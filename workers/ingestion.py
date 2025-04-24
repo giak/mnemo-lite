@@ -13,12 +13,19 @@ import numpy as np
 from tenacity import retry, stop_after_attempt, wait_exponential
 import chromadb
 from chromadb.config import Settings
+from sentence_transformers import SentenceTransformer
+import rich
+from rich.console import Console
+from rich.panel import Panel
 
-# Configuration du logger
+# Set up console for nice output
+console = Console()
+
+# Configure logger
 logger = structlog.get_logger()
 
-# Récupération des variables d'environnement
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "db")
+# Environment variables
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "mnemo")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "mnemopass")
@@ -30,7 +37,7 @@ CHROMA_PORT = os.getenv("CHROMA_PORT", "8000")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
-# Configuration du logger
+# Configure structlog
 structlog.configure(
     processors=[
         structlog.contextvars.merge_contextvars,
@@ -38,7 +45,7 @@ structlog.configure(
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.PositionalArgumentsFormatter(),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
         structlog.processors.UnicodeDecoder(),
@@ -49,7 +56,18 @@ structlog.configure(
     cache_logger_on_first_use=True,
 )
 
-# Client ChromaDB
+# Setup signal handler for graceful shutdown
+class GracefulExit:
+    def __init__(self):
+        self.exit = False
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
+        
+    def signal_handler(self, sig, frame):
+        logger.info("shutdown_signal_received", signal=sig)
+        self.exit = True
+
+# ChromaDB client
 class ChromaClient:
     def __init__(self):
         self.client = chromadb.HttpClient(host=CHROMA_HOST, port=int(CHROMA_PORT))
@@ -71,7 +89,7 @@ class ChromaClient:
     def upsert(self, id, embedding, metadata=None):
         try:
             metadata = metadata or {}
-            # Conversion en str car ChromaDB attend des strings pour les IDs
+            # ChromaDB expects string IDs
             self.collection.upsert(
                 ids=[str(id)],
                 embeddings=[embedding],
@@ -92,8 +110,7 @@ class ChromaClient:
             logger.error("chromadb_delete_error", id=str(id), error=str(e))
             return False
 
-
-# Connexion à la base de données PostgreSQL avec retry
+# Database connection with retry
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=60))
 def get_pg_connection():
     try:
@@ -105,233 +122,224 @@ def get_pg_connection():
             database=POSTGRES_DB,
             cursor_factory=DictCursor
         )
-        conn.autocommit = False  # Nous gérons manuellement les transactions
+        conn.autocommit = False  # Manually manage transactions
         logger.info("postgres_connection_established")
         return conn
     except Exception as e:
         logger.error("postgres_connection_error", error=str(e))
         raise e
 
-
-# Gestionnaire d'interruption pour arrêt propre
-class GracefulExit:
+# Class for generating embeddings
+class EmbeddingGenerator:
     def __init__(self):
-        self.exit = False
-        signal.signal(signal.SIGINT, self.signal_handler)
-        signal.signal(signal.SIGTERM, self.signal_handler)
-        
-    def signal_handler(self, sig, frame):
-        logger.info("shutdown_signal_received", signal=sig)
-        self.exit = True
-
-
-# Classe principale du worker
-class OutboxProcessor:
-    def __init__(self):
-        self.chroma_client = ChromaClient()
-        self.exit_handler = GracefulExit()
-        
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
-    async def get_embedding(self, text):
-        """
-        Méthode simulée pour générer un embedding en utilisant un service externe.
-        En production, remplacez cette implémentation par un appel à un API d'embedding.
-        """
+        self.model = None
+        self.load_model()
+    
+    def load_model(self):
         try:
-            # Simulation d'un embedding aléatoire
-            # À remplacer par un vrai appel API en production
-            embedding = np.random.rand(1536).tolist()
-            return embedding
+            self.model = SentenceTransformer('all-MiniLM-L6-v2')
+            logger.info("embedding_model_loaded")
+        except Exception as e:
+            logger.error("embedding_model_loading_error", error=str(e))
+            raise e
+    
+    def generate(self, text):
+        try:
+            if not text or len(text.strip()) == 0:
+                # Return a zero vector for empty text
+                return [0.0] * 384  # Default dimension for all-MiniLM-L6-v2
+            
+            embedding = self.model.encode(text)
+            return embedding.tolist()
         except Exception as e:
             logger.error("embedding_generation_error", error=str(e))
             raise e
-    
-    def process_outbox_item(self, item, conn, cur):
-        """
-        Traite un élément de l'outbox et synchronise avec ChromaDB.
-        """
+
+# Main worker class
+class IngestionWorker:
+    def __init__(self):
+        self.chroma_client = ChromaClient()
+        self.exit_handler = GracefulExit()
+        self.embedding_generator = EmbeddingGenerator()
+        self.poll_interval = 5  # seconds
+        self.batch_size = 50
+        self.create_outbox_table_if_not_exists()
+        
+    def create_outbox_table_if_not_exists(self):
+        """Create outbox table if it doesn't exist yet."""
         try:
-            id = item["id"]
-            op_type = item["op_type"]
+            conn = get_pg_connection()
+            cur = conn.cursor()
             
-            if op_type == "upsert":
-                embedding = item["embedding"]
-                if embedding:
-                    # Récupérer les métadonnées de l'événement
-                    cur.execute(
-                        "SELECT event_type, memory_type, role_id, metadata FROM events WHERE id = %s", 
-                        (id,)
-                    )
-                    event_data = cur.fetchone()
-                    
-                    if event_data:
-                        metadata = {
-                            "event_type": event_data["event_type"],
-                            "memory_type": event_data["memory_type"],
-                            "role_id": str(event_data["role_id"]),
-                            **(event_data["metadata"] or {})
-                        }
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS chroma_outbox (
+                    id UUID PRIMARY KEY,
+                    content TEXT NOT NULL,
+                    op_type VARCHAR(10) NOT NULL,
+                    metadata JSONB,
+                    embedding JSONB,
+                    retry_count INT DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            
+            conn.commit()
+            logger.info("outbox_table_checked")
+            cur.close()
+            conn.close()
+        except Exception as e:
+            logger.error("outbox_table_check_error", error=str(e))
+    
+    def process_outbox_batch(self):
+        """Process a batch of items from the outbox table."""
+        try:
+            conn = get_pg_connection()
+            cur = conn.cursor()
+            
+            # Get items to process
+            cur.execute("""
+                SELECT id, content, op_type, metadata, embedding, retry_count 
+                FROM chroma_outbox
+                WHERE retry_count < 3
+                ORDER BY created_at ASC
+                LIMIT %s
+            """, (self.batch_size,))
+            
+            items = cur.fetchall()
+            
+            if not items:
+                logger.debug("no_items_to_process")
+                cur.close()
+                conn.close()
+                return 0
+            
+            processed_count = 0
+            
+            for item in items:
+                id = item["id"]
+                op_type = item["op_type"]
+                
+                try:
+                    if op_type == "upsert":
+                        # Generate embedding if not already present
+                        embedding = item["embedding"]
+                        if not embedding:
+                            embedding = self.embedding_generator.generate(item["content"])
                         
-                        # Upsert dans ChromaDB
-                        success = self.chroma_client.upsert(id, embedding, metadata)
+                        # Upsert to ChromaDB
+                        success = self.chroma_client.upsert(
+                            id, 
+                            embedding, 
+                            item["metadata"] or {}
+                        )
                         
                         if success:
-                            # Supprimer de l'outbox en cas de succès
+                            # Remove from outbox
                             cur.execute(
-                                "DELETE FROM chroma_outbox WHERE id = %s", 
-                                (id,)
+                                "DELETE FROM chroma_outbox WHERE id = %s", (id,)
                             )
-                            conn.commit()
-                            logger.info("outbox_item_processed", id=str(id), operation="upsert")
+                            processed_count += 1
                         else:
-                            # Incrémenter le compteur d'essais
+                            # Increment retry count
                             cur.execute(
                                 "UPDATE chroma_outbox SET retry_count = retry_count + 1 WHERE id = %s", 
                                 (id,)
                             )
-                            conn.commit()
-                            logger.warning("outbox_item_retry", id=str(id), operation="upsert")
-                    else:
-                        # L'événement n'existe pas ou plus
-                        cur.execute(
-                            "DELETE FROM chroma_outbox WHERE id = %s", 
-                            (id,)
-                        )
-                        conn.commit()
-                        logger.warning("outbox_item_orphaned", id=str(id))
-                else:
-                    # Pas d'embedding disponible pour cet élément
-                    cur.execute(
-                        "UPDATE chroma_outbox SET retry_count = retry_count + 1 WHERE id = %s", 
-                        (id,)
-                    )
-                    conn.commit()
-                    logger.warning("outbox_item_missing_embedding", id=str(id))
-            
-            elif op_type == "delete":
-                # Supprimer de ChromaDB
-                success = self.chroma_client.delete(id)
-                
-                if success or item["retry_count"] >= 3:
-                    # Supprimer de l'outbox en cas de succès ou après trop d'essais
-                    cur.execute(
-                        "DELETE FROM chroma_outbox WHERE id = %s", 
-                        (id,)
-                    )
-                    conn.commit()
-                    logger.info("outbox_item_processed", id=str(id), operation="delete")
-                else:
-                    # Incrémenter le compteur d'essais
-                    cur.execute(
-                        "UPDATE chroma_outbox SET retry_count = retry_count + 1 WHERE id = %s", 
-                        (id,)
-                    )
-                    conn.commit()
-                    logger.warning("outbox_item_retry", id=str(id), operation="delete")
-            
-            return True
-        
-        except Exception as e:
-            conn.rollback()
-            logger.error("outbox_processing_error", id=str(item["id"]), error=str(e))
-            return False
-    
-    def process_outbox(self):
-        """
-        Traite les éléments en attente dans l'outbox.
-        """
-        try:
-            conn = get_pg_connection()
-            cur = conn.cursor()
-            
-            # Récupérer les éléments à traiter, limités à 50 à la fois
-            cur.execute(
-                """
-                SELECT id, embedding, op_type, retry_count 
-                FROM chroma_outbox 
-                WHERE retry_count < 3
-                ORDER BY created_at ASC
-                LIMIT 50
-                """
-            )
-            
-            items = cur.fetchall()
-            if items:
-                logger.info("processing_outbox_batch", count=len(items))
-                
-                for item in items:
-                    if self.exit_handler.exit:
-                        break
                     
-                    self.process_outbox_item(item, conn, cur)
+                    elif op_type == "delete":
+                        # Delete from ChromaDB
+                        success = self.chroma_client.delete(id)
+                        
+                        if success:
+                            # Remove from outbox
+                            cur.execute(
+                                "DELETE FROM chroma_outbox WHERE id = %s", (id,)
+                            )
+                            processed_count += 1
+                        else:
+                            # Increment retry count
+                            cur.execute(
+                                "UPDATE chroma_outbox SET retry_count = retry_count + 1 WHERE id = %s", 
+                                (id,)
+                            )
+                    
+                    conn.commit()
+                    logger.info("item_processed", id=str(id), op_type=op_type)
+                
+                except Exception as e:
+                    conn.rollback()
+                    logger.error("item_processing_error", id=str(id), op_type=op_type, error=str(e))
+                    # Increment retry count
+                    cur.execute(
+                        "UPDATE chroma_outbox SET retry_count = retry_count + 1 WHERE id = %s", 
+                        (id,)
+                    )
+                    conn.commit()
             
             cur.close()
             conn.close()
-            
+            return processed_count
+        
         except Exception as e:
-            logger.error("outbox_batch_processing_error", error=str(e))
-            if 'conn' in locals() and conn:
-                try:
-                    conn.rollback()
-                    conn.close()
-                except:
-                    pass
+            logger.error("batch_processing_error", error=str(e))
+            return 0
     
     def listen_for_notifications(self):
-        """
-        Écoute les notifications de la base de données pour traiter les nouveaux éléments.
-        """
+        """Listen for database notifications when new items are added to the outbox."""
         try:
-            logger.info("starting_notification_listener")
-            
-            conn = get_pg_connection()
-            conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-            cur = conn.cursor()
-            
-            cur.execute("LISTEN outbox_new")
-            
-            logger.info("notification_listener_ready")
-            
-            while not self.exit_handler.exit:
-                if select.select([conn], [], [], 5) == ([], [], []):
-                    # Timeout
-                    continue
-                
-                conn.poll()
-                while conn.notifies:
-                    notify = conn.notifies.pop(0)
-                    logger.debug("notification_received", channel=notify.channel)
-                    self.process_outbox()
-            
-            cur.close()
-            conn.close()
-            
+            # This is a placeholder for a future implementation
+            # For now, we'll just use polling
+            pass
         except Exception as e:
             logger.error("notification_listener_error", error=str(e))
-            raise e
     
     def run(self):
-        """
-        Démarre le processeur d'outbox principal.
-        """
-        logger.info("ingestion_worker_starting", environment=ENVIRONMENT)
+        """Main execution loop."""
+        console.print(Panel.fit(
+            "🔄 [bold green]Ingestion Worker Started[/bold green]\n"
+            f"Connected to ChromaDB at {CHROMA_HOST}:{CHROMA_PORT}\n"
+            f"Connected to PostgreSQL at {POSTGRES_HOST}:{POSTGRES_PORT}\n"
+            "Processing outbox items...",
+            title="MnemoLite Ingestion Worker"
+        ))
         
-        import select
+        logger.info("worker_started")
         
-        try:
-            # Traitement initial
-            self.process_outbox()
+        while not self.exit_handler.exit:
+            try:
+                processed_count = self.process_outbox_batch()
+                if processed_count > 0:
+                    logger.info("batch_processed", count=processed_count)
+                    console.print(f"✅ Processed {processed_count} items")
+                
+                # Wait before processing the next batch
+                time.sleep(self.poll_interval)
             
-            # Démarrage de l'écouteur de notifications
-            self.listen_for_notifications()
-            
-        except Exception as e:
-            logger.error("ingestion_worker_error", error=str(e))
+            except Exception as e:
+                logger.error("worker_execution_error", error=str(e))
+                console.print(f"❌ [bold red]Error:[/bold red] {str(e)}")
+                # Wait before retrying
+                time.sleep(self.poll_interval * 2)
         
-        finally:
-            logger.info("ingestion_worker_stopped")
+        logger.info("worker_stopping")
+        console.print("[bold yellow]Worker shutting down gracefully...[/bold yellow]")
 
+def main():
+    # Create and run the worker
+    worker = IngestionWorker()
+    
+    try:
+        # Create worker log file to signal health checks
+        with open("/app/logs/worker.log", "w") as f:
+            f.write(f"Worker started at {datetime.now().isoformat()}\n")
+        
+        worker.run()
+    except Exception as e:
+        logger.error("worker_fatal_error", error=str(e))
+        console.print(f"[bold red]Fatal error:[/bold red] {str(e)}")
+    finally:
+        logger.info("worker_shutdown_complete")
+        console.print("[bold green]Worker shutdown complete[/bold green]")
 
 if __name__ == "__main__":
-    processor = OutboxProcessor()
-    processor.run() 
+    main() 

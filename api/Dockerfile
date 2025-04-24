@@ -1,35 +1,64 @@
 # Multi-stage build
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim as builder
 
-WORKDIR /build
-COPY api/requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Set working directory
+WORKDIR /app
 
-FROM python:3.12-slim AS runtime
+# Copy requirements file
+COPY requirements.txt .
 
-# Optimisations Python
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONPATH=/app
+# Install build dependencies
+RUN sed -i 's|http://deb.debian.org/debian|http://ftp.fr.debian.org/debian|g' /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    python3-dev && \
+    pip install --upgrade pip wheel setuptools && \
+    pip wheel --no-cache-dir --wheel-dir=/app/wheels -r requirements.txt && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Runtime stage
+FROM python:3.12-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
 
 WORKDIR /app
-COPY --from=builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH
 
-# Optimisation des couches
-COPY ./api/models/ /app/models/
-COPY ./api/routes/ /app/routes/
-COPY ./api/main.py /app/
+# Install runtime dependencies
+RUN sed -i 's|http://deb.debian.org/debian|http://ftp.fr.debian.org/debian|g' /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Création des répertoires nécessaires
-RUN mkdir -p /app/cache /app/config /app/templates \
-    && useradd -m appuser \
-    && chown -R appuser:appuser /app
+# Copy wheels from builder stage
+COPY --from=builder /app/wheels /wheels
+COPY --from=builder /app/requirements.txt .
 
-# Utilisation d'un utilisateur non-root
+# Install dependencies from wheels
+RUN pip install --no-cache /wheels/*
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/certs
+
+# Add non-root user
+RUN useradd -m appuser && \
+    chown -R appuser:appuser /app
 USER appuser
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl --fail http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"] 
+# Run the API server
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

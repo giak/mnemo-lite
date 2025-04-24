@@ -50,7 +50,7 @@ prod-clean:
 
 # Commandes pour les bases de données
 db-up:
-	docker compose up -d db redis chromadb
+	docker compose up -d db chromadb
 
 db-shell:
 	docker compose exec db psql -U $(shell grep POSTGRES_USER .env | cut -d '=' -f2) -d $(shell grep POSTGRES_DB .env | cut -d '=' -f2)

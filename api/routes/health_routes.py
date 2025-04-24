@@ -4,7 +4,6 @@ import time
 from fastapi import APIRouter, Depends, HTTPException
 import httpx
 import asyncpg
-import redis.asyncio as redis
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Counter, Gauge, Histogram
 from fastapi.responses import Response, JSONResponse
 import datetime
@@ -23,11 +22,6 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "mnemo")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "mnemopass")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "mnemolite")
 
-REDIS_HOST = os.getenv("REDIS_HOST", "redis")
-REDIS_PORT = os.getenv("REDIS_PORT", "6379")
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "redis_password")
-REDIS_DB = os.getenv("REDIS_DB", "0")
-
 CHROMA_HOST = os.getenv("CHROMA_HOST", "chromadb")
 CHROMA_PORT = os.getenv("CHROMA_PORT", "8000")
 
@@ -44,22 +38,6 @@ async def check_postgres():
         version = await conn.fetchval("SELECT version();")
         await conn.close()
         return {"status": "ok", "version": version}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-async def check_redis():
-    try:
-        r = redis.Redis(
-            host=REDIS_HOST,
-            port=int(REDIS_PORT),
-            password=REDIS_PASSWORD,
-            db=int(REDIS_DB),
-            decode_responses=True
-        )
-        info = await r.info()
-        await r.close()
-        return {"status": "ok", "version": info.get("redis_version")}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -84,14 +62,10 @@ async def health_check():
     
     # Vérification de la santé de chaque dépendance
     pg_status = await check_postgres()
-    redis_status = await check_redis()
     chroma_status = await check_chroma()
     
     # Systèmes critiques fonctionnels?
-    is_healthy = (
-        pg_status["status"] == "ok" and 
-        redis_status["status"] == "ok"
-    )
+    is_healthy = pg_status["status"] == "ok"
     
     # Calcul de la durée
     duration = time.time() - start_time
@@ -103,7 +77,6 @@ async def health_check():
         "duration_ms": round(duration * 1000, 2),
         "services": {
             "postgres": pg_status,
-            "redis": redis_status,
             "chromadb": chroma_status
         }
     }
