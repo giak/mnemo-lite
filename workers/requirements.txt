@@ -1,0 +1,15 @@
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+chromadb==0.4.22
+openai==1.12.0
+sentence-transformers==2.2.2
+numpy==1.26.3
+httpx==0.26.0
+pgmq==0.10.0
+prometheus-client==0.18.0
+pydantic==2.6.1
+pydantic-settings==2.1.0
+tenacity==8.2.3
+structlog==24.1.0
+pg-partman==4.7.4
+rich==13.7.0 

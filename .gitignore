@@ -1,0 +1,6 @@
+.cursor/
+.vscode/
+.idea/
+.DS_Store
+.env
+.env.production
