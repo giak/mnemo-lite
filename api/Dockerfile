@@ -5,7 +5,7 @@ FROM python:3.12-slim as builder
 WORKDIR /app
 
 # Copy requirements file
-COPY requirements.txt .
+COPY api/requirements.txt .
 
 # Install build dependencies
 RUN sed -i 's|http://deb.debian.org/debian|http://ftp.fr.debian.org/debian|g' /etc/apt/sources.list.d/debian.sources && \
@@ -45,8 +45,12 @@ COPY --from=builder /app/requirements.txt .
 # Install dependencies from wheels
 RUN pip install --no-cache /wheels/*
 
+# Copy and install development dependencies
+COPY requirements-dev.txt .
+RUN pip install --no-cache -r requirements-dev.txt
+
 # Copy application code
-COPY . .
+COPY api/ ./
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/certs

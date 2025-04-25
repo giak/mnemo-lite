@@ -76,7 +76,8 @@ api-shell:
 	docker compose -f $(COMPOSE_FILE) exec api /bin/bash
 
 api-test:
-	docker compose -f $(COMPOSE_FILE) exec api pytest
+	# Utiliser python -m pytest est plus robuste que de dépendre du PATH
+	docker compose -f $(COMPOSE_FILE) exec api python -m pytest tests/
 
 # Commandes pour les workers
 worker-shell:

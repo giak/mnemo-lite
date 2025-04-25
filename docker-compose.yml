@@ -48,8 +48,8 @@ services:
 
   api:
     build:
-      context: ./api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: api/Dockerfile
     container_name: mnemo-api
     restart: unless-stopped
     ports:
@@ -62,8 +62,9 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - ./api:/app
+      - ./api:/app/api
       - ./certs:/app/certs:ro
+      - ./tests:/app/tests
     deploy:
       resources:
         limits:
@@ -76,8 +77,8 @@ services:
 
   worker:
     build:
-      context: ./workers
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: workers/Dockerfile
     container_name: mnemo-worker
     restart: unless-stopped
     environment:

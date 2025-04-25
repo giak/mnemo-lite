@@ -19,7 +19,7 @@ RUN sed -i 's|http://deb.debian.org/debian|http://ftp.fr.debian.org/debian|g' /e
     python3-dev
 
 # Copy requirements file first to leverage Docker caching
-COPY requirements.txt .
+COPY workers/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --upgrade pip && \
@@ -41,15 +41,20 @@ RUN sed -i 's|http://deb.debian.org/debian|http://ftp.fr.debian.org/debian|g' /e
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy wheels from builder stage and install
+# Copy wheels from builder stage and install production dependencies
 COPY --from=builder /app/wheels /wheels
+COPY --from=builder /app/requirements.txt .
 RUN pip install --no-cache /wheels/*
+
+# Copy and install development dependencies
+COPY requirements-dev.txt .
+RUN pip install --no-cache -r requirements-dev.txt
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/data /app/certs
 
 # Copy application code
-COPY . .
+COPY workers/ ./
 
 # Add non-root user
 RUN groupadd -r appuser && \
