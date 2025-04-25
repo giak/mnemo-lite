@@ -3,11 +3,11 @@
 ## 1. Titre du produit
 **MnemoLite** — Mémoire cognitive autonome pour assistant conversationnel Expanse
 
-**Version**: 1.0.0  
-**Date**: 2025-04-24
+**Version**: 1.0.1 (Aligné PFD 1.2.1)
+**Date**: 2025-04-26
 
 ## 2. Objectif du produit
-Fournir une **mémoire cognitive réutilisable, autonome et interrogeable**, destinée à simuler, tester, visualiser et enrichir les capacités mémorielles d’un agent IA, en reproduisant les grands types de mémoire humaine (épisodique, sémantique, procédurale, prospective, de travail).
+Fournir une **mémoire cognitive réutilisable, autonome et interrogeable**, optimisée pour un déploiement local, destinée à simuler, tester, visualiser et enrichir les capacités mémorielles d’un agent IA, en reproduisant les grands types de mémoire humaine (épisodique, sémantique, procédurale, prospective, de travail).
 
 MnemoLite doit être intégrable dans Expanse via scripts Python appelés par des règles `.mdc`, mais doit également fonctionner seul, avec une interface Web.
 
@@ -45,68 +45,59 @@ MnemoLite doit être intégrable dans Expanse via scripts Python appelés par de
 
 ## 5. Spécifications fonctionnelles clés
 
-| ID      | Fonctionnalité                                | Priorité |
-|---------|-----------------------------------------------|----------|
-| F-001   | Ingestion JSON/REST d'événements              | Haute    |
-| F-002   | Stockage dans PostgreSQL (métadonnées)        | Haute    |
-| F-003   | Vectorisation (OpenAI ou modèle local)        | Haute    |
-| F-004   | Indexation dans ChromaDB                      | Haute    |
-| F-005   | Interface Web HTMX avec timeline et tags      | Haute    |
-| F-006   | Requête vectorielle + sémantique              | Haute    |
-| F-007   | Graphe mnésique (pgGraph/pgRouting + tables d'adjacence) | Moyenne  |
-| F-008   | Export CSV / JSONL de tout ou partie mémoire  | Moyenne  |
-| F-009   | API réflexive (`/psi/`)                       | Moyenne  |
-| F-010   | Mécanisme d'oubli actif (TTL / filtre)        | Moyenne  |
-| F-011   | Visualisation cause/effet / cluster            | Faible   |
-| F-012   | Stratégie d'archivage multi-niveaux            | Moyenne   |
-| F-013   | Documentation d'installation et déploiement    | Haute     |
-| F-014   | Guides d'intégration (Expanse, standalone)     | Haute     |
+| ID      | Fonctionnalité                                | Priorité | Notes                                        |
+|---------|-----------------------------------------------|----------|----------------------------------------------|
+| F-001   | Ingestion JSON/REST d'événements              | Haute    |                                              |
+| F-002   | Stockage dans PostgreSQL (métadonnées)        | Haute    | Tables principales (events, nodes, edges)    |
+| F-003   | Vectorisation (OpenAI ou modèle local)        | Haute    | Worker ou application logic                |
+| F-004   | Indexation vectorielle via pgvector (HNSW)    | Haute    | Remplacement de ChromaDB                     |
+| F-005   | Interface Web HTMX avec timeline et tags      | Haute    | Pour exploration locale                      |
+| F-006   | Requête vectorielle + sémantique              | Haute    | API `/search`                                |
+| F-007   | Graphe mnésique (Tables nodes/edges + CTE SQL)| Moyenne  | Limité à ≤ 3 sauts pour performance locale   |
+| F-008   | Export CSV / JSONL de tout ou partie mémoire  | Moyenne  | Utile pour analyse / backup manuel         |
+| F-009   | API réflexive (`/psi/`)                       | Moyenne  | Requiert logique LLM externe               |
+| F-010   | Mécanisme d'oubli actif (TTL / filtre)        | Moyenne  | Via partitionnement `pg_partman`             |
+| F-011   | Visualisation cause/effet / cluster            | Faible   | Potentiellement via UI ou export + outil ext |
+| F-012   | Cycle de vie Hot/Warm (Quantisation INT8)     | Haute    | Géré par `pg_cron` après ~1 an ; Cold/Archive différé |
+| F-013   | Documentation d'installation et déploiement    | Haute    | Focus sur Docker local                       |
+| F-014   | Guides d'intégration (Expanse, standalone)     | Haute    | Script Python simple pour `.mdc`             |
 
 ## 6. Contraintes techniques
 - 100 % open-source / auto-hébergeable
-- PostgreSQL 17, ChromaDB, FastAPI 0.110+, HTMX 1.9+, Python 3.12+
+- PostgreSQL 17 (+ pgvector, pg_partman, pg_cron), FastAPI 0.110+, HTMX 1.9+, Python 3.12+
 - Docker Compose + Makefile + .env
 - Aucun SPA ou bundle JS imposé
 
 ## 7. KPIs de validation
 
-| Critère                             | Méthode                     | Seuil      |
-|------------------------------------|-----------------------------|------------|
-| Taux de récupération cohérente     | Test unitaire               | ≥ 99 %     |
-| Temps de réponse `/search`         | `bench_httpx`               | < 10 ms P95 |
-| Taux de retour pertinent (top 5)   | Test manuel + recall score | > 80 %     |
-| Temps de démarrage local complet   | `docker compose up`        | < 3 min    |
-| Utilisation mémoire (inference 1M) | `htop + chroma stat`        | < 2.5 GB   |
-| Réponse Ψ complète                 | Cas de test Q→A justifiée  | Oui        |
-| Démarrage sans Cursor              | Test E2E                    | ≤ 5 min    |
-| Intégration `.mdc`                 | Code review                 | ≤ 20 lignes Python |
-
-### KPIs stratégie d'archivage
-
-| Métrique                           | Couche           | Cible                 |
-|-----------------------------------|------------------|------------------------|
-| Temps d'accès vectoriel           | Hot (0-90j)      | ≤ 5 ms P95             |
-|                                   | Warm (90j-1an)   | ≤ 30 ms P95            |
-|                                   | Cold (1-2ans)    | ≤ 100 ms P95           |
-| Réduction taille stockage         | Warm vs Hot      | ≥ 60%                  |
-|                                   | Cold vs Hot      | ≥ 85%                  |
-|                                   | Archive vs Hot   | ≥ 95%                  |
+| Critère                             | Méthode                     | Seuil (Local)             |
+|------------------------------------|-----------------------------|---------------------------|
+| Taux de récupération cohérente     | Test unitaire               | ≥ 99 %                    |
+| Temps de réponse `/search` (k=10)  | `bench_httpx`               | < 10 ms P95 (@ 10M local) |
+| Recall Warm INT8                   | Bench spécifique            | ≥ 92 %                    |
+| Taux de retour pertinent (top 5)   | Test manuel + recall score | > 80 %                    |
+| Temps de démarrage local complet   | `docker compose up`        | < 3 min                   |
+| Utilisation mémoire (10M vecteurs) | `htop` pendant bench        | < 4 GB (estimé sur 64GB RAM) |
+| Disk / 10M interactions            | `df -h` sur volume PG       | < 100 GB (estimé)         |
+| Réponse Ψ complète                 | Cas de test Q→A justifiée  | Oui                       |
+| Démarrage sans Cursor              | Test E2E                    | ≤ 5 min                   |
+| Intégration `.mdc`                 | Code review                 | ≤ 20 lignes Python        |
 
 ## 8. Livrables associés
-- Fichier `schema.sql` pour PostgreSQL + pgvector + graph
+- Fichier `schema.sql` pour PostgreSQL + pgvector + graph (tables)
 - Script `populate_fake_data.py`
 - API `memory_server.py`
 - Interface `templates/index.html` + `search.html`
-- Script `vector_indexer.py` (ingestion Chroma)
+- Workers `pg_cron` pour maintenance (quantization, etc.)
 - Documentation : `README.md`, `api.md`, `psi-guide.md`
 
 ## 9. Installation et environnement
 
 ### 9.1 Prérequis système
-- Linux (Ubuntu 22.04+ ou Debian 11+)
+- Linux (Ubuntu 22.04+ ou Debian 11+, Mint 22)
 - Docker Engine 24.0+ et Docker Compose 2.20+
-- 4GB RAM min (8GB recommandé)
-- 20GB SSD min pour les données
+- 8GB RAM min (16GB+ recommandé, 64GB cible)
+- 20GB SSD min pour les données (plus selon volume mémoire)
 - Python 3.12+ pour l'intégration
 
 ### 9.2 Guide d'installation rapide
@@ -148,7 +139,7 @@ La vérification du déploiement peut être effectuée avec:
 ```bash
 make test-install   # Vérifie l'installation
 make test-e2e       # Exécute les tests end-to-end
-make metrics        # Affiche les métriques de performance
+make metrics        # Affiche les métriques de performance (basé sur les stats PG)
 ```
 
 ## 10. Documentation

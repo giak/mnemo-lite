@@ -1,192 +1,182 @@
 # MnemoLite – Project Foundation Document (PFD)
 
-## Project Title: MnemoLite
-**Version**: 1.0.0  
-**Date**: 2025-04-24  
-**Author / Sponsor**: Giak  
+**Version** : **1.2.1** (Local Deployment Focus)
+**Date** : 26 avril 2025
+**Auteur / Sponsor** : Giak & Expanse Cognition Team
 
-# Executive Summary
+---
 
-MnemoLite est une mémoire cognitive locale, conçue pour les agents Expanse. Elle peut être utilisée en standalone pour simuler, tester, visualiser et interroger des souvenirs conversationnels (prompts, décisions, feedback, réflexions). Elle s'inspire directement des modèles cognitifs humains (mémoire de travail, sémantique, épisodique, procédurale, prospective) et des principes Expanse (Ξ, Φ, Λ, Ψ, M). 
+## 1 · Executive Summary
+MnemoLite dote l’assistant personnel **Expanse** d’une **mémoire cognitive auto‑adaptable** optimisée pour un déploiement local. Elle permet de simuler, tester, visualiser et interroger des souvenirs conversationnels, en expliquant leurs chaînes causales.
+La nouvelle architecture **H‑VG‑T** (_Hybrid‑Vector‑Graph‑Tiered_) repose **exclusivement** sur **PostgreSQL 17** ; elle marie :
 
-Le système repose sur **PostgreSQL 17 + pgvector + pgGraph + pgmq** pour les couches transactionnelles et relationnelles, et sur **ChromaDB** pour la recherche vectorielle performante (> 50 M vecteurs, < 10 ms latence). L'interface utilisateur Web est basée sur **FastAPI + HTMX + Jinja2**, permettant d'utiliser MnemoLite sans aucune dépendance front JS.
+* **Vecteurs sémantiques haute vitesse** (pgvector + HNSW) — latence locale optimisée.
+* **Graphe relationnel léger** (tables `nodes/edges` + CTE récursives ≤ 3 sauts) — traçabilité causale.
+* **Stratification Hot / Warm simplifiée** — quantisation int8 après ~1 an → optimisation du stockage local.
+* **Monitoring local efficace** — Logs PostgreSQL, `pg_stat_statements`, outils système Linux.
 
-## Impact des choix techniques
+Le tout tient dans **3 conteneurs** (_postgres_, _app_, _worker_) et expose une interface utilisateur Web basée sur **FastAPI + HTMX + Jinja2**, assurant une simplicité d’exploitation et un déploiement local rapide sans dépendances front JS.
 
-L'élimination des dépendances externes au profit de solutions natives PostgreSQL apporte plusieurs avantages concrets :
+---
 
-- **Réduction de la complexité opérationnelle** : Plus besoin de gérer des services tiers comme Apache AGE
-- **Fiabilité accrue** : Moins de points de défaillance potentiels dans l'architecture
-- **Meilleure maintenabilité** : Compétences centrées sur PostgreSQL uniquement, pas de multi-technologies
-- **Déploiement simplifié** : Réduction du nombre de conteneurs/services à orchestrer (de 5 à 3)
-- **Performance optimisée** : Communication directe SQL plutôt que API/RPC entre composants
-- **Évolutivité facilitée** : Échelle verticale simple avec PostgreSQL plutôt que horizontale complexe
-- **Coût réduit** : Moins de ressources système requises, empreinte mémoire diminuée de ~30%
+## 2 · Impact des Choix Techniques
+L'élimination des dépendances externes au profit de solutions natives PostgreSQL apporte plusieurs avantages concrets pour un déploiement local : simplicité, performance optimisée et maintenance aisée.
+| Axe | Bénéfice clé | Explication | Chiffres | Réf. |
+|-----|--------------|-------------|----------|------|
+| **Opérations** | **Complexité ↓** | 3 services Docker | –40 % de scripts Ops | POC 2025‑03 |
+| **Performance** | **Latence Locale ↓** | HNSW optimisé (local bench) | < 10 ms p95 (cible 10M) | Katz 2024 |
+| **Coût** | **Logiciel Gratuit** | Stack 100% FOSS | 0 € licence | - |
+| **Évolutivité** | **Disk Local ↓** | Quantisation INT8 –60 % | Testé ~5M interactions | Issue #521 |
+| **Maintenabilité** | **Stack Postgres Only** | Pas de Neo4j/AGE/Chroma | 1 skillset | Dev survey 2024 |
 
-Cette approche "délibérément minimaliste" constitue un avantage stratégique à long terme pour la maintenance et l'évolution du système.
+---
 
-## Évolutivité et croissance des données
+## 3 · Context & Problem Statement
+La mémoire actuelle :
+* dépend de Cursor‑IDE,
+* mélange logique et stockage,
+* manque de stratégie TTL claire pour l'usage local,
+* ne fournit pas d'explication causale multi‑sauts simple.
 
-L'architecture de MnemoLite intègre dès sa conception des mécanismes d'évolutivité pour gérer efficacement la croissance des données :
+**MnemoLite** isole la persistance, normalise les données, implémente un cycle de vie adapté au local et expose une **API REST OpenAPI 3.1** testable en CI.
 
-- **Stratégie multi-niveaux progressive** : Le modèle hot/warm/cold/archive permet d'adapter les ressources proportionnellement à la valeur des données au fil du temps
-- **Partitionnement automatique temporel** : pg_partman assure une segmentation transparente des tables sans impact sur les requêtes applicatives
-- **Compression sélective des vecteurs** : Passage de FLOAT32 (chaud) à INT8 (warm) puis résumés JSON (cold) optimisant le rapport utilité/stockage
-- **Capacité de dimensionnement vertical** : PostgreSQL optimisé supporte jusqu'à 100M vecteurs sur un serveur modeste (32GB RAM)
-- **Extension horizontale préparée** : Possibilité future de sharding par dates ou par domaines sémantiques via Foreign Data Wrappers
-- **Point d'évolution S3/Iceberg** : Préparation aux formats d'analyse big data pour les données archivées sans perte de requêtes
+---
 
-Cette stratégie d'évolutivité assure que le système peut gérer de façon économique aussi bien 10 000 que 10 000 000 d'événements, avec des performances prévisibles et une empreinte ressource maîtrisée.
+## 4 · Objectives (SMART)
+| Code | Objectif mesurable | Cible / Date |
+|------|--------------------|--------------|
+| **S** | Couvrir 5 types de mémoires | 30‑06‑25 |
+| **M** | Cohérence UID ↔ vecteur ↔ graphe | ≥ 99,8 % quotidien |
+| **A** | `docker compose up` | ≤ 5 min sur machine locale (64GB RAM) |
+| **R** | Bridge `.mdc` | ≤ 20 lignes Python |
+| **T** | Demo live locale | 30‑06‑25 |
 
-\pagebreak
+---
 
-# Context & Problem Statement
+## 5 · Scope
+**In :** ingestion REST/JSONL ; index pgvector ; graph SQL (CTE ≤ 3) ; partition Hot/Warm + TTL ; monitoring local (logs, pg_stats) ; pipeline outbox ; backups locaux (`pg_dump`).
+**Out :** RBAC fin ; K8s ; mobile native ; sync multi‑instance ; archivage complexe (Cold/Archive S3) ; observabilité cloud (Prometheus/OTel).
 
-Expanse a besoin d'une mémoire structurée, contextuelle, performante, et introspectable – mais la mémoire actuelle est trop dépendante de Cursor IDE, couplée aux règles `.mdc`, et peu testable isolément. MnemoLite répond à cette limite en séparant complètement la logique mémoire et les dépendances IDE : injection, lecture, visualisation, audit et introspection sont possibles depuis une simple interface Python ou Web, avec ou sans LLM.
+---
 
-# Objectives (SMART)
-
-- **S** : Simuler différents types de mémoire cognitive (travail, épisodique, sémantique, procédurale, prospective).
-- **M** : Maintenir une cohérence vecteur ↔ méta ↔ graphe ≥ 99 % (uid, ts, provenance).
-- **A** : Opérationnel en standalone (Docker + UI Web) en < 10 min.
-- **R** : Branchable aux règles `.mdc` Cursor en < 20 lignes Python.
-- **T** : Démo fonctionnelle sur données simulées d'ici le **30 mai 2024**.
-
-# Scope
-
-**In** –
-- Ingestion JSONL / REST de données simulées
-- Stockage et indexation PostgreSQL + ChromaDB + pgGraph
-- Recherche vectorielle, logique, sémantique et contextuelle
-- Interface Web (HTMX) et CLI de test
-- Logs auditables, introspection Ξ et visualisation Φ/Λ
-
-**Out** –
-- Authentification fine (multi-agent, RBAC)
-- Orchestration cloud/Kubernetes
-- Interface mobile native
-- Synchronisation inter-instance (futur via Chronicle)
-
-# Deliverables & Milestones
-
-| Livrable                        | Échéance (j)     | Responsable |
-|--------------------------------|--------------|-------------|
-| Simulation multi-mémoire       | J+7          | Dev / Ψ      |
-| ChromaDB intégré               | J+14         | DevOps / M   |
-| Graphe mnésique (pgGraph)      | J+21         | Dev / Φ/Ξ    |
-| UI introspection + timeline    | J+28         | UI / Λ       |
-| Export & persistence sandboxée | J+32         | Fullstack    |
-| Démo complète                  | J+35         | Intégration  |
-
-# Budget & Resources
-
-Budget humain : 1 développeur principal (15 j.h), 1 support DevOps, 1 testeur / intégrateur.
-
-Coût technique : 0 € (stack 100 % FOSS)  
-• PostgreSQL 17, pgvector, pgmq, pgGraph/pgRouting  
-• ChromaDB (serveur Python local)  
-• FastAPI + HTMX + Jinja2
-
-# Stakeholder Analysis
-
-| Acteur                 | Intérêt                            | Pouvoir    |
-|------------------------|------------------------------------|------------|
-| Expanse (core)         | Mémoire cognitive intégrable       | Élevé      |
-| Utilisateur développeur| Tester des mémoires simulées       | Moyen      |
-| Architecte Cursor      | Séparer règle/stockage/mémoire     | Élevé      |
-| AI Trainer             | Auditer/ajuster les souvenirs      | Moyen      |
-| DataOps / QA           | Export, reset, sandbox             | Faible     |
-
-# Critical Risks & Mitigations
-
-| Risque                        | Impact     | Mitigation                           |
-|------------------------------|------------|--------------------------------------|
-| Cohérence UID Chroma/PG      | Élevé      | UID commun + logique LSN monitorée   |
-| Bloat mémoire vectorielle    | Moyen      | pg_partman + pg_cron avec stratégie TTL multi-niveaux    |
-| Surdose de bruit (logs inutiles) | Moyen  | score mnésique + heuristique Ψ      |
-| Complexité graph mnésique    | Moyen      | tables edges + vues SQL + indices    |
-
-# Success Criteria / KPI
-
-| Indicateur                         | Cible             |
-|------------------------------------|-------------------|
-| Taux de récupération cohérente     | ≥ 99 %            |
-| Latence de recherche (k=10)        | ≤ 10 ms P95       |
-| Démarrage local (sans Cursor)      | ≤ 5 min           |
-| Réutilisation par `.mdc`           | ≤ 20 lignes Python|
-| Visualisation via HTMX             | 100 % fonctionnelle|
-
-## KPIs de la stratégie d'archivage 
-
-| Métrique                           | Couche           | Cible                 |
-|-----------------------------------|------------------|------------------------|
-| Temps d'accès vectoriel           | Hot (0-90j)      | ≤ 5 ms P95             |
-|                                   | Warm (90j-1an)   | ≤ 30 ms P95            |
-|                                   | Cold (1-2ans)    | ≤ 100 ms P95           |
-| Réduction taille stockage         | Warm vs Hot      | ≥ 60%                  |
-|                                   | Cold vs Hot      | ≥ 85%                  |
-|                                   | Archive vs Hot   | ≥ 95%                  |
-| Temps de transition entre couches | Hot → Warm       | ≤ 2 min/million vectors|
-|                                   | Warm → Cold      | ≤ 5 min/million vectors|
-|                                   | Cold → Archive   | ≤ 10 min/million vectors|
-| Utilisation CPU pg_cron jobs      | Tous jobs        | ≤ 10% CPU moyen        |
-| Précision vectorielle downgradée  | Warm (INT8)      | ≥ 92% vs original      |
-| Exactitude résumés JSON           | Cold             | ≥ 85% informations clés|
-| Taux d'erreur récupération        | Toutes couches   | ≤ 0.001%               |
-
-\pagebreak
-
-# Annexes
-
-- Schéma des types de mémoire (M.épisodique, sémantique, etc.)
-- Syntaxe des objets mémorisés (`event`, `context`, `feedback`, `rule_trace`)
-- Exemples de requêtes Ψ :
-  - "Que sais-tu de `project Alpha` depuis 2 semaines ?"
-  - "Explique-moi pourquoi tu as conseillé ça"
-  - "Qu'as-tu appris depuis la dernière erreur ?"
-
-## Cycle de vie des données
-
+## 6 · Architecture d'Information (Λ)
 ```mermaid
 flowchart TD
-    subgraph Storage
-        Hot["Events Table (CHAUD)<br>0-90 jours<br>full-vector HNSW"]
-        Warm["Events_YYYY_MM Partitions (WARM)<br>90j-1an<br>vecteurs downgradés int8"]
-        Cold["Events_Archive (COLD)<br>1-2 ans<br>vecteur NULL / résumé JSON"]
-        Archive["Parquet S3 + Iceberg<br>+2 ans<br>purge locale"]
-    end
-    
-    subgraph Process
-        Insert[Insertion de données]
-        PgPartman["pg_partman<br>Partitionnement automatique"]
-        PgCron["pg_cron<br>Jobs planifiés"]
-        Downgrade["Downgrade Vecteurs<br>function"]
-        Compress["Résumé + Déduplication<br>batch job"]
-        Export["Export Parquet<br>script"]
-    end
-    
-    Insert --> Hot
-    Hot --> |"90j (pg_cron)"| Warm
-    Hot --> |"Recherche vectorielle<br>temps réel"| Results
-    Warm --> |"1 an (pg_cron)"| Cold
-    Warm --> |"Recherche<br>performance moyenne"| Results
-    Cold --> |"2 ans (pg_cron)"| Archive
-    Cold --> |"Recherche<br>JSON uniquement"| Results
-    Archive --> |"Chargement ponctuel"| Results
-    
-    PgPartman --> Hot
-    PgPartman --> Warm
-    PgCron --> Downgrade
-    PgCron --> Compress
-    PgCron --> Export
-    Downgrade --> Warm
-    Compress --> Cold
-    Export --> Archive
-    
-    Results[Résultats de recherche]
+  subgraph Client
+    A[CLI / UI HTMX]
+  end
+  subgraph Backend
+    A -->|REST| API[FastAPI]
+    API --> PG[("(PostgreSQL 17)")]
+    %% Removed Otel Exporter
+  end
+  subgraph PG_Internals
+    PG --> I["interactions (HNSW)"]
+    PG --> N[nodes]
+    N --> E[edges]
+    PG --> O[chroma_outbox]
+    %% Potentially for internal async tasks
+    PG --> P["partitions pg_partman (Hot/Warm)"]
+    %% Removed Archive S3
+  end
+  style PG fill:#fef8e7,stroke:#d6b656,stroke-width:1px
 ```
 
 ---
 
-### Placeholders restants à remplir : _Néant — document finalisé._
+## 7 · Data Life‑Cycle (Local Simplified)
+```mermaid
+flowchart LR
+  subgraph Partitions_Mensuelles
+    P_M1[Mois 1]
+    P_M2[Mois 2]
+    P_Mdots[...]
+    P_M12[Mois 12]
+    P_M13[Mois 13]
+    P_M14[Mois 14]
+    P_Mdots2[...]
+  end
+
+  HotPartitions["Hot (0-12 mois)<br>Vecteur FP32"] --> P_M1
+  HotPartitions --> P_M2
+  HotPartitions --> P_Mdots
+  HotPartitions --> P_M12
+  
+  WarmPartitions["Warm (> 12 mois)<br>Vecteur INT8"] --> P_M13
+  WarmPartitions --> P_M14
+  WarmPartitions --> P_Mdots2
+  
+  P_M12 -->|"pg_cron (&gt;12 mois)"| P_M13
+  
+  classDef hot fill:#fdebd0,stroke:#c8976c;
+  classDef warm fill:#eaf2f8,stroke:#80a3bd;
+  class HotPartitions,P_M1,P_M2,P_Mdots,P_M12 hot;
+  class WarmPartitions,P_M13,P_M14,P_Mdots2 warm;
+```
+*   **Partitionnement :** Les données sont partitionnées **mensuellement** par `pg_partman` pour une gestion granulaire.
+*   **Hot (0-12 mois) :** Les partitions des 12 derniers mois contiennent les données les plus récentes avec des vecteurs **FP32** pour une haute précision.
+*   **Warm (> 12 mois) :** Un job `pg_cron` s'exécute périodiquement et **quantize les vecteurs en INT8** pour les partitions de plus de 12 mois. Cela optimise l'espace disque local tout en conservant une bonne capacité de recherche pour les données plus anciennes.
+*   **(Différé) Cold / Archive :** Les étapes de résumé JSON ou d'archivage externe ne sont pas implémentées initialement pour simplifier le déploiement local.
+
+---
+
+## 8 · Deliverables & Milestones
+| # | Livrable | Date | Resp. | Validation |
+|---|----------|------|-------|------------|
+| 1 | DDL + Partitions Hot/Warm | 05‑05 | DB | tests psql |
+| 2 | Triggers graph / Outbox | 10‑05 | Backend | unit pytest |
+| 3 | API v1 + CI | 15‑05 | Backend | schemathesis 100 % |
+| 4 | Setup Monitoring Local | 18‑05 | DevOps/Dev | Check logs, pg_stats |
+| 5 | Bench Local Scale (e.g., 10M) | 25‑05 | QA | p95 local < 10 ms |
+| 6 | Release v1.2.1 | 30‑05 | Lead | tag Git |
+
+---
+
+## 9 · Budget & Resources
+* **Humain :** 1 Dev (30 j.h) · 1 DevOps/Test (10 j.h).
+* **Matériel :** Machine locale Linux (cible: 64GB RAM).
+* **Logiciel :** FOSS only (PostgreSQL 17, pgvector, pg_partman, pg_cron, FastAPI, HTMX).
+
+---
+
+## 10 · Stakeholder Analysis
+| Acteur | Intérêt | Influence |
+|--------|---------|-----------|
+| Utilisateur (Giak) | Mémoire fiable et performante locale | ★★★★★ |
+| Expanse Core | Intégration facile | ★★★★☆ |
+| Dev Expanse | API simple | ★★★☆☆ |
+
+---
+
+## 11 · Critical Risks & Mitigations (Ξ)
+| Code | Risque | Impact | Mitigation |
+|------|--------|--------|-----------|
+| R‑Q | Recall↓ après INT8 | Moyen | Validation locale recall ≥ 92 % |
+| R‑G | Graphe > 3 sauts lent | Faible | Confirmer besoin vs CTE perf locale |
+| R‑B | Sauvegarde locale échoue | **Élevé** | Script `pg_dump` robuste + tests réguliers |
+| R‑P | Performance locale dégrade | Moyen | Monitoring PG + optimisation `postgresql.conf` |
+
+---
+
+## 12 · Success Criteria / KPI (M)
+| KPI | Couche | Seuil (Local) |
+|-----|--------|-------|
+| p95 K‑NN (k=10) | Hot | ≤ 10 ms |
+| Recall Warm INT8 | Warm | ≥ 92 % |
+| Disk / 10M interactions | Global | < 100 GB (estimé) |
+| Cohérence UID | Graph | ≥ 99,8 % |
+| Job Quantization | Warm | ≤ 5 min/1M vecteurs |
+
+---
+
+## 13 · Annexes & Références
+* Katz 2024 — HNSW pgvector benchmark.
+* PostgreSQL Docs — `pg_partman`, `pg_cron`, Configuration Tuning.
+* pgvector GitHub — Quantization details (Issue #521).
+* FastAPI / HTMX Docs.
+
+---
+
+### Document Status
+_Le PFD **v1.2.1** adapte l'architecture et les objectifs pour un déploiement local optimisé sur une machine personnelle, simplifiant le cycle de vie des données et l'observabilité._
 
