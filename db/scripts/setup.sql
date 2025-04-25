@@ -1,20 +1,16 @@
--- Fonctions vectorielles pour l'API
+-- Fonctions et Vues Utilitaires pour MnemoLite (v1.1.0)
+-- Alignées sur le schéma bdd_schema.md v1.1.0
 
--- Recherche sémantique
+-- Recherche sémantique dans les événements
 CREATE OR REPLACE FUNCTION search_memories(
   query_embedding VECTOR(1536),
   limit_results INTEGER DEFAULT 10,
-  memory_type_filter TEXT DEFAULT NULL,
-  event_type_filter TEXT DEFAULT NULL,
-  role_filter INTEGER DEFAULT NULL,
+  metadata_filter JSONB DEFAULT NULL, -- Filtre JSONB, ex: '{"memory_type": "episodic", "role": "user"}'
   start_date TIMESTAMPTZ DEFAULT NULL,
   end_date TIMESTAMPTZ DEFAULT NULL
 ) RETURNS TABLE (
   id UUID,
   timestamp TIMESTAMPTZ,
-  memory_type TEXT,
-  event_type TEXT,
-  role_id INTEGER,
   content JSONB,
   similarity FLOAT,
   metadata JSONB
@@ -24,94 +20,50 @@ BEGIN
   SELECT 
     e.id,
     e.timestamp,
-    e.memory_type,
-    e.event_type,
-    e.role_id,
     e.content,
-    1 - (e.embedding <=> query_embedding) AS similarity,
+    1 - (e.embedding <=> query_embedding) AS similarity, -- Cosine similarity
     e.metadata
   FROM 
     events e
   WHERE 
     e.embedding IS NOT NULL
-    AND (memory_type_filter IS NULL OR e.memory_type = memory_type_filter)
-    AND (event_type_filter IS NULL OR e.event_type = event_type_filter)
-    AND (role_filter IS NULL OR e.role_id = role_filter)
     AND (start_date IS NULL OR e.timestamp >= start_date)
     AND (end_date IS NULL OR e.timestamp <= end_date)
-    AND (e.expiration IS NULL OR e.expiration > NOW())
+    -- Le filtre JSONB permet de chercher sur n'importe quelle clé/valeur dans metadata
+    AND (metadata_filter IS NULL OR e.metadata @> metadata_filter)
+    -- NOTE: Expiration non gérée ici, supposée gérée par pg_partman ou requêtes spécifiques
   ORDER BY 
-    e.embedding <=> query_embedding
+    e.embedding <=> query_embedding -- Ordre par similarité cosinus (plus proche de 1 est mieux)
   LIMIT limit_results;
 END;
 $$ LANGUAGE plpgsql;
 
--- Récupérer des événements liés
-CREATE OR REPLACE FUNCTION get_related_events(
-  event_id UUID,
-  relation_type TEXT DEFAULT NULL,
-  limit_results INTEGER DEFAULT 10
-) RETURNS TABLE (
-  id UUID,
-  source_id UUID,
-  target_id UUID,
-  relation_type TEXT,
-  target_timestamp TIMESTAMPTZ,
-  target_memory_type TEXT,
-  target_event_type TEXT,
-  target_role_id INTEGER,
-  target_content JSONB
-) AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    r.id,
-    r.source_id,
-    r.target_id,
-    r.relation_type,
-    e.timestamp,
-    e.memory_type,
-    e.event_type,
-    e.role_id,
-    e.content
-  FROM 
-    relations r
-    JOIN events e ON r.target_id = e.id
-  WHERE 
-    r.source_id = event_id
-    AND (relation_type IS NULL OR r.relation_type = relation_type)
-  ORDER BY 
-    e.timestamp DESC
-  LIMIT limit_results;
-END;
-$$ LANGUAGE plpgsql;
+COMMENT ON FUNCTION search_memories IS 'Recherche des événements par similarité sémantique (cosinus) avec filtres optionnels sur dates et métadonnées JSONB.';
 
 -- Fonction pour supprimer la mémoire associée à une session
-CREATE OR REPLACE FUNCTION forget_session(session_id TEXT) RETURNS INTEGER AS $$
+-- ATTENTION: Ne supprime que les événements. Les nœuds/arêtes associés dans le graphe ne sont pas touchés.
+CREATE OR REPLACE FUNCTION forget_session(p_session_id TEXT) RETURNS BIGINT AS $$
 DECLARE
-  affected_rows INTEGER;
+  deleted_count BIGINT;
 BEGIN
-  -- Suppression de toutes les relations associées
-  DELETE FROM relations
-  WHERE source_id IN (SELECT id FROM events WHERE metadata->>'session_id' = session_id)
-     OR target_id IN (SELECT id FROM events WHERE metadata->>'session_id' = session_id);
+  -- Suppression des événements correspondants
+  WITH deleted AS (
+    DELETE FROM events
+    WHERE metadata->>'session_id' = p_session_id
+    RETURNING *
+  )
+  SELECT count(*) INTO deleted_count FROM deleted;
   
-  -- Archivage des événements
-  INSERT INTO events_archive
-  SELECT *, NOW() 
-  FROM events 
-  WHERE metadata->>'session_id' = session_id;
+  -- Note: Pas d'archivage ici, la rétention est gérée par pg_partman.
+  -- Note: Pas de suppression de relations ici, la table relations/edges est gérée séparément.
   
-  -- Suppression des événements
-  DELETE FROM events
-  WHERE metadata->>'session_id' = session_id;
-  
-  GET DIAGNOSTICS affected_rows = ROW_COUNT;
-  RETURN affected_rows;
+  RETURN deleted_count;
 END;
 $$ LANGUAGE plpgsql;
 
--- Création de la vue des sessions actives récentes
+COMMENT ON FUNCTION forget_session IS 'Supprime tous les événements associés à un session_id spécifique dans la table events. Retourne le nombre d'événements supprimés.';
+
+-- Vue des sessions actives récentes (Basée sur metadata->>'session_id')
 CREATE OR REPLACE VIEW recent_sessions AS
 SELECT 
   metadata->>'session_id' AS session_id,
@@ -122,13 +74,16 @@ FROM
   events
 WHERE 
   metadata->>'session_id' IS NOT NULL
-  AND timestamp > NOW() - INTERVAL '7 days'
+  -- Optionnel: Ajouter un filtre de temps si nécessaire, ex:
+  -- AND timestamp > NOW() - INTERVAL '7 days'
 GROUP BY 
   metadata->>'session_id'
 ORDER BY 
-  MAX(timestamp) DESC;
+  last_activity DESC;
 
--- Fonction pour résumer une session
+COMMENT ON VIEW recent_sessions IS 'Vue agrégée montrant les sessions récentes basées sur la présence de session_id dans metadata des événements.';
+
+-- Fonction pour résumer une session (Récupère métadonnées et événements récents)
 CREATE OR REPLACE FUNCTION summarize_session(
   p_session_id TEXT,
   p_limit INTEGER DEFAULT 100
@@ -137,7 +92,7 @@ CREATE OR REPLACE FUNCTION summarize_session(
   started_at TIMESTAMPTZ,
   last_activity TIMESTAMPTZ, 
   event_count BIGINT,
-  recent_events JSONB
+  recent_events JSONB -- Liste des événements récents
 ) AS $$
 BEGIN
   RETURN QUERY
@@ -154,16 +109,16 @@ BEGIN
   recent_evts AS (
     SELECT 
       jsonb_agg(
-        jsonb_build_object(
+        -- Sélection des champs pertinents de l'événement
+        jsonb_strip_nulls(jsonb_build_object(
           'id', id,
           'timestamp', timestamp,
-          'event_type', event_type,
-          'role_id', role_id,
-          'content', content
-        ) ORDER BY timestamp DESC
+          'content', content, -- Inclure le contenu
+          'metadata', metadata -- Inclure les métadonnées
+        )) ORDER BY timestamp DESC
       ) AS events
     FROM (
-      SELECT id, timestamp, event_type, role_id, content
+      SELECT id, timestamp, content, metadata
       FROM events
       WHERE metadata->>'session_id' = p_session_id
       ORDER BY timestamp DESC
@@ -177,37 +132,15 @@ BEGIN
     sm.cnt AS event_count,
     re.events AS recent_events
   FROM 
-    session_meta sm,
-    recent_evts re;
+    session_meta sm
+    CROSS JOIN recent_evts re; -- Utiliser CROSS JOIN car recent_evts retourne toujours une ligne (potentiellement avec null ou [] si aucun événement)
 END;
 $$ LANGUAGE plpgsql;
 
--- Tâche planifiée pour le nettoyage des données expirées
-SELECT cron.schedule(
-  'clean-expired-data',
-  '0 4 * * *',  -- tous les jours à 4h00
-  $$
-    -- Archiver les données expirées
-    INSERT INTO events_archive
-    SELECT *, NOW() 
-    FROM events 
-    WHERE expiration < NOW();
-    
-    -- Supprimer les données expirées
-    DELETE FROM events 
-    WHERE expiration < NOW();
-    
-    -- Rafraîchir la vue matérialisée
-    REFRESH MATERIALIZED VIEW active_memories;
-  $$
-);
+COMMENT ON FUNCTION summarize_session IS 'Fournit un résumé d'une session: métadonnées agrégées et les N événements les plus récents.';
 
--- Tâche pour le nettoyage des données de plus de 90 jours dans l'outbox
-SELECT cron.schedule(
-  'clean-outbox',
-  '0 5 * * *',  -- tous les jours à 5h00
-  $$
-    DELETE FROM chroma_outbox 
-    WHERE created_at < NOW() - INTERVAL '90 days';
-  $$
-); 
+-- NOTE: Les fonctions et triggers liés à la table 'relations' et 'chroma_outbox' ont été supprimés.
+-- NOTE: Les tâches cron pour le nettoyage via 'expiration' ou 'chroma_outbox' ont été supprimées.
+-- La gestion de la rétention est assurée par pg_partman (configuration manuelle requise).
+
+-- Fin du script setup.sql nettoyé 

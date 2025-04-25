@@ -5,8 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, Body, Query, Path
 from pydantic import BaseModel, Field
 import datetime
 from typing import List, Optional, Dict, Any
-import chromadb
-from chromadb.config import Settings
 import structlog
 
 # Configuration du logger
@@ -14,15 +12,19 @@ logger = structlog.get_logger()
 
 router = APIRouter()
 
-# Récupération des variables d'environnement
+# Récupération des variables d'environnement PostgreSQL
+# Utilisation de DATABASE_URL est préférée, mais garder ces variables
+# pour la compatibilité avec le code existant get_db_connection pourrait être utile temporairement.
+# Idéalement, get_db_connection devrait utiliser DATABASE_URL.
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "db")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "mnemo")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "mnemopass")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "mnemolite")
 
-CHROMA_HOST = os.getenv("CHROMA_HOST", "chromadb")
-CHROMA_PORT = os.getenv("CHROMA_PORT", "8000")
+# Variables ChromaDB supprimées
+# CHROMA_HOST = os.getenv("CHROMA_HOST", "chromadb")
+# CHROMA_PORT = os.getenv("CHROMA_PORT", "8000")
 
 # Modèles de données
 class MemoryBase(BaseModel):

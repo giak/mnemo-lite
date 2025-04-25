@@ -1,35 +1,40 @@
-.PHONY: up down build restart logs ps clean prune
+.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore api-shell api-test worker-shell certs help
 
 # Variables
 COMPOSE_FILE := docker-compose.yml
 PROD_COMPOSE_FILE := docker-compose.prod.yml
+# Variables par défaut pour les commandes exec (simplifié)
+POSTGRES_USER ?= mnemo
+POSTGRES_DB ?= mnemolite
+API_PORT ?= 8001
 
 # Commandes de développement
 up:
-	docker compose up -d
+	docker compose -f $(COMPOSE_FILE) up -d
 
 down:
-	docker compose down
+	docker compose -f $(COMPOSE_FILE) down --remove-orphans
 
 build:
-	docker compose build
+	DOCKER_BUILDKIT=1 docker compose -f $(COMPOSE_FILE) build
 
 restart:
-	docker compose restart
+	docker compose -f $(COMPOSE_FILE) restart
 
 logs:
-	docker compose logs -f
+	docker compose -f $(COMPOSE_FILE) logs -f
 
 ps:
-	docker compose ps
+	docker compose -f $(COMPOSE_FILE) ps
 
 clean:
-	docker compose down -v
+	docker compose -f $(COMPOSE_FILE) down -v --remove-orphans
 
 prune:
-	docker system prune -a --volumes
+	make clean
+	docker system prune -af --volumes
 
-# Commandes pour la production
+# Commandes pour la production (Adapter si docker-compose.prod.yml existe)
 prod-up:
 	docker compose -f $(COMPOSE_FILE) -f $(PROD_COMPOSE_FILE) up -d
 
@@ -50,28 +55,39 @@ prod-clean:
 
 # Commandes pour les bases de données
 db-up:
-	docker compose up -d db chromadb
+	# Démarre uniquement le service 'db'
+	docker compose -f $(COMPOSE_FILE) up -d db
 
 db-shell:
-	docker compose exec db psql -U $(shell grep POSTGRES_USER .env | cut -d '=' -f2) -d $(shell grep POSTGRES_DB .env | cut -d '=' -f2)
+	# Utilise les variables définies en haut du Makefile ou l'environnement
+	docker compose -f $(COMPOSE_FILE) exec db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
 
 db-backup:
-	docker compose exec db pg_dump -U $(shell grep POSTGRES_USER .env | cut -d '=' -f2) -d $(shell grep POSTGRES_DB .env | cut -d '=' -f2) > backup-$(shell date +%Y%m%d%H%M%S).sql
+	# Utilise les variables définies en haut du Makefile ou l'environnement
+	docker compose -f $(COMPOSE_FILE) exec db pg_dump -U $(POSTGRES_USER) -d $(POSTGRES_DB) > backup-$(shell date +%Y%m%d%H%M%S).sql
 
 db-restore:
 	@echo "Usage: make db-restore file=<backup-file>"
-	@test -f $(file) && cat $(file) | docker compose exec -T db psql -U $(shell grep POSTGRES_USER .env | cut -d '=' -f2) -d $(shell grep POSTGRES_DB .env | cut -d '=' -f2)
+	# Utilise les variables définies en haut du Makefile ou l'environnement
+	@test -f $(file) && cat $(file) | docker compose -f $(COMPOSE_FILE) exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
 
 # Commandes pour l'API
 api-shell:
-	docker compose exec api /bin/bash
+	docker compose -f $(COMPOSE_FILE) exec api /bin/bash
 
 api-test:
-	docker compose exec api pytest
+	docker compose -f $(COMPOSE_FILE) exec api pytest
 
 # Commandes pour les workers
 worker-shell:
-	docker compose exec worker /bin/bash
+	docker compose -f $(COMPOSE_FILE) exec worker /bin/bash
+
+# Vérification de l'état des services (Nouvelle cible)
+health:
+	@echo "API Health (Port $(API_PORT)):'"
+	@curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:$(API_PORT)/health
+	@echo "PostgreSQL Health:'"
+	@docker compose -f $(COMPOSE_FILE) exec db pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB) -q && echo "OK" || echo "FAIL"
 
 # Création des certificats auto-signés (développement)
 certs:
@@ -111,4 +127,5 @@ help:
 	@echo "  make worker-shell    - Connect to worker container shell"
 	@echo ""
 	@echo "Utils:"
-	@echo "  make certs           - Generate self-signed certificates" 
+	@echo "  make certs           - Generate self-signed certificates"
+	@echo "  make health          - Check API (at /health) and PostgreSQL health" 
