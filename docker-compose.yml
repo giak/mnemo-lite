@@ -8,7 +8,7 @@ version: '3.8'
 
 services:
   db:
-    image: postgres:17-alpine
+    image: pgvector/pgvector:pg17
     container_name: mnemo-postgres
     restart: unless-stopped
     deploy:
@@ -65,6 +65,7 @@ services:
       - ./api:/app/api
       - ./certs:/app/certs:ro
       - ./tests:/app/tests
+      - ./scripts:/app/scripts
     deploy:
       resources:
         limits:

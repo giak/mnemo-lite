@@ -4,30 +4,55 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import asyncpg
+import structlog
+from fastapi.routing import APIRoute
 
 # Import des routes
-from routes import memory_routes, search_routes, health_routes
+from routes import memory_routes, search_routes, health_routes, event_routes
 
 # Configuration de base
+DATABASE_URL = os.getenv("DATABASE_URL")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
+logger = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialisation au démarrage
-    print(f"Starting MnemoLite API in {ENVIRONMENT} mode")
+    # Initialisation au démarrage: Créer le pool de connexions
+    logger.info(f"Starting MnemoLite API in {ENVIRONMENT} mode")
+    if not DATABASE_URL:
+        logger.error("DATABASE_URL environment variable not set!")
+        # On pourrait lever une exception ici pour empêcher le démarrage
+        # raise RuntimeError("DATABASE_URL not set") 
+        app.state.db_pool = None # Indiquer que le pool n'est pas dispo
+    else:
+        try:
+            app.state.db_pool = await asyncpg.create_pool(
+                dsn=DATABASE_URL,
+                min_size=1,
+                max_size=10 # Ajuster selon les besoins
+            )
+            logger.info("Database connection pool created.")
+        except Exception as e:
+            logger.error("Failed to create database connection pool", error=str(e))
+            app.state.db_pool = None
     
-    # Nettoyage à l'arrêt
     yield
-    print("Shutting down MnemoLite API")
+    
+    # Nettoyage à l'arrêt: Fermer le pool
+    logger.info("Shutting down MnemoLite API")
+    if app.state.db_pool:
+        await app.state.db_pool.close()
+        logger.info("Database connection pool closed.")
 
 
 # Création de l'application
 app = FastAPI(
     title="MnemoLite API",
-    description="API pour la gestion de la mémoire vectorielle",
-    version="0.1.0",
+    description="API pour la gestion de la mémoire événementielle et vectorielle",
+    version="1.0.0",
     debug=DEBUG,
     lifespan=lifespan
 )
@@ -42,18 +67,37 @@ app.add_middleware(
 )
 
 # Enregistrement des routes
-app.include_router(memory_routes.router, prefix="/memories", tags=["memories"])
-app.include_router(search_routes.router, prefix="/search", tags=["search"])
-app.include_router(health_routes.router, tags=["health"])
+app.include_router(memory_routes.router, prefix="/v0/memories", tags=["v0_memories (Legacy)"])
+app.include_router(search_routes.router, prefix="/v0/search", tags=["v0_search (Legacy)"])
+app.include_router(event_routes.router, prefix="/v1/events", tags=["v1_Events"])
+app.include_router(health_routes.router, prefix="/v1", tags=["v1_Health & Metrics"])
+
+
+# --- Endpoint de Debug Temporaire ---
+@app.get("/debug/routes")
+async def list_routes():
+    """Liste toutes les routes enregistrées dans l'application."""
+    routes_info = []
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            routes_info.append({
+                "path": route.path,
+                "name": route.name,
+                "methods": sorted(list(route.methods))
+            })
+    return routes_info
+# --- Fin Endpoint de Debug ---
 
 
 @app.get("/")
 async def root():
     return {
         "name": "MnemoLite API",
-        "version": "0.1.0",
+        "version": "1.0.0",
         "status": "operational",
-        "environment": ENVIRONMENT
+        "environment": ENVIRONMENT,
+        "docs": "/docs",
+        "redoc": "/redoc"
     }
 
 
