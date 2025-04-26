@@ -11,137 +11,130 @@ import uuid
 import os
 import random
 from datetime import datetime, timedelta, timezone
+import time
 
 # --- Configuration ---
-DB_URL = os.getenv("DATABASE_URL", "postgresql://mnemo:mnemo@localhost:5432/mnemolite")
-TABLE_NAME = "events"
-EMBEDDING_DIM = 1536 # Assuming OpenAI text-embedding-3-small
+DEFAULT_NUM_EVENTS = 30000  # Nombre d'événements à générer
+DEFAULT_DB_DSN = os.environ.get("DATABASE_URL", "postgresql://user:password@localhost:5432/mnemolite_db")
+DEFAULT_EMBEDDING_DIM = 1536 # Ajusté selon le schéma DB (01-init.sql)
+BATCH_SIZE = 1000 # Taille des lots pour l'insertion
+
+# Période pour les timestamps (3 mois)
+END_DATE = datetime.now(timezone.utc)
+START_DATE = END_DATE - timedelta(days=90)
+
+METADATA_TYPES = ["log", "metric", "trace", "audit"]
+METADATA_SOURCES = ["app-web", "app-mobile", "api-gateway", "db-worker", "infra-node"]
+METADATA_STATUS_CODES = [200, 201, 204, 400, 401, 403, 404, 500, 503]
 
 # --- Helper Functions ---
 
-def generate_random_timestamp(start_date=datetime(2023, 1, 1, tzinfo=timezone.utc), 
-                              end_date=datetime.now(timezone.utc)):
-    """Generates a random timestamp between start and end dates."""
-    delta = end_date - start_date
+def generate_random_timestamp(start, end):
+    """Génère un timestamp aléatoire entre start et end."""
+    delta = end - start
     random_seconds = random.uniform(0, delta.total_seconds())
-    return start_date + timedelta(seconds=random_seconds)
+    return start + timedelta(seconds=random_seconds)
 
-def generate_random_metadata():
-    """Generates varied JSONB metadata for filtering tests."""
-    # Example: Mix of simple tags and nested data
+def generate_random_embedding(dim):
+    """Génère un vecteur embedding aléatoire normalisé."""
+    vec = np.random.rand(dim).astype(np.float32)
+    norm = np.linalg.norm(vec)
+    if norm == 0:
+        return np.zeros(dim).tolist() # Éviter division par zéro
+    return (vec / norm).tolist()
+
+def generate_random_event(embedding_dim):
+    """Génère un enregistrement d'événement aléatoire."""
+    event_type = random.choice(METADATA_TYPES)
     metadata = {
-        "source_system": random.choice(["SystemA", "SystemB", "SystemC", "LegacySys"]),
-        "event_type": random.choice(["USER_LOGIN", "ITEM_PURCHASED", "NOTIFICATION_SENT", "ERROR_LOGGED"]),
-        "region": random.choice(["us-east-1", "eu-west-1", "ap-southeast-2", "us-west-2"]),
-        "priority": random.randint(1, 5),
-        "is_critical": random.choice([True, False]),
+        "type": event_type,
+        "source": random.choice(METADATA_SOURCES),
+        "tenant_id": random.randint(1, 10)
     }
-    if random.random() < 0.2: # Add nested data occasionally
-        metadata["details"] = {
-            "user_id": random.randint(1000, 9999),
-            "session_id": str(uuid.uuid4())
-        }
-    return json.dumps(metadata)
+    if event_type in ["log", "trace"]:
+         # Ajout conditionnel de status_code
+        if random.random() > 0.3: # 70% de chance d'avoir un status_code
+            metadata["status_code"] = random.choice(METADATA_STATUS_CODES)
 
-def generate_random_content():
-    """Generates simple placeholder JSON content."""
-    return json.dumps({
-        "message": f"Event {random.randint(1000, 9999)} occurred.",
-        "payload_size": random.randint(10, 1024),
-        "processed": random.choice([True, False])
-    })
+    return (
+        uuid.uuid4(),                                 # id (au lieu de event_id)
+        generate_random_timestamp(START_DATE, END_DATE), # timestamp
+        generate_random_embedding(embedding_dim),     # embedding (list)
+        json.dumps(metadata),                         # metadata (json string)
+        json.dumps({})                                # content (au lieu de raw_event)
+    )
 
-async def insert_batch_with_insert(pool, batch_data):
-    """Inserts a batch of data using INSERT statements (slower but vector-compatible)."""
-    query = """
-    INSERT INTO events (id, timestamp, content, metadata, embedding)
-    VALUES ($1, $2, $3, $4, $5::vector) -- Explicitly cast to vector
-    """
-    # Prepare data for executemany: list of tuples
-    # Convert embedding list to string representation '[...]' for text protocol
-    records_to_insert = [
-        (
-            d["id"],
-            d["timestamp"],
-            d["content"],
-            d["metadata"],
-            # Convert list to string '[num, num, ...]' expected by pgvector text input
-            str(d["embedding"]).replace(" ", "") 
-        )
-        for d in batch_data
-    ]
-    
-    async with pool.acquire() as conn:
-        async with conn.transaction(): # Use a transaction for the batch
-            try:
-                status = await conn.executemany(query, records_to_insert)
-                # executemany doesn't return a count, assume success if no exception
-                return len(records_to_insert)
-            except Exception as e:
-                print(f"Error during batch INSERT: {e}")
-                # Consider logging the failing batch data
-                return 0
-
-# --- Main Execution ---
-
-async def main(num_events, batch_size):
-    """Main function to generate and insert data."""
-    # Increase pool size slightly for potentially more concurrent inserts
-    pool = await asyncpg.create_pool(DB_URL, min_size=5, max_size=20) 
-    print(f"Connected to database. Target: {num_events} events, Batch size: {batch_size}")
-    print("Using INSERT statements (slower than COPY)...")
-
-    total_inserted = 0
-    start_time = datetime.now()
-
+async def main(num_events, db_dsn, embedding_dim):
+    """Fonction principale pour générer et insérer les données."""
+    print(f"Connexion à la base de données : {db_dsn}")
+    conn = None
     try:
-        while total_inserted < num_events:
-            current_batch_size = min(batch_size, num_events - total_inserted)
-            batch_data = []
-            
-            # Generate batch
-            embeddings = np.random.normal(size=(current_batch_size, EMBEDDING_DIM)).astype('float32')
-            embeddings /= np.linalg.norm(embeddings, axis=1, keepdims=True) # Normalize
+        conn = await asyncpg.connect(db_dsn)
+        print(f"Connexion réussie. Génération de {num_events} événements (dim={embedding_dim})...")
 
-            for i in range(current_batch_size):
-                event = {
-                    "id": uuid.uuid4(), # Use 'id'
-                    "timestamp": generate_random_timestamp(),
-                    "content": generate_random_content(),
-                    "metadata": generate_random_metadata(),
-                    # asyncpg expects list/tuple for vector type
-                    "embedding": embeddings[i].tolist() 
-                }
-                batch_data.append(event)
+        start_time = time.time()
+        total_inserted = 0
+        records_batch = []
 
-            # Insert batch using INSERT
-            # inserted_count = await insert_batch(pool, batch_data) # Old COPY call
-            inserted_count = await insert_batch_with_insert(pool, batch_data)
-            total_inserted += inserted_count
+        for i in range(num_events):
+            records_batch.append(generate_random_event(embedding_dim))
 
-            # Progress reporting
-            elapsed_time = (datetime.now() - start_time).total_seconds()
-            rate = total_inserted / elapsed_time if elapsed_time > 0 else 0
-            print(f"Inserted {total_inserted}/{num_events} events... ({rate:.2f} events/sec)", end="\r")
+            if len(records_batch) >= BATCH_SIZE or i == num_events - 1:
+                try:
+                    # Utilisation de copy_records_to_table pour l'efficacité
+                    await conn.copy_records_to_table(
+                        'events',
+                        records=records_batch,
+                        columns=['id', 'timestamp', 'embedding', 'metadata', 'content'],
+                        timeout=60 # Augmenter le timeout pour les gros lots
+                    )
+                    total_inserted += len(records_batch)
+                    elapsed_time = time.time() - start_time
+                    print(f"  -> Inséré {total_inserted}/{num_events} événements ({len(records_batch)} ce lot). Temps écoulé: {elapsed_time:.2f}s", end='\r')
+                    records_batch = [] # Vider le lot
 
-            if inserted_count < current_batch_size:
-                print("\nInsertion issue encountered, stopping generation.")
-                break
-                
+                except Exception as e:
+                    print(f"\nErreur lors de l'insertion du lot: {e}")
+                    print("Tentative d'insertion ligne par ligne (plus lent)...")
+                    # Mode dégradé: insertion ligne par ligne en cas d'échec du lot
+                    for record in records_batch:
+                         # Convertir l'embedding (liste) en string pour INSERT
+                         record_list = list(record) # Convertir le tuple en liste pour modification
+                         record_list[2] = str(record_list[2]) # Convertir l'embedding (index 2) en string '[...]'
+                         record_tuple = tuple(record_list)
+
+                         try:
+                             await conn.execute("""
+                                 INSERT INTO events (id, timestamp, embedding, metadata, content)
+                                 VALUES ($1, $2, $3, $4, $5)
+                             """, *record_tuple) # Utiliser le tuple modifié
+                             total_inserted +=1
+                             elapsed_time = time.time() - start_time
+                             print(f"  -> Inséré {total_inserted}/{num_events} événements (ligne par ligne). Temps écoulé: {elapsed_time:.2f}s", end='\r')
+                         except Exception as inner_e:
+                             print(f"\nErreur lors de l'insertion de l'enregistrement {record[0]}: {inner_e}")
+                             # Décider quoi faire ici: skipper, logger, arrêter ? Pour l'instant, on logue et continue.
+                    records_batch = [] # Vider le lot même en cas d'erreur partielle
+
+        print(f"\nInsertion terminée. {total_inserted} événements insérés en {time.time() - start_time:.2f} secondes.")
+
     except Exception as e:
-        print(f"\nAn error occurred: {e}")
+        print(f"Erreur générale : {e}")
     finally:
-        await pool.close()
-        print(f"\nFinished. Total events inserted: {total_inserted}")
-        final_elapsed_time = (datetime.now() - start_time).total_seconds()
-        final_rate = total_inserted / final_elapsed_time if final_elapsed_time > 0 else 0
-        print(f"Total time: {final_elapsed_time:.2f} seconds. Average rate: {final_rate:.2f} events/sec")
+        if conn:
+            await conn.close()
+            print("Connexion à la base de données fermée.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate test data for MnemoLite events table.")
-    parser.add_argument("-n", "--num-events", type=int, required=True, help="Total number of events to generate.")
-    parser.add_argument("-b", "--batch-size", type=int, default=1000, help="Number of events per insertion batch.")
+    parser = argparse.ArgumentParser(description="Génère des données de test pour MnemoLite.")
+    parser.add_argument("-n", "--num-events", type=int, default=DEFAULT_NUM_EVENTS,
+                        help=f"Nombre d'événements à générer (défaut: {DEFAULT_NUM_EVENTS})")
+    parser.add_argument("--db-dsn", type=str, default=DEFAULT_DB_DSN,
+                        help=f"DSN de la base de données PostgreSQL (défaut: {DEFAULT_DB_DSN} ou variable d'env DATABASE_URL)")
+    parser.add_argument("--dim", type=int, default=DEFAULT_EMBEDDING_DIM,
+                        help=f"Dimension des embeddings (défaut: {DEFAULT_EMBEDDING_DIM})")
+
     args = parser.parse_args()
 
-    asyncio.run(main(args.num_events, args.batch_size)) 
+    asyncio.run(main(args.num_events, args.db_dsn, args.dim)) 

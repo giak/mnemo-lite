@@ -64,8 +64,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./api:/app/api
+    volumes: # Re-enabled for development - Mounting ./api to /app
+      - ./api:/app # Adjusted mount point
       - ./certs:/app/certs:ro
       - ./tests:/app/tests
       - ./scripts:/app/scripts
@@ -78,7 +78,6 @@ services:
       backend:
       frontend:
     logging: *default-logging
-    entrypoint: ["/app/api/entrypoint.sh"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8000/v1/healthz"]
       interval: 30s
