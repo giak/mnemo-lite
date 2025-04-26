@@ -75,6 +75,7 @@ class EventRepository:
         VALUES ($1, $2, $3, NOW()) 
         RETURNING id, timestamp, content, metadata, embedding
         """
+        # Pass the embedding list directly; asyncpg + pgvector codec handle conversion
         embedding_str = json.dumps(event_data.embedding) if event_data.embedding is not None else None
         
         # Utiliser le pool
@@ -83,7 +84,7 @@ class EventRepository:
                 query, 
                 json.dumps(event_data.content),
                 json.dumps(event_data.metadata),
-                embedding_str
+                embedding_str # Pass the JSON string representation
             )
         
         if record:
@@ -156,7 +157,7 @@ class EventRepository:
                 records = await conn.fetch(query, criteria_json)
                 logger.debug("filter_by_metadata raw results count", count=len(records)) # DEBUG LOG
         except Exception as e:
-            logger.error("filter_by_metadata error during query", error=str(e), exc_info=True)
+            logger.error(f"filter_by_metadata error during query: {e!s}", exc_info=True)
             # Propager l'erreur ou retourner liste vide ? Pour l'instant, propage implicitement.
             # Potentiellement, on devrait gérer ça plus finement.
 
@@ -179,49 +180,41 @@ class EventRepository:
         2. Filtre les résultats par métadonnées et timestamp.
         3. Applique la limite et l'offset finaux.
         """
-        # --- Logique de construction de la requête SQL ---
-        # 1. Préparer les paramètres et la requête de base
         query_params = []
-        param_index = 1
-        base_query = """
-        SELECT id, timestamp, content, metadata, embedding, similarity_score
-        FROM (\n"""
-        
-        knn_query = """
-            SELECT id, timestamp, content, metadata, embedding, (embedding <=> $1) as similarity_score
-            FROM events
-            ORDER BY embedding <=> $1
-            LIMIT $2 -- Sur-échantillonnage
-        """
-        
-        # 2. Déterminer le facteur de sur-échantillonnage (overfetch_factor)
-        overfetch_factor = 5 # TODO: Rendre configurable ?
-        knn_limit = top_k * overfetch_factor
-        
-        # 3. Construire la partie WHERE (filtres)
         where_clauses = []
-        
+        param_index = 1
+
         if vector:
-            # Si un vecteur est fourni, la requête de base est la recherche KNN
-            base_query += knn_query
-            query_params.extend([vector, knn_limit])
+            # --- Construction requête avec recherche vectorielle (KNN + filtres) ---
+            # Convert vector list to string format '[...]' expected by pgvector
+            vector_str_param = str(vector).replace(" ", "") # Simple conversion, remove spaces
+
+            base_query = """
+            SELECT id, timestamp, content, metadata, embedding, similarity_score
+            FROM (
+                SELECT id, timestamp, content, metadata, embedding, (embedding <=> $1::vector) as similarity_score
+                FROM events
+                ORDER BY embedding <=> $1::vector
+                LIMIT $2 -- Sur-échantillonnage
+            ) AS vector_results
+            WHERE 1=1"""
+            
+            query_params.extend([vector_str_param, top_k * 5]) # Utiliser le string formaté
             param_index = 3 # Les params $1 et $2 sont utilisés par KNN
         else:
-            # Si pas de vecteur, simple SELECT *
-            base_query += """ SELECT id, timestamp, content, metadata, embedding, 0.0 as similarity_score FROM events """
-            # Pas de LIMIT initial ici, les filtres s'appliqueront
-            # Il faudra ajouter un ORDER BY si pas de vecteur (ex: par timestamp)
-        
-        # Ajouter la fermeture de la sous-requête
-        base_query += """\n) AS vector_results\nWHERE 1=1"""
-        
-        # Ajouter filtre metadata
+            # --- Construction requête SANS recherche vectorielle (Filtres + Tri) ---
+            base_query = """
+            SELECT id, timestamp, content, metadata, embedding, 0.0 as similarity_score 
+            FROM events
+            WHERE 1=1""" 
+            # Pas de params $1, $2 ici
+
+        # --- Ajout des filtres communs (metadata, timestamp) ---
         if metadata:
             where_clauses.append(f"metadata @> ${param_index}::jsonb")
             query_params.append(json.dumps(metadata))
             param_index += 1
             
-        # Ajouter filtre temporel
         if ts_start:
             where_clauses.append(f"timestamp >= ${param_index}")
             query_params.append(ts_start)
@@ -235,11 +228,11 @@ class EventRepository:
         if where_clauses:
             base_query += " AND " + " AND ".join(where_clauses)
             
-        # 4. Ajouter ORDER BY final (si pas de recherche vectorielle) et LIMIT/OFFSET
-        # Si on n'a pas de vecteur, on trie par timestamp par défaut
+        # --- Ajout ORDER BY, LIMIT, OFFSET finaux ---
         if not vector:
+             # Trier par timestamp si pas de recherche vectorielle
              base_query += "\nORDER BY timestamp DESC" 
-        # Sinon, le tri par similarité est déjà fait dans la sous-requête
+        # else: Le tri par similarité est implicite via la sous-requête si vector
         
         base_query += f"\nLIMIT ${param_index}"
         query_params.append(limit)
@@ -247,34 +240,32 @@ class EventRepository:
         
         base_query += f"\nOFFSET ${param_index}"
         query_params.append(offset)
-        param_index += 1
+        # param_index += 1 # Plus nécessaire après le dernier ajout
 
         # --- Exécution de la requête ---
         records = []
         try:
             async with self.pool.acquire() as conn:
-                # Convertir le vecteur en string format '[1,2,3]' pour pgvector si c'est une liste
-                prepared_params = []
-                for p in query_params:
-                    if isinstance(p, list): # Supposons que seul le vecteur est une liste
-                        prepared_params.append(json.dumps(p)) # Format '[1.2, 3.4,...]'
-                    else:
-                        prepared_params.append(p)
-                        
-                 # Debug log
+                # Les paramètres sont déjà dans query_params, y compris le vecteur correctement formaté
+                prepared_params = query_params
+                                 
+                # Debug log
                 logging.debug(f"Executing search_vector query: {base_query}")
+                logging.debug(f"With parameters: {prepared_params}") # Log params too
+                
                 records = await conn.fetch(base_query, *prepared_params)
-        except asyncpg.PostgresError as db_err:
-            logging.error(f"Database error during search_vector query: {db_err}", exc_info=True)
-            # Relancer une exception spécifique ou générique
-            raise ConnectionError(f"Database error during search: {db_err}") from db_err
+                
+                logger.debug("search_vector raw results count", count=len(records)) # DEBUG LOG
+        except asyncpg.exceptions.UndefinedFunctionError as e:
+            logger.error(f"pgvector UndefinedFunctionError: Is the pgvector extension enabled? Query: {base_query} Params: {prepared_params}", exc_info=True)
+            raise RuntimeError("Database query failed due to potential missing pgvector extension or incorrect function call.") from e
         except Exception as e:
-            logging.error(f"Unexpected error during search_vector query: {e}", exc_info=True)
-            # Que faire en cas d'erreur ? Relancer, retourner [], etc.
-            # Relancer pour signaler un problème inattendu
-            raise RuntimeError(f"Unexpected error during search: {e}") from e
+            # logger.error(f"search_vector error during query: {base_query} Params: {prepared_params}", error=str(e), exc_info=True)
+            logger.exception(f"search_vector error during query: {base_query} Params: {prepared_params} Error: {e!s}") # Use logger.exception to include traceback and format error
+            # Propager une erreur générique pour ne pas fuiter de détails
+            raise RuntimeError("Database query failed unexpectedly.") from e
 
-        # 5. Convertir les résultats en EventModel
+        # Conversion des résultats
         return [EventModel.from_db_record(dict(record)) for record in records]
 
 # Note: Il faudra également mettre en place la gestion du pool de connexions

@@ -22,15 +22,23 @@
     *   *Critères d'Acceptation:*
         *   Un index `HNSW` utilisant la similarité cosinus (`vector_cosine_ops`) est défini pour la colonne `embedding`.
         *   Les paramètres de l'index (`m`, `ef_construction`) sont choisis et documentés (valeurs initiales raisonnables basées sur les recommandations `pgvector`).
-        *   (Optionnel pour PoC, mais recommandé) La table `events` est définie comme partitionnée par `RANGE` sur `timestamp` (ex: mensuellement), ou la structure le permettant est en place.
+        *   La table `events` est définie comme partitionnée par `RANGE` sur `timestamp` (ex: mensuellement), ou la structure le permettant est en place. **FAIT via `pg_partman`.**
         *   La documentation de la structure DB (`docs/bdd_schema.md`) est mise à jour.
-    *   **Statut:** **PARTIELLEMENT FAIT**
+    *   **Statut:** **FAIT**
     *   **Notes / Problèmes Rencontrés & Solutions:**
-        *   **Fait:** La table `events` est définie avec `PARTITION BY RANGE (timestamp)` comme documenté dans `docs/bdd_schema.md`. La structure de base est prête.
-        *   **Fait:** La documentation `docs/bdd_schema.md` est à jour concernant la structure de la table et la définition de l'index HNSW (cosine, params `m=16, ef_construction=64`).
-        *   **À FAIRE (Manuel):** L'index HNSW (`CREATE INDEX ON partition_name USING hnsw (...)`) doit être créé manuellement sur chaque partition existante et future. L'automatisation via `pg_partman` ou similaire est différée pour le moment.
-        *   Quel partitionnement choisir (mensuel, hebdomadaire) ? Impact sur la maintenance vs performance. -> Décision différée avec l'automatisation.
-        *   Comment gérer la création de nouvelles partitions (manuel, `pg_partman`, trigger) ? -> Gestion manuelle pour l'instant.
+        *   **Fait:** La table `events` est définie avec `PARTITION BY RANGE (timestamp)` comme documenté dans `docs/bdd_schema.md`.
+        *   **Fait:** Documentation `docs/bdd_schema.md` mise à jour (index HNSW `m=16, ef_construction=64`).
+        *   **Installation `pg_partman`:**
+            *   Ajout de `postgresql-17-partman` dans `Dockerfile` pour l'image `db`.
+            *   Ajout de `CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;` dans `db/init/01-init-db.sql`.
+        *   **Configuration `pg_partman` (`db/init/02-partman-config.sql`):**
+            *   **Étape 1 (Échec):** Tentative d'insertion manuelle dans `partman.part_config`. Échoue car `pg_partman` gère sa propre configuration.
+            *   **Étape 2 (Échec):** Tentative d'utilisation de `partman.create_parent` avec `p_type := 'native'` (interprétation erronée) et `p_interval := 'monthly'` (syntaxe incorrecte). Résultat: `ERROR: native is not a valid partitioning type for pg_partman`.
+            *   **Étape 3 (Succès):** Utilisation de `partman.create_parent` avec les paramètres corrects : `p_parent_table := 'public.events'`, `p_control := 'timestamp'`, `p_type := 'range'`, `p_interval := '1 month'`, `p_premake := 4`.
+            *   **Apprentissage clé:** Dans `pg_partman 5.x`, `p_type` spécifie la *stratégie* (`range` ou `list`), pas le mécanisme (`native`). La version 5+ utilise *toujours* le partitionnement natif de PostgreSQL.
+        *   **Vérification:** La commande `\dt public.events_p*` confirme la création des partitions mensuelles (ex: `events_p20241201`, `events_p20250101`, ...).
+        *   **À FAIRE (Manuel):** L'index HNSW (`CREATE INDEX ON partition_name USING hnsw (...)`) doit toujours être créé manuellement sur chaque partition (existante et future). Une fonction pour automatiser cela lors de la création de partition par `pg_partman` (via `p_template_table` ou trigger) pourrait être explorée plus tard.
+        *   **Maintenance:** La tâche périodique pour créer/détacher les partitions (`partman.run_maintenance_proc()`) doit être configurée (ex: via `pg_cron` dans le conteneur `db`). C'est en dehors du scope de cette story initiale.
 
 2.  **STORY-03.2: [Repository] Implémentation `search_vector` (Logique Post-Filtrage)**
     *   **En tant que** Développeur Système MnemoLite,
@@ -63,26 +71,58 @@
         *   La route appelle la méthode `repository.search_vector()` avec les paramètres appropriés.
         *   La réponse utilise le modèle `EventSearchResults` (`{"data": [...], "meta": {...}}`) incluant les résultats et les métadonnées de recherche (limit, offset, total_hits si dispo, query_time).
         *   La spécification OpenAPI (`docs/v2/Specification_API.md`) est mise à jour pour refléter les nouveaux paramètres et la réponse.
-    *   **Statut:** **À FAIRE**
+    *   **Statut:** **FAIT** *(Implémentation initiale)*
     *   **Notes / Problèmes Rencontrés & Solutions:**
-        *   Choisir le format de `vector_query`. Base64 est plus compact mais moins lisible. Floats séparés par virgule est plus simple mais peut poser problème avec les limites d'URL si la dimension est grande (1536 ici, c'est beaucoup). JSON dans le corps serait idéal mais c'est un `GET`. Peut-être accepter les deux ou privilégier Base64 ?
-        *   Comment `top_k` interagit avec `limit` ? `top_k` est pour la recherche NN initiale, `limit` est pour le résultat final.
+        *   **Fait:** Endpoint `GET /v1/search` modifié pour accepter `vector_query`, `top_k`, `ts_start`, `ts_end`, `filter_metadata`, `limit`, `offset`.
+        *   **Fait:** Validation des paramètres ajoutée (Base64 pour `vector_query`, types, etc.). Erreur 422 retournée si invalide.
+        *   **Fait:** Appel à `repository.search_vector()` effectué.
+        *   **Fait:** Réponse `EventSearchResults` utilisée. Spécification OpenAPI mise à jour.
+        *   **Format `vector_query`:** Choix de Base64 encodant une string JSON `"[0.1, 0.2, ...]"` pour compacité et éviter les problèmes d'encodage URL avec les floats.
+        *   **Interaction `top_k`/`limit`:** Clarifié que `top_k` est pour la recherche KNN initiale (avec sur-échantillonnage), `limit` est pour le résultat final retourné au client.
+        *   **Problèmes de Tests d'Intégration:** Rencontré des erreurs `asyncpg.InterfaceError: connection is closed` et `ConnectionDoesNotExistError` intermittentes lors de l'exécution des tests pour `/v1/search` (`tests/test_search_routes.py`), potentiellement dues à des conflits entre le `TestClient` synchrone, `anyio`, et le pool de connexions `asyncpg`, ou à une fuite d'état entre les tests lors de l'utilisation de fixtures `scope="session"`.
+        *   **Solution Tests:** Résolu en revenant à des fixtures `scope="function"` pour le pool de base de données (`test_db_pool`) et le client de test (`client`), et en s'assurant que la base de données est explicitement tronquée (`TRUNCATE TABLE events`) *avant* chaque exécution de test via la fixture `client`. Cela garantit une isolation stricte entre les tests. Les tests sont maintenant stables.
 
 4.  **STORY-03.4: [PoC] Validation Performance & Rappel**
     *   **En tant que** Développeur Système MnemoLite,
     *   **Je veux** réaliser un Proof of Concept en chargeant une quantité significative de données (ex: 500k+ événements avec embeddings) et en mesurant la latence (P95) et le rappel (Recall@k) des requêtes hybrides,
     *   **Afin de** valider l'efficacité de l'approche HNSW + post-filtrage et d'ajuster les paramètres (index, facteur over-fetch) si nécessaire.
+    *   *Introduction & Contexte:*
+        *   **Besoin:** Valider si notre stratégie de recherche hybride (index HNSW `pgvector` + post-filtrage metadata/temps sur la table `events` partitionnée par mois via `pg_partman`) est performante et pertinente sous une charge de données réaliste (~1 million d'événements).
+        *   **Objectif PoC:** Mesurer la latence P95 et le Rappel@k pour divers scénarios de requêtes hybrides. Confirmer l'atteinte des SLOs (ex: P95 < 200ms, Rappel@k ≥ 0.9) ou identifier les points d'amélioration.
     *   *Critères d'Acceptation:*
-        *   Un script ou notebook existe pour générer/importer des données de test à grande échelle.
-        *   Un script ou notebook existe pour exécuter un benchmark de requêtes hybrides variées (différents `top_k`, sélectivité des filtres).
-        *   Les métriques de latence P95 et de rappel (comparé à une recherche exhaustive sur petit dataset) sont collectées.
-        *   Les résultats sont analysés pour confirmer l'atteinte des SLO (<100ms) ou identifier les goulets d'étranglement.
-        *   Les paramètres d'index HNSW (`ef_search`) et le facteur d'over-fetch sont potentiellement ajustés.
+        *   Un script (`scripts/benchmarks/generate_test_data.py`) génère et charge ~1M+ événements via `asyncpg`.
+        *   Les index HNSW sont créés sur les partitions après le chargement.
+        *   Un script (`scripts/benchmarks/run_benchmark.py`) exécute un benchmark de requêtes hybrides variées (vector, metadata, hybrid ; `top_k`, filtres, partitions).
+        *   Les métriques de latence P95 (client/serveur) et de Rappel@k (vs. exact KNN sur échantillon) sont collectées.
+        *   Les résultats sont analysés, comparés aux SLOs (P95 < 200ms, Recall@k ≥ 0.9).
+        *   Les paramètres (`ef_search`, over-fetch, `work_mem`) sont ajustés si nécessaire, et les choix finaux sont documentés.
     *   **Statut:** **À FAIRE**
-    *   **Notes / Problèmes Rencontrés & Solutions:**
-        *   Génération des embeddings factices mais réalistes.
-        *   Définition d'un benchmark représentatif.
-        *   Comment mesurer le rappel efficacement ?
+    *   **Plan d'Action / Tâches:**
+        1.  **[À Faire] Génération Données:**
+            *   Créer `scripts/benchmarks/generate_test_data.py`.
+            *   Implémenter la génération de ~1M événements (timestamps réalistes, metadata variés, embeddings normalisés).
+            *   Utiliser `asyncpg.copy_records_to_table` pour l'insertion.
+            *   Exécuter pour peupler la base.
+        2.  **[À Faire] Création Index:**
+            *   Script (ou commandes manuelles) pour `CREATE INDEX CONCURRENTLY ... USING hnsw (...)` sur chaque partition après chargement.
+        3.  **[À Faire] Implémentation Benchmark:**
+            *   Créer `scripts/benchmarks/run_benchmark.py`.
+            *   Définir la matrice de requêtes test.
+            *   Implémenter l'appel à `EventRepository.search_vector`.
+            *   Ajouter la mesure de latence (client-side `perf_counter_ns`, optionnel `EXPLAIN ANALYZE`).
+        4.  **[À Faire] Mesure Rappel:**
+            *   Implémenter le calcul de Recall@k (cible ≥ 0.9).
+            *   Générer la vérité terrain (exact KNN) sur un échantillon (ex: 1%).
+            *   Comparer les résultats HNSW du benchmark.
+        5.  **[À Faire] Exécution & Analyse:**
+            *   Exécuter le benchmark.
+            *   Collecter et analyser les métriques (P95 latence, Recall@k).
+            *   Comparer aux SLOs.
+        6.  **[À Faire] Tuning (si besoin):**
+            *   Ajuster `ef_search`, over-fetch, `work_mem` de manière systématique.
+            *   Relancer le benchmark pour valider les améliorations.
+        7.  **[À Faire] Documentation:**
+            *   Documenter les résultats finaux, paramètres optimaux et conclusions dans cette story.
 
 *(Ajouter STORY-03.5 pour les tests d'intégration spécifiques à la recherche hybride une fois la fonctionnalité de base validée par le PoC)*
 

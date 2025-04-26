@@ -11,7 +11,7 @@ import json
 from api.db.repositories.event_repository import EventRepository, EventModel, EventCreate
 # from api.db.repositories import event_repository # Plus nécessaire si on ne spy pas le module
 
-@pytest.mark.asyncio # Nécessaire pour les tests async avec pytest-asyncio
+@pytest.mark.anyio # Nécessaire pour les tests async avec pytest-asyncio
 async def test_event_repository_instantiation():
     """Teste si EventRepository peut être instancié avec un pool mocké."""
     # Crée un mock asynchrone pour simuler le pool de connexions asyncpg
@@ -24,7 +24,7 @@ async def test_event_repository_instantiation():
     assert isinstance(repository, EventRepository)
     assert repository.pool is mock_pool
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_add_event_success(mocker):
     """Teste l'ajout réussi d'un événement."""
     # 1. Préparation (Arrange)
@@ -73,7 +73,7 @@ async def test_add_event_success(mocker):
     assert call_args[0].strip().startswith("INSERT INTO events")
     assert call_args[1] == json.dumps(event_content)
     assert call_args[2] == json.dumps(event_metadata)
-    assert call_args[3] == json.dumps(event_embedding)
+    assert call_args[3] == json.dumps(event_embedding) # Revert: Expect JSON string again
     
     # Vérifie que le résultat est du bon type et contient les bonnes données
     assert isinstance(created_event, EventModel)
@@ -83,7 +83,7 @@ async def test_add_event_success(mocker):
     assert created_event.metadata == event_metadata
     assert created_event.embedding == event_embedding
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_get_event_by_id_success(mocker):
     """Teste la récupération réussie d'un événement par ID."""
     # 1. Préparation (Arrange)
@@ -130,7 +130,7 @@ async def test_get_event_by_id_success(mocker):
     assert found_event.metadata == expected_metadata
     assert found_event.embedding == expected_embedding
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_get_event_by_id_not_found(mocker):
     """Teste le cas où l'événement n'est pas trouvé par ID."""
     # 1. Préparation (Arrange)
@@ -157,7 +157,7 @@ async def test_get_event_by_id_not_found(mocker):
 
 # --- Tests pour filter_by_metadata --- 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_filter_by_metadata_found(mocker):
     """Teste le filtrage par métadonnées quand des événements correspondent."""
     # 1. Préparation (Arrange)
@@ -214,7 +214,7 @@ async def test_filter_by_metadata_found(mocker):
     assert found_events[0].metadata["source"] == "test"
     assert found_events[1].metadata["type"] == "filter"
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_filter_by_metadata_not_found(mocker):
     """Teste le filtrage par métadonnées quand aucun événement ne correspond."""
     # 1. Préparation (Arrange)
@@ -242,7 +242,7 @@ async def test_filter_by_metadata_not_found(mocker):
 
 # --- Tests pour search_vector --- 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_search_vector_metadata_only(mocker):
     """Teste search_vector avec seulement un filtre metadata (vector=None)."""
     # 1. Préparation (Arrange)
@@ -321,7 +321,7 @@ async def test_search_vector_metadata_only(mocker):
     assert found_events[0].metadata["source"] == "search_test"
     assert found_events[0].similarity_score == 0.0 # Vérifier le score par défaut
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_search_vector_vector_only(mocker):
     """Teste search_vector avec seulement un vecteur (metadata=None)."""
     # 1. Préparation (Arrange)
@@ -393,7 +393,7 @@ async def test_search_vector_vector_only(mocker):
     assert f"OFFSET $4" in query_sql # L'OFFSET final est $4
 
     # Vérifier les paramètres passés
-    assert query_params[0] == json.dumps(query_vector) # $1: Vecteur
+    assert query_params[0] == str(query_vector).replace(" ", "") # $1: Vecteur (Correct format '[...]')
     assert query_params[1] == expected_knn_limit      # $2: Limite KNN
     assert query_params[2] == test_limit             # $3: Limite finale
     assert query_params[3] == test_offset            # $4: Offset final
@@ -408,7 +408,7 @@ async def test_search_vector_vector_only(mocker):
     assert found_events[0].similarity_score == 0.05 
     assert found_events[1].similarity_score == 0.15
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_search_vector_hybrid(mocker):
     """Teste search_vector avec un vecteur ET un filtre metadata."""
     # 1. Préparation (Arrange)
@@ -473,9 +473,9 @@ async def test_search_vector_hybrid(mocker):
     assert f"OFFSET $5" in query_sql # Offset final
     
     # Vérifier les paramètres passés dans l'ordre
-    assert query_params[0] == json.dumps(query_vector) # $1: Vecteur
+    assert query_params[0] == str(query_vector).replace(" ", "") # $1: Vecteur (Correct format '[...]')
     assert query_params[1] == expected_knn_limit      # $2: Limite KNN
-    assert query_params[2] == json.dumps(criteria)    # $3: Filtre Metadata
+    assert query_params[2] == json.dumps(criteria)    # $3: Filtre metadata
     assert query_params[3] == test_limit             # $4: Limite finale
     assert query_params[4] == test_offset            # $5: Offset final
 

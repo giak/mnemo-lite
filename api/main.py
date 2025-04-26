@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 import asyncpg
 import structlog
 from fastapi.routing import APIRoute
+import pgvector.asyncpg
 
 # Import des routes
 from routes import memory_routes, search_routes, health_routes, event_routes
@@ -16,27 +17,43 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
+# Ajouter la lecture de TEST_DATABASE_URL
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
+
 logger = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialisation au démarrage: Créer le pool de connexions
     logger.info(f"Starting MnemoLite API in {ENVIRONMENT} mode")
-    if not DATABASE_URL:
-        logger.error("DATABASE_URL environment variable not set!")
-        # On pourrait lever une exception ici pour empêcher le démarrage
-        # raise RuntimeError("DATABASE_URL not set") 
-        app.state.db_pool = None # Indiquer que le pool n'est pas dispo
+    
+    # Choisir la bonne URL de DB
+    db_url_to_use = None
+    if ENVIRONMENT == "test":
+        logger.info("Using TEST_DATABASE_URL for test environment.")
+        db_url_to_use = TEST_DATABASE_URL
+    else:
+        db_url_to_use = DATABASE_URL
+        
+    if not db_url_to_use:
+        logger.error(f"Database URL not set for environment '{ENVIRONMENT}'!")
+        app.state.db_pool = None
     else:
         try:
             app.state.db_pool = await asyncpg.create_pool(
-                dsn=DATABASE_URL,
+                dsn=db_url_to_use,
                 min_size=1,
                 max_size=10 # Ajuster selon les besoins
             )
-            logger.info("Database connection pool created.")
+            logger.info(f"Database connection pool created using: {db_url_to_use.split('@')[1] if '@' in db_url_to_use else '[URL hidden]'}") # Log safe part of URL
+            
+            # Enregistrer les codecs pgvector
+            async with app.state.db_pool.acquire() as conn:
+                await pgvector.asyncpg.register_vector(conn)
+                logger.info("pgvector codecs registered for asyncpg connections.")
+                
         except Exception as e:
-            logger.error("Failed to create database connection pool", error=str(e))
+            logger.error("Failed to create database connection pool or register codecs", error=str(e))
             app.state.db_pool = None
     
     yield
@@ -106,13 +123,24 @@ async def root():
     }
 
 
+# Exception Handlers
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}, # Use standard FastAPI detail field
+        headers=getattr(exc, "headers", None),
+    )
+
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
+    # Log the full error in debug mode or non-HTTP errors
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    
     return JSONResponse(
         status_code=500,
         content={
-            "error": "Internal Server Error",
-            "message": str(exc) if DEBUG else "An error occurred processing your request"
+            "detail": str(exc) if DEBUG else "Internal Server Error"
         }
     )
 

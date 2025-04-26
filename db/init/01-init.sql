@@ -16,15 +16,16 @@ CREATE EXTENSION IF NOT EXISTS vector; -- Pour VECTOR et index HNSW/IVFFlat
 CREATE TABLE IF NOT EXISTS events (
     -- id          UUID NOT NULL DEFAULT gen_random_uuid(),
     -- timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Clé primaire simple
+    id          UUID NOT NULL DEFAULT gen_random_uuid(), -- Rendre NOT NULL
     timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),         
     content     JSONB NOT NULL,
     embedding   VECTOR(1536),
-    metadata    JSONB DEFAULT '{}'::jsonb
+    metadata    JSONB DEFAULT '{}'::jsonb,
     -- PRIMARY KEY (id, timestamp) -- Clé composite supprimée
-); -- PARTITION BY RANGE (timestamp); -- Partitionnement supprimé temporairement
+    PRIMARY KEY (id, timestamp) -- Utiliser la clé composite pour la partition
+) PARTITION BY RANGE (timestamp); -- Réactiver le partitionnement
 
-COMMENT ON TABLE events IS 'Table principale stockant tous les evenements atomiques (temporairement NON partitionnee).';
+COMMENT ON TABLE events IS 'Table principale stockant tous les evenements atomiques (partitionnee par mois sur timestamp).';
 COMMENT ON COLUMN events.content IS 'Contenu detaille de l evenement au format JSONB.';
 COMMENT ON COLUMN events.embedding IS 'Vecteur semantique du contenu (dimension 1536 pour text-embedding-3-small).';
 COMMENT ON COLUMN events.metadata IS 'Metadonnees additionnelles (tags, IDs, types) au format JSONB.';

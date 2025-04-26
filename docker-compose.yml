@@ -8,7 +8,9 @@ version: '3.8'
 
 services:
   db:
-    image: pgvector/pgvector:pg17
+    build:
+      context: ./db
+      dockerfile: Dockerfile
     container_name: mnemo-postgres
     restart: unless-stopped
     deploy:
@@ -76,6 +78,7 @@ services:
       backend:
       frontend:
     logging: *default-logging
+    entrypoint: ["/app/api/entrypoint.sh"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8000/v1/healthz"]
       interval: 30s

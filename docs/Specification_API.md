@@ -101,32 +101,33 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
   /search:
     get:
-      summary: Recherche multi-critères (vecteur + filtres)
+      summary: Recherche hybride (vecteur + filtres + temps)
+      description: >
+        Effectue une recherche multi-critères en combinant similarité vectorielle,
+        filtres sur les métadonnées et filtres temporels.
       operationId: search_events_v1_search_get
       parameters:
         - in: query
-          name: vector_query # Vecteur de requête, format TBD (ex: base64, liste de floats séparés par virgule?)
-          description: "Vecteur de requête pour la recherche de similarité. Format à préciser (ex: liste de floats séparés par virgule)."
-          schema:
-            type: string # Ou array de number si format JSON supporté en query param
-        - in: query
-          name: text_query
-          description: "Terme de recherche textuelle (si backend supporte recherche full-text sur content)."
+          name: vector_query
+          description: "Vecteur de requête (liste de floats) encodé en Base64. Utilisé pour la recherche de similarité."
           schema:
             type: string
+            format: base64 # Indique le format attendu
+          example: 'WzAuMSwgMC4yLCAwLjNd' # base64 de [0.1, 0.2, 0.3]
         - in: query
           name: top_k
-          description: "Nombre maximum de résultats à retourner."
+          description: "Nombre de voisins les plus proches à considérer initialement pour la recherche vectorielle (avant filtrage)."
           schema:
             type: integer
             default: 10
             minimum: 1
+            maximum: 50 # Correspond à la validation dans la route
         - in: query
           name: filter_metadata # Filtre sur le champ metadata JSONB
-          description: "Filtre JSON sur les métadonnées (ex: {'key': 'value', 'tag': ['a', 'b']}). Format exact via query param à définir (ex: stringified JSON encodé URL?)."
+          description: "Filtre JSON stringifié sur les métadonnées (ex: {\"key\": \"value\"})."
           schema:
             type: string # Représente un objet JSON stringifié
-          example: '{"event_type": "decision", "rule_id": "M-UpdateLogic"}'
+          example: '{\"event_type\": \"decision\", \"rule_id\": \"M-UpdateLogic\"}'
         - in: query
           name: ts_start
           description: "Timestamp de début pour le filtre temporel (format ISO 8601)."
@@ -140,25 +141,20 @@ paths:
             type: string
             format: date-time
         - in: query
-          name: sort
-          description: "Champ de tri (ex: -timestamp pour descendant). Support limité initialement à timestamp."
-          schema:
-            type: string
-            default: -timestamp
-        # Pagination Keyset (Alternative à Offset/Limit)
-        - in: query
-          name: after_cursor # Curseur pour la page suivante (ex: timestamp ou ID de l'élément précédent)
-          description: "Curseur pour la pagination keyset (format dépend du champ de tri)."
-          schema:
-            type: string
-        - in: query
           name: limit
-          description: "Nombre max d'éléments par page."
+          description: "Nombre maximum de résultats finaux à retourner."
           schema:
             type: integer
-            default: 50
+            default: 50 # Mis à jour
             minimum: 1
             maximum: 100
+        - in: query
+          name: offset
+          description: "Offset pour la pagination standard."
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
       responses:
         '200':
           description: Résultats classés
@@ -266,7 +262,7 @@ components:
         timestamp: { type: string, format: date-time }
         content: { $ref: '#/components/schemas/NewEvent/properties/content' }
         metadata: { $ref: '#/components/schemas/NewEvent/properties/metadata' }
-        # embedding: { type: array, items: { type: number } } # Probablement pas utile de retourner l'embedding
+        similarity_score: { type: number, nullable: true, description: "Score de similarité (si recherche vectorielle effectuée, plus bas = plus similaire)" }
     SearchResults:
       type: object
       properties:
@@ -278,10 +274,9 @@ components:
           type: object
           properties:
             query_time_ms: { type: number }
-            total_hits: { type: integer } # Nombre total estimé (si dispo)
+            total_hits: { type: integer, nullable: true, description: "Nombre total de résultats correspondants (peut être omis ou approximatif)." } # Nombre total estimé (si dispo)
             limit: { type: integer }
-            next_cursor: { type: string, nullable: true } # Curseur pour la page suivante
-    
+            offset: { type: integer, nullable: true } # Ajouté offset
     PsiQueryRequest:
       type: object
       required: [query_type, params]

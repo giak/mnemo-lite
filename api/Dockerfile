@@ -42,8 +42,8 @@ RUN sed -i 's|http://deb.debian.org/debian|http://ftp.fr.debian.org/debian|g' /e
 COPY --from=builder /app/wheels /wheels
 COPY --from=builder /app/requirements.txt .
 
-# Install dependencies from wheels
-RUN pip install --no-cache /wheels/*
+# Install dependencies from wheels using requirements.txt
+RUN pip install --no-cache --no-index --find-links=/wheels -r requirements.txt
 
 # Copy and install development dependencies
 COPY requirements-dev.txt .
