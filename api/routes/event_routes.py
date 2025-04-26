@@ -2,7 +2,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional, Dict, Any
 import structlog
-from pydantic import BaseModel # Ajouter l'import pour BaseModel
+from pydantic import BaseModel, Field # Ajouter l'import pour BaseModel et Field
 
 # Importer le repository et les modèles Pydantic
 # (Assumer qu'ils sont accessibles via le PYTHONPATH)
@@ -16,10 +16,13 @@ logger = structlog.get_logger()
 class MetadataUpdateRequest(BaseModel):
     metadata: Dict[str, Any]
 
+# --- Modèle pour la réponse de liste d'événements ---
+# class EventListResponse(BaseModel):
+#     events: List[EventModel]
+
 
 router = APIRouter(
-    prefix="/v1/events", # Déplacer le préfixe ici pour plus de clarté
-    tags=["v1_Events"] # Mettre à jour le tag pour correspondre à main.py
+    tags=["v1_Events"] 
 )
 
 @router.post("/", response_model=EventModel, status_code=201)
@@ -92,5 +95,32 @@ async def delete_event(
     # Si la suppression réussit, FastAPI retourne automatiquement
     # une réponse vide avec le status_code 204 (No Content)
     return None
+
+# --- Route de recherche par métadonnées --- (Supprimée pour suivre Specification_API.md -> GET /v1/search)
+# @router.post("/search/metadata", response_model=EventListResponse)
+# async def search_events_by_metadata(
+#     search_request: MetadataSearchRequest,
+#     repository: EventRepository = Depends(get_event_repository)
+# ):
+#     """Recherche des événements basés sur des critères de métadonnées.
+#     Utilise l'opérateur JSONB `@>` pour la correspondance.
+#     """
+#     try:
+#         logger.info("search_events_by_metadata_request", criteria=search_request.criteria)
+#         found_events = await repository.filter_by_metadata(metadata_criteria=search_request.criteria)
+#         logger.info("search_events_by_metadata_success", count=len(found_events))
+#         return EventListResponse(events=found_events)
+#     except Exception as e:
+#         # Convertir les données d'entrée en dict avant de logger
+#         input_data_dict = search_request.dict() if hasattr(search_request, 'dict') else str(search_request)
+#         logger.error("search_events_by_metadata_error", error=str(e), input_data=input_data_dict)
+#         # On pourrait affiner l'erreur, mais 500 est raisonnable pour une erreur de recherche
+#         raise HTTPException(
+#             status_code=500, 
+#             detail=f"Failed to search events by metadata: {str(e)}"
+#         )
+
+
+# Ajouter ici plus tard d'autres endpoints (ex: recherche sémantique)
 
 # Ajouter ici plus tard les autres endpoints pour DELETE /events/{id} 

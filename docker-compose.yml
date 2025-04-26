@@ -55,7 +55,8 @@ services:
     ports:
       - "127.0.0.1:${API_PORT:-8001}:8000"
     environment:
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-mnemolite}"
+      TEST_DATABASE_URL: "postgresql://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-changeme}@db:5432/mnemolite_test"
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ENVIRONMENT: ${ENVIRONMENT:-development}
     depends_on:
@@ -75,6 +76,12 @@ services:
       backend:
       frontend:
     logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/v1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   worker:
     build:

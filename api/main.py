@@ -68,26 +68,31 @@ app.add_middleware(
 
 # Enregistrement des routes
 app.include_router(memory_routes.router, prefix="/v0/memories", tags=["v0_memories (Legacy)"])
-app.include_router(search_routes.router, prefix="/v0/search", tags=["v0_search (Legacy)"])
 app.include_router(event_routes.router, prefix="/v1/events", tags=["v1_Events"])
+app.include_router(search_routes.router, prefix="/v1/search", tags=["v1_Search"])
 app.include_router(health_routes.router, prefix="/v1", tags=["v1_Health & Metrics"])
 
 
 # --- Endpoint de Debug Temporaire ---
-@app.get("/debug/routes")
-async def list_routes():
-    """Liste toutes les routes enregistrées dans l'application."""
-    routes_info = []
-    for route in app.routes:
-        if isinstance(route, APIRoute):
-            routes_info.append({
-                "path": route.path,
-                "name": route.name,
-                "methods": sorted(list(route.methods))
-            })
-    return routes_info
+# @app.get("/debug/routes")
+# async def list_routes():
+#     """Liste toutes les routes enregistrées dans l'application."""
+#     routes_info = []
+#     for route in app.routes:
+#         if isinstance(route, APIRoute):
+#             routes_info.append({
+#                 "path": route.path,
+#                 "name": route.name,
+#                 "methods": sorted(list(route.methods))
+#             })
+#     return routes_info
 # --- Fin Endpoint de Debug ---
 
+# --- Route de Test Temporaire ---
+# @app.get("/v1/test")
+# async def test_route():
+#     return {"status": "test route ok"}
+# --- Fin Route de Test ---
 
 @app.get("/")
 async def root():
