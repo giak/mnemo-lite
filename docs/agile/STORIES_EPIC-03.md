@@ -96,8 +96,9 @@
         *   Les métriques de latence P95 (client/serveur) et de Rappel@k (vs. exact KNN sur échantillon) sont collectées.
         *   Les résultats sont analysés, comparés aux SLOs (P95 < 200ms, Recall@k ≥ 0.9).
         *   Les paramètres (`ef_search`, over-fetch, `work_mem`) sont ajustés si nécessaire, et les choix finaux sont documentés.
-    *   **Statut:** **À FAIRE**
+    *   **Statut:** **EN COURS (Benchmark setup initial fait)**
     *   **Plan d'Action / Tâches:**
+        *   **Note:** Le script `run_benchmark.py` est fonctionnel mais l'analyse complète et le tuning sont reportés.
         1.  **[À Faire] Génération Données:**
             *   Créer `scripts/benchmarks/generate_test_data.py`.
             *   Implémenter la génération de ~1M événements (timestamps réalistes, metadata variés, embeddings normalisés).

@@ -4,6 +4,8 @@ pytest>=7.0.0
 anyio>=3.0.0 # Required for @pytest.mark.anyio
 pytest-mock>=3.10.0 # Ajout pour la fixture mocker
 httpx>=0.26.0 # Déjà dans api/reqs, mais utile pour les tests d'intégration API
+asyncpg>=0.29.0 # For direct DB interaction in tests/scripts
+numpy>=1.26.0 # For vector generation in benchmark scripts
 # pytest-anyio>=0.0.6 # Incorrect package name
 
 # Ajouter ici d'autres outils utiles: flake8, black, mypy, etc.
