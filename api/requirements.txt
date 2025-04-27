@@ -1,15 +1,41 @@
-fastapi==0.110.0
-uvicorn[standard]==0.27.0
+# Core dependencies
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.7.1
+python-dotenv>=1.0.1
+# Added for SQLAlchemy Core with PostgreSQL
+sqlalchemy>=2.0
+psycopg2-binary
+
+# Monitoring
+# prometheus-fastapi-instrumentator>=7.0.0 # Uncomment if needed
+
+# Utilities
+# httpx>=0.27.0 # Uncomment if external API calls needed
+# requests>=2.31.0 # Uncomment if external API calls needed
+
+# Logging
+# loguru>=0.7.2 # Uncomment if using Loguru
+
+# Security
+# passlib[bcrypt]>=1.7.4 # Uncomment if needed for password hashing
+
+# Optional database drivers (Keep only needed ones)
+# asyncpg>=0.29.0 # If using async PostgreSQL with SQLAlchemy
+
+# Development/Testing (Consider moving to requirements-dev.txt)
+# pytest>=8.1.1
+# pytest-asyncio>=0.23.6
+
+# Add other dependencies below
+
 uvloop==0.19.0
 httptools==0.6.1
-pydantic==2.6.1
 pydantic-settings==2.1.0
 asyncpg>=0.29.0
-psycopg2-binary==2.9.9
 openai==1.12.0
 sentence-transformers==2.2.2
 numpy==1.26.3
-httpx==0.26.0
 jinja2==3.1.3
 python-multipart==0.0.6
 prometheus-client==0.18.0
@@ -17,4 +43,4 @@ tenacity==8.2.3
 structlog==24.1.0
 rich==13.7.0
 psutil==5.9.6
-pgvector==0.2.1 
+pgvector 

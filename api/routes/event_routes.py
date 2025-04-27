@@ -6,9 +6,9 @@ from pydantic import BaseModel, Field # Ajouter l'import pour BaseModel et Field
 
 # Importer le repository et les modèles Pydantic
 # (Assumer qu'ils sont accessibles via le PYTHONPATH)
-from api.db.repositories.event_repository import EventRepository, EventCreate, EventModel
+from db.repositories.event_repository import EventRepository, EventCreate, EventModel
 # Importer la fonction de dépendance qu'on créera dans main.py (ou un fichier dédié)
-from api.dependencies import get_event_repository # Chemin à confirmer/créer
+from dependencies import get_event_repository # Chemin à confirmer/créer
 
 logger = structlog.get_logger()
 

@@ -7,7 +7,7 @@ import os
 import argparse
 import numpy as np
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pgvector.utils import from_db, to_db
 import statistics
 from pathlib import Path
@@ -103,19 +103,23 @@ async def run_query_scenario(
     metadata_filter: dict | None,
     top_k: int,
     limit: int,
-    num_runs: int
+    num_runs: int,
+    ts_start: datetime | None = None,
+    ts_end: datetime | None = None
 ) -> tuple[float, float]:
     """Exécute un scénario de recherche plusieurs fois et calcule les latences P50/P95."""
     latencies_ms = []
     repo = EventRepository(db_pool)
     print(f"--- Démarrage Scénario: {scenario_name} ({num_runs} runs) ---")
-    print(f"    Vector: {'Oui' if vector else 'Non'}, Metadata: {metadata_filter}, TopK: {top_k}, Limit: {limit}")
+    print(f"    Vector: {'Oui' if vector else 'Non'}, Metadata: {metadata_filter}, TopK: {top_k}, Limit: {limit}, Start: {ts_start}, End: {ts_end}")
 
     # Préchauffage (une exécution pour initialiser les caches potentiels)
     try:
         _ = await repo.search_vector(
             vector=vector,
             metadata=metadata_filter,
+            ts_start=ts_start,
+            ts_end=ts_end,
             top_k=top_k,
             limit=limit,
             offset=0
@@ -131,6 +135,8 @@ async def run_query_scenario(
             results = await repo.search_vector(
                 vector=vector,
                 metadata=metadata_filter,
+                ts_start=ts_start,
+                ts_end=ts_end,
                 top_k=top_k,
                 limit=limit,
                 offset=0 # Garder offset 0 pour la mesure pure
@@ -216,6 +222,23 @@ async def main(db_dsn: str, num_runs: int, embedding_dim: int, top_k: int, limit
         num_runs=num_runs
     )
     all_results["Metadata Seul (type=log)"] = {"P50": p50, "P95": p95}
+
+    # --- Scénario 4: Metadata + Temps (type=log, dernier mois) ---
+    end_time_filter = datetime.now(timezone.utc)
+    start_time_filter = end_time_filter - timedelta(days=30)
+
+    p50, p95 = await run_query_scenario(
+        db_pool=db_pool,
+        scenario_name="Metadata+Temps (type=log, 1 mois)",
+        vector=None, # Pas de vecteur
+        metadata_filter={"type": "log"}, # Filtre commun
+        ts_start=start_time_filter, # Filtre temporel !
+        ts_end=end_time_filter,     # Filtre temporel !
+        top_k=0, # top_k non pertinent sans vecteur
+        limit=limit,
+        num_runs=num_runs
+    )
+    all_results["Metadata+Temps (type=log, 1 mois)"] = {"P50": p50, "P95": p95}
 
 
     print("\n" + "="*15 + " RÉSUMÉ " + "="*15)

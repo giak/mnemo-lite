@@ -12,9 +12,9 @@ import json
 import time
 
 # Importer le repository Event et le modèle EventModel
-from api.db.repositories.event_repository import EventRepository, EventModel
+from db.repositories.event_repository import EventRepository, EventModel
 # Importer la dépendance pour le repository
-from api.dependencies import get_event_repository
+from dependencies import get_event_repository
 
 # Configuration du logger
 logger = structlog.get_logger()

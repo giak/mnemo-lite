@@ -6,9 +6,9 @@ import datetime
 import json
 
 # Import de l'application FastAPI
-from api.main import app 
+from main import app 
 # Import des dépendances et modèles
-from api.db.repositories.event_repository import EventRepository, EventModel, EventCreate
+from db.repositories.event_repository import EventRepository, EventModel, EventCreate
 
 # --- Fixtures ---
 
@@ -40,8 +40,8 @@ def test_get_event_success_with_patch(client: TestClient):
     )
 
     # 2. Action (Act) - Utilise patch.object pour remplacer get_by_id
-    #    'api.db.repositories.event_repository.EventRepository' -> chemin vers la CLASSE
-    with patch('api.db.repositories.event_repository.EventRepository.get_by_id', new_callable=AsyncMock) as mock_get_by_id:
+    #    'db.repositories.event_repository.EventRepository' -> chemin vers la CLASSE (sans api.)
+    with patch('db.repositories.event_repository.EventRepository.get_by_id', new_callable=AsyncMock) as mock_get_by_id:
         # Configurer la valeur de retour du mock créé par patch
         mock_get_by_id.return_value = mock_event_model
         
@@ -68,7 +68,7 @@ def test_get_event_not_found_with_patch(client: TestClient):
     test_event_id = uuid.uuid4()
 
     # 2. Action (Act) - Utilise patch.object
-    with patch('api.db.repositories.event_repository.EventRepository.get_by_id', new_callable=AsyncMock) as mock_get_by_id:
+    with patch('db.repositories.event_repository.EventRepository.get_by_id', new_callable=AsyncMock) as mock_get_by_id:
         # Configurer le mock pour retourner None
         mock_get_by_id.return_value = None
         

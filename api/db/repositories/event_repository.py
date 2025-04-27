@@ -1,25 +1,26 @@
 import uuid
-import asyncpg
+# Remove asyncpg import
+# import asyncpg 
 from typing import Optional, Dict, Any, List
 import datetime
 from pydantic import BaseModel, Field
 import json
-import builtins
-import logging
+from datetime import timezone
+# Import SQLAlchemy async engine and text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.sql import text, literal
+from models.event_models import EventCreate, EventModel # Import the correct models
+import logging # Keep standard logging import for now, though unused directly by repo
+from sqlalchemy import text, select, Table, Column, MetaData, JSON, TIMESTAMP, String, Uuid, cast, Integer, Float, desc # Add desc
+from sqlalchemy.dialects.postgresql import JSONB # Add VECTOR type # Removed VECTOR from here
+from pgvector.sqlalchemy import Vector # Correct import
+from sqlalchemy import and_ # Add and_ import
+from sqlalchemy import bindparam # Add bindparam import
+from sqlalchemy import func # Add func
+from sqlalchemy.exc import SQLAlchemyError
+import structlog # <<< Import structlog
 
-logger = logging.getLogger(__name__) # Initialisation du logger
-
-# Modèles Pydantic (Esquisse)
-# Placeholder pour les modèles Pydantic (à définir/importer plus tard)
-class EventModel:
-    # Définir les champs correspondant à la table 'events'
-    # ex: id: uuid.UUID, timestamp: datetime, content: Dict, metadata: Dict, embedding: Optional[List[float]]
-    pass
-
-class EventCreate(BaseModel):
-    content: Dict[str, Any] = Field(..., description="Contenu JSON de l'événement.")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Métadonnées JSON.")
-    embedding: Optional[List[float]] = Field(None, description="Vecteur embedding (optionnel).")
+# logger = logging.getLogger(__name__) # <<< REMOVE MODULE-LEVEL LOGGER
 
 class EventModel(BaseModel):
     id: uuid.UUID
@@ -44,229 +45,427 @@ class EventModel(BaseModel):
                     # Pour l'instant, on pourrait lever une erreur ou mettre None/dict vide
                     record_dict[field] = {} # Mettre un dict vide par défaut
         
-        # Gestion spécifique pour le type VECTOR
-        embedding_val = record_dict.get('embedding')
-        if isinstance(embedding_val, str):
+        # Parse embedding if it's a string
+        if isinstance(record_dict.get('embedding'), str):
             try:
-                record_dict['embedding'] = json.loads(embedding_val)
+                # Try using json.loads first
+                record_dict['embedding'] = json.loads(record_dict['embedding'])
             except (json.JSONDecodeError, TypeError):
-                record_dict['embedding'] = None
-        elif not isinstance(embedding_val, (list, type(None))):
-             record_dict['embedding'] = None
-             
+                try:
+                    # Try manual parsing as backup
+                    record_dict['embedding'] = _parse_embedding_from_db(record_dict['embedding'])
+                except:
+                    record_dict['embedding'] = None
+        
         # Le score de similarité peut être absent (si pas de recherche vectorielle)
         if 'similarity_score' not in record_dict:
             record_dict['similarity_score'] = None 
             
+        # Use model_validate for Pydantic v2
         return cls.model_validate(record_dict)
+
+def _format_embedding_for_db(embedding: List[float]) -> str:
+    """Converts a list of floats to a pgvector-compatible string."""
+    return "[" + ",".join(map(str, embedding)) + "]"
+
+def _parse_embedding_from_db(embedding_str: Optional[str]) -> Optional[List[float]]:
+    """Converts a pgvector string representation back to a list of floats."""
+    if embedding_str is None:
+        return None
+    try:
+        # Remove brackets and split by comma
+        cleaned_str = embedding_str.strip("[]")
+        if not cleaned_str: # Handle empty list case '[]'
+            return []
+        return [float(x) for x in cleaned_str.split(',')]
+    except (ValueError, TypeError) as e:
+        # Depending on requirements, either return None or raise an error
+        return None # Or raise ValueError("Invalid embedding format")
+    # except (ValueError, TypeError) as e:  # <<< REMOVE logging call from helper
+    #     # Potentially pass logger instance if needed later
+    #     # logger.error(f"Error parsing embedding string '{embedding_str}': {e}") 
+    #     return None
+
+# Define table structure for SQLAlchemy Core 
+# (Ideally defined once, but included here for context)
+metadata_obj = MetaData()
+events_table = Table(
+    'events', metadata_obj,
+    Column('id', Uuid, primary_key=True),
+    Column('timestamp', TIMESTAMP(timezone=True)),
+    Column('content', JSONB), # Assuming JSONB for content as well for consistency
+    Column('metadata', JSONB),
+    Column('embedding', Vector(1536)) # Use correct case: Vector
+) 
 
 class EventRepository:
     """Couche d'accès aux données pour la table 'events'."""
 
-    def __init__(self, pool: asyncpg.Pool):
-        """Initialise le repository avec un pool de connexions asyncpg."""
-        self.pool = pool
-        # self.conn = conn # Ancienne initialisation
+    # Change __init__ to accept SQLAlchemy AsyncEngine
+    def __init__(self, engine: AsyncEngine):
+        """Initialise le repository avec un moteur SQLAlchemy asynchrone."""
+        self.engine = engine
+        # self.pool: asyncpg.Pool = pool # Keep the old pool reference commented out for now
+        self.logger = structlog.get_logger(__name__) # Use structlog logger
+
+    def _get_vector_dimensions(self) -> int:
+        """Returns the configured vector embedding dimension."""
+        return 1536
 
     async def add(self, event_data: EventCreate) -> EventModel:
         """Ajoute un nouvel événement à la base de données."""
-        query = """
+        timestamp_to_use = event_data.timestamp if event_data.timestamp else datetime.datetime.now(timezone.utc)
+        
+        # Convert embedding list to string format expected by pgvector
+        # Example: [0.1, 0.2] -> '[0.1,0.2]' (Verify exact format if needed)
+        embedding_str = None
+        if event_data.embedding is not None:
+             # Convert list of floats to comma-separated string within brackets
+             embedding_str = '[' + ','.join(map(str, event_data.embedding)) + ']'
+
+        query = text("""
         INSERT INTO events (content, metadata, embedding, timestamp) 
-        VALUES ($1, $2, $3, NOW()) 
+        VALUES (:content, :metadata, :embedding, :timestamp)
         RETURNING id, timestamp, content, metadata, embedding
-        """
-        # Pass the embedding list directly; asyncpg + pgvector codec handle conversion
-        embedding_str = json.dumps(event_data.embedding) if event_data.embedding is not None else None
+        """)
         
-        # Utiliser le pool
-        async with self.pool.acquire() as conn:
-            record = await conn.fetchrow(
-                query, 
-                json.dumps(event_data.content),
-                json.dumps(event_data.metadata),
-                embedding_str # Pass the JSON string representation
-            )
-        
+        params = {
+            "content": json.dumps(event_data.content),
+            "metadata": json.dumps(event_data.metadata),
+            # Pass the string representation or None
+            "embedding": embedding_str, 
+            "timestamp": timestamp_to_use 
+        }
+
+        async with self.engine.connect() as conn:
+            try:
+                result = await conn.execute(query, params)
+                record = result.fetchone()
+                await conn.commit()
+            except Exception as e:
+                await conn.rollback()
+                self.logger.error(f"Error adding event: {e}", exc_info=True)
+                raise
+
         if record:
-            record_dict = dict(record)
+            record_dict = record._asdict()
+            # Handle potential string format returned from DB for embedding
+            if isinstance(record_dict.get('embedding'), str):
+                 try:
+                     # Attempt to parse string back to list of floats
+                     # This assumes the DB returns in '[...]' format
+                     record_dict['embedding'] = json.loads(record_dict['embedding'])
+                 except (json.JSONDecodeError, TypeError):
+                      self.logger.warning("Could not parse embedding string from DB back to list", exc_info=True)
+                      record_dict['embedding'] = None # Or handle as error
+
             return EventModel.from_db_record(record_dict)
         else:
             raise Exception("Failed to create event or retrieve returning values.")
 
     async def get_by_id(self, event_id: uuid.UUID) -> Optional[EventModel]:
         """Récupère un événement par son ID."""
-        query = """SELECT id, timestamp, content, metadata, embedding 
-                   FROM events WHERE id = $1"""
-        # Utiliser le pool
-        async with self.pool.acquire() as conn:
-            record = await conn.fetchrow(query, event_id)
+        query = text("""
+            SELECT id, timestamp, content, metadata, embedding 
+            FROM events WHERE id = :event_id
+        """)
+        params = {"event_id": event_id}
+        
+        # Use the engine
+        async with self.engine.connect() as conn:
+            result = await conn.execute(query, params)
+            record = result.fetchone()
         
         if record:
-            record_dict = dict(record)
+            record_dict = record._asdict() 
             return EventModel.from_db_record(record_dict)
         return None
 
     async def update_metadata(self, event_id: uuid.UUID, metadata_update: Dict[str, Any]) -> Optional[EventModel]:
-        """Met à jour (fusionne) les métadonnées d'un événement existant.
-        Retourne l'événement mis à jour ou None si l'ID n'existe pas.
-        """
-        query = """
+        """Met à jour (fusionne) les métadonnées d'un événement existant."""
+        query = text("""
         UPDATE events 
-        SET metadata = metadata || $2::jsonb
-        WHERE id = $1 
+        SET metadata = metadata || :metadata_update::jsonb
+        WHERE id = :event_id 
         RETURNING id, timestamp, content, metadata, embedding
-        """
-        # Utiliser le pool
-        async with self.pool.acquire() as conn:
-            metadata_update_json = json.dumps(metadata_update)
-            record = await conn.fetchrow(
-                query, 
-                event_id,
-                metadata_update_json
-            )
+        """)
+        params = {
+            "event_id": event_id,
+            "metadata_update": json.dumps(metadata_update)
+        }
         
+        async with self.engine.connect() as conn:
+            try:
+                result = await conn.execute(query, params)
+                record = result.fetchone()
+                await conn.commit()
+            except Exception as e:
+                await conn.rollback()
+                self.logger.error(f"Error updating metadata for event {event_id}: {e}", exc_info=True)
+                raise
+
         if record:
-            record_dict = dict(record)
+            record_dict = record._asdict()
+            # Handle potential string format for embedding
+            if isinstance(record_dict.get('embedding'), str):
+                 try: record_dict['embedding'] = json.loads(record_dict['embedding'])
+                 except: record_dict['embedding'] = None
             return EventModel.from_db_record(record_dict)
         return None
 
     async def delete(self, event_id: uuid.UUID) -> bool:
-        """Supprime un événement par son ID. Retourne True si supprimé, False sinon."""
-        query = "DELETE FROM events WHERE id = $1"
-        # Utiliser le pool
-        async with self.pool.acquire() as conn:
-            status = await conn.execute(query, event_id)
-        deleted_count = int(status.split(" ")[-1])
-        return deleted_count > 0
+        """Supprime un événement par son ID. Retourne True si réussi."""
+        query = text("DELETE FROM events WHERE id = :event_id")
+        params = {"event_id": event_id}
+        deleted = False
+        # Use the engine
+        async with self.engine.connect() as conn:
+            try:
+                result = await conn.execute(query, params)
+                # Check rowcount if available and meaningful, otherwise assume success if no exception
+                # For asyncpg, rowcount might not be reliable for DELETE.
+                # If result.rowcount is reliably > 0, use that. Otherwise, True on no exception.
+                # Let's assume True for now if execute completes without error.
+                await conn.commit() # Commit transaction
+                # Check if result.rowcount works reliably with your setup, otherwise this is optimistic
+                deleted = result.rowcount > 0 if result.rowcount is not None and result.rowcount >= 0 else True 
+            except Exception as e:
+                await conn.rollback()
+                self.logger.error(f"Error deleting event {event_id}: {e}", exc_info=True)
+                # Re-raise or return False based on desired error handling
+                raise # Re-raise the exception for now
+
+        return deleted # Return status based on execution
 
     async def filter_by_metadata(self, metadata_criteria: Dict[str, Any]) -> List[EventModel]:
-        """Récupère une liste d'événements filtrés par critères de métadonnées.
-        Utilise l'opérateur JSONB @> pour vérifier si metadata contient les critères.
-        """
-        query = """
+        """Récupère une liste d'événements filtrés par critères de métadonnées."""
+        query = text("""
         SELECT id, timestamp, content, metadata, embedding 
         FROM events 
-        WHERE metadata @> $1::jsonb
-        ORDER BY timestamp DESC -- Optionnel: trier par défaut
-        """
-        records = [] # Initialiser en cas d'erreur
+        WHERE metadata @> :criteria::jsonb
+        ORDER BY timestamp DESC
+        """)
+        params = {"criteria": json.dumps(metadata_criteria)}
+        
+        records = []
         try:
-            async with self.pool.acquire() as conn:
-                criteria_json = json.dumps(metadata_criteria)
-                logger.debug("Executing filter_by_metadata", query=query, criteria_json=criteria_json) # DEBUG LOG
-                records = await conn.fetch(query, criteria_json)
-                logger.debug("filter_by_metadata raw results count", count=len(records)) # DEBUG LOG
+            async with self.engine.connect() as conn:
+                self.logger.debug("Executing filter_by_metadata query=%s criteria_json=%s", str(query), params["criteria"])
+                result = await conn.execute(query, params)
+                records = result.fetchall()
+                self.logger.debug("filter_by_metadata raw results count=%d", len(records))
         except Exception as e:
-            logger.error(f"filter_by_metadata error during query: {e!s}", exc_info=True)
-            # Propager l'erreur ou retourner liste vide ? Pour l'instant, propage implicitement.
-            # Potentiellement, on devrait gérer ça plus finement.
+            self.logger.error(f"filter_by_metadata error during query: {e!s}", exc_info=True)
+            raise # Re-raise for now
 
-        return [EventModel.from_db_record(dict(record)) for record in records]
+        event_models = []
+        for record in records:
+            record_dict = record._asdict()
+            if isinstance(record_dict.get('embedding'), str):
+                 try: record_dict['embedding'] = json.loads(record_dict['embedding'])
+                 except: record_dict['embedding'] = None
+            event_models.append(EventModel.from_db_record(record_dict))
+            
+        return event_models
 
     async def search_vector(
-        self, 
-        vector: Optional[List[float]],
-        top_k: int = 10, 
+        self,
+        vector: Optional[List[float]] = None,
+        top_k: int = 10,
         metadata: Optional[Dict[str, Any]] = None,
         ts_start: Optional[datetime.datetime] = None,
         ts_end: Optional[datetime.datetime] = None,
-        limit: int = 50,
+        limit: int = 10,
         offset: int = 0
     ) -> List[EventModel]:
-        """Exécute une recherche hybride (vectorielle + métadonnées + temps).
-        
-        Utilise une stratégie de post-filtrage :
-        1. Recherche des K voisins les plus proches (avec sur-échantillonnage).
-        2. Filtre les résultats par métadonnées et timestamp.
-        3. Applique la limite et l'offset finaux.
         """
-        query_params = []
-        where_clauses = []
-        param_index = 1
+        Search for events using vector similarity, metadata filtering, and time range.
+        Supports vector-only, metadata-only, and hybrid searches using SQLAlchemy Core.
+        """
+        self.logger.debug(
+            "Searching events (Core)",
+            has_vector=vector is not None,
+            metadata_filter=metadata,
+            # top_k=top_k, # Removed top_k log as it's indirectly used by limit
+            ts_start=ts_start,
+            ts_end=ts_end,
+            limit=limit,
+            offset=offset,
+        )
+        results_raw = []
+        limit = max(0, limit)
+        offset = max(0, offset)
 
-        if vector:
-            # --- Construction requête avec recherche vectorielle (KNN + filtres) ---
-            # Convert vector list to string format '[...]' expected by pgvector
-            vector_str_param = str(vector).replace(" ", "") # Simple conversion, remove spaces
+        async with self.engine.connect() as conn:
+            try:
+                # Prepare parameters using bindparam for safety and type handling
+                # Pass the Python dict directly to bindparam for JSONB
+                md_param = bindparam('md_filter', value=metadata, type_=JSONB) if metadata else None 
+                ts_start_param = bindparam('ts_start', value=ts_start, type_=TIMESTAMP(timezone=True)) if ts_start else None
+                ts_end_param = bindparam('ts_end', value=ts_end, type_=TIMESTAMP(timezone=True)) if ts_end else None
+                limit_param = bindparam('lim', value=limit, type_=Integer)
+                offset_param = bindparam('off', value=offset, type_=Integer)
 
-            base_query = """
-            SELECT id, timestamp, content, metadata, embedding, similarity_score
-            FROM (
-                SELECT id, timestamp, content, metadata, embedding, (embedding <=> $1::vector) as similarity_score
-                FROM events
-                ORDER BY embedding <=> $1::vector
-                LIMIT $2 -- Sur-échantillonnage
-            ) AS vector_results
-            WHERE 1=1"""
-            
-            query_params.extend([vector_str_param, top_k * 5]) # Utiliser le string formaté
-            param_index = 3 # Les params $1 et $2 sont utilisés par KNN
-        else:
-            # --- Construction requête SANS recherche vectorielle (Filtres + Tri) ---
-            base_query = """
-            SELECT id, timestamp, content, metadata, embedding, 0.0 as similarity_score 
-            FROM events
-            WHERE 1=1""" 
-            # Pas de params $1, $2 ici
+                # Select based on whether vector search is needed
+                if vector:
+                    # --- Hybrid or Vector-Only Search (Using Core DSL - seems okay) ---
+                    self.logger.debug("Executing hybrid/vector search using SQLAlchemy Core DSL")
+                    # Ensure vector param uses the helper function --- NON ! Le bind processor s'en charge
+                    # Pass the raw list/numpy array directly to bindparam
+                    vector_param = bindparam('vec_query', value=vector, type_=Vector(self._get_vector_dimensions())) 
 
-        # --- Ajout des filtres communs (metadata, timestamp) ---
-        if metadata:
-            where_clauses.append(f"metadata @> ${param_index}::jsonb")
-            query_params.append(json.dumps(metadata))
-            param_index += 1
-            
-        if ts_start:
-            where_clauses.append(f"timestamp >= ${param_index}")
-            query_params.append(ts_start)
-            param_index += 1
-        if ts_end:
-            where_clauses.append(f"timestamp <= ${param_index}")
-            query_params.append(ts_end)
-            param_index += 1
+                    selectable_columns = [
+                        events_table.c.id,
+                        events_table.c.timestamp,
+                        events_table.c.content,
+                        events_table.c.metadata,
+                        events_table.c.embedding,
+                        events_table.c.embedding.l2_distance(vector_param).label('similarity_score')
+                    ]
+                    stmt = select(*selectable_columns)
 
-        # Combiner les clauses WHERE
-        if where_clauses:
-            base_query += " AND " + " AND ".join(where_clauses)
-            
-        # --- Ajout ORDER BY, LIMIT, OFFSET finaux ---
-        if not vector:
-             # Trier par timestamp si pas de recherche vectorielle
-             base_query += "\nORDER BY timestamp DESC" 
-        # else: Le tri par similarité est implicite via la sous-requête si vector
-        
-        base_query += f"\nLIMIT ${param_index}"
-        query_params.append(limit)
-        param_index += 1
-        
-        base_query += f"\nOFFSET ${param_index}"
-        query_params.append(offset)
-        # param_index += 1 # Plus nécessaire après le dernier ajout
+                    where_conditions = []
+                    if md_param is not None: # Check if bindparam was created
+                        # Use the md_param which now holds the dictionary directly
+                        where_conditions.append(events_table.c.metadata.op('@>')(md_param)) 
+                    if ts_start_param is not None:
+                        where_conditions.append(events_table.c.timestamp >= ts_start_param)
+                    if ts_end_param is not None:
+                        where_conditions.append(events_table.c.timestamp <= ts_end_param)
 
-        # --- Exécution de la requête ---
-        records = []
-        try:
-            async with self.pool.acquire() as conn:
-                # Les paramètres sont déjà dans query_params, y compris le vecteur correctement formaté
-                prepared_params = query_params
-                                 
-                # Debug log
-                logging.debug(f"Executing search_vector query: {base_query}")
-                logging.debug(f"With parameters: {prepared_params}") # Log params too
-                
-                records = await conn.fetch(base_query, *prepared_params)
-                
-                logger.debug("search_vector raw results count", count=len(records)) # DEBUG LOG
-        except asyncpg.exceptions.UndefinedFunctionError as e:
-            logger.error(f"pgvector UndefinedFunctionError: Is the pgvector extension enabled? Query: {base_query} Params: {prepared_params}", exc_info=True)
-            raise RuntimeError("Database query failed due to potential missing pgvector extension or incorrect function call.") from e
-        except Exception as e:
-            # logger.error(f"search_vector error during query: {base_query} Params: {prepared_params}", error=str(e), exc_info=True)
-            logger.exception(f"search_vector error during query: {base_query} Params: {prepared_params} Error: {e!s}") # Use logger.exception to include traceback and format error
-            # Propager une erreur générique pour ne pas fuiter de détails
-            raise RuntimeError("Database query failed unexpectedly.") from e
+                    if where_conditions:
+                        stmt = stmt.where(and_(*where_conditions))
 
-        # Conversion des résultats
-        return [EventModel.from_db_record(dict(record)) for record in records]
+                    stmt = stmt.order_by(events_table.c.embedding.l2_distance(vector_param))
+                    stmt = stmt.limit(limit_param).offset(offset_param)
+
+                    compiled_stmt = stmt.compile(self.engine, compile_kwargs={"literal_binds": False})
+                    # Log params correctly - bindparams handle the dictionary internally now
+                    self.logger.debug(f"Compiled hybrid/vector search (Core DSL): {compiled_stmt}\nParams: {compiled_stmt.params}") 
+
+                    # Extract parameters for vector search
+                    params = {
+                        'vec_query': vector
+                    }
+                    if md_param is not None:
+                        params['md_filter'] = metadata
+                    if ts_start_param is not None:
+                        params['ts_start'] = ts_start
+                    if ts_end_param is not None:
+                        params['ts_end'] = ts_end
+                    params['lim'] = limit
+                    params['off'] = offset
+                    
+                    result = await conn.execute(stmt, params)
+                    results_raw = result.mappings().all()
+                    self.logger.debug(f"search_vector (hybrid/vector): Fetched {len(results_raw)} records")
+
+
+                elif metadata or ts_start or ts_end:
+                    # --- Metadata / Time Filter Only Path (Using Core DSL) ---
+                    self.logger.debug("Executing metadata/time only search using SQLAlchemy Core DSL")
+                    
+                    # Use Core DSL for consistency with other code paths
+                    selectable_columns = [
+                        events_table.c.id,
+                        events_table.c.timestamp,
+                        events_table.c.content,
+                        events_table.c.metadata,
+                        cast(None, Vector(self._get_vector_dimensions())).label('embedding'),
+                        cast(None, Float).label('similarity_score')
+                    ]
+                    stmt = select(*selectable_columns)
+                    
+                    # Build where conditions using Core DSL
+                    where_conditions = []
+                    if md_param is not None:
+                        where_conditions.append(events_table.c.metadata.op('@>')(md_param))
+                    if ts_start_param is not None:
+                        where_conditions.append(events_table.c.timestamp >= ts_start_param)
+                    if ts_end_param is not None:
+                        where_conditions.append(events_table.c.timestamp <= ts_end_param)
+                    
+                    if where_conditions:
+                        stmt = stmt.where(and_(*where_conditions))
+                    
+                    # Apply consistent ordering and pagination
+                    stmt = stmt.order_by(desc(events_table.c.timestamp))
+                    stmt = stmt.limit(limit_param).offset(offset_param)
+                    
+                    # Log the compiled statement for debugging
+                    compiled_stmt = stmt.compile(self.engine, compile_kwargs={"literal_binds": False})
+                    self.logger.debug(f"Compiled metadata/time search (Core DSL): {compiled_stmt}\nParams: {compiled_stmt.params}")
+                    
+                    # Extract parameters from bindparams
+                    params = {}
+                    if md_param is not None:
+                        params['md_filter'] = metadata
+                    if ts_start_param is not None:
+                        params['ts_start'] = ts_start
+                    if ts_end_param is not None:
+                        params['ts_end'] = ts_end
+                    params['lim'] = limit
+                    params['off'] = offset
+                    
+                    # Execute the query with explicit parameters
+                    result = await conn.execute(stmt, params)
+                    results_raw = result.mappings().all()
+                    self.logger.debug(f"search_vector (metadata/time): Fetched {len(results_raw)} records")
+                    
+                    # Add validation check for unexpected result counts
+                    if len(results_raw) > limit and limit > 0:
+                        self.logger.warning(
+                            f"Query returned more results ({len(results_raw)}) than requested limit ({limit}). "
+                            f"This may indicate a pagination issue."
+                        )
+
+                else:
+                    # --- No Filters Path (Get recent events - Using Core DSL - seems okay) ---
+                    self.logger.debug("Executing default search (no filters) using SQLAlchemy Core DSL")
+                    # Re-define limit/offset params here using the original names for clarity in this scope
+                    limit_param_no_filter = bindparam('lim_no_f', value=limit, type_=Integer)
+                    offset_param_no_filter = bindparam('off_no_f', value=offset, type_=Integer)
+                    # selectable_columns = [...] # Already defined is fine, or redefine for clarity
+                    selectable_columns = [
+                        events_table.c.id,
+                        events_table.c.timestamp,
+                        events_table.c.content,
+                        events_table.c.metadata,
+                        cast(None, Vector(self._get_vector_dimensions())).label('embedding'),
+                        cast(None, Float).label('similarity_score')
+                    ]
+                    stmt = select(*selectable_columns)
+                    stmt = stmt.order_by(desc(events_table.c.timestamp))
+                    # Use the specific bind params for this no-filter branch
+                    stmt = stmt.limit(limit_param_no_filter).offset(offset_param_no_filter)
+
+                    compiled_stmt = stmt.compile(self.engine, compile_kwargs={"literal_binds": False})
+                    self.logger.debug(f"Compiled default search (Core DSL): {compiled_stmt}\nParams: {compiled_stmt.params}") # Params automatically extracted
+
+                    result = await conn.execute(stmt) # Pass the statement object
+                    results_raw = result.mappings().all()
+                    self.logger.debug(f"search_vector (default): Fetched {len(results_raw)} records")
+
+
+            except SQLAlchemyError as e:
+                self.logger.error(f"Database error during search: {e}", exc_info=True)
+                raise # Re-raise to fail tests clearly
+            except Exception as e:
+                self.logger.error(f"Unexpected error during search: {e}", exc_info=True)
+                raise # Re-raise
+
+        # Process results into EventModel outside the try block (or handle parsing errors)
+        final_results = []
+        for row_dict in results_raw: # row_dict is a RowMapping
+            try:
+                # Convert RowMapping to a standard dict before passing
+                final_results.append(EventModel.from_db_record(dict(row_dict))) 
+            except Exception as e:
+                 self.logger.error(f"Failed to parse DB record into EventModel: {row_dict}", error=str(e), exc_info=True)
+                 # Decide how to handle parsing errors - skip record or raise? Skip for now.
+                 continue
+
+        return final_results # Return list of EventModel instances
 
 # Note: Il faudra également mettre en place la gestion du pool de connexions
 # dans api/main.py (via le lifespan) et l'injection de dépendance

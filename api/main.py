@@ -1,13 +1,23 @@
 import os
 import json
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import asyncpg
+# Remove asyncpg import
+# import asyncpg
 import structlog
 from fastapi.routing import APIRoute
-import pgvector.asyncpg
+import uuid
+from typing import Optional
+
+# Import SQLAlchemy async engine creation
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+from sqlalchemy.event import listen
+
+# Import pgvector setup for SQLAlchemy (assuming a utility exists or needs creation)
+# from db.utils import register_vector_sqlalchemy # Placeholder for pgvector setup
+# import pgvector.asyncpg # Keep for potential raw connection access if needed?
 
 # Import des routes
 from routes import memory_routes, search_routes, health_routes, event_routes
@@ -22,47 +32,61 @@ TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 
 logger = structlog.get_logger()
 
+# Placeholder: Function to register pgvector type handler on connect
+# Needs to be implemented correctly based on sqlalchemy/pgvector interaction
+# async def register_vector_on_connect(dbapi_connection, connection_record):
+#    logger.info("Registering pgvector type for new SQLAlchemy connection...")
+#    # This part depends on how pgvector integrates with SQLAlchemy's async driver
+#    # Might involve registering type handlers on the raw DBAPI connection
+#    # Or perhaps SQLAlchemy dialect handles it automatically? Needs verification.
+#    # Example for asyncpg raw connection (if accessible):
+#    # raw_conn = await dbapi_connection.get_raw_connection() # Hypothetical
+#    # await pgvector.asyncpg.register_vector(raw_conn) # Using old asyncpg method as example
+#    # Example based on psycopg: register_vector(dbapi_connection)
+#    pass # Requires proper implementation
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialisation au démarrage: Créer le pool de connexions
+    # Initialisation au démarrage: Créer le moteur SQLAlchemy
     logger.info(f"Starting MnemoLite API in {ENVIRONMENT} mode")
     
-    # Choisir la bonne URL de DB
-    db_url_to_use = None
-    if ENVIRONMENT == "test":
-        logger.info("Using TEST_DATABASE_URL for test environment.")
-        db_url_to_use = TEST_DATABASE_URL
-    else:
-        db_url_to_use = DATABASE_URL
+    db_url_to_use = TEST_DATABASE_URL if ENVIRONMENT == "test" else DATABASE_URL
         
     if not db_url_to_use:
         logger.error(f"Database URL not set for environment '{ENVIRONMENT}'!")
-        app.state.db_pool = None
+        app.state.db_engine = None # Store None if no URL
     else:
         try:
-            app.state.db_pool = await asyncpg.create_pool(
-                dsn=db_url_to_use,
-                min_size=1,
-                max_size=10 # Ajuster selon les besoins
+            # Create SQLAlchemy Async Engine
+            app.state.db_engine: AsyncEngine = create_async_engine(
+                db_url_to_use,
+                echo=DEBUG, # Log SQL queries if DEBUG is True
+                pool_size=10, # Example pool size
+                max_overflow=5  # Example overflow
             )
-            logger.info(f"Database connection pool created using: {db_url_to_use.split('@')[1] if '@' in db_url_to_use else '[URL hidden]'}") # Log safe part of URL
+            logger.info(f"Database engine created using: {db_url_to_use.split('@')[1] if '@' in db_url_to_use else '[URL hidden]'}")
             
-            # Enregistrer les codecs pgvector
-            async with app.state.db_pool.acquire() as conn:
-                await pgvector.asyncpg.register_vector(conn)
-                logger.info("pgvector codecs registered for asyncpg connections.")
-                
+            # Register pgvector type handler listener (if needed)
+            # This approach might need adjustment based on how pgvector works with SQLAlchemy async drivers
+            # listen(app.state.db_engine.sync_engine, "connect", register_vector_on_connect) # Using sync_engine might be incorrect for async
+            # TODO: Verify correct way to register pgvector types with SQLAlchemy async engine
+            logger.warning("pgvector type registration with SQLAlchemy async engine needs verification.")
+
+            # Optional: Test connection
+            async with app.state.db_engine.connect() as conn:
+                logger.info("Database connection test successful.")
+
         except Exception as e:
-            logger.error("Failed to create database connection pool or register codecs", error=str(e))
-            app.state.db_pool = None
+            logger.error("Failed to create database engine", error=str(e), exc_info=True)
+            app.state.db_engine = None # Set to None on failure
     
     yield
     
-    # Nettoyage à l'arrêt: Fermer le pool
+    # Nettoyage à l'arrêt: Disposer le moteur
     logger.info("Shutting down MnemoLite API")
-    if app.state.db_pool:
-        await app.state.db_pool.close()
-        logger.info("Database connection pool closed.")
+    if hasattr(app.state, 'db_engine') and app.state.db_engine:
+        await app.state.db_engine.dispose()
+        logger.info("Database engine disposed.")
 
 
 # Création de l'application
@@ -89,6 +113,33 @@ app.include_router(event_routes.router, prefix="/v1/events", tags=["v1_Events"])
 app.include_router(search_routes.router, prefix="/v1/search", tags=["v1_Search"])
 app.include_router(health_routes.router, prefix="/v1", tags=["v1_Health & Metrics"])
 
+
+# --- Endpoint pour la création d'événements PENDANT LES TESTS --- 
+# Ne devrait pas être exposé en production.
+# Utilise l'injection de dépendance standard pour obtenir le repo.
+from db.repositories.event_repository import EventRepository, EventCreate, EventModel
+from dependencies import get_event_repository
+
+@app.post("/v1/_test_only/events/", 
+          response_model=EventModel, 
+          tags=["_Test Utilities"], 
+          include_in_schema=(ENVIRONMENT == "test" or DEBUG), # Hide from prod docs
+          summary="Create an event (for testing)")
+async def create_event_for_testing(
+    event_data: EventCreate,
+    repo: EventRepository = Depends(get_event_repository)
+):
+    """Endpoint réservé aux tests pour créer un événement.
+    Utilise le pool de connexion principal de l'application.
+    """
+    try:
+        created_event = await repo.add(event_data)
+        return created_event
+    except Exception as e:
+        logger.error("Error creating event via test endpoint", exc_info=True)
+        # Lever une HTTPException pour que TestClient la capture correctement
+        raise HTTPException(status_code=500, detail=f"Failed to create test event: {e}")
+# --- Fin Endpoint de test ---
 
 # --- Endpoint de Debug Temporaire ---
 # @app.get("/debug/routes")
@@ -122,28 +173,26 @@ async def root():
         "redoc": "/redoc"
     }
 
-
 # Exception Handlers
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail}, # Use standard FastAPI detail field
-        headers=getattr(exc, "headers", None),
-    )
+class RouteErrorHandler(APIRoute):
+    def get_route_handler(self):
+        original_route_handler = super().get_route_handler()
 
-@app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception):
-    # Log the full error in debug mode or non-HTTP errors
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": str(exc) if DEBUG else "Internal Server Error"
-        }
-    )
+        async def custom_route_handler(request: Request) -> Response:
+            try:
+                return await original_route_handler(request)
+            except HTTPException as http_exc:
+                logger.warning(f"HTTPException caught: {http_exc.status_code} {http_exc.detail}", request=request.url.path)
+                raise http_exc # Re-raise FastAPI's HTTPException
+            except Exception as exc:
+                logger.exception("Unhandled exception in route handler", request=request.url.path)
+                return JSONResponse(
+                    status_code=500,
+                    content={"detail": "Internal Server Error"},
+                )
+        return custom_route_handler
 
+app.router.route_class = RouteErrorHandler
 
 if __name__ == "__main__":
     import uvicorn
