@@ -3,29 +3,29 @@
 ## 1. Titre du produit
 **MnemoLite** — Mémoire cognitive autonome pour assistant conversationnel Expanse
 
-**Version**: 1.0.1 (Aligné PFD 1.2.1)
-**Date**: 2025-04-26
+**Version**: 1.0.2 (Aligné PFD 1.2.2)
+**Date**: 2025-04-27
 
 ## 2. Objectif du produit
-Fournir une **mémoire cognitive réutilisable, autonome et interrogeable**, optimisée pour un déploiement local, destinée à simuler, tester, visualiser et enrichir les capacités mémorielles d’un agent IA, en reproduisant les grands types de mémoire humaine (épisodique, sémantique, procédurale, prospective, de travail).
+Fournir une **mémoire cognitive réutilisable, autonome et interrogeable**, optimisée pour un déploiement local, destinée à simuler, tester, visualiser et enrichir les capacités mémorielles d'un agent IA, en reproduisant les grands types de mémoire humaine (épisodique, sémantique, procédurale, prospective, de travail).
 
 MnemoLite doit être intégrable dans Expanse via scripts Python appelés par des règles `.mdc`, mais doit également fonctionner seul, avec une interface Web.
 
 ## 3. Public cible
 - Architectes & développeurs Expanse
 - Chercheurs en cognition augmentée IA
-- Formateurs d’agents LLM personnalisés
+- Formateurs d'agents LLM personnalisés
 - Analystes QA / DataOps / A/B testers
 
-## 4. Cas d’usage principaux
+## 4. Cas d'usage principaux
 
 ### UC1 — Injection de souvenirs simulés
 **Acteur** : Testeur, Développeur  
 **Précondition** : CLI/API active  
-**Description** : L’utilisateur injecte une série d’événements factices (`prompt`, `réponse`, `décision`, `outil`) dans la mémoire.
-**Postcondition** : Les entrées sont vectorisées (si applicable), horodatées, indexées (PG + Chroma).
+**Description** : L'utilisateur injecte une série d'événements factices (`prompt`, `réponse`, `décision`, `outil`) dans la mémoire.
+**Postcondition** : Les entrées sont vectorisées (si applicable), horodatées, indexées (PostgreSQL + pgvector).
 
-### UC2 — Recherche contextuelle d’un souvenir
+### UC2 — Recherche contextuelle d'un souvenir
 **Acteur** : Agent Expanse ou Humain  
 **Précondition** : Clé de recherche disponible (texte, vecteur, métadonnée)  
 **Description** : Le système restitue les souvenirs les plus proches selon une pondération mixte (`embedding` + tags + temporalité).
@@ -34,13 +34,13 @@ MnemoLite doit être intégrable dans Expanse via scripts Python appelés par de
 ### UC3 — Exploration manuelle (UI HTMX)
 **Acteur** : Analyste, Formateur, Développeur  
 **Précondition** : UI Web active  
-**Description** : L’utilisateur navigue dans une timeline, filtre par type, explore un graphe de dépendances mnésiques, ou demande des résumés.
+**Description** : L'utilisateur navigue dans une timeline, filtre par type, explore un graphe de dépendances mnésiques, ou demande des résumés.
 **Postcondition** : Retour HTML dynamique, exportable, interrogeable via URL.
 
 ### UC4 — Requête Ψ réflexive
 **Acteur** : LLM ou humain  
 **Précondition** : API `/psi/query` accessible  
-**Description** : L’utilisateur pose une question réflexive à la mémoire : "Pourquoi as-tu fait ça ?", "Qu’as-tu appris ?", etc.
+**Description** : L'utilisateur pose une question réflexive à la mémoire : "Pourquoi as-tu fait ça ?", "Qu'as-tu appris ?", etc.
 **Postcondition** : Retour raisonné, enrichi, structuré (preuve, chemin, incertitudes).
 
 ## 5. Spécifications fonctionnelles clés
@@ -78,18 +78,19 @@ MnemoLite doit être intégrable dans Expanse via scripts Python appelés par de
 | Taux de retour pertinent (top 5)   | Test manuel + recall score | > 80 %                    |
 | Temps de démarrage local complet   | `docker compose up`        | < 3 min                   |
 | Utilisation mémoire (10M vecteurs) | `htop` pendant bench        | < 4 GB (estimé sur 64GB RAM) |
-| Disk / 10M interactions            | `df -h` sur volume PG       | < 100 GB (estimé)         |
+| Disk / 10M events                  | `df -h` sur volume PG       | < 100 GB (estimé)         |
 | Réponse Ψ complète                 | Cas de test Q→A justifiée  | Oui                       |
 | Démarrage sans Cursor              | Test E2E                    | ≤ 5 min                   |
 | Intégration `.mdc`                 | Code review                 | ≤ 20 lignes Python        |
 
 ## 8. Livrables associés
-- Fichier `schema.sql` pour PostgreSQL + pgvector + graph (tables)
-- Script `populate_fake_data.py`
-- API `memory_server.py`
-- Interface `templates/index.html` + `search.html`
-- Workers `pg_cron` pour maintenance (quantization, etc.)
-- Documentation : `README.md`, `api.md`, `psi-guide.md`
+- Scripts d'initialisation DB (`db/init/*.sql`)
+- Script de données de test (`scripts/seed.py` ou similaire)
+- API FastAPI (`api/main.py`)
+- Templates HTMX (`api/templates/*.html`)
+- Workers Python (`workers/*.py` pour ingestion/tâches asynchrones via PGMQ)
+- Configuration `pg_cron` (SQL ou via outil d'admin) pour maintenance (quantization, etc.)
+- Documentation : `README.md` + fichiers dans `docs/` (vérifier noms exacts : `API.md`, `ARCHITECTURE.md`, `SCHEMA.md` etc.)
 
 ## 9. Installation et environnement
 
@@ -120,12 +121,11 @@ make prod       # Mode production
 ### 9.3 Structure des dossiers
 ```
 mnemo-lite/
-├── api/               # Code FastAPI
-├── db/                # Schémas et migrations
-├── workers/           # Workers d'ingestion et maintenance
-├── ui/                # Templates HTMX
+├── api/               # Code FastAPI (inclut /templates pour HTMX)
+├── db/                # Schémas et initialisation (dans /init)
+├── workers/           # Workers d'ingestion et maintenance (Python)
 ├── docs/              # Documentation
-└── scripts/           # Utilitaires et helpers
+└── scripts/           # Utilitaires et helpers (ex: seed.py)
 ```
 
 ### 9.4 Configuration et personnalisation

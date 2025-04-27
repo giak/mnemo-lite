@@ -61,7 +61,11 @@ These results demonstrate the efficiency of the HNSW index for vector searches a
 
 3.  Start the services:
     ```bash
+    # Option 1: Using Docker Compose directly
     docker compose up -d
+    # Option 2: Using Makefile (Recommended - may include init steps)
+    # make setup # (If defined in Makefile for first-time setup)
+    # make run # (Or similar target defined in Makefile)
     ```
 
 4.  Verify all services are running:
@@ -71,7 +75,7 @@ These results demonstrate the efficiency of the HNSW index for vector searches a
 
 5.  Check the API health (adjust port if needed based on `.env` or `docker-compose.yml`):
     ```bash
-    curl http://localhost:8001/v1/healthz
+    curl http://localhost:${API_PORT:-8001}/v1/health
     ```
 
 ## API Usage Examples
@@ -114,29 +118,22 @@ curl -X GET "http://localhost:8001/v1/search?filter_metadata=%7B%22project%22%3A
 
 ### Local Development Setup
 
-1.  Install Python 3.12+
-2.  Create and activate a virtual environment:
-    ```bash
-    python -m venv venv
-    source venv/bin/activate # Linux/macOS
-    # venv\Scripts\activate # Windows
-    ```
+**Note importante :** L'environnement Python requis pour l'API et les workers, ainsi que toutes leurs dépendances, sont entièrement gérés **à l'intérieur des images Docker**. Vous n'avez *pas* besoin d'installer Python ou les paquets listés dans `requirements.txt` directement sur votre machine hôte pour développer ou exécuter l'application principale. Le workflow ci-dessous repose sur cette approche conteneurisée.
 
-3.  Install API dependencies:
-    ```bash
-    pip install -r api/requirements.txt
-    # Install worker dependencies if applicable: pip install -r workers/requirements.txt
-    ```
+Le développement se fait principalement via Docker, en tirant parti des volumes montés et du rechargement automatique.
 
-4.  Start required services (like the database) in development mode (if different from production setup):
+1.  **Assurez-vous que les services Docker sont lancés**, idéalement via le `Makefile` ou `docker compose up -d`.
     ```bash
-    docker compose -f docker-compose.dev.yml up -d # Or use the main docker-compose
+    docker compose up -d
+    # Ou utilisez une cible Makefile appropriée
     ```
-
-5.  Run the API locally with auto-reload:
+2.  **Modifiez le code** directement dans les répertoires locaux (`api/`, `workers/`).
+3.  **Le serveur API (Uvicorn)**, lancé avec l'option `--reload` dans le conteneur `mnemo-api`, détectera automatiquement les changements dans le répertoire `api/` (grâce au volume monté) et redémarrera pour prendre en compte les modifications.
+4.  Pour les **workers**, en fonction de leur implémentation, un redémarrage manuel du conteneur worker (`docker compose restart mnemo-worker`) peut être nécessaire pour prendre en compte les changements de code, à moins qu'ils n'implémentent aussi un mécanisme de rechargement.
+5.  Les **dépendances Python** sont gérées *à l'intérieur* des images Docker. Si vous ajoutez/modifiez des dépendances dans `api/requirements.txt` ou `workers/requirements.txt`, vous devrez **reconstruire** les images correspondantes :
     ```bash
-    # Assuming your FastAPI app instance is named 'app' in 'api/main.py'
-    uvicorn api.main:app --reload --host 0.0.0.0 --port 8001
+    docker compose build api worker # Reconstruit les images api et worker
+    docker compose up -d --force-recreate # Recrée les conteneurs avec les nouvelles images
     ```
 
 ## Configuration
@@ -146,26 +143,27 @@ MnemoLite uses environment variables defined in the `.env` file.
 Key configuration options:
 
 - `POSTGRES_*`: PostgreSQL connection settings (user, password, db name, host, port).
-- `WORKER_*`: Configuration for the optional worker (e.g., queue name if using pgmq).
 - `API_*`: API server settings (e.g., host, port if not using default).
-- `EMBEDDING_MODEL`: Specifies the model used for generating embeddings.
+- `API_PORT`: Port exposed by the API service (default: 8001).
+- `ENVIRONMENT`: Set application environment (development, test, production).
+- `OPENAI_API_KEY`: Optional key if using OpenAI for embeddings or other features.
 
 ## API Documentation
 
 When the API service is running, interactive documentation is available at:
 
-- Swagger UI: http://localhost:8001/v1/docs
-- ReDoc: http://localhost:8001/v1/redoc
+- Swagger UI: http://localhost:${API_PORT:-8001}/docs
+- ReDoc: http://localhost:${API_PORT:-8001}/redoc
 
-Refer to `docs/v2/Specification_API.md` for the detailed OpenAPI specification.
+Refer to `docs/Specification_API.md` (v1.1.0+) for the detailed OpenAPI specification.
 
 ## Project Documentation
 
-- **PFD**: `docs/v2/Project Foundation Document.md`
-- **PRD**: `docs/v2/Product Requirements Document.md`
-- **Architecture**: `docs/v2/Document Architecture.md`
-- **DB Schema**: `docs/v2/bdd_schema.md`
-- **Stories**: `docs/agile/STORIES_EPIC-*.md`
+- **PFD**: `docs/Project Foundation Document.md` (v1.2.2+)
+- **PRD**: `docs/Product Requirements Document.md` (v1.0.2+)
+- **Architecture**: `docs/Document Architecture.md` (v1.1.1+)
+- **DB Schema**: `docs/bdd_schema.md` (v1.2.1+)
+- **Stories**: `docs/agile/` (contains user stories etc.)
 
 ## Contributing
 

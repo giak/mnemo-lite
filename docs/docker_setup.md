@@ -1,7 +1,7 @@
 # MnemoLite - Configuration Docker (100% PostgreSQL)
 
-**Version**: 1.3.0 (Aligné ARCH 1.1.0)
-**Date**: 2025-04-26
+**Version**: 1.3.1 (Aligné ARCH 1.1.1)
+**Date**: 2025-04-27
 
 ## Vue d'ensemble
 
@@ -59,76 +59,49 @@ graph TD
 ### Fichier `docker-compose.yml` (Exemple)
 
 ```yaml
+# Extrait simplifié et aligné sur le docker-compose.yml réel
+# (Identique à celui dans docs/Document Architecture.md)
 version: '3.8'
 
-x-logging: &default-logging
+x-logging: &default-logging # Optionnel: Configuration centralisée des logs
   driver: "json-file"
   options:
     max-size: "10m"
     max-file: "3"
 
 services:
-  db: # Renommé pour simplicité
-    # Image recommandée incluant pgvector:
-    image: pgvector/pgvector:pg16-alpine # Ou pg17 quand dispo/stable
-    # Alternative: image: postgres:17-alpine
-    # Si image postgres standard, installer les extensions via script init
+  db:
+    build:
+      context: ./db
+      dockerfile: Dockerfile # Contient FROM pgvector/pgvector:pg17 et installe partman
     container_name: mnemo-postgres
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          # Ajuster selon votre machine locale (64GB RAM)
-          cpus: '2' # Peut être plus généreux
-          memory: 4G # Peut être plus généreux
-        # reservations: 
-        #   memory: 1G
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-mnemo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mnemopass}
       POSTGRES_DB: ${POSTGRES_DB:-mnemolite}
-      POSTGRES_INITDB_ARGS: "--data-checksums"
-      # Pour pg_cron (si non pré-configuré dans l'image)
-      # PGUSER: ${POSTGRES_USER:-mnemo} 
-      # CRON_DATABASE: ${POSTGRES_DB:-mnemolite}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Monter un script qui crée les extensions: pgvector, pg_partman, pg_cron si nécessaire
-      - ./db/init:/docker-entrypoint-initdb.d:ro 
-      # Monter la configuration pg_partman et les scripts pg_cron si gérés par fichiers
-      # - ./db/partman_config:/etc/pg_partman:ro 
-      # - ./db/cron_jobs:/etc/pg_cron:ro
+      - ./db/init:/docker-entrypoint-initdb.d:ro # Scripts init SQL
     ports:
-      # Expose sur localhost uniquement
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
-    healthcheck:
+    healthcheck: # Exemple, vérifier le fichier réel pour la commande exacte
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-mnemo} -d $${POSTGRES_DB:-mnemolite} -q"]
       interval: 5s
       timeout: 5s
       retries: 5
       start_period: 10s
-    command: > # Exemple de commande pour charger les extensions nécessaires
+    command: > # Exemple de tuning PG (vérifier fichier réel)
       postgres
-        # Les shared_preload_libraries doivent être chargées au démarrage
-        # Cette partie dépend fortement de l'image utilisée et de la méthode d'installation
-        # Exemple si extensions installées:
-        # -c shared_preload_libraries='pg_cron,pg_partman_bgw' 
-        # -c cron.database_name='${POSTGRES_DB:-mnemolite}' 
-        # -c pg_partman_bgw.interval=3600 
-        # -c pg_partman_bgw.role='${POSTGRES_USER:-mnemo}' 
-        # Paramètres de performance (ajuster pour 64GB RAM)
-        -c shared_buffers=16GB 
-        -c effective_cache_size=48GB 
-        -c maintenance_work_mem=2GB 
-        -c work_mem=64MB 
-        -c max_parallel_workers_per_gather=4 
-        -c max_worker_processes=8 # Inclut autovacuum, logical replication, etc.
-    shm_size: 1g # Augmenter si parallelisme important ou extensions gourmandes
+        -c shared_buffers=1GB
+        -c effective_cache_size=3GB
+        # ... autres paramètres ...
+    shm_size: 1g
     networks:
       backend:
         aliases:
           - db
-    logging: *default-logging
+    logging: *default-logging # Appliquer la config de logs
 
   api:
     build:
@@ -137,31 +110,29 @@ services:
     container_name: mnemo-api
     restart: unless-stopped
     ports:
-      # Expose sur localhost uniquement par défaut
-      - "127.0.0.1:${API_PORT:-8001}:8000" # Port externe API
+      - "127.0.0.1:${API_PORT:-8001}:8000"
     environment:
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
-      # Autres variables nécessaires (clés API externes, etc.)
-      # OPENAI_API_KEY=${OPENAI_API_KEY} 
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
+      # TEST_DATABASE_URL: ... (si nécessaire)
+      OPENAI_API_KEY: ${OPENAI_API_KEY} # Optionnel
       ENVIRONMENT: ${ENVIRONMENT:-development}
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./api:/app # Montage code local pour dev
-      # - ./certs:/app/certs:ro # Si certificats nécessaires
-    deploy:
-      resources:
-        limits:
-          cpus: '1' # Peut être plus généreux
-          memory: 1G # Peut être plus généreux
+      - ./api:/app # Montage pour dev
+      - ./certs:/app/certs:ro # Optionnel
+      - ./tests:/app/tests # Optionnel
+      - ./scripts:/app/scripts # Optionnel
     networks:
       backend:
       frontend:
     logging: *default-logging
-    # Healthcheck optionnel sur /v1/healthz peut être ajouté
+    healthcheck: # Exemple, vérifier le fichier réel
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/v1/healthz"]
+      # ... interval, timeout, etc.
 
-  worker: # Optionnel
+  worker:
     build:
       context: .
       dockerfile: workers/Dockerfile
@@ -169,38 +140,35 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
-      # Autres variables nécessaires
-      # OPENAI_API_KEY=${OPENAI_API_KEY} 
+      OPENAI_API_KEY: ${OPENAI_API_KEY} # Optionnel
       ENVIRONMENT: ${ENVIRONMENT:-development}
       PYTHONUNBUFFERED: "1"
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./workers:/app # Montage code local pour dev
-      # - ./certs:/app/certs:ro 
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
+      - ./workers:/app
+      - ./certs:/app/certs:ro # Optionnel
+    # Pas de port exposé typiquement pour un worker
     networks:
       backend:
     logging: *default-logging
 
-networks:
-  frontend: 
-  backend:
-    internal: true
-
 volumes:
   postgres_data:
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    internal: true
+    driver: bridge
 ```
 
 ### Explication des optimisations et choix (Mis à jour)
 
 *   **Stack Simplifiée** : Suppression de ChromaDB. PostgreSQL est maintenant la seule base de données. L'image `pgvector/pgvector` est recommandée pour inclure l'extension `pgvector` facilement.
-*   **Gestion des Extensions PG** : L'installation et la configuration de `pgvector`, `pg_partman`, `pg_cron` doivent être gérées, soit via l'image Docker choisie, soit via des scripts SQL dans le volume `docker-entrypoint-initdb.d`, soit via des commandes exécutées après le démarrage. Le pré-chargement (`shared_preload_libraries`) est souvent nécessaire pour `pg_cron` et `pg_partman_bgw`.
+*   **Gestion des Extensions PG** : L'installation et la configuration de `pgvector` et `pg_partman` sont gérées via l'image de base (`pgvector/pgvector:pg17`) et le Dockerfile (`db/Dockerfile`). L'extension `pg_cron`, nécessaire pour la quantisation planifiée, n'est **pas installée ou activée par défaut** dans cette configuration ; son ajout et sa configuration (potentiellement via `shared_preload_libraries` dans `docker-compose.yml` et des scripts SQL) sont une étape ultérieure.
 *   **Ressources Locales** : Les limites de CPU/mémoire sont des exemples et **doivent être ajustées** pour tirer parti de votre machine locale (64GB RAM). Les paramètres PostgreSQL dans la section `command` sont des suggestions pour une machine avec beaucoup de RAM.
 *   **Sécurité & Simplicité** : Exposition des ports sur `127.0.0.1`, réseau `backend` interne, alias réseau `db`. Utilisation d'utilisateurs non-root dans les Dockerfiles (supposé).
 *   **Robustesse** : Healthcheck pour `postgres`. `depends_on` avec `condition: service_healthy`.

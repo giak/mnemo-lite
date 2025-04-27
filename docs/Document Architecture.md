@@ -1,7 +1,7 @@
 # MnemoLite – Document d'Architecture (ARCH) détaillé
 
-**Version**: 1.1.0 (Aligné PFD 1.2.1 / PRD 1.0.1)
-**Date**: 2025-04-26
+**Version**: 1.1.1 (Aligné PFD 1.2.2 / PRD 1.0.2)
+**Date**: 2025-04-27
 
 ## 1. Vue d'ensemble
 MnemoLite adopte une architecture **CQRS cognitive et modulaire**, optimisée pour un déploiement local. Elle repose **exclusivement sur PostgreSQL 17** avec ses extensions pour gérer les aspects relationnels, vectoriels (`pgvector`), le partitionnement temporel (`pg_partman`), les tâches asynchrones (`pgmq` optionnel) et le graphe relationnel (tables + CTE).
@@ -107,8 +107,8 @@ CREATE INDEX ON nodes(node_type);
 
 CREATE TABLE edges (
     edge_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_node_id UUID NOT NULL REFERENCES nodes(node_id) ON DELETE CASCADE,
-    target_node_id UUID NOT NULL REFERENCES nodes(node_id) ON DELETE CASCADE,
+    source_node_id UUID NOT NULL, -- Reference logique nodes.node_id
+    target_node_id UUID NOT NULL, -- Reference logique nodes.node_id
     relation_type TEXT NOT NULL, -- Ex: 'causes', 'mentions', 'related_to'
     properties JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -117,7 +117,7 @@ CREATE INDEX ON edges(source_node_id);
 CREATE INDEX ON edges(target_node_id);
 CREATE INDEX ON edges(relation_type);
 ```
-*Note: La création des nœuds et des arêtes est gérée par la logique applicative lors de l'ingestion des événements.* 
+*Note: La création des nœuds et des arêtes est gérée par la logique applicative. Pas de contraintes FK physiques sur edges pour flexibilité; cohérence gérée par l'application ou des checks périodiques.*
 
 ### Autres tables (optionnelles)
 *   `memory_types`, `event_types` : Pour standardiser les types via clés étrangères.
@@ -167,7 +167,7 @@ CREATE INDEX ON edges(relation_type);
 *   **Cycle de vie Hot/Warm simplifié :**
     *   **Partitionnement Mensuel :** Géré par `pg_partman`.
     *   **Hot (0-12 mois) :** Partitions récentes, vecteurs FP32.
-    *   **Warm (> 12 mois) :** Vecteurs quantisés en **INT8** par un job `pg_cron` pour économiser l'espace disque. Le job cible les partitions de plus de 12 mois.
+    *   **Warm (> 12 mois) :** Vecteurs quantisés en **INT8** par un job `pg_cron` (à activer/configurer) pour économiser l'espace disque. Le job cible les partitions de plus de 12 mois.
     *   **Rétention :** Les vieilles partitions (> N mois/années, configurable dans `pg_partman`) peuvent être détachées ou supprimées pour gérer l'espace disque local.
     *   **Archivage Complexe Différé :** Pas d'étape Cold (JSON) ou Archive (S3) initialement.
 
@@ -192,7 +192,7 @@ flowchart LR
   WarmPartitions --> P_M14
   WarmPartitions --> P_Mdots2
   
-  P_M12 -->|"pg_cron (&gt;12 mois)<br>Quantize INT8"| P_M13
+  P_M12 -->|"pg_cron (&gt;12 mois)<br>Quantize INT8<br>(Needs activation)"| P_M13
   
   classDef hot fill:#fdebd0,stroke:#c8976c;
   classDef warm fill:#eaf2f8,stroke:#80a3bd;
@@ -206,50 +206,74 @@ flowchart LR
 
 ## 7. Déploiement (Docker Compose Local)
 ```yaml
+# Extrait simplifié et aligné sur le docker-compose.yml réel
 version: '3.8'
+
 services:
   db:
-    image: pgvector/pgvector:pg16 # Utiliser une image incluant pgvector
-    # Ou image: postgres:17 + installation manuelle des extensions
-    ports:
-      - "5432:5432"
+    build:
+      context: ./db
+      dockerfile: Dockerfile # Contient FROM pgvector/pgvector:pg17 et installe partman
+    container_name: mnemo-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: mnemo_db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      # Activer les extensions nécessaires au démarrage si possible
-      # Ou utiliser un script d'initialisation
+      POSTGRES_USER: ${POSTGRES_USER:-mnemo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mnemopass}
+      POSTGRES_DB: ${POSTGRES_DB:-mnemolite}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d # Pour scripts SQL initiaux
-    # Ajuster les ressources si nécessaire pour le local
-    # mem_limit: 8g 
-    # cpus: 4    
-  app:
+      - ./db/init:/docker-entrypoint-initdb.d:ro # Scripts init SQL
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck: # ... défini dans le fichier réel
+      # ...
+    # ... autres configs (command, shm_size, networks, logging)
+
+  api:
     build:
       context: .
       dockerfile: api/Dockerfile
+    container_name: mnemo-api
+    restart: unless-stopped
     ports:
-      - "8001:8000"
+      - "127.0.0.1:${API_PORT:-8001}:8000"
     environment:
-      DATABASE_URL: postgresql://user:password@db:5432/mnemo_db
-      # Autres variables d'environnement pour l'API
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
+      # ... autres env vars
     depends_on:
-      - db
-  worker: # Optionnel, si pgmq est utilisé
+      db:
+        condition: service_healthy
+    volumes:
+      - ./api:/app # Montage pour dev
+      # ... autres volumes (certs, tests, scripts)
+    # ... autres configs (networks, logging, healthcheck)
+
+  worker:
     build:
       context: .
-      dockerfile: workers/Dockerfile 
+      dockerfile: workers/Dockerfile
+    container_name: mnemo-worker
+    restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://user:password@db:5432/mnemo_db
-      # Autres variables d'environnement pour le worker
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
+      # ... autres env vars
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    volumes:
+      - ./workers:/app
+      # ... autres volumes (certs)
+    # ... autres configs (networks, logging)
 
 volumes:
   postgres_data:
+
+networks: # Définis dans le fichier réel (frontend, backend)
+  # ...
+
 ```
 *Note : L'image Docker PostgreSQL doit inclure les extensions `pgvector`, `pg_partman`, `pgmq` ou celles-ci doivent être installées via un script d'initialisation.* 
+*Note : Le service `db` utilise une image buildée (`db/Dockerfile`) qui installe `pgvector` (via l'image de base) et `pg_partman`. `pgmq` est une dépendance Python (`tembo-pgmq-python`) utilisée par le worker, pas une extension PG à installer ici.*
 
 ---
 
@@ -263,6 +287,7 @@ volumes:
 | Performance locale dégrade    | Moyen    | Monitoring PG stats, optimisation conf |
 | Gestion index sur partitions  | Moyen    | Automatisation via `pg_partman` hooks |
 | Espace disque local insuffisant| Moyen    | Politique de rétention `pg_partman` agressive |
++| `pg_cron` non activé/configuré | Moyen    | Ajouter procédure d'activation/test |
 
 ---
 
@@ -279,29 +304,38 @@ volumes:
 ## 10. Structure du projet (Simplifiée)
 ```
 mnemo-lite/
-├── api/                # Code FastAPI et endpoints
-│   ├── routes/         # Définition des routes
-│   ├── models/         # Modèles Pydantic
-│   └── services/       # Logique métier (inclut recherche, graph)
-├── db/                 # Schémas et config DB
-│   ├── init/           # Scripts SQL d'initialisation (extensions, etc.)
-│   ├── schema.sql      # Schéma principal (peut être généré)
-│   └── partman_config/ # Configuration pg_partman
-├── workers/            # Optionnel: Workers (pgmq, pg_cron jobs)
-│   ├── ingestion.py    # Worker d'ingestion (si pgmq)
-│   └── maintenance.py  # Scripts pour pg_cron (quantization, etc.)
-├── ui/                 # Interface utilisateur HTMX/Jinja2
-│   ├── templates/
-│   └── static/
+├── api/                # Code FastAPI (inclut /templates pour HTMX et /services, /routes, /models)
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── main.py
+│   ├── dependencies.py
+│   ├── config/
+│   ├── db/             # Logique DB spécifique API (repositories?)
+│   ├── models/
+│   ├── routes/
+│   ├── services/       # Potentiellement ici ou intégré ailleurs
+│   └── templates/      # Templates Jinja2/HTMX
+├── db/                 # Configuration et initialisation PostgreSQL
+│   ├── Dockerfile
+│   └── init/           # Scripts SQL d'initialisation (01-extensions, 01-init, 02-partman-config)
+├── workers/            # Workers asynchrones (ex: ingestion, PGMQ consumers)
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── worker.py
+│   ├── ingestion.py    # Exemple de worker
+│   └── config/
 ├── docs/               # Documentation (PFD, PRD, ARCH...)
 ├── scripts/            # Utilitaires (seed data, bench)
-├── tests/              # Tests automatisés
-├── Dockerfile.api
-├── Dockerfile.worker   # Si applicable
+├── tests/              # Tests automatisés (pytest)
+├── certs/              # Certificats (si HTTPS local)
+├── .env.example
+├── .gitignore
 ├── docker-compose.yml
-└── .env.example
+├── Makefile
+└── README.md
 ```
 *Note: Le worker de synchronisation PG->Chroma (`sync.py`) n'est plus nécessaire.* 
+*Note: Structure basée sur les listings et les conventions FastAPI/Docker. L'ancienne `ui/` est intégrée dans `api/templates/`.*
 
 ---
 
@@ -319,7 +353,7 @@ mnemo-lite/
 ---
 
 ## 13. Documentation associée
-*Mettre à jour `SCHEMA.md`, `WORKERS.md` (si applicable), `API.md` pour refléter l'architecture 100% PostgreSQL.* 
+*Vérifier et mettre à jour les documents dans `docs/` (ex: `API.md`, `SCHEMA.md` si existants) pour refléter l'architecture 100% PostgreSQL, PGMQ, etc.* 
 
 ---
 
