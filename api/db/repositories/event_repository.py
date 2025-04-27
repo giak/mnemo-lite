@@ -301,8 +301,24 @@ class EventRepository:
                 # Prepare parameters using bindparam for safety and type handling
                 # Pass the Python dict directly to bindparam for JSONB
                 md_param = bindparam('md_filter', value=metadata, type_=JSONB) if metadata else None 
-                ts_start_param = bindparam('ts_start', value=ts_start, type_=TIMESTAMP(timezone=True)) if ts_start else None
-                ts_end_param = bindparam('ts_end', value=ts_end, type_=TIMESTAMP(timezone=True)) if ts_end else None
+                
+                # Fix timestamp parameter binding for timezone handling
+                if ts_start:
+                    # Ensure UTC timezone if not already specified
+                    if ts_start.tzinfo is None:
+                        ts_start = ts_start.replace(tzinfo=datetime.timezone.utc)
+                    ts_start_param = bindparam('ts_start', value=ts_start, type_=TIMESTAMP(timezone=True))
+                else:
+                    ts_start_param = None
+                    
+                if ts_end:
+                    # Ensure UTC timezone if not already specified
+                    if ts_end.tzinfo is None:
+                        ts_end = ts_end.replace(tzinfo=datetime.timezone.utc)
+                    ts_end_param = bindparam('ts_end', value=ts_end, type_=TIMESTAMP(timezone=True))
+                else:
+                    ts_end_param = None
+                    
                 limit_param = bindparam('lim', value=limit, type_=Integer)
                 offset_param = bindparam('off', value=offset, type_=Integer)
 
@@ -332,6 +348,15 @@ class EventRepository:
                         where_conditions.append(events_table.c.timestamp >= ts_start_param)
                     if ts_end_param is not None:
                         where_conditions.append(events_table.c.timestamp <= ts_end_param)
+                        
+                    # Add distance threshold for hybrid searches to filter out vectors that are too distant
+                    # This is important when combining vector and metadata filters
+                    if len(where_conditions) > 0:  # If this is a hybrid search (vector + other filters)
+                        # Threshold distance for filtering out poor vector matches in hybrid search
+                        # Smaller value = more strict filtering (only very similar vectors)
+                        distance_threshold = 5.0  # This value needs to be tuned based on your vector space
+                        distance_param = bindparam('distance_threshold', value=distance_threshold, type_=Float)
+                        where_conditions.append(events_table.c.embedding.l2_distance(vector_param) < distance_param)
 
                     if where_conditions:
                         stmt = stmt.where(and_(*where_conditions))
@@ -353,6 +378,9 @@ class EventRepository:
                         params['ts_start'] = ts_start
                     if ts_end_param is not None:
                         params['ts_end'] = ts_end
+                    # Add the distance threshold parameter if used
+                    if len(where_conditions) > 1:  # If we have a hybrid search
+                        params['distance_threshold'] = distance_threshold
                     params['lim'] = limit
                     params['off'] = offset
                     

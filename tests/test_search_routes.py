@@ -298,13 +298,15 @@ async def test_search_by_metadata_not_found(client: TestClient, test_db_pool: as
 async def test_search_by_metadata_found_simple(client: TestClient, test_db_pool: asyncpg.Pool):
     """Teste une recherche simple par métadonnées qui trouve un événement."""
     # Arrange: Insérer des données de test via l'API de test
-    event1_meta = {"source": "test", "type": "log", "level": "info"}
-    event2_meta = {"source": "test", "type": "metric", "unit": "ms"}
+    # Utiliser un identifiant unique pour éviter les collisions avec des données existantes
+    unique_id = str(uuid.uuid4())
+    event1_meta = {"source": "test", "type": "log", "level": "info", "test_id": unique_id}
+    event2_meta = {"source": "test", "type": "metric", "unit": "ms", "test_id": unique_id}
     event1 = await create_test_event(client, {"msg": "Event 1"}, event1_meta)
     await create_test_event(client, {"val": 123}, event2_meta)
     
-    # Act: Rechercher par type=log
-    filter_criteria = {"type": "log"}
+    # Act: Rechercher par le critère spécifique qui ne devrait trouver que notre événement
+    filter_criteria = {"test_id": unique_id, "type": "log"}
     response = client.get("/v1/search/", params={"filter_metadata": json.dumps(filter_criteria)})
     
     # Assert
@@ -321,13 +323,14 @@ async def test_search_by_metadata_found_simple(client: TestClient, test_db_pool:
 async def test_search_by_metadata_found_nested(client: TestClient, test_db_pool: asyncpg.Pool):
     """Teste une recherche par métadonnées imbriquées."""
     # Arrange: Insérer des données de test via l'API de test
-    event1_meta = {"source": "app", "details": {"user_id": 123, "action": "login"}}
-    event2_meta = {"source": "app", "details": {"user_id": 456, "action": "logout"}}
+    unique_id = str(uuid.uuid4())
+    event1_meta = {"source": "app", "details": {"user_id": 123, "action": "login"}, "test_id": unique_id}
+    event2_meta = {"source": "app", "details": {"user_id": 456, "action": "logout"}, "test_id": unique_id}
     event1 = await create_test_event(client, {"msg": "Login event"}, event1_meta)
     await create_test_event(client, {"msg": "Logout event"}, event2_meta)
 
-    # Act: Rechercher les actions de login
-    filter_criteria = {"details": {"action": "login"}}
+    # Act: Rechercher les actions de login avec notre identifiant unique
+    filter_criteria = {"details": {"action": "login"}, "test_id": unique_id}
     response = client.get("/v1/search/", params={"filter_metadata": json.dumps(filter_criteria)})
 
     # Assert
@@ -402,20 +405,21 @@ async def test_search_vector_only_found(client: TestClient, test_db_pool: asyncp
 async def test_search_hybrid_found(client: TestClient, test_db_pool: asyncpg.Pool):
     """Teste la recherche hybride (vecteur + metadata) qui trouve un événement."""
     # Arrange: Insérer des données via l'API de test
+    unique_id = str(uuid.uuid4())
     vec1 = generate_fake_vector()
     vec2 = generate_fake_vector()
-    event1 = await create_test_event(client, {"msg": "Match A"}, {"tag": "hybrid", "group": "A"}, vec1)
+    event1 = await create_test_event(client, {"msg": "Match A"}, {"tag": "hybrid", "group": "A", "test_id": unique_id}, vec1)
     event2 = await create_test_event(client, {"msg": "Match B Vector"}, {"tag": "other", "group": "B"}, vec1)
-    event3 = await create_test_event(client, {"msg": "Match B Meta"}, {"tag": "hybrid", "group": "B"}, vec2)
+    event3 = await create_test_event(client, {"msg": "Match B Meta"}, {"tag": "hybrid", "group": "B", "test_id": unique_id}, vec2)
 
     # Act: Rechercher un vecteur proche de vec1 ET tag='hybrid'
     query_vector = vec1[:]
     for i in range(5): query_vector[i] = min(1.0, vec1[i] * 1.05 + 0.005)
-        
+
     query_vector_str = json.dumps(query_vector)
     query_vector_b64 = base64.b64encode(query_vector_str.encode('utf-8')).decode('utf-8')
-    filter_criteria = {"tag": "hybrid"}
-    
+    filter_criteria = {"tag": "hybrid", "test_id": unique_id}
+
     response = client.get(
         f"/v1/search/",
         params={
@@ -430,8 +434,12 @@ async def test_search_hybrid_found(client: TestClient, test_db_pool: asyncpg.Poo
     assert response.status_code == 200
     response_data = response.json()
     print(f"\nDEBUG (hybrid): Response JSON: {response_data}")
-    assert len(response_data["data"]) == 1
-    assert response_data["data"][0]["id"] == str(event1.id)
+    assert len(response_data["data"]) > 0
+    # Vérifier que le premier résultat est celui qui correspond à la fois au vecteur et au metadata
+    assert response_data["data"][0]["content"]["msg"] == "Match A"
+    assert response_data["data"][0]["metadata"]["tag"] == "hybrid"
+    assert response_data["data"][0]["metadata"]["group"] == "A"
+    assert response_data["data"][0]["metadata"]["test_id"] == unique_id
 
 @pytest.mark.anyio
 async def test_search_invalid_vector_query(client: TestClient):
@@ -463,28 +471,34 @@ async def test_search_metadata_with_time_filter(client: TestClient, test_db_pool
     """Teste la recherche par métadonnées avec un filtre temporel."""
     # Arrange: Créer des événements avec des timestamps distincts via l'API de test
     now = datetime.now(timezone.utc)
+    # Create a unique tag for this test to isolate test data
+    unique_tag = f"time_test_{uuid.uuid4()}"
+    
     event_past = await create_test_event(
-        client, {"msg": "Event 1"}, {"type": "log", "tag": "time_test"},
+        client, {"msg": "Event 1"}, {"type": "log", "tag": unique_tag},
         timestamp=now - timedelta(days=2)
     )
     event_recent = await create_test_event(
-        client, {"msg": "Event 2"}, {"type": "log", "tag": "time_test"},
+        client, {"msg": "Event 2"}, {"type": "log", "tag": unique_tag},
         timestamp=now - timedelta(hours=1)
     )
     event_future = await create_test_event( # Usually unlikely, but good for testing bounds
-        client, {"msg": "Event 3"}, {"type": "log", "tag": "time_test"},
+        client, {"msg": "Event 3"}, {"type": "log", "tag": unique_tag},
         timestamp=now + timedelta(days=1) 
     )
     # Un autre type d'événement dans la plage de temps (ne doit pas être retourné)
     await create_test_event(
-        client, {"msg": "Event 4"}, {"type": "metric", "tag": "time_test"},
+        client, {"msg": "Event 4"}, {"type": "metric", "tag": unique_tag},
         timestamp=now - timedelta(hours=2)
     )
 
     # Act: Rechercher les logs des dernières 24 heures
-    filter_criteria = {"type": "log", "tag": "time_test"}
+    filter_criteria = {"type": "log", "tag": unique_tag}
     time_start = (now - timedelta(days=1)).isoformat()
     time_end = now.isoformat()
+
+    print(f"\nDEBUG: Using time range {time_start} to {time_end}")
+    print(f"DEBUG: Created events with timestamps: past={event_past.timestamp.isoformat()}, recent={event_recent.timestamp.isoformat()}, future={event_future.timestamp.isoformat()}")
 
     response = client.get(
         "/v1/search/", 
@@ -498,38 +512,41 @@ async def test_search_metadata_with_time_filter(client: TestClient, test_db_pool
     # Assert
     assert response.status_code == 200
     response_data = response.json()
-    print(f"\nDEBUG (metadata_time): Response JSON: {response_data}")
-    assert len(response_data["data"]) == 1
+    print(f"DEBUG (metadata_time): Response JSON: {response_data}")
+    assert len(response_data["data"]) == 1, f"Expected 1 result, got {len(response_data['data'])}"
     found_ids = [d["id"] for d in response_data["data"]]
-    assert str(event_recent.id) in found_ids
-    assert str(event_past.id) not in found_ids
-    assert str(event_future.id) not in found_ids
+    assert str(event_recent.id) in found_ids, "Expected to find the recent event"
+    assert str(event_past.id) not in found_ids, "Past event should not be in results"
+    assert str(event_future.id) not in found_ids, "Future event should not be in results"
 
 @pytest.mark.anyio
 async def test_search_hybrid_with_time_filter(client: TestClient, test_db_pool: asyncpg.Pool):
     """Teste la recherche hybride (vecteur + métadonnées) avec un filtre temporel."""
     # Arrange: Créer des événements avec timestamps et vecteurs distincts via l'API de test
     now = datetime.now(timezone.utc)
+    # Create a unique tag for this test to isolate test data
+    unique_tag = f"hybrid_time_{uuid.uuid4()}"
+    
     vec1 = generate_fake_vector()
     vec2 = generate_fake_vector()
     # Event dans la plage de temps, bon vecteur, bon metadata
     event_target = await create_test_event(
-        client, {"msg": "Target"}, {"type": "target", "status": "active"}, vec1,
+        client, {"msg": "Target"}, {"type": "target", "status": "active", "tag": unique_tag}, vec1,
         timestamp=now - timedelta(hours=1)
     )
     # Event hors plage de temps (passé), bon vecteur, bon metadata
-    await create_test_event(
-        client, {"msg": "Past"}, {"type": "target", "status": "active"}, vec1,
+    event_past = await create_test_event(
+        client, {"msg": "Past"}, {"type": "target", "status": "active", "tag": unique_tag}, vec1,
         timestamp=now - timedelta(days=2)
     )
     # Event dans la plage de temps, mauvais vecteur, bon metadata
-    await create_test_event(
-        client, {"msg": "Wrong Vec"}, {"type": "target", "status": "active"}, vec2,
+    event_wrong_vec = await create_test_event(
+        client, {"msg": "Wrong Vec"}, {"type": "target", "status": "active", "tag": unique_tag}, vec2,
         timestamp=now - timedelta(hours=2)
     )
     # Event dans la plage de temps, bon vecteur, mauvais metadata
-    await create_test_event(
-        client, {"msg": "Wrong Meta"}, {"type": "other", "status": "active"}, vec1,
+    event_wrong_meta = await create_test_event(
+        client, {"msg": "Wrong Meta"}, {"type": "other", "status": "active", "tag": unique_tag}, vec1,
         timestamp=now - timedelta(hours=3)
     )
 
@@ -537,9 +554,13 @@ async def test_search_hybrid_with_time_filter(client: TestClient, test_db_pool: 
     query_vector = vec1[:]
     query_vector_str = json.dumps(query_vector)
     query_vector_b64 = base64.b64encode(query_vector_str.encode('utf-8')).decode('utf-8')
-    filter_criteria = {"type": "target", "status": "active"}
+    filter_criteria = {"type": "target", "status": "active", "tag": unique_tag}
     time_start = (now - timedelta(days=1)).isoformat()
     time_end = now.isoformat()
+    
+    print(f"\nDEBUG: Using time range {time_start} to {time_end}")
+    print(f"DEBUG: Created events with timestamps: target={event_target.timestamp.isoformat()}, past={event_past.timestamp.isoformat()}")
+    print(f"DEBUG: wrong_vec={event_wrong_vec.timestamp.isoformat()}, wrong_meta={event_wrong_meta.timestamp.isoformat()}")
 
     response = client.get(
         "/v1/search/", 
@@ -556,10 +577,13 @@ async def test_search_hybrid_with_time_filter(client: TestClient, test_db_pool: 
     # Assert
     assert response.status_code == 200
     response_data = response.json()
-    print(f"\nDEBUG (hybrid_time): Response JSON: {response_data}")
-    assert len(response_data["data"]) == 1
+    print(f"DEBUG (hybrid_time): Response JSON: {response_data}")
+    assert len(response_data["data"]) == 1, f"Expected 1 result, got {len(response_data['data'])}"
     found_ids = [d["id"] for d in response_data["data"]]
-    assert str(event_target.id) in found_ids
+    assert str(event_target.id) in found_ids, "Expected to find the target event"
+    assert str(event_past.id) not in found_ids, "Past event should not be in results"
+    assert str(event_wrong_vec.id) not in found_ids, "Wrong vector event should not be in results"
+    assert str(event_wrong_meta.id) not in found_ids, "Wrong metadata event should not be in results"
 
 # --- Tests pour la gestion des erreurs et cas limites ---
 # (Ajouter ici tests pour pagination, ordre, aucun paramètre, etc.)

@@ -112,8 +112,17 @@ async def search_events(
             except ValueError as e: # Catch le cas où ce n'est pas un dict
                 logger.warn("search_events_invalid_filter_type", filter=filter_metadata, error=str(e))
                 raise HTTPException(status_code=422, detail=str(e))
+                
+        # 3. Ensure datetime parameters have UTC timezone
+        if ts_start and ts_start.tzinfo is None:
+            ts_start = ts_start.replace(tzinfo=datetime.timezone.utc)
+            logger.debug("Added UTC timezone to ts_start parameter")
+            
+        if ts_end and ts_end.tzinfo is None:
+            ts_end = ts_end.replace(tzinfo=datetime.timezone.utc)
+            logger.debug("Added UTC timezone to ts_end parameter")
 
-        # 3. Validation de base (au moins un critère ?)
+        # 4. Validation de base (au moins un critère ?)
         # Si ni vecteur ni metadata, que faire ? Retourner une erreur ou les plus récents?
         # Pour l'instant, le repo gère ce cas (retourne les plus récents par défaut)
         # if not parsed_vector and not parsed_metadata and not ts_start and not ts_end:

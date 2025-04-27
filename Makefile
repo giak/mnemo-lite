@@ -1,4 +1,4 @@
-.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore api-shell api-test worker-shell certs help
+.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore api-shell api-test api-test-file api-test-one api-coverage api-debug worker-shell certs help
 
 # Variables
 COMPOSE_FILE := docker-compose.yml
@@ -7,6 +7,7 @@ PROD_COMPOSE_FILE := docker-compose.prod.yml
 POSTGRES_USER ?= mnemo
 POSTGRES_DB ?= mnemolite
 API_PORT ?= 8001
+TEST_ENV ?= -e TEST_DATABASE_URL="postgresql+asyncpg://mnemo:5eCqZDyUV6MmcZMKin1GmFTlTkPbU50n@db:5432/mnemolite_test"
 
 # Commandes de développement
 up:
@@ -76,12 +77,35 @@ api-shell:
 	docker compose -f $(COMPOSE_FILE) exec api /bin/bash
 
 api-test:
-	# Utiliser python -m pytest est plus robuste que de dépendre du PATH
-	docker compose -f $(COMPOSE_FILE) exec api python -m pytest tests/
+	# Exécuter tous les tests avec verbosité
+	docker compose -f $(COMPOSE_FILE) exec -w /app $(TEST_ENV) api pytest tests/ -xvs
+
+api-test-file:
+	@echo "Usage: make api-test-file file=<test_file_path>"
+	@test -n "$(file)" || (echo "Error: 'file' parameter is required"; exit 1)
+	docker compose -f $(COMPOSE_FILE) exec -w /app $(TEST_ENV) api pytest $(file) -vvs
+
+api-test-one:
+	@echo "Usage: make api-test-one test=<test_file_path>::<test_name>"
+	@test -n "$(test)" || (echo "Error: 'test' parameter is required"; exit 1)
+	docker compose -f $(COMPOSE_FILE) exec -w /app $(TEST_ENV) api pytest $(test) -vvs
+
+api-coverage:
+	docker compose -f $(COMPOSE_FILE) exec -w /app $(TEST_ENV) api pytest --cov=api tests/
+
+api-debug:
+	@echo "Usage: make api-debug file=<python_script_path>"
+	@test -n "$(file)" || (echo "Error: 'file' parameter is required"; exit 1)
+	docker compose -f $(COMPOSE_FILE) exec -it -e PYTHONUNBUFFERED=1 -e DEBUG=1 -w /app api python -m pdb $(file)
 
 # Commandes pour les workers
 worker-shell:
 	docker compose -f $(COMPOSE_FILE) exec worker /bin/bash
+
+worker-run:
+	@echo "Usage: make worker-run task=<task_module>"
+	@test -n "$(task)" || (echo "Error: 'task' parameter is required"; exit 1)
+	docker compose -f $(COMPOSE_FILE) exec -w /app/workers -e PYTHONUNBUFFERED=1 worker python -m $(task)
 
 # Vérification de l'état des services (Nouvelle cible)
 health:
@@ -94,6 +118,10 @@ health:
 certs:
 	mkdir -p certs
 	openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout certs/key.pem -out certs/cert.pem -subj "/C=FR/ST=Paris/L=Paris/O=MnemoLite/CN=localhost"
+
+# Benchmark
+benchmark:
+	docker compose -f $(COMPOSE_FILE) exec -w /app api python -m scripts.benchmarks.run_benchmark
 
 # Aide
 help:
@@ -122,11 +150,17 @@ help:
 	@echo ""
 	@echo "API:"
 	@echo "  make api-shell       - Connect to API container shell"
-	@echo "  make api-test        - Run API tests"
+	@echo "  make api-test        - Run all API tests with verbosity"
+	@echo "  make api-test-file file=<path> - Run tests in specific file"
+	@echo "  make api-test-one test=<path>::<name> - Run specific test"
+	@echo "  make api-coverage    - Run tests with coverage report"
+	@echo "  make api-debug file=<path> - Debug Python script with pdb"
 	@echo ""
 	@echo "Worker:"
 	@echo "  make worker-shell    - Connect to worker container shell"
+	@echo "  make worker-run task=<module> - Run specific worker task"
 	@echo ""
 	@echo "Utils:"
 	@echo "  make certs           - Generate self-signed certificates"
-	@echo "  make health          - Check API (at /health) and PostgreSQL health" 
+	@echo "  make health          - Check API (at /health) and PostgreSQL health"
+	@echo "  make benchmark       - Run performance benchmarks" 
