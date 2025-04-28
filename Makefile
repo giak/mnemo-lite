@@ -113,7 +113,8 @@ api-test-one:
 	docker compose -f $(COMPOSE_FILE) exec -w /app -e TEST_DATABASE_URL=$(TEST_DATABASE_URL_VALUE) api pytest $(test) -vvs
 
 api-coverage:
-	docker compose -f $(COMPOSE_FILE) exec -w /app -e TEST_DATABASE_URL=$(TEST_DATABASE_URL_VALUE) api pytest --cov=api tests/
+	@echo "Running API tests with coverage..."
+	docker compose -f $(COMPOSE_FILE) exec -w /app -e TEST_DATABASE_URL=$(TEST_DATABASE_URL_VALUE) api pytest --cov=. tests/
 
 api-debug:
 	@echo "Usage: make api-debug file=<python_script_path>"

@@ -44,8 +44,9 @@ COPY --from=builder /app/requirements.txt .
 COPY requirements-dev.txt .
 
 # Install dependencies from wheels using requirements.txt
-RUN pip install --no-cache --no-index --find-links=/wheels -r requirements.txt && \
-    pip install --no-cache -r requirements-dev.txt
+RUN pip install --no-cache --no-index --find-links=/wheels -r requirements.txt
+# Install dev requirements separately
+RUN pip install --no-cache -r requirements-dev.txt
 
 # Copy application code
 COPY api/ ./

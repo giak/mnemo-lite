@@ -1,23 +1,17 @@
 # Development and Testing Dependencies
 pytest>=7.0.0
-# pytest-asyncio>=0.20.0 # Replaced by anyio
 anyio>=3.0.0 # Required for @pytest.mark.anyio
-pytest-mock>=3.10.0 # Ajout pour la fixture mocker
-httpx>=0.26.0 # Déjà dans api/reqs, mais utile pour les tests d'intégration API
+pytest-asyncio # Needed for async tests
+pytest-mock>=3.10.0 # For mocker fixture
+pytest-cov # For code coverage
+httpx>=0.26.0 # For API integration tests
 asyncpg>=0.29.0 # For direct DB interaction in tests/scripts
 numpy>=1.26.0 # For vector generation in benchmark scripts
-# pytest-anyio>=0.0.6 # Incorrect package name
 
 # Ajouter ici d'autres outils utiles: flake8, black, mypy, etc.
 # flake8
 # black
 # mypy
 
-# Testing/Debugging
-pytest-asyncio
-pytest-mock
-ipdb
-
-# Force context cache invalidation 
-
-pytest-cov 
+# Debugging
+ipdb 
