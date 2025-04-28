@@ -74,4 +74,40 @@ Ce document recense les tests automatisés du projet MnemoLite, collectés via `
 - `test_search_invalid_vector_content`: Teste la recherche vectorielle avec un contenu de vecteur invalide (ex: mauvaise dimension).
 - `test_search_metadata_with_time_filter`: Teste la recherche par métadonnées avec un filtre temporel ajouté via l'API.
 - `test_search_hybrid_with_time_filter`: Teste la recherche hybride avec un filtre temporel ajouté via l'API.
-- `test_search_pagination`: Teste la pagination (limit et offset) pour les résultats de recherche via l'API. 
+- `test_search_pagination`: Teste la pagination (limit et offset) pour les résultats de recherche via l'API.
+
+## api/tests/test_dependency_injection.py
+
+- `test_db_engine_injection`: Teste l'injection correcte du moteur de base de données.
+- `test_event_repository_injection`: Teste l'injection correcte du repository d'événements.
+- `test_memory_repository_injection`: Teste l'injection correcte du repository de mémoires.
+- `test_embedding_service_injection`: Teste l'injection correcte du service d'embedding.
+- `test_memory_search_service_injection`: Teste l'injection correcte du service de recherche de mémoires.
+- `test_event_processor_injection`: Teste l'injection correcte du processeur d'événements.
+- `test_notification_service_injection`: Teste l'injection correcte du service de notification.
+- `test_dependency_error_handling`: Teste la gestion des erreurs lorsqu'une dépendance requise n'est pas disponible.
+
+## api/tests/test_event_processor.py
+
+- `test_process_event`: Teste le traitement d'un événement, vérifiant l'enrichissement des métadonnées et la génération d'embedding.
+- `test_generate_memory_from_event`: Teste la génération d'une mémoire à partir d'un événement.
+- `test_process_event_with_error`: Teste le comportement du processeur lors d'une erreur pendant la génération d'embedding.
+
+## api/tests/test_notification_service.py
+
+- `test_send_notification`: Teste l'envoi d'une notification individuelle.
+- `test_broadcast_notification`: Teste la diffusion d'une notification à plusieurs utilisateurs.
+- `test_broadcast_notification_without_recipients`: Teste le comportement lorsqu'aucun destinataire n'est spécifié.
+- `test_send_notification_with_smtp`: Teste l'envoi d'une notification avec un serveur SMTP configuré.
+- `test_send_notification_with_error`: Teste la gestion des erreurs lors de l'envoi d'une notification.
+
+## api/tests/test_new_services.py
+
+- `test_event_processor_injection`: Teste l'injection du processeur d'événements dans une application FastAPI.
+- `test_notification_service_injection`: Teste l'injection du service de notification avec configuration SMTP.
+
+## api/tests/test_memory_search_service.py
+
+- `test_search_by_content`: Teste la recherche de mémoires par contenu textuel.
+- `test_search_by_metadata`: Teste la recherche de mémoires par métadonnées.
+- `test_search_by_similarity`: Teste la recherche de mémoires par similarité sémantique. 

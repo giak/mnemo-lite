@@ -1,11 +1,9 @@
-"""
-Routes pour la gestion des mémoires.
-"""
 import logging
-from typing import List, Optional, Dict, Any, Union, Annotated
+from typing import List, Optional, Dict, Any, Union
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, Body
+from pydantic import parse_obj_as
 
 from models.memory_models import Memory, MemoryCreate, MemoryUpdate
 from interfaces.repositories import MemoryRepositoryProtocol
@@ -14,12 +12,12 @@ from dependencies import get_memory_repository
 # Configuration du logger
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1/memories", tags=["memories"])
+router = APIRouter(prefix="/memories", tags=["memories"])
 
 @router.post("/", response_model=Memory, status_code=201)
 async def create_memory(
     memory: MemoryCreate,
-    repo: Annotated[MemoryRepositoryProtocol, Depends(get_memory_repository)]
+    repo: MemoryRepositoryProtocol = Depends(get_memory_repository)
 ) -> Memory:
     """
     Crée une nouvelle mémoire.
@@ -44,8 +42,8 @@ async def create_memory(
 
 @router.get("/{memory_id}", response_model=Memory)
 async def get_memory(
-    memory_id: UUID,
-    repo: Annotated[MemoryRepositoryProtocol, Depends(get_memory_repository)]
+    memory_id: UUID = Path(...),
+    repo: MemoryRepositoryProtocol = Depends(get_memory_repository)
 ) -> Memory:
     """
     Récupère une mémoire par son ID.
@@ -74,9 +72,9 @@ async def get_memory(
 
 @router.put("/{memory_id}", response_model=Memory)
 async def update_memory(
-    memory_id: UUID,
-    memory_update: MemoryUpdate,
-    repo: Annotated[MemoryRepositoryProtocol, Depends(get_memory_repository)]
+    memory_id: UUID = Path(...),
+    memory_update: MemoryUpdate = Body(...),
+    repo: MemoryRepositoryProtocol = Depends(get_memory_repository)
 ) -> Memory:
     """
     Met à jour une mémoire existante.
@@ -106,8 +104,8 @@ async def update_memory(
 
 @router.delete("/{memory_id}", status_code=204)
 async def delete_memory(
-    memory_id: UUID,
-    repo: Annotated[MemoryRepositoryProtocol, Depends(get_memory_repository)]
+    memory_id: UUID = Path(...),
+    repo: MemoryRepositoryProtocol = Depends(get_memory_repository)
 ) -> None:
     """
     Supprime une mémoire existante.
@@ -132,25 +130,25 @@ async def delete_memory(
 
 @router.get("/", response_model=List[Memory])
 async def list_memories(
-    repo: Annotated[MemoryRepositoryProtocol, Depends(get_memory_repository)],
-    limit: int = Query(10, ge=1, le=100, description="Nombre maximum de résultats à retourner"),
-    offset: int = Query(0, ge=0, description="Index de départ pour la pagination"),
-    memory_type: Optional[str] = Query(None, description="Type de mémoire à filtrer"),
-    event_type: Optional[str] = Query(None, description="Type d'événement associé"),
-    role_id: Optional[int] = Query(None, description="ID du rôle associé"),
-    session_id: Optional[str] = Query(None, description="ID de session associé")
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    memory_type: Optional[str] = Query(None),
+    event_type: Optional[str] = Query(None),
+    role_id: Optional[int] = Query(None),
+    session_id: Optional[str] = Query(None),
+    repo: MemoryRepositoryProtocol = Depends(get_memory_repository)
 ) -> List[Memory]:
     """
     Liste les mémoires avec filtrage et pagination.
     
     Args:
-        repo: Repository injecté pour la gestion des mémoires
         limit: Nombre maximum de résultats à retourner
         offset: Index de départ pour la pagination
         memory_type: Type de mémoire à filtrer
         event_type: Type d'événement associé
         role_id: ID du rôle associé
         session_id: ID de session associé
+        repo: Repository injecté pour la gestion des mémoires
         
     Returns:
         Liste des mémoires correspondant aux critères

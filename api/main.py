@@ -10,6 +10,10 @@ import structlog
 from fastapi.routing import APIRoute
 import uuid
 from typing import Optional
+import logging
+import sys
+from datetime import datetime
+from pydantic import BaseModel, Field
 
 # Import SQLAlchemy async engine creation
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
@@ -20,7 +24,8 @@ from sqlalchemy.event import listen
 # import pgvector.asyncpg # Keep for potential raw connection access if needed?
 
 # Import des routes
-from routes import memory_routes, search_routes, health_routes, event_routes
+from routes import memory_routes, health_routes, event_routes, search_routes
+from routes.health_routes import router as health_router
 
 # Configuration de base
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -45,6 +50,10 @@ logger = structlog.get_logger()
 #    # Example based on psycopg: register_vector(dbapi_connection)
 #    pass # Requires proper implementation
 
+# Models Pydantic pour les réponses d'erreur
+class ErrorResponse(BaseModel):
+    detail: str
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialisation au démarrage: Créer le moteur SQLAlchemy
@@ -62,7 +71,9 @@ async def lifespan(app: FastAPI):
                 db_url_to_use,
                 echo=DEBUG, # Log SQL queries if DEBUG is True
                 pool_size=10, # Example pool size
-                max_overflow=5  # Example overflow
+                max_overflow=5,  # Example overflow
+                future=True,
+                pool_pre_ping=True
             )
             logger.info(f"Database engine created using: {db_url_to_use.split('@')[1] if '@' in db_url_to_use else '[URL hidden]'}")
             
@@ -95,7 +106,12 @@ app = FastAPI(
     description="API pour la gestion de la mémoire événementielle et vectorielle",
     version="1.0.0",
     debug=DEBUG,
-    lifespan=lifespan
+    lifespan=lifespan,
+    responses={
+        500: {"model": ErrorResponse, "description": "Erreur interne du serveur"},
+        400: {"model": ErrorResponse, "description": "Requête invalide"},
+        404: {"model": ErrorResponse, "description": "Ressource introuvable"},
+    },
 )
 
 # Configuration CORS
@@ -111,8 +127,8 @@ app.add_middleware(
 app.include_router(memory_routes.router, prefix="/v0/memories", tags=["v0_memories (Legacy)"])
 app.include_router(event_routes.router, prefix="/v1/events", tags=["v1_Events"])
 app.include_router(search_routes.router, prefix="/v1/search", tags=["v1_Search"])
-app.include_router(health_routes.router, prefix="/v1", tags=["v1_Health & Metrics"])
-
+app.include_router(health_router)
+# app.include_router(embedding_routes.router)
 
 # --- Endpoint pour la création d'événements PENDANT LES TESTS --- 
 # Ne devrait pas être exposé en production.

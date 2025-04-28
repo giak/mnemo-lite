@@ -48,18 +48,20 @@ Cette epic vise à améliorer la qualité globale, la maintenabilité, la testab
 **Je veux** que les composants de haut niveau (ex: routes API, tâches worker) reçoivent leurs dépendances (ex: Repositories, Services) via injection plutôt que de les créer directement
 **Afin de** respecter le Principe d'Inversion de Dépendance (DIP), découpler les composants et faciliter le remplacement des dépendances (notamment pour les tests).
 
+**État:** Terminé
+
 **Tâches:**
-- [ ] Choisir et mettre en place un mécanisme/librairie d'injection de dépendances (si nécessaire, ex: FastAPI Depends, `dependency-injector`).
-- [ ] Identifier les endroits où les dépendances sont créées directement.
-- [ ] Refactoriser les constructeurs ou points d'entrée pour recevoir les dépendances injectées.
-- [ ] Configurer le conteneur d'injection ou le système de dépendances.
-- [ ] Adapter les tests pour fournir des mocks/doublures via l'injection.
+- [x] Choisir et mettre en place un mécanisme/librairie d'injection de dépendances (si nécessaire, ex: FastAPI Depends, `dependency-injector`).
+- [x] Identifier les endroits où les dépendances sont créées directement.
+- [x] Refactoriser les constructeurs ou points d'entrée pour recevoir les dépendances injectées.
+- [x] Configurer le conteneur d'injection ou le système de dépendances.
+- [x] Adapter les tests pour fournir des mocks/doublures via l'injection.
 
 **Critères d'acceptation:**
-- [ ] Les composants clés dépendent d'abstractions (interfaces/protocoles) plutôt que de classes concrètes lorsque c'est pertinent.
-- [ ] Les dépendances sont injectées de l'extérieur.
-- [ ] Il est facile de remplacer une dépendance par une autre (ex: un mock pour les tests).
-- [ ] Le couplage entre les modules est réduit.
+- [x] Les composants clés dépendent d'abstractions (interfaces/protocoles) plutôt que de classes concrètes lorsque c'est pertinent.
+- [x] Les dépendances sont injectées de l'extérieur.
+- [x] Il est facile de remplacer une dépendance par une autre (ex: un mock pour les tests).
+- [x] Le couplage entre les modules est réduit.
 
 **Complexité estimée:** Moyenne à Élevée (selon l'ampleur)
 **Priorité:** Moyenne
