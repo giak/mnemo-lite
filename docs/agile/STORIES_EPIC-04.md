@@ -21,18 +21,22 @@ Cette epic vise à améliorer la qualité globale, la maintenabilité, la testab
 **Je veux** refactoriser les classes et modules clés (ex: Repositories, Services) pour qu'ils aient une seule responsabilité bien définie
 **Afin de** réduire le couplage, faciliter les tests unitaires et améliorer la compréhension du code.
 
+**État:** Terminé
+
 **Tâches:**
-- [x] Identifier les classes/modules violant le SRP (ex: `EventRepository` initial).
+- [x] Identifier les classes/modules violant le SRP (ex: `EventRepository` initial, `memory_routes.py`).
 - [x] Créer de nouvelles classes/modules pour séparer les responsabilités (ex: `EventQueryBuilder`).
-- [ ] Examiner d'autres Repositories (si existants) et Services pour appliquer le SRP.
-- [ ] Adapter le code appelant pour utiliser les nouvelles structures.
-- [ ] Mettre à jour les tests existants.
+- [x] Examiner les routes (`memory_routes.py`, `event_routes.py`, `health_routes.py`, `search_routes.py`) pour appliquer le SRP.
+- [x] Créer `MemoryRepository` (et potentiellement `MemoryQueryBuilder`) pour encapsuler la logique DB de `memory_routes.py`.
+- [x] Adapter le code appelant (routes) pour utiliser les nouvelles structures.
+- [x] Exécuter les tests `make api-test` pour vérifier la non-régression.
+- [x] Mettre à jour les tests existants / Créer des tests pour le nouveau Repository.
 
 **Critères d'acceptation:**
 - [x] Les classes refactorisées ont une seule raison de changer.
 - [x] La séparation des responsabilités est claire (ex: construction de requête vs exécution).
-- [ ] Le code est plus facile à tester isolément.
-- [ ] Aucune régression fonctionnelle introduite.
+- [x] Le code est plus facile à tester isolément.
+- [x] Aucune régression fonctionnelle introduite.
 
 **Complexité estimée:** Moyenne (par composant)
 **Priorité:** Haute

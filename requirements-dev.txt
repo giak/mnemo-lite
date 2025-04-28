@@ -19,3 +19,5 @@ pytest-mock
 ipdb
 
 # Force context cache invalidation 
+
+pytest-cov 

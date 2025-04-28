@@ -6,8 +6,9 @@ from contextlib import asynccontextmanager
 # Import SQLAlchemy AsyncEngine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-# Importer le repository
+# Importer les repositories
 from db.repositories.event_repository import EventRepository
+from db.repositories.memory_repository import MemoryRepository
 
 # Rename and modify to get SQLAlchemy engine
 async def get_db_engine(request: Request) -> AsyncEngine:
@@ -26,4 +27,9 @@ async def get_db_engine(request: Request) -> AsyncEngine:
 async def get_event_repository(engine: AsyncEngine = Depends(get_db_engine)) -> EventRepository:
     """Injecte une instance de EventRepository avec le moteur SQLAlchemy."""
     # Pass the engine to the repository constructor
-    return EventRepository(engine=engine) 
+    return EventRepository(engine=engine)
+
+# <-- Nouvelle fonction pour MemoryRepository -->
+async def get_memory_repository(engine: AsyncEngine = Depends(get_db_engine)) -> MemoryRepository:
+    """Injecte une instance de MemoryRepository avec le moteur SQLAlchemy."""
+    return MemoryRepository(engine=engine) 
