@@ -11,4 +11,11 @@ numpy>=1.26.0 # For vector generation in benchmark scripts
 # Ajouter ici d'autres outils utiles: flake8, black, mypy, etc.
 # flake8
 # black
-# mypy 
+# mypy
+
+# Testing/Debugging
+pytest-asyncio
+pytest-mock
+ipdb
+
+# Force context cache invalidation 

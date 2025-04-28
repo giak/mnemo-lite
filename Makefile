@@ -1,4 +1,7 @@
-.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore api-shell api-test api-test-file api-test-one api-coverage api-debug worker-shell certs help
+# Load .env file if it exists to potentially override defaults
+-include .env
+
+.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore api-shell api-test api-test-file api-test-one api-coverage api-debug worker-shell certs help db-create-test db-fill-test db-test-reset
 
 # Variables
 COMPOSE_FILE := docker-compose.yml
@@ -6,8 +9,11 @@ PROD_COMPOSE_FILE := docker-compose.prod.yml
 # Variables par défaut pour les commandes exec (simplifié)
 POSTGRES_USER ?= mnemo
 POSTGRES_DB ?= mnemolite
+# Utiliser $(or ...) pour gérer le cas où POSTGRES_PASSWORD est défini mais vide
+POSTGRES_PASSWORD := $(or $(POSTGRES_PASSWORD),mnemopass)
 API_PORT ?= 8001
-TEST_ENV ?= -e TEST_DATABASE_URL="postgresql+asyncpg://mnemo:5eCqZDyUV6MmcZMKin1GmFTlTkPbU50n@db:5432/mnemolite_test"
+# S'assurer que TEST_DATABASE_URL contient le mot de passe
+TEST_DATABASE_URL_VALUE := "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db:5432/mnemolite_test"
 
 # Commandes de développement
 up:
@@ -72,26 +78,42 @@ db-restore:
 	# Utilise les variables définies en haut du Makefile ou l'environnement
 	@test -f $(file) && cat $(file) | docker compose -f $(COMPOSE_FILE) exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
 
+# Nouvelles commandes pour la base de test
+db-create-test:
+	@echo "Création de la base de données de test..."
+	cat db/scripts/create_test_db.sql | docker compose -f $(COMPOSE_FILE) exec -T db psql -U $(POSTGRES_USER) -d postgres
+
+db-fill-test:
+	@echo "Installation des dépendances requises..."
+	docker compose -f $(COMPOSE_FILE) exec api pip install numpy asyncpg
+	@echo "Remplissage de la base de données de test avec des données fictives..."
+	# Passer l'URL complète directement ici aussi
+	docker compose -f $(COMPOSE_FILE) exec -e TEST_DATABASE_URL=$(TEST_DATABASE_URL_VALUE) api python -m scripts.generate_test_data
+
+db-test-reset: db-create-test db-fill-test
+	@echo "Base de données de test réinitialisée et remplie avec succès."
+
 # Commandes pour l'API
 api-shell:
 	docker compose -f $(COMPOSE_FILE) exec api /bin/bash
 
 api-test:
 	# Exécuter tous les tests avec verbosité
-	docker compose -f $(COMPOSE_FILE) exec -w /app $(TEST_ENV) api pytest tests/ -xvs
+	# Passer uniquement TEST_DATABASE_URL
+	docker compose -f $(COMPOSE_FILE) exec -w /app -e TEST_DATABASE_URL=$(TEST_DATABASE_URL_VALUE) api bash -c "find . -name '*.pyc' -delete && pytest tests/ -xvs"
 
 api-test-file:
 	@echo "Usage: make api-test-file file=<test_file_path>"
 	@test -n "$(file)" || (echo "Error: 'file' parameter is required"; exit 1)
-	docker compose -f $(COMPOSE_FILE) exec -w /app $(TEST_ENV) api pytest $(file) -vvs
+	docker compose -f $(COMPOSE_FILE) exec -w /app -e TEST_DATABASE_URL=$(TEST_DATABASE_URL_VALUE) api pytest $(file) -vvs
 
 api-test-one:
 	@echo "Usage: make api-test-one test=<test_file_path>::<test_name>"
 	@test -n "$(test)" || (echo "Error: 'test' parameter is required"; exit 1)
-	docker compose -f $(COMPOSE_FILE) exec -w /app $(TEST_ENV) api pytest $(test) -vvs
+	docker compose -f $(COMPOSE_FILE) exec -w /app -e TEST_DATABASE_URL=$(TEST_DATABASE_URL_VALUE) api pytest $(test) -vvs
 
 api-coverage:
-	docker compose -f $(COMPOSE_FILE) exec -w /app $(TEST_ENV) api pytest --cov=api tests/
+	docker compose -f $(COMPOSE_FILE) exec -w /app -e TEST_DATABASE_URL=$(TEST_DATABASE_URL_VALUE) api pytest --cov=api tests/
 
 api-debug:
 	@echo "Usage: make api-debug file=<python_script_path>"
@@ -147,6 +169,9 @@ help:
 	@echo "  make db-shell        - Connect to PostgreSQL shell"
 	@echo "  make db-backup       - Create database backup"
 	@echo "  make db-restore file=<file> - Restore database from backup"
+	@echo "  make db-create-test  - Create test database"
+	@echo "  make db-fill-test    - Fill test database with fake data"
+	@echo "  make db-test-reset   - Create and fill test database"
 	@echo ""
 	@echo "API:"
 	@echo "  make api-shell       - Connect to API container shell"

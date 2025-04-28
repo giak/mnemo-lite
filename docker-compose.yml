@@ -26,6 +26,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./db/scripts:/app/scripts:ro
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
@@ -64,8 +65,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes: # Re-enabled for development - Mounting ./api to /app
-      - ./api:/app # Adjusted mount point
+    volumes:
+      - ./api:/app
       - ./certs:/app/certs:ro
       - ./tests:/app/tests
       - ./scripts:/app/scripts

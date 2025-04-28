@@ -241,25 +241,32 @@ async def test_direct_db_connection():
     """Teste la connexion directe à la base de données de test en utilisant TEST_DATABASE_URL."""
     conn = None
     test_url_env = os.getenv("TEST_DATABASE_URL") # Lire la variable d'environnement
+    # postgres_password = os.getenv("POSTGRES_PASSWORD", "mnemopass") # On ne lit plus la variable séparément
+
     if not test_url_env:
         pytest.skip("TEST_DATABASE_URL environment variable not set, skipping direct connection test.")
 
     try:
-        # Parse the URL from env var (postgresql+asyncpg://...)
+        # Parse the URL from env var (postgresql+asyncpg://user:pass@host:port/db)
         parsed_url = urlparse(test_url_env)
-        # Construct the direct connection URL (postgresql://...)
-        direct_conn_url_parts = (
-            "postgresql", # Replace scheme
-            parsed_url.netloc, # Keep user:pass@host:port
-            parsed_url.path,   # Keep /database_name
-            parsed_url.params, # Keep params, query, fragment (usually empty)
-            parsed_url.query,
-            parsed_url.fragment
-        )
-        direct_conn_url = urlunparse(direct_conn_url_parts)
 
-        print(f"\nAttempting direct connection using parsed URL: {direct_conn_url}") 
-        conn = await asyncpg.connect(direct_conn_url) # Use the corrected URL
+        # Extraire les informations directement depuis l'URL parsée
+        db_user = parsed_url.username
+        db_password = parsed_url.password
+        db_host = parsed_url.hostname
+        db_port = parsed_url.port
+        db_name = parsed_url.path.lstrip('/')
+
+        # Utiliser les informations extraites pour la connexion directe
+        print(f"\nAttempting direct connection using parsed credentials from TEST_DATABASE_URL...")
+        conn = await asyncpg.connect(
+            user=db_user,
+            password=db_password,
+            database=db_name,
+            host=db_host,
+            port=db_port
+        )
+
         # Si la connexion réussit, vérifier qu'on peut faire une requête simple
         result = await conn.fetchval("SELECT 1")
         assert result == 1
@@ -276,6 +283,7 @@ async def test_direct_db_connection():
     finally:
         if conn:
             await conn.close()
+            print("Direct connection closed.")
 
 # --- Tests --- 
 
