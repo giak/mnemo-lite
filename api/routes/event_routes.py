@@ -125,7 +125,7 @@ async def delete_event(
         logger.error(f"Erreur lors de la suppression de l'événement {event_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression de l'événement: {str(e)}")
 
-@router.get("/filter/metadata", response_model=List[EventModel])
+@router.post("/filter/metadata", response_model=List[EventModel])
 async def filter_events_by_metadata(
     repo: Annotated[EventRepositoryProtocol, Depends(get_event_repository)],
     metadata_filter: Dict[str, Any] = Body(...),
@@ -153,7 +153,7 @@ async def filter_events_by_metadata(
         logger.error(f"Erreur lors du filtrage des événements par métadonnées: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erreur lors du filtrage des événements: {str(e)}")
 
-@router.get("/search/embedding", response_model=List[EventModel])
+@router.post("/search/embedding", response_model=List[EventModel])
 async def search_events_by_embedding(
     repo: Annotated[EventRepositoryProtocol, Depends(get_event_repository)],
     embedding: List[float] = Body(...),
