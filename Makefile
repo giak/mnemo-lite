@@ -1,7 +1,7 @@
 # Load .env file if it exists to potentially override defaults
 -include .env
 
-.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore api-shell api-test api-test-file api-test-one api-coverage api-debug worker-shell certs help db-create-test db-fill-test db-test-reset
+.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore api-shell api-test api-test-file api-test-one api-coverage api-debug worker-shell certs help db-create-test db-fill-test db-test-reset api-test-reset
 
 # Variables
 COMPOSE_FILE := docker-compose.yml
@@ -97,10 +97,12 @@ db-test-reset: db-create-test db-fill-test
 api-shell:
 	docker compose -f $(COMPOSE_FILE) exec api /bin/bash
 
+api-test-reset: down build up db-test-reset
+	@echo "Environnement de test complètement réinitialisé"
+
 api-test:
-	# Exécuter tous les tests avec verbosité
-	# Passer uniquement TEST_DATABASE_URL
-	docker compose -f $(COMPOSE_FILE) exec -w /app -e TEST_DATABASE_URL=$(TEST_DATABASE_URL_VALUE) api bash -c "find . -name '*.pyc' -delete && pytest tests/ -xvs"
+	@echo "Running API tests with coverage..."
+	docker compose -f $(COMPOSE_FILE) exec -w /app -e TEST_DATABASE_URL=$(TEST_DATABASE_URL_VALUE) api pytest --cov=. tests/
 
 api-test-file:
 	@echo "Usage: make api-test-file file=<test_file_path>"
@@ -176,6 +178,7 @@ help:
 	@echo ""
 	@echo "API:"
 	@echo "  make api-shell       - Connect to API container shell"
+	@echo "  make api-test-reset  - Reset containers and test database completely"
 	@echo "  make api-test        - Run all API tests with verbosity"
 	@echo "  make api-test-file file=<path> - Run tests in specific file"
 	@echo "  make api-test-one test=<path>::<name> - Run specific test"

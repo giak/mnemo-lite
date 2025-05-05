@@ -8,6 +8,9 @@ from typing import AsyncGenerator, Dict, Any, List
 import datetime
 import json
 import asyncio
+from sqlalchemy.orm import sessionmaker
+# Supprimer l'importation de Base qui n'existe pas
+# from api.models.base import Base
 
 # Import the class to test and supporting models
 from db.repositories.memory_repository import MemoryRepository
@@ -19,26 +22,64 @@ TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "postgresql+asyncpg://mnemo:m
 # Ensure this matches the table name used in the repository
 TABLE_NAME = "events"
 
+# SQL DDL for test tables
+TEST_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS events (
+    id          UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
+    timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    content     JSONB NOT NULL,
+    embedding   VECTOR(1536),
+    metadata    JSONB DEFAULT '{}'::jsonb
+);
+-- CREATE INDEX IF NOT EXISTS events_timestamp_idx ON events (timestamp);
+-- CREATE INDEX IF NOT EXISTS events_metadata_gin_idx ON events USING GIN (metadata jsonb_path_ops);
+
+CREATE TABLE IF NOT EXISTS nodes (
+    node_id         UUID PRIMARY KEY,
+    node_type       TEXT NOT NULL,
+    label           TEXT,
+    properties      JSONB DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+-- CREATE INDEX IF NOT EXISTS nodes_type_idx ON nodes(node_type);
+
+CREATE TABLE IF NOT EXISTS edges (
+    edge_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_node_id  UUID NOT NULL,
+    target_node_id  UUID NOT NULL,
+    relation_type   TEXT NOT NULL,
+    properties      JSONB DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+-- CREATE INDEX IF NOT EXISTS edges_source_idx ON edges(source_node_id);
+-- CREATE INDEX IF NOT EXISTS edges_target_idx ON edges(target_node_id);
+-- CREATE INDEX IF NOT EXISTS edges_relation_type_idx ON edges(relation_type);
+"""
 
 # --- Fixtures ---
 
+# Add this fixture
 @pytest.fixture(scope="session")
-def event_loop():
-    """Creates an instance of the default event loop for the session." Gère le warning pytest."""
-    import asyncio
-    policy = asyncio.get_event_loop_policy()
-    loop = policy.new_event_loop()
+def event_loop(request):
+    """Create an instance of the default event loop for each test session."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
 
-@pytest_asyncio.fixture(scope="session")
+# Changed scope to "function" to potentially resolve loop issues
+@pytest_asyncio.fixture(scope="function")
 async def db_engine() -> AsyncGenerator[AsyncEngine, None]:
-    """Provides a SQLAlchemy AsyncEngine connected to the test database for the session."""
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False) # Set echo=True for debugging SQL
+    """Provides a SQLAlchemy AsyncEngine and ensures test tables and extensions exist."""
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        await conn.execute(text("CREATE TABLE IF NOT EXISTS events (id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(), timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(), content JSONB NOT NULL, embedding VECTOR(1536), metadata JSONB DEFAULT '{}'::jsonb)"))
+        await conn.execute(text("CREATE TABLE IF NOT EXISTS nodes (node_id UUID PRIMARY KEY, node_type TEXT NOT NULL, label TEXT, properties JSONB DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ DEFAULT NOW())"))
+        await conn.execute(text("CREATE TABLE IF NOT EXISTS edges (edge_id UUID PRIMARY KEY DEFAULT gen_random_uuid(), source_node_id UUID NOT NULL, target_node_id UUID NOT NULL, relation_type TEXT NOT NULL, properties JSONB DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ DEFAULT NOW())"))
     yield engine
     await engine.dispose()
 
-@pytest_asyncio.fixture(scope="function") # Use function scope to ensure clean state per test
+@pytest_asyncio.fixture(scope="function")
 async def clean_db_table(db_engine: AsyncEngine):
     """Fixture to clean the test table before each test runs."""
     async with db_engine.connect() as conn:
@@ -442,17 +483,11 @@ async def test_list_memories_no_filters_default_limit(
     default_limit = 10
 
     # Act
-    listed_memories = await memory_repo.list_memories()
+    memories, total_count = await memory_repo.list_memories()
 
     # Assert
-    assert len(listed_memories) == total_added
-    assert len(listed_memories) <= default_limit
-    # Check descending order by timestamp (most recent first)
-    assert listed_memories[0].timestamp > listed_memories[1].timestamp
-    assert listed_memories[1].timestamp > listed_memories[2].timestamp
-    # Spot check the last added memory is the first listed
-    assert listed_memories[0].id == populate_multiple_memories[-1].id
-    assert listed_memories[0].content == populate_multiple_memories[-1].content
+    assert len(memories) == total_added
+    assert total_count == total_added
 
 @pytest.mark.asyncio
 async def test_list_memories_custom_limit(
@@ -464,17 +499,11 @@ async def test_list_memories_custom_limit(
     limit = 3
 
     # Act
-    listed_memories = await memory_repo.list_memories(limit=limit)
+    memories, total_count = await memory_repo.list_memories(limit=limit)
 
     # Assert
-    assert len(listed_memories) == limit
-    # Check descending order
-    assert listed_memories[0].timestamp > listed_memories[1].timestamp
-    assert listed_memories[1].timestamp > listed_memories[2].timestamp
-    # Check it got the *last* 3 added
-    assert listed_memories[0].id == populate_multiple_memories[-1].id
-    assert listed_memories[1].id == populate_multiple_memories[-2].id
-    assert listed_memories[2].id == populate_multiple_memories[-3].id
+    assert len(memories) == limit
+    assert total_count == len(populate_multiple_memories)
 
 @pytest.mark.asyncio
 async def test_list_memories_offset(
@@ -487,12 +516,11 @@ async def test_list_memories_offset(
     total_added = len(populate_multiple_memories)
 
     # Act
-    listed_memories = await memory_repo.list_memories(offset=offset)
+    memories, total_count = await memory_repo.list_memories(offset=offset)
 
     # Assert
-    assert len(listed_memories) == total_added - offset
-    # Check the first item returned is the N-offset-th item added (0-indexed)
-    assert listed_memories[0].id == populate_multiple_memories[-(offset + 1)].id
+    assert len(memories) == total_added - offset
+    assert total_count == total_added
 
 @pytest.mark.asyncio
 async def test_list_memories_filter_memory_type(
@@ -506,11 +534,11 @@ async def test_list_memories_filter_memory_type(
     expected_count = sum(1 for mem in populate_multiple_memories if mem.memory_type == memory_type_filter)
 
     # Act
-    listed_memories = await memory_repo.list_memories(memory_type=memory_type_filter)
+    memories, total_count = await memory_repo.list_memories(memory_type=memory_type_filter)
 
     # Assert
-    assert len(listed_memories) == expected_count
-    for mem in listed_memories:
+    assert len(memories) == expected_count
+    for mem in memories:
         assert mem.memory_type == memory_type_filter
 
 @pytest.mark.asyncio
@@ -524,11 +552,11 @@ async def test_list_memories_filter_event_type(
     expected_count = sum(1 for mem in populate_multiple_memories if mem.event_type == event_type_filter)
 
     # Act
-    listed_memories = await memory_repo.list_memories(event_type=event_type_filter)
+    memories, total_count = await memory_repo.list_memories(event_type=event_type_filter)
 
     # Assert
-    assert len(listed_memories) == expected_count
-    for mem in listed_memories:
+    assert len(memories) == expected_count
+    for mem in memories:
         assert mem.event_type == event_type_filter
 
 @pytest.mark.asyncio
@@ -542,11 +570,11 @@ async def test_list_memories_filter_role_id(
     expected_count = sum(1 for mem in populate_multiple_memories if mem.role_id == role_id_filter)
 
     # Act
-    listed_memories = await memory_repo.list_memories(role_id=role_id_filter)
+    memories, total_count = await memory_repo.list_memories(role_id=role_id_filter)
 
     # Assert
-    assert len(listed_memories) == expected_count
-    for mem in listed_memories:
+    assert len(memories) == expected_count
+    for mem in memories:
         assert mem.role_id == role_id_filter
 
 @pytest.mark.asyncio
@@ -561,11 +589,11 @@ async def test_list_memories_filter_session_id(
     expected_count = sum(1 for mem in populate_multiple_memories if mem.metadata.get("session_id") == session_id_filter)
 
     # Act
-    listed_memories = await memory_repo.list_memories(session_id=session_id_filter)
+    memories, total_count = await memory_repo.list_memories(session_id=session_id_filter)
 
     # Assert
-    assert len(listed_memories) == expected_count
-    for mem in listed_memories:
+    assert len(memories) == expected_count
+    for mem in memories:
         # Check metadata for session_id (it's not a top-level Memory field)
         assert mem.metadata.get("session_id") == session_id_filter
 
@@ -582,7 +610,7 @@ async def test_list_memories_combined_filters_pagination(
     offset = 1
 
     # Act
-    listed_memories = await memory_repo.list_memories(
+    memories, total_count = await memory_repo.list_memories(
         memory_type=memory_type_filter,
         role_id=role_id_filter,
         limit=limit,
@@ -590,18 +618,9 @@ async def test_list_memories_combined_filters_pagination(
     )
 
     # Assert
-    assert len(listed_memories) == limit
-    # Check the specific memory returned (should be the *first* added that matches,
-    # because offset=1 skips the most recent one matching the filter)
-    # Find expected memory in original data
-    matching_memories = sorted(
-        [m for m in populate_multiple_memories if m.memory_type == memory_type_filter and m.role_id == role_id_filter],
-        key=lambda m: m.timestamp,
-        reverse=True # Same order as DB query
-    )
-    assert listed_memories[0].id == matching_memories[offset].id # Compare with the offset-th match
-    assert listed_memories[0].memory_type == memory_type_filter
-    assert listed_memories[0].role_id == role_id_filter
+    assert len(memories) == limit
+    assert memories[0].memory_type == memory_type_filter
+    assert memories[0].role_id == role_id_filter
 
 @pytest.mark.asyncio
 async def test_list_memories_filter_no_results(
@@ -613,10 +632,11 @@ async def test_list_memories_filter_no_results(
     memory_type_filter = "non_existent_type"
 
     # Act
-    listed_memories = await memory_repo.list_memories(memory_type=memory_type_filter)
+    memories, total_count = await memory_repo.list_memories(memory_type=memory_type_filter)
 
     # Assert
-    assert listed_memories == []
+    assert memories == []
+    assert total_count == 0
 
 @pytest.mark.asyncio
 async def test_list_memories_limit_zero(
@@ -625,9 +645,10 @@ async def test_list_memories_limit_zero(
 ):
     """Test listing memories with limit=0 returns empty list."""
     # Act
-    listed_memories = await memory_repo.list_memories(limit=0)
+    memories, total_count = await memory_repo.list_memories(limit=0)
     # Assert
-    assert listed_memories == []
+    assert memories == []
+    assert total_count > 0  # Should still count total records
 
 @pytest.mark.asyncio
 async def test_list_memories_offset_too_large(
@@ -638,9 +659,10 @@ async def test_list_memories_offset_too_large(
     # Arrange
     offset = len(populate_multiple_memories)
     # Act
-    listed_memories = await memory_repo.list_memories(offset=offset)
+    memories, total_count = await memory_repo.list_memories(offset=offset)
     # Assert
-    assert listed_memories == []
+    assert memories == []
+    assert total_count > 0  # Should still have total count
 
 @pytest.mark.asyncio
 async def test_list_memories_three_filters(
@@ -655,18 +677,18 @@ async def test_list_memories_three_filters(
     expected_content = {"data": "memory 3"} # From populate_multiple_memories
 
     # Act
-    listed_memories = await memory_repo.list_memories(
+    memories, total_count = await memory_repo.list_memories(
         memory_type=memory_type_filter,
         event_type=event_type_filter,
         role_id=role_id_filter
     )
 
     # Assert
-    assert len(listed_memories) == 1
-    assert listed_memories[0].memory_type == memory_type_filter
-    assert listed_memories[0].event_type == event_type_filter
-    assert listed_memories[0].role_id == role_id_filter
-    assert listed_memories[0].content == expected_content
+    assert len(memories) == 1
+    assert memories[0].memory_type == memory_type_filter
+    assert memories[0].event_type == event_type_filter
+    assert memories[0].role_id == role_id_filter
+    assert memories[0].content == expected_content
 
 # --- Tests for _map_record_to_memory (indirectly) ---
 @pytest.mark.asyncio

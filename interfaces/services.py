@@ -2,8 +2,9 @@
 Interfaces pour les services selon le Dependency Inversion Principle (DIP).
 Ces protocoles définissent les contrats que les implémentations concrètes doivent respecter.
 """
-from typing import Protocol, Optional, List, Dict, Any, Union
+from typing import Protocol, Optional, List, Dict, Any, Union, Tuple
 from uuid import UUID
+from datetime import datetime
 
 from models.event_models import EventModel
 from models.memory_models import Memory
@@ -28,12 +29,51 @@ class MemorySearchServiceProtocol(Protocol):
         """Recherche des mémoires par leur contenu textuel."""
         ...
     
-    async def search_by_metadata(self, metadata_filter: Dict[str, Any], limit: int = 10) -> List[Memory]:
+    async def search_by_metadata(
+        self, 
+        metadata_filter: Dict[str, Any], 
+        limit: int = 10,
+        offset: int = 0,
+        ts_start: Optional[datetime] = None,
+        ts_end: Optional[datetime] = None
+    ) -> List[Memory]:
         """Recherche des mémoires par leurs métadonnées."""
         ...
     
-    async def search_by_similarity(self, query: str, limit: int = 5) -> List[Memory]:
+    async def search_by_similarity(
+        self, 
+        query: str, 
+        limit: int = 5,
+        offset: int = 0,
+        ts_start: Optional[datetime] = None,
+        ts_end: Optional[datetime] = None
+    ) -> List[Memory]:
         """Recherche des mémoires par similarité sémantique."""
+        ...
+        
+    async def search_by_vector(
+        self, 
+        embedding: List[float], 
+        top_k: int = 10,
+        limit: int = 5,
+        offset: int = 0,
+        ts_start: Optional[datetime] = None,
+        ts_end: Optional[datetime] = None
+    ) -> List[Memory]:
+        """Recherche des mémoires par similarité vectorielle."""
+        ...
+        
+    async def search_hybrid(
+        self,
+        query: str = None,
+        embedding: List[float] = None,
+        metadata_filter: Dict[str, Any] = None,
+        limit: int = 10,
+        offset: int = 0,
+        ts_start: Optional[datetime] = None,
+        ts_end: Optional[datetime] = None
+    ) -> Tuple[List[Union[Memory, EventModel]], int]:
+        """Effectue une recherche hybride (texte + vecteur) sur les mémoires."""
         ...
 
 

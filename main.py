@@ -13,10 +13,10 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 
 # Import direct des modules de routes pour contourner le problème d'importation
-from routes.memory_routes import router as memory_routes
-from routes.event_routes import router as event_routes
-from routes.search_routes import router as search_routes
-from routes.health_routes import router as health_routes
+from api.routes.memory_routes import router as memory_routes
+from api.routes.event_routes import router as event_routes
+from api.routes.search_routes import router as search_routes
+from api.routes.health_routes import router as health_routes
 
 # Configuration de base
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
                 pool_size=10, # Example pool size
                 max_overflow=5  # Example overflow
             )
-            logger.info(f"Database engine created successfully")
+            logger.info(f"Database engine created using: {db_url_to_use.split('@')[1] if '@' in db_url_to_use else db_url_to_use}")
             
             # Optional: Test connection
             async with app.state.db_engine.connect() as conn:
@@ -84,11 +84,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Enregistrement des routes
-app.include_router(memory_routes, prefix="/v0/memories", tags=["v0_memories (Legacy)"])
-app.include_router(event_routes, prefix="/v1/events", tags=["v1_Events"])
-app.include_router(search_routes, prefix="/v1/search", tags=["v1_Search"])
-app.include_router(health_routes, prefix="/v1", tags=["v1_Health & Metrics"])
+# Configuration des routes
+app.include_router(health_routes.router)
+app.include_router(event_routes.router, prefix="/v1/events", tags=["events"])
+app.include_router(memory_routes.router, prefix="/v1/memories", tags=["memories"])
+app.include_router(search_routes.router, prefix="/v1/search", tags=["search"])
 
 @app.get("/")
 async def root():

@@ -14,7 +14,7 @@ from dependencies import get_event_repository
 # Configuration du logger
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1/events", tags=["events"])
+router = APIRouter(tags=["events"])
 
 @router.post("/", response_model=EventModel, status_code=201)
 async def create_event(

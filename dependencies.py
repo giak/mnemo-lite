@@ -17,7 +17,7 @@ from interfaces.services import (
 # Import des services
 from services.embedding_service import EmbeddingService
 # Note: Ces imports seront actifs quand les services seront implémentés
-# from services.memory_search_service import MemorySearchService
+from services.memory_search_service import MemorySearchService
 # from services.event_processor import EventProcessor
 # from services.notification_service import NotificationService
 
@@ -66,9 +66,12 @@ async def get_memory_search_service(
     Returns:
         Une implémentation du protocole MemorySearchServiceProtocol.
     """
-    # À implémenter quand le service sera disponible
-    raise NotImplementedError("Le service de recherche de mémoires n'est pas encore implémenté")
-    # return MemorySearchService(event_repo, memory_repo, embedding_service)
+    # Remplacer l'exception par l'instanciation du service
+    return MemorySearchService(
+        event_repository=event_repo, 
+        memory_repository=memory_repo, 
+        embedding_service=embedding_service
+    )
 
 async def get_event_processor(
     event_repo: EventRepositoryProtocol = Depends(get_event_repository),

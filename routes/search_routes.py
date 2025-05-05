@@ -12,7 +12,7 @@ from dependencies import get_event_repository
 # Configuration du logger
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/search", tags=["search"])
+router = APIRouter(tags=["search"])
 
 class SimilaritySearchRequest(BaseModel):
     text: str

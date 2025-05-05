@@ -7,8 +7,17 @@ import asyncpg
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Counter, Gauge, Histogram
 from fastapi.responses import Response, JSONResponse
 import datetime
+import logging
+from typing import Dict, Any, List
+import asyncio
+from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.sql import text
+from dependencies import get_db_engine
 
-router = APIRouter()
+# Configuration du logger
+logger = logging.getLogger(__name__)
+
+router = APIRouter(tags=["health"])
 
 # Métriques Prometheus
 api_requests_total = Counter('api_requests_total', 'Total number of API requests', ['endpoint', 'method', 'status'])
@@ -39,6 +48,45 @@ async def check_postgres():
 
 # Fonction check_chroma supprimée
 # async def check_chroma(): ...
+
+
+@router.get("/readiness", response_model=Dict[str, Any])
+async def readiness(db_engine: AsyncEngine = Depends(get_db_engine)) -> Dict[str, Any]:
+    """
+    Vérifie si l'API est prête à recevoir du trafic.
+    
+    Args:
+        db_engine: Moteur de base de données injecté
+        
+    Returns:
+        État de préparation de l'application
+    """
+    try:
+        # Vérifier la connexion à la base de données
+        async with db_engine.connect() as conn:
+            # Simple requête pour tester la connexion
+            await conn.execute(text("SELECT 1"))
+            
+        return {
+            "status": "ok",
+            "message": "API is ready to receive traffic",
+            "checks": {
+                "database": True
+            }
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "error",
+                "message": "API is not ready to receive traffic",
+                "checks": {
+                    "database": False
+                },
+                "details": str(e)
+            }
+        )
 
 
 @router.get("/health")

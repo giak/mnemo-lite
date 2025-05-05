@@ -14,7 +14,7 @@ from dependencies import get_memory_repository
 # Configuration du logger
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1/memories", tags=["memories"])
+router = APIRouter(tags=["memories"])
 
 @router.post("/", response_model=Memory, status_code=201)
 async def create_memory(
@@ -170,10 +170,13 @@ async def list_memories(
         if session_id:
             metadata_filter["session_id"] = session_id
             
-        memories = await repo.list_memories(
+        memories, total_count = await repo.list_memories(
             limit=limit,
             offset=offset,
-            metadata_filter=metadata_filter if metadata_filter else None
+            memory_type=memory_type,
+            event_type=event_type,
+            role_id=role_id,
+            session_id=session_id
         )
         return memories
     except Exception as e:

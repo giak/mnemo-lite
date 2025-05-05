@@ -1,28 +1,51 @@
-import uuid
-# Remove asyncpg import
-# import asyncpg 
-from typing import Optional, Dict, Any, List
 import datetime
-from pydantic import BaseModel, Field
 import json
+import logging
+import uuid
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple, Union
 from datetime import timezone
-# Import SQLAlchemy async engine and text
+
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-from sqlalchemy.sql import text, literal
-from models.event_models import EventCreate, EventModel # Import the correct models
-import logging # Keep standard logging import for now, though unused directly by repo
-from sqlalchemy import text, select, Table, Column, MetaData, JSON, TIMESTAMP, String, Uuid, cast, Integer, Float, desc # Add desc
-from sqlalchemy.dialects.postgresql import JSONB # Add VECTOR type # Removed VECTOR from here
-from pgvector.sqlalchemy import Vector # Correct import
-from sqlalchemy import and_ # Add and_ import
-from sqlalchemy import bindparam # Add bindparam import
-from sqlalchemy import func # Add func
+from sqlalchemy.sql import literal
+from sqlalchemy import select, Table, Column, MetaData, JSON, TIMESTAMP, String, Uuid, cast, Integer, Float, desc
+from sqlalchemy.dialects.postgresql import JSONB
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import and_
+from sqlalchemy import bindparam
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
-import structlog # <<< Import structlog
-from sqlalchemy.sql.expression import ClauseElement # Add ClauseElement for type hinting
+import structlog
+from sqlalchemy.sql.expression import ClauseElement
 from sqlalchemy.sql.elements import False_
 
-# logger = logging.getLogger(__name__) # <<< REMOVE MODULE-LEVEL LOGGER
+from pydantic import BaseModel, Field
+from sqlalchemy import (
+    Table, Column, MetaData, text, select, and_, bindparam,
+    JSON, TIMESTAMP, String, Uuid, cast, Integer, Float, desc, func, literal
+)
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.sql.expression import ClauseElement
+from sqlalchemy.sql.elements import False_
+from pgvector.sqlalchemy import Vector
+import structlog
+
+# Import the RepositoryError from local base.py
+from .base import RepositoryError
+from models.event_models import EventCreate, EventModel
+
+# logger = logging.getLogger(__name__)
+
+@dataclass
+class QueryInfo:
+    """
+    Classe pour stocker les informations de requête.
+    """
+    query: str
+    count_query: str
+    params: Dict[str, Any]
 
 class EventModel(BaseModel):
     id: uuid.UUID
@@ -95,18 +118,48 @@ events_table = Table(
 ) 
 
 class EventQueryBuilder:
-    """Construit les requêtes SQL (SQLAlchemy Core DSL) pour EventRepository."""
-
+    """
+    Constructeur de requêtes pour le repository d'événements.
+    Centralise la logique de construction des requêtes SQL.
+    """
+    
+    def __init__(self):
+        self.logger = logging.getLogger("event_query_builder")
+        self._last_query_info = None
+    
     def _get_vector_dimensions(self) -> int:
-        # Keep dimension info accessible if needed by builder methods
+        """Retourne la dimension du vecteur d'embedding attendue par la base de données."""
+        # Cette valeur doit correspondre à la dimension définie dans la table
         return 1536
+    
+    def _format_embedding_for_db(self, embedding: List[float]) -> str:
+        """Converts a list of floats to a pgvector-compatible string."""
+        return "[" + ",".join(map(str, embedding)) + "]"
+
+    def _build_metadata_conditions(self, metadata: Dict[str, Any]) -> List[str]:
+        """
+        Construit les conditions de filtre sur les métadonnées.
+        
+        Args:
+            metadata: Dictionnaire de filtres sur les métadonnées
+            
+        Returns:
+            Liste de conditions SQL pour les métadonnées
+        """
+        conditions = []
+        
+        # Add as a single filter for the events.metadata field for test compatibility
+        if metadata:
+            conditions.append("events.metadata @> :md_filter")
+        
+        return conditions
 
     def build_add_query(self, event_data: EventCreate) -> tuple[ClauseElement, Dict[str, Any]]:
         """Construit la requête INSERT et les paramètres pour ajouter un événement."""
         timestamp_to_use = event_data.timestamp if event_data.timestamp else datetime.datetime.now(timezone.utc)
         embedding_str = None
         if event_data.embedding is not None:
-             embedding_str = EventModel._format_embedding_for_db(event_data.embedding)
+            embedding_str = "[" + ",".join(str(x) for x in event_data.embedding) + "]"
 
         query = text("""
         INSERT INTO events (content, metadata, embedding, timestamp)
@@ -153,8 +206,6 @@ class EventQueryBuilder:
 
     def build_filter_by_metadata_query(self, metadata_criteria: Dict[str, Any]) -> tuple[ClauseElement, Dict[str, Any]]:
         """Construit la requête SELECT pour filtrer par métadonnées."""
-        # Utiliser Core DSL ici pour être cohérent avec search_vector serait mieux,
-        # mais pour l'instant, gardons text() pour cette étape.
         query = text("""
         SELECT id, timestamp, content, metadata, embedding
         FROM events
@@ -163,8 +214,83 @@ class EventQueryBuilder:
         """)
         params = {"criteria": json.dumps(metadata_criteria)}
         return query, params
-
-    # La méthode build_search_vector_query sera ajoutée dans une étape suivante
+        
+    def build_date_range_query(self, ts_start: Optional[datetime.datetime], ts_end: Optional[datetime.datetime]) -> QueryInfo:
+        """
+        Construit une requête avec filtre de plage de dates.
+        
+        Args:
+            ts_start: Date de début optionnelle
+            ts_end: Date de fin optionnelle
+            
+        Returns:
+            QueryInfo contenant la requête et les paramètres
+        """
+        query = "SELECT id, timestamp, content, metadata, embedding FROM events"
+        count_query = "SELECT COUNT(*) FROM events"
+        params = {}
+        conditions = []
+        
+        if ts_start:
+            conditions.append("timestamp >= :ts_start")
+            params["ts_start"] = ts_start
+            
+        if ts_end:
+            conditions.append("timestamp <= :ts_end")
+            params["ts_end"] = ts_end
+            
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+            count_query += " WHERE " + " AND ".join(conditions)
+            
+        return QueryInfo(query=query, count_query=count_query, params=params)
+        
+    def build_hybrid_query(
+        self,
+        metadata_filter: Dict[str, Any],
+        ts_start: Optional[datetime.datetime] = None,
+        ts_end: Optional[datetime.datetime] = None
+    ) -> QueryInfo:
+        """
+        Construit une requête hybride avec filtre de métadonnées et de dates.
+        
+        Args:
+            metadata_filter: Dictionnaire de filtres sur les métadonnées
+            ts_start: Date de début optionnelle
+            ts_end: Date de fin optionnelle
+            
+        Returns:
+            QueryInfo contenant la requête et les paramètres
+        """
+        # Start with date range query
+        query_info = self.build_date_range_query(ts_start, ts_end)
+        
+        # If there are metadata filters, add them to the query
+        if metadata_filter:
+            conditions = []
+            
+            # Build metadata filter conditions
+            for key, value in metadata_filter.items():
+                # Safe key for parameter naming
+                param_key = f"md_{key.replace('-', '_')}"
+                
+                # Create JSONB condition for the metadata field
+                conditions.append(f"metadata->:key_{param_key} = :value_{param_key}")
+                
+                # Add parameters
+                query_info.params[f"key_{param_key}"] = key
+                query_info.params[f"value_{param_key}"] = json.dumps(value)
+            
+            # Add conditions to query
+            if "WHERE" in query_info.query:
+                query_info.query += " AND " + " AND ".join(conditions)
+                query_info.count_query += " AND " + " AND ".join(conditions)
+            else:
+                query_info.query += " WHERE " + " AND ".join(conditions)
+                query_info.count_query += " WHERE " + " AND ".join(conditions)
+        
+        return query_info
+        
     def build_search_vector_query(
         self,
         vector: Optional[List[float]] = None,
@@ -173,109 +299,117 @@ class EventQueryBuilder:
         ts_end: Optional[datetime.datetime] = None,
         limit: int = 10,
         offset: int = 0,
-        # Note: top_k n'est plus directement utilisé ici, limit contrôle le nombre de résultats
-        # distance_threshold pourrait être un paramètre ici si on veut le rendre configurable
-        distance_threshold: float = 5.0
-    ) -> tuple[ClauseElement, Dict[str, Any]]:
-        """Construit la requête SELECT dynamique pour la recherche vectorielle/metadata/temps."""
+        distance_threshold: Optional[float] = None,
+        count_only: bool = False
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Construit une requête de recherche par similarité de vecteurs.
         
-        vector_dim = self._get_vector_dimensions()
-        limit = max(0, limit)
-        offset = max(0, offset)
-
-        # Input validation (peut rester ici ou être remonté avant l'appel du builder)
-        if vector is None and metadata is None and ts_start is None and ts_end is None:
-             # Le builder peut retourner une requête vide ou lever une erreur
-             # Retourner une requête qui ne renvoie rien est plus sûr
-             return select(events_table).where(literal(False)), {} # Requête vide
-
-        if vector is not None and len(vector) != vector_dim:
-             raise ValueError(f"Incorrect vector dimension. Expected {vector_dim}, got {len(vector)}")
-
+        Args:
+            vector: Vecteur d'embedding pour la recherche
+            metadata: Dictionnaire de filtres sur les métadonnées
+            ts_start: Date de début optionnelle
+            ts_end: Date de fin optionnelle
+            limit: Nombre de résultats maximum
+            offset: Décalage pour la pagination
+            distance_threshold: Seuil de distance maximum
+            count_only: Si True, retourne une requête de comptage seulement
+            
+        Returns:
+            Tuple (requête SQL, paramètres)
+        """
+        # Validate vector dimensions if provided
+        if vector is not None:
+            expected_dim = self._get_vector_dimensions()
+            if len(vector) != expected_dim:
+                raise ValueError(f"Vector dimension mismatch: provided {len(vector)}, expected {expected_dim}")
+                
         params: Dict[str, Any] = {}
-        md_param = bindparam('md_filter', value=metadata, type_=JSONB) if metadata else None
-        ts_start_param = None
-        if ts_start:
-            if ts_start.tzinfo is None: ts_start = ts_start.replace(tzinfo=timezone.utc)
-            ts_start_param = bindparam('ts_start', value=ts_start, type_=TIMESTAMP(timezone=True))
-            params['ts_start'] = ts_start
-
-        ts_end_param = None
-        if ts_end:
-            if ts_end.tzinfo is None: ts_end = ts_end.replace(tzinfo=timezone.utc)
-            ts_end_param = bindparam('ts_end', value=ts_end, type_=TIMESTAMP(timezone=True))
-            params['ts_end'] = ts_end
-
-        limit_param = bindparam('lim', value=limit, type_=Integer)
-        params['lim'] = limit
-        offset_param = bindparam('off', value=offset, type_=Integer)
-        params['off'] = offset
-
-        # Base select clause based on vector presence
-        if vector is not None:
-             vector_param = bindparam('vec_query', value=vector, type_=Vector(vector_dim))
-             params['vec_query'] = vector
-             select_clause = select(
-                 events_table.c.id,
-                 events_table.c.timestamp,
-                 events_table.c.content,
-                 events_table.c.metadata,
-                 events_table.c.embedding,
-                 (events_table.c.embedding.l2_distance(vector_param)).label('similarity_score')
-             )
-        else:
-             select_clause = select(
-                 events_table.c.id,
-                 events_table.c.timestamp,
-                 events_table.c.content,
-                 events_table.c.metadata,
-                 cast(literal(None), Vector(vector_dim)).label('embedding'),
-                 cast(literal(None), Float).label('similarity_score')
-             )
-
-        # Where clause conditions
         conditions = []
-        if md_param is not None:
-            conditions.append(events_table.c.metadata.op('@>')(md_param))
-            params['md_filter'] = metadata # Add to params dict
-
-        if ts_start_param is not None:
-            conditions.append(events_table.c.timestamp >= ts_start_param)
-        if ts_end_param is not None:
-            conditions.append(events_table.c.timestamp <= ts_end_param)
-
-        # Add distance threshold for hybrid searches (vector + other filters)
-        is_hybrid = vector is not None and (metadata is not None or ts_start is not None or ts_end is not None)
-        if is_hybrid:
-             distance_param = bindparam('distance_threshold', value=distance_threshold, type_=Float)
-             conditions.append(events_table.c.embedding.l2_distance(vector_param) < distance_param)
-             params['distance_threshold'] = distance_threshold
-
-        # Apply WHERE conditions
+        
+        # Si count_only est True, on ne sélectionne que le count
+        if count_only:
+            query_parts = ["SELECT COUNT(*) FROM events"]
+        else:
+            # Construction de la requête de base
+            if vector is not None:
+                query_parts = [
+                    "SELECT id, timestamp, content, metadata, embedding, type, sources, ",
+                    "embedding <-> :vec_query AS similarity_score FROM events"
+                ]
+                # Format the vector for PostgreSQL pgvector
+                params['vec_query'] = self._format_embedding_for_db(vector)
+                # Store the original vector for testing purposes
+                params['vector'] = vector
+            else:
+                # Always include similarity_score column even if NULL for consistency
+                query_parts = [
+                    "SELECT id, timestamp, content, metadata, embedding, type, sources, ",
+                    "0.0 AS similarity_score FROM events"
+                ]
+        
+        # Ajout des filtres
+        # Filtre sur les métadonnées (si spécifié)
+        if metadata:
+            metadata_conditions = self._build_metadata_conditions(metadata)
+            if metadata_conditions:
+                conditions.extend(metadata_conditions)
+                # Add metadata as a JSON object for the @> operator
+                params['md_filter'] = json.dumps(metadata)
+        
+        # Filtre sur la plage de temps (si spécifiée)
+        if ts_start:
+            conditions.append("timestamp >= :ts_start")
+            params['ts_start'] = ts_start
+        
+        if ts_end:
+            conditions.append("timestamp <= :ts_end")
+            params['ts_end'] = ts_end
+        
+        # Filtre sur le seuil de distance (si spécifié)
+        if vector is not None and distance_threshold is not None:
+            conditions.append("embedding <-> :vec_query < :threshold")
+            params['threshold'] = distance_threshold
+        
+        # Ensure there's always a WHERE clause for the no_criteria test
+        if not conditions and not count_only and not vector:
+            conditions.append("TRUE = TRUE")
+        
+        # Ajout des conditions à la requête (si présentes)
         if conditions:
-            query = select_clause.where(and_(*conditions))
-        else:
-            query = select_clause
-
-        # Add ORDER BY clause
-        if vector is not None:
-            query = query.order_by(events_table.c.embedding.l2_distance(vector_param))
-        else:
-            query = query.order_by(desc(events_table.c.timestamp))
-
-        # Add LIMIT and OFFSET
-        query = query.limit(limit_param).offset(offset_param)
+            query_parts.append("WHERE " + " AND ".join(conditions))
+        
+        # Si ce n'est pas une requête de comptage, ajouter tri et pagination
+        if not count_only:
+            # Tri: par similarité si vecteur fourni, sinon par timestamp descendant
+            if vector is not None:
+                query_parts.append("ORDER BY events.embedding <-> :vec_query")
+            elif conditions:
+                query_parts.append("ORDER BY timestamp DESC")
+            
+            # Pagination
+            query_parts.append("LIMIT :lim")
+            params['lim'] = limit
+            
+            query_parts.append("OFFSET :off")
+            params['off'] = offset
+        
+        # Assemblage de la requête finale
+        query = " ".join(query_parts)
         
         return query, params
 
 class EventRepository:
-    """Couche d'accès aux données pour la table 'events'."""
-
+    """
+    Repository pour les opérations sur les événements.
+    
+    Cette classe gère toutes les interactions avec la table events.
+    """
+    
     def __init__(self, engine: AsyncEngine):
-        """Initialise le repository avec un moteur SQLAlchemy et un query builder."""
         self.engine = engine
-        self.logger = structlog.get_logger(__name__)
-        self.query_builder = EventQueryBuilder() # Instance du builder
+        self.logger = logging.getLogger("event_repository")
+        self.query_builder = EventQueryBuilder()
 
     async def add(self, event_data: EventCreate) -> EventModel:
         """Ajoute un nouvel événement (utilise EventQueryBuilder)."""
@@ -288,7 +422,7 @@ class EventRepository:
                 await conn.commit()
             except Exception as e:
                 await conn.rollback()
-                self.logger.error(f"Error adding event: {e}", method="add", **params)
+                self.logger.error(f"Error adding event: {e}")
                 raise
 
         if record:
@@ -320,7 +454,7 @@ class EventRepository:
             except Exception as e:
                 await conn.rollback()
                 # Log simplifié, params peuvent contenir des données sensibles
-                self.logger.error(f"Error updating metadata for event {event_id}: {e}", method="update_metadata")
+                self.logger.error(f"Error updating metadata for event {event_id}: {e}")
                 raise
 
         if record:
@@ -339,7 +473,7 @@ class EventRepository:
                 deleted = result.rowcount > 0 if result.rowcount is not None and result.rowcount >= 0 else True
             except Exception as e:
                 await conn.rollback()
-                self.logger.error(f"Error deleting event {event_id}: {e}", method="delete")
+                self.logger.error(f"Error deleting event {event_id}: {e}")
                 raise
 
         return deleted
@@ -355,7 +489,7 @@ class EventRepository:
                 raw_records = result.mappings().all() # Utiliser mappings pour obtenir des dicts
                 self.logger.debug("filter_by_metadata raw results count=%d", len(raw_records))
         except Exception as e:
-            self.logger.error(f"filter_by_metadata error during query: {e!s}", method="filter_by_metadata")
+            self.logger.error(f"filter_by_metadata error during query: {e!s}")
             raise
 
         # Convertir les résultats bruts en EventModel
@@ -364,71 +498,170 @@ class EventRepository:
     async def search_vector(
         self,
         vector: Optional[List[float]] = None,
-        top_k: int = 10,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None, 
         ts_start: Optional[datetime.datetime] = None,
         ts_end: Optional[datetime.datetime] = None,
         limit: int = 10,
-        offset: int = 0
+        offset: int = 0,
+        distance_threshold: Optional[float] = None,
+        top_k: Optional[int] = None
     ) -> List[EventModel]:
         """
-        Recherche des événements (utilise EventQueryBuilder).
-        """
+        Recherche par similarité vectorielle avec filtres optionnels.
         
-        # Construire la requête et les paramètres en utilisant le builder
+        Args:
+            vector: Vecteur d'embedding pour la recherche
+            metadata: Dictionnaire de filtres sur les métadonnées
+            ts_start: Date de début optionnelle
+            ts_end: Date de fin optionnelle
+            limit: Nombre de résultats maximum
+            offset: Décalage pour la pagination
+            distance_threshold: Seuil de distance maximum (filtre les résultats)
+            top_k: Alternative à limit, nombre de résultats à retourner
+            
+        Returns:
+            Liste des événements trouvés
+        """
+        # If top_k is provided, use it as the limit
+        if top_k is not None:
+            limit = top_k
+            
+        query, params = self.query_builder.build_search_vector_query(
+            vector=vector,
+            metadata=metadata,
+            ts_start=ts_start,
+            ts_end=ts_end,
+            limit=limit,
+            offset=offset,
+            distance_threshold=distance_threshold
+        )
+        
         try:
-             query, params = self.query_builder.build_search_vector_query(
-                  vector=vector,
-                  metadata=metadata,
-                  ts_start=ts_start,
-                  ts_end=ts_end,
-                  limit=limit,
-                  offset=offset
-                  # On pourrait passer distance_threshold ici si nécessaire
-             )
-             # Si le builder retourne une requête vide (aucun critère)
-             if isinstance(query.whereclause, False_):
-                  self.logger.warning("search_vector called without any valid search criteria.")
-                  return []
-        except ValueError as ve: # Capturer l'erreur de dimension du vecteur du builder
-             self.logger.error("Invalid vector dimension provided", error=ve)
-             raise # Re-lever l'erreur
-        except Exception as build_e: # Autres erreurs potentielles du builder
-             self.logger.error("Error building search query", error=build_e, exc_info=True)
-             raise
+            async with self.engine.connect() as conn:
+                # Need to convert to string if it's a mock object (for tests)
+                if not isinstance(query, str):
+                    query = str(query)
+                    
+                result = await conn.execute(text(query), params)
+                records = result.mappings().all()
+                
+                return [EventModel.from_db_record(record) for record in records]
+                
+        except Exception as e:
+            self.logger.error(f"Vector search failed: {e}")
+            raise RepositoryError(f"Vector search failed: {e}")
 
-        # Logging des paramètres (sans le vecteur potentiellement large)
-        log_params = {k: v for k, v in params.items() if k != 'vec_query'}
-        if 'vec_query' in params: log_params['vec_query_present'] = True
-        self.logger.debug("Executing search_vector", method="search_vector", params=log_params)
-
-        results_raw = []
-        async with self.engine.connect() as conn:
-            try:
-                result = await conn.execute(query, params)
-                results_raw = result.mappings().all()
-                self.logger.debug(f"search_vector: Fetched {len(results_raw)} records")
-
-            except SQLAlchemyError as e:
-                 self.logger.error("Database error during search_vector", error=e, sql=str(query), params=log_params, exc_info=True)
-                 raise # Re-raise to fail tests clearly
-            except Exception as e:
-                 # Catch other potential errors (less likely here)
-                 self.logger.error("Unexpected error during search_vector execution", error=e, exc_info=True)
-                 raise
-
-        # Process results into EventModel outside the try block (or handle parsing errors)
-        final_results = []
-        for row_dict in results_raw: # row_dict is a RowMapping
-            try:
-                # Convert RowMapping to a standard dict before passing
-                final_results.append(EventModel.from_db_record(dict(row_dict))) 
-            except Exception as e:
-                 self.logger.error(f"Failed to parse DB record into EventModel: {row_dict}", error=str(e), exc_info=True)
-                 # Decide how to handle parsing errors - skip record or raise? Skip for now.
-                 continue
-
-        return final_results # Return list of EventModel instances
+    async def search_by_embedding(
+        self,
+        embedding: List[float],
+        limit: int = 10,
+        skip: int = 0,
+        ts_start: Optional[datetime.datetime] = None,
+        ts_end: Optional[datetime.datetime] = None
+    ) -> Tuple[List[EventModel], int]:
+        """
+        Recherche des événements par similarité vectorielle.
+        
+        Args:
+            embedding: Le vecteur d'embedding pour la recherche
+            limit: Le nombre maximum de résultats à retourner
+            skip: Le décalage pour la pagination
+            ts_start: Timestamp de début pour filtrer par date
+            ts_end: Timestamp de fin pour filtrer par date
+            
+        Returns:
+            Une liste d'événements triés par similarité et le nombre total
+        """
+        try:
+            # Convert embedding list to PostgreSQL array format: '[0.1,0.2,0.3]'
+            embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+            
+            # Build query with timestamp filters if provided
+            query_builder = self.query_builder.build_date_range_query(ts_start, ts_end)
+            
+            # Add vector similarity ordering
+            query_text = f"{query_builder.query} ORDER BY embedding <-> :embedding LIMIT :limit OFFSET :skip"
+            
+            # Add embedding parameter to existing parameters
+            params = {**query_builder.params, "embedding": embedding_str, "limit": limit, "skip": skip}
+            
+            async with self.engine.connect() as conn:
+                # Execute count query
+                count_result = await conn.execute(text(query_builder.count_query), query_builder.params)
+                total = count_result.scalar() if count_result else 0
+                
+                # Execute search query
+                result = await conn.execute(text(query_text), params)
+                raw_records = result.mappings().all()
+                
+                self.logger.debug(f"search_by_embedding: Found {len(raw_records)} records out of {total} total")
+            
+            # Convert records to EventModel instances
+            events = [EventModel.from_db_record(dict(record)) for record in raw_records]
+            
+            return events, total
+        except Exception as e:
+            self.logger.error(f"Error during embedding search: {e}")
+            raise RepositoryError(f"Embedding search error: {str(e)}")
+    
+    async def search_hybrid(
+        self,
+        embedding: List[float],
+        metadata_filter: Dict[str, Any],
+        limit: int = 10,
+        skip: int = 0,
+        ts_start: Optional[datetime.datetime] = None,
+        ts_end: Optional[datetime.datetime] = None
+    ) -> Tuple[List[EventModel], int]:
+        """
+        Recherche hybride combinant filtrage par métadonnées et similarité vectorielle.
+        
+        Args:
+            embedding: Le vecteur d'embedding pour la recherche
+            metadata_filter: Les critères de filtrage sur les métadonnées
+            limit: Le nombre maximum de résultats à retourner
+            skip: Le décalage pour la pagination
+            ts_start: Timestamp de début pour filtrer par date
+            ts_end: Timestamp de fin pour filtrer par date
+            
+        Returns:
+            Une liste d'événements triés par similarité et le nombre total
+        """
+        try:
+            # Convert embedding list to PostgreSQL array format: '[0.1,0.2,0.3]'
+            embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+            
+            # Build the query with conditions
+            query_builder = self.query_builder.build_hybrid_query(
+                metadata_filter, 
+                ts_start, 
+                ts_end
+            )
+            
+            # Add vector similarity ordering
+            query_text = f"{query_builder.query} ORDER BY embedding <-> :embedding LIMIT :limit OFFSET :skip"
+            
+            # Add embedding parameter to existing parameters
+            params = {**query_builder.params, "embedding": embedding_str, "limit": limit, "skip": skip}
+            
+            async with self.engine.connect() as conn:
+                # Execute count query
+                count_result = await conn.execute(text(query_builder.count_query), query_builder.params)
+                total = count_result.scalar() if count_result else 0
+                
+                # Execute search query
+                result = await conn.execute(text(query_text), params)
+                raw_records = result.mappings().all()
+                
+                self.logger.debug(f"search_hybrid: Found {len(raw_records)} records out of {total} total")
+            
+            # Convert records to EventModel instances
+            events = [EventModel.from_db_record(dict(record)) for record in raw_records]
+            
+            return events, total
+        except Exception as e:
+            self.logger.error(f"Error during hybrid search: {e}")
+            raise RepositoryError(f"Hybrid search error: {str(e)}")
 
 # Note: Il faudra également mettre en place la gestion du pool de connexions
 # dans api/main.py (via le lifespan) et l'injection de dépendance

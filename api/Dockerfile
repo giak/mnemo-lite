@@ -48,8 +48,8 @@ RUN pip install --no-cache --no-index --find-links=/wheels -r requirements.txt
 # Install dev requirements separately
 RUN pip install --no-cache -r requirements-dev.txt
 
-# Copy application code
-COPY api/ ./
+# Copy application code - Ensure it goes into an /app/api subdirectory
+COPY api/ /app/api/
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/certs
@@ -59,9 +59,9 @@ RUN useradd -m appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl --fail http://localhost:8000/health || exit 1
+# Health check (COMMENTED OUT to rely only on docker-compose healthcheck)
+# HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+#     CMD curl --fail http://localhost:8000/v1/health || exit 1
 
-# Run the API server with reload for development
+# Run the API server directly (Restore reload)
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

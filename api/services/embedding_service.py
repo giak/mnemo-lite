@@ -6,10 +6,12 @@ Ce module définit une interface abstraite et une implémentation concrète.
 import logging
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import List, Optional, Union
+from typing import List, Optional, Union, TypeVar, overload
 
 # Configuration du logger
 logger = logging.getLogger(__name__)
+
+T = TypeVar('T', str, List[float])
 
 class EmbeddingServiceInterface(ABC):
     """
@@ -31,13 +33,13 @@ class EmbeddingServiceInterface(ABC):
         pass
     
     @abstractmethod
-    async def compute_similarity(self, text1: str, text2: str) -> float:
+    async def compute_similarity(self, item1: Union[str, List[float]], item2: Union[str, List[float]]) -> float:
         """
-        Calcule la similarité entre deux textes en comparant leurs embeddings.
+        Calcule la similarité entre deux éléments (textes ou embeddings).
         
         Args:
-            text1: Premier texte à comparer
-            text2: Second texte à comparer
+            item1: Premier élément à comparer (texte ou embedding)
+            item2: Second élément à comparer (texte ou embedding)
             
         Returns:
             Un score de similarité entre 0 et 1
@@ -83,7 +85,9 @@ class SimpleEmbeddingService(EmbeddingServiceInterface):
             # Implémentation simple: utilisation d'un hachage du texte
             # Dans un environnement réel, utilisez un modèle d'embedding approprié
             text_hash = hash(text)
-            np.random.seed(text_hash)
+            # Ensure seed is within the allowed range (0 to 2^32 - 1)
+            seed = abs(text_hash) % (2**32 - 1)
+            np.random.seed(seed)
             
             # Génération d'un vecteur pseudo-aléatoire mais déterministe
             vector = np.random.normal(0, 1, self.dimension)
@@ -98,21 +102,29 @@ class SimpleEmbeddingService(EmbeddingServiceInterface):
             logger.error(f"Erreur lors de la génération d'embedding: {str(e)}")
             raise ValueError(f"Impossible de générer l'embedding: {str(e)}")
     
-    async def compute_similarity(self, text1: str, text2: str) -> float:
+    async def compute_similarity(self, item1: Union[str, List[float]], item2: Union[str, List[float]]) -> float:
         """
-        Calcule la similarité entre deux textes en utilisant la similarité cosinus.
+        Calcule la similarité entre deux éléments (textes ou embeddings).
         
         Args:
-            text1: Premier texte à comparer
-            text2: Second texte à comparer
+            item1: Premier élément à comparer (texte ou embedding)
+            item2: Second élément à comparer (texte ou embedding)
             
         Returns:
             Un score de similarité entre 0 et 1
         """
         try:
-            # Génération des embeddings pour les deux textes
-            embedding1 = await self.generate_embedding(text1)
-            embedding2 = await self.generate_embedding(text2)
+            # Déterminer si les entrées sont des textes ou des embeddings
+            if isinstance(item1, str) and isinstance(item2, str):
+                # Cas où les deux éléments sont des textes
+                embedding1 = await self.generate_embedding(item1)
+                embedding2 = await self.generate_embedding(item2)
+            elif isinstance(item1, list) and isinstance(item2, list):
+                # Cas où les deux éléments sont des embeddings
+                embedding1 = item1
+                embedding2 = item2
+            else:
+                raise ValueError("Les éléments à comparer doivent être tous deux des textes ou tous deux des embeddings")
             
             # Calcul de la similarité cosinus
             vec1 = np.array(embedding1)

@@ -11,54 +11,51 @@ CREATE EXTENSION IF NOT EXISTS vector; -- Pour VECTOR et index HNSW/IVFFlat
 -- CREATE EXTENSION IF NOT EXISTS pg_partman; -- Commenté: Sera créé manuellement après init
 
 ------------------------------------------------------------------
--- Table Principale: events (NON partitionnée pour l'instant)
+-- Create Test Database (if it doesn't exist)
 ------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS events (
-    -- id          UUID NOT NULL DEFAULT gen_random_uuid(),
-    -- timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    id          UUID NOT NULL DEFAULT gen_random_uuid(), -- Rendre NOT NULL
-    timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),         
-    content     JSONB NOT NULL,
-    embedding   VECTOR(1536),
-    metadata    JSONB DEFAULT '{}'::jsonb,
-    -- PRIMARY KEY (id, timestamp) -- Clé composite supprimée
-    PRIMARY KEY (id, timestamp) -- Utiliser la clé composite pour la partition
-) PARTITION BY RANGE (timestamp); -- Réactiver le partitionnement
+SELECT 'CREATE DATABASE mnemolite_test'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'mnemolite_test')\gexec
 
-COMMENT ON TABLE events IS 'Table principale stockant tous les evenements atomiques (partitionnee par mois sur timestamp).';
+-- Optional: Grant privileges if needed, though usually the user owns it
+-- GRANT ALL PRIVILEGES ON DATABASE mnemolite_test TO "${POSTGRES_USER}";
+
+-- Reconnect or ensure subsequent scripts handle the test DB context if needed
+-- \connect mnemolite_test -- This might be needed if schemas are applied to test DB
+
+------------------------------------------------------------------
+-- Apply Schema to MAIN Database (mnemolite)
+------------------------------------------------------------------
+-- (Connects implicitly to POSTGRES_DB initially)
+
+CREATE TABLE IF NOT EXISTS events (
+    id          UUID NOT NULL DEFAULT gen_random_uuid(),
+    timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),         
+    content     JSONB NOT NULL,             -- Contenu flexible: { "type": "prompt", ... } ou { "type": "decision", ... }
+    embedding   VECTOR(1536),               -- Embedding (ex: text-embedding-3-small)
+    metadata    JSONB DEFAULT '{}'::jsonb,  -- Tags, source, IDs, types, etc.
+    -- Clé primaire composite, incluant la clé de partitionnement
+    -- Commented out partitioning for test setup simplicity
+    PRIMARY KEY (id)
+);
+-- PARTITION BY RANGE (timestamp);
+
+COMMENT ON TABLE events IS 'Table principale stockant tous les evenements atomiques (NON partitionnee pour test setup).';
 COMMENT ON COLUMN events.content IS 'Contenu detaille de l evenement au format JSONB.';
 COMMENT ON COLUMN events.embedding IS 'Vecteur semantique du contenu (dimension 1536 pour text-embedding-3-small).';
 COMMENT ON COLUMN events.metadata IS 'Metadonnees additionnelles (tags, IDs, types) au format JSONB.';
 
--- Index GIN sur metadata pour recherches flexibles sur la table Mere
--- (sera herite par les partitions)
+CREATE INDEX IF NOT EXISTS events_timestamp_idx ON events (timestamp);
 CREATE INDEX IF NOT EXISTS events_metadata_gin_idx ON events USING GIN (metadata jsonb_path_ops);
 
--- Index B-tree sur timestamp (cle de partitionnement)
-CREATE INDEX IF NOT EXISTS events_timestamp_idx ON events (timestamp);
-
--- NOTE IMPORTANTE sur l'index vectoriel (HNSW/IVFFlat):
--- Il DOIT etre cree sur chaque partition individuelle, PAS sur la table mere.
--- Ceci est generalement gere via des hooks pg_partman ou des scripts de maintenance.
--- Exemple pour une partition 'events_pYYYY_MM':
--- CREATE INDEX CONCURRENTLY IF NOT EXISTS events_pYYYY_MM_embedding_hnsw_idx 
--- ON events_pYYYY_MM USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
-
-------------------------------------------------------------------
--- Tables Graphe Conceptuel/Evenementiel (Optionnel selon usage)
-------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS nodes (
     node_id         UUID PRIMARY KEY, -- Generalement un event.id, mais peut etre autre chose (concept genere)
     node_type       TEXT NOT NULL,    -- Ex: 'event', 'concept', 'entity', 'rule', 'document'
     label           TEXT,             -- Nom lisible pour affichage/requete
-    properties      JSONB DEFAULT '{}'::jsonb, -- Attributs additionnels du noeud
+    properties      JSONB DEFAULT '{}'::jsonb, -- Attributs additionnels du nœud
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 COMMENT ON TABLE nodes IS 'Noeuds du graphe conceptuel (evenements, concepts, entites).';
-
 CREATE INDEX IF NOT EXISTS nodes_type_idx ON nodes(node_type);
--- Optionnel: Index sur label si recherche frequente par nom
--- CREATE INDEX IF NOT EXISTS nodes_label_idx ON nodes USING gin (label gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS edges (
     edge_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -71,15 +68,55 @@ CREATE TABLE IF NOT EXISTS edges (
 COMMENT ON TABLE edges IS 'Relations (aretes) entre les noeuds du graphe conceptuel.';
 COMMENT ON COLUMN edges.source_node_id IS 'ID du noeud source (pas de FK physique).';
 COMMENT ON COLUMN edges.target_node_id IS 'ID du noeud cible (pas de FK physique).';
-
 CREATE INDEX IF NOT EXISTS edges_source_idx ON edges(source_node_id);
 CREATE INDEX IF NOT EXISTS edges_target_idx ON edges(target_node_id);
 CREATE INDEX IF NOT EXISTS edges_relation_type_idx ON edges(relation_type);
--- Optionnel: Index composite pour requêtes fréquentes
--- CREATE INDEX IF NOT EXISTS edges_source_type_target_idx ON edges(source_node_id, relation_type, target_node_id);
 
--- Note: Pas de contraintes de clé étrangère (FK) sur edges pour flexibilité.
--- La cohérence est gérée par l'application ou des checks périodiques.
+------------------------------------------------------------------
+-- Apply Schema to TEST Database (mnemolite_test)
+------------------------------------------------------------------
+-- Important: Requires running this script with a tool that handles \connect (like psql)
+-- or splitting into separate scripts executed against respective DBs.
+-- For simplicity here, we duplicate the DDL assuming manual application or adjustment.
+-- If docker-entrypoint runs scripts sequentially, it might apply to the default DB only.
+-- A more robust approach involves separate scripts or conditional logic.
+
+\connect mnemolite_test;
+
+-- Re-create tables in the test database
+CREATE TABLE IF NOT EXISTS events (
+    id          UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
+    timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    content     JSONB NOT NULL,
+    embedding   VECTOR(1536),
+    metadata    JSONB DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS events_timestamp_idx ON events (timestamp);
+CREATE INDEX IF NOT EXISTS events_metadata_gin_idx ON events USING GIN (metadata jsonb_path_ops);
+
+CREATE TABLE IF NOT EXISTS nodes (
+    node_id         UUID PRIMARY KEY,
+    node_type       TEXT NOT NULL,
+    label           TEXT,
+    properties      JSONB DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS nodes_type_idx ON nodes(node_type);
+
+CREATE TABLE IF NOT EXISTS edges (
+    edge_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_node_id  UUID NOT NULL,
+    target_node_id  UUID NOT NULL,
+    relation_type   TEXT NOT NULL,
+    properties      JSONB DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS edges_source_idx ON edges(source_node_id);
+CREATE INDEX IF NOT EXISTS edges_target_idx ON edges(target_node_id);
+CREATE INDEX IF NOT EXISTS edges_relation_type_idx ON edges(relation_type);
+
+-- Optionally connect back
+-- \connect mnemolite;
 
 ------------------------------------------------------------------
 -- Configuration Post-Initialisation (Manuelle ou via Script Séparé)

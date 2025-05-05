@@ -8,12 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 from sqlalchemy.sql import text, Select, ColumnElement, insert, select, update, delete
 from sqlalchemy.sql.expression import literal_column
 from sqlalchemy.sql.elements import False_ # Import spécifique pour la vérification
+from sqlalchemy.engine import Result
 
 # Importations liées à Pydantic pour la validation et la sérialisation
 from pydantic import BaseModel, Field, field_validator
 
 # Importation pour le logging
 import logging
+
+# Import RepositoryError from base
+from .base import RepositoryError
 
 # Configuration du logger
 logging.basicConfig(level=logging.INFO) # Ou logging.DEBUG pour plus de détails
