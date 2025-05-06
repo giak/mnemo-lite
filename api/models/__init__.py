@@ -1,1 +1,1 @@
-# Fichier d'initialisation du package models 
+# Fichier d'initialisation du package models

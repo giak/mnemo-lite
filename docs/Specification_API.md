@@ -27,15 +27,15 @@
 ---
 
 ## 3. Endpoints principaux (Λ)
-| Méthode | Route               | Fonction                                      | Auth       |
-|---------|---------------------|-----------------------------------------------|------------|
-| POST    | `/v1/events`        | Ingestion d'un événement                      | none (dev) |
-| GET     | `/v1/events/{id}`   | Récupérer par UID                             | none       |
-| PATCH   | `/v1/events/{id}`   | MàJ (fusion) métadonnées d'un événement       | none       |
-| DELETE  | `/v1/events/{id}`   | Suppression d'un événement                    | none       |
-| GET     | `/v1/search`        | Recherche vectorielle + filtres               | none       |
-| GET     | `/v1/health`        | Liveness / readiness                          | none       |
-| GET     | `/v1/metrics`       | Métriques Prometheus                          | none       |
+| Méthode | Route                     | Fonction                                      | Auth       |
+|---------|---------------------------|-----------------------------------------------|------------|
+| POST    | `/v1/events`              | Ingestion d'un événement                      | none (dev) |
+| GET     | `/v1/events/{id}`         | Récupérer par UID                             | none       |
+| PATCH   | `/v1/events/{id}/metadata`| MàJ (fusion) métadonnées d'un événement       | none       |
+| DELETE  | `/v1/events/{id}`         | Suppression d'un événement                    | none       |
+| GET     | `/v1/search/`             | Recherche vectorielle + filtres               | none       |
+| GET     | `/v1/health`              | Liveness / readiness                          | none       |
+| GET     | `/v1/metrics`             | Métriques Prometheus                          | none       |
 
 ---
 
@@ -107,54 +107,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-    patch: # Endpoint ajouté
-      summary: Mettre à jour les métadonnées d'un événement
-      operationId: update_event_metadata_v1_events__id__patch
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [metadata]
-              properties:
-                metadata:
-                  type: object
-                  description: "Objet JSON contenant les métadonnées à fusionner avec celles existantes."
-                  example: { "tag": "corrected", "reviewed": true }
-      responses:
-        '200':
-          description: Métadonnées mises à jour
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Event' # Retourne l'événement mis à jour
-        '404':
-          description: Événement non trouvé
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '422':
-          description: Erreur de validation (ID ou corps de requête invalide)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-        '500':
-          description: Erreur interne du serveur
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-    delete: # Endpoint ajouté
+    delete:
       summary: Supprimer un événement
       operationId: delete_event_v1_events__id__delete
       parameters:
@@ -185,7 +138,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /search:
+  /events/{id}/metadata:
+    patch:
+      summary: Mettre à jour les métadonnées d'un événement
+      operationId: update_event_metadata_v1_events__id__metadata_patch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: "Objet JSON contenant les métadonnées à fusionner avec celles existantes."
+              example: { "tag": "corrected", "reviewed": true }
+      responses:
+        '200':
+          description: Métadonnées mises à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '404':
+          description: Événement non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Erreur de validation (ID ou corps de requête invalide)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '500':
+          description: Erreur interne du serveur
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /search/:
     get:
       summary: Recherche hybride (vecteur + filtres + temps)
       description: >
@@ -195,24 +192,15 @@ paths:
       parameters:
         - in: query
           name: vector_query
-          description: "Vecteur de requête (liste de floats) encodé en Base64. Utilisé pour la recherche de similarité."
+          description: "Requête textuelle (sera convertie en embedding par le service) OU vecteur d'embedding (liste de floats) fourni comme une chaîne JSON (ex: '[0.1,0.2,...]')."
           schema:
             type: string
-            format: base64 # Indique le format attendu
-          example: 'WzAuMSwgMC4yLCAwLjNd' # base64 de [0.1, 0.2, 0.3]
+          example: "trouver des logs importants"
         - in: query
-          name: top_k
-          description: "Nombre de voisins les plus proches à considérer initialement pour la recherche vectorielle (avant filtrage)."
-          schema:
-            type: integer
-            default: 10
-            minimum: 1
-            maximum: 50 # Correspond à la validation dans la route
-        - in: query
-          name: filter_metadata # Filtre sur le champ metadata JSONB
+          name: filter_metadata
           description: "Filtre JSON stringifié sur les métadonnées (ex: {\"key\": \"value\"})."
           schema:
-            type: string # Représente un objet JSON stringifié
+            type: string
           example: '{\"event_type\": \"decision\", \"rule_id\": \"M-UpdateLogic\"}'
         - in: query
           name: ts_start
@@ -227,11 +215,18 @@ paths:
             type: string
             format: date-time
         - in: query
+          name: distance_threshold
+          description: "Seuil de distance pour la similarité vectorielle (plus bas = plus similaire)."
+          schema:
+            type: number
+            format: float
+            default: 0.5
+        - in: query
           name: limit
           description: "Nombre maximum de résultats finaux à retourner."
           schema:
             type: integer
-            default: 50
+            default: 10
             minimum: 1
             maximum: 100
         - in: query
@@ -260,7 +255,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /health: # Endpoint pour Kube/Docker (corrigé depuis /healthz)
+  /health:
     get:
       summary: Vérification de santé du service
       operationId: health_check_v1_health_get
@@ -270,24 +265,39 @@ paths:
           content:
             application/json:
               schema:
-                # La réponse réelle est plus détaillée, voir health_routes.py
                 type: object
                 properties:
                   status: { type: string, enum: ["healthy", "degraded"] }
                   timestamp: { type: string, format: date-time }
-                  duration_ms: { type: number }
+                  duration_ms: { type: number, format: float }
                   services:
                     type: object
                     properties:
-                      postgres: { type: object } # Détails dans le code
+                      postgres:
+                        type: object
+                        properties:
+                          status: { type: string, enum: ["ok", "error"] }
+                          version: { type: string, nullable: true }
+                          message: { type: string, nullable: true }
         '503':
           description: Service non disponible (ex: DB inaccessible)
           content:
             application/json:
               schema:
-                # Structure similaire à la réponse 200 mais avec statut 'degraded'
                 type: object
-  /metrics: # Endpoint pour Prometheus (remplace /stats)
+                properties:
+                  status: { type: string, enum: ["degraded"] }
+                  timestamp: { type: string, format: date-time }
+                  duration_ms: { type: number, format: float }
+                  services:
+                    type: object
+                    properties:
+                      postgres:
+                        type: object
+                        properties:
+                          status: { type: string, enum: ["error"] }
+                          message: { type: string, nullable: true }
+  /metrics:
     get:
       summary: Métriques Prometheus
       operationId: get_metrics_v1_metrics_get
@@ -307,26 +317,26 @@ components:
   schemas:
     NewEvent:
       type: object
-      required: [content] # Seul le contenu est strictement requis à l'ingestion
+      required: [content]
       properties:
         content:
           type: object
           description: "Contenu flexible de l'événement."
           example: { "type": "prompt", "role": "user", "text": "Explique X." }
-        metadata: # Optionnel
+        metadata:
           type: object
           description: "Métadonnées associées (tags, IDs externes...)."
           default: {}
           example: { "event_type": "user_interaction", "session_id": "xyz" }
-        embedding: # Optionnel
+        embedding:
           type: array
           items:
             type: number
             format: float
           nullable: true
-          description: "Vecteur sémantique (si calculé par le client)."
+          description: "Vecteur sémantique (si calculé par le client, 1536 dimensions)."
           example: [0.1, 0.2, ..., 0.9]
-        timestamp: # Optionnel
+        timestamp:
           type: string
           format: date-time
           nullable: true
@@ -337,7 +347,14 @@ components:
         id: { type: string, format: uuid }
         timestamp: { type: string, format: date-time }
         content: { $ref: '#/components/schemas/NewEvent/properties/content' }
-        metadata: { type: object } # Ne peut pas référencer metadata de NewEvent car il est optionnel
+        metadata: { type: object }
+        embedding:
+          type: array
+          items:
+            type: number
+            format: float
+          nullable: true
+          description: "Vecteur sémantique de l'événement."
         similarity_score: { type: number, nullable: true, description: "Score de similarité (si recherche vectorielle effectuée, plus bas = plus similaire)" }
     SearchResults:
       type: object
@@ -345,18 +362,17 @@ components:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/Event' # Contient les événements trouvés
+            $ref: '#/components/schemas/Event'
         meta:
           type: object
           properties:
-            query_time_ms: { type: number, description: "Temps d'exécution de la requête en ms." }
-            total_hits: { type: integer, nullable: true, description: "Nombre total de résultats correspondants (peut être omis ou approximatif)." } # Nombre total estimé (si dispo)
+            total_hits: { type: integer, nullable: true, description: "Nombre total de résultats correspondants avant pagination." }
             limit: { type: integer }
-            offset: { type: integer, nullable: true } # Ajouté offset
+            offset: { type: integer }
     ErrorResponse:
       type: object
       properties:
-        detail: # Format standard FastAPI pour les erreurs 4xx/5xx
+        detail:
           type: string
           example: "Event not found"
     HTTPValidationError: # Standard FastAPI
@@ -387,7 +403,7 @@ sequenceDiagram
 
     User->>+Client_LLM: Question en langage naturel
     Note over Client_LLM: "Phase 1: Analyse (NLU),\nPlanification,\nTraduction en Params API"
-    Client_LLM->>+MnemoLite_API: "Appel API (ex: GET /search + params)"
+    Client_LLM->>+MnemoLite_API: "Appel API (ex: GET /search/ + params)"
     MnemoLite_API->>+MnemoLite_DB: "Requête Structurée (SQL + Vector)"
     MnemoLite_DB-->>-MnemoLite_API: "Données Brutes (Events JSON)"
     MnemoLite_API-->>-Client_LLM: "Réponse API (Contexte Récupéré)"
@@ -402,7 +418,7 @@ Le processus typique, souvent assimilable à un pattern RAG (Retrieval-Augmented
     *   Le LLM analyse l'intention (recherche d'explication) et planifie les informations nécessaires depuis MnemoLite (événements de décision sur A, feedback sur A, événements sur B...).
 
 2.  **Génération des Paramètres API (LLM Phase 1) :**
-    *   Le LLM traduit le plan en un ou plusieurs appels API structurés (principalement `GET /search`) avec les paramètres adéquats (filtres `metadata`, `vector_query`, `ts_start`/`end`, etc.).
+    *   Le LLM traduit le plan en un ou plusieurs appels API structurés (principalement `GET /search/`) avec les paramètres adéquats (filtres `metadata`, `vector_query`, `ts_start`/`end`, etc.).
     *   *(Voir tableau section 4.1 pour exemples de mapping)*
 
 3.  **Récupération du Contexte (Appel API) :**

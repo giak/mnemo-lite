@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.sql import text
 from sqlalchemy.engine import Result
 
+# Import models
 from models.memory_models import Memory, MemoryCreate, MemoryUpdate
 
 import logging
@@ -31,7 +32,7 @@ class MemoryRepository:
         if self.engine:
             return await self.engine.connect()
         raise ValueError("No connection or engine provided to repository")
-        
+    
     def _prepare_embedding(self, embedding):
         """Prépare l'embedding pour l'enregistrement en DB.
         Accepte une liste de float ou None, et retourne une valeur appropriée pour la BD.
@@ -72,23 +73,23 @@ class MemoryRepository:
         
         # Autre cas, retourner tel quel
         return embedding
-            
+        
     async def get_by_id(self, memory_id: uuid.UUID) -> Optional[Memory]:
         """Récupère une mémoire par son ID depuis la table events."""
         try:
             # Construire la requête SQL pour sélectionner un événement par ID
-            query = text(f"""
-                SELECT
-                    id,
-                    content,
-                    metadata,
+    query = text(f"""
+        SELECT 
+            id, 
+            content, 
+            metadata, 
                     embedding,
                     timestamp
-                FROM
+        FROM 
                     {TABLE_NAME}
-                WHERE
-                    id = :memory_id
-            """)
+        WHERE 
+            id = :memory_id
+    """)
             
             conn = await self._get_connection()
             result = await conn.execute(query, {"memory_id": memory_id})
@@ -98,19 +99,39 @@ class MemoryRepository:
                 return None
                 
             # Construire l'objet Memory à partir de l'événement
-            # Note: les champs memory_type, event_type et role_id doivent être extraits des métadonnées
-            metadata = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"] or {}
+            # Les métadonnées contiennent les champs spécifiques, mais nous les extrayons
+            # également séparément pour les attributs directs de l'objet Memory
+            metadata_from_db = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"] or {}
+            
+            # Extraire les champs spécifiques avec les valeurs par défaut attendues par les tests
+            memory_type = metadata_from_db.get("memory_type", "event")    # Valeur par défaut "event"
+            event_type = metadata_from_db.get("event_type", "log")        # Valeur par défaut "log"
+            role_id = metadata_from_db.get("role_id", 1)                  # Valeur par défaut 1
+            
+            # Traiter l'expiration qui peut être une chaîne ou None
+            expiration_str = metadata_from_db.get("expiration")
+            expiration = None
+            if expiration_str:
+                try:
+                    if isinstance(expiration_str, str):
+                        expiration = datetime.datetime.fromisoformat(expiration_str)
+                except (ValueError, TypeError):
+                    self.logger.warning(f"Impossible de parser l'expiration: {expiration_str}")
+            
+            # Pour les tests, nous conservons les métadonnées telles qu'elles sont dans la BD,
+            # y compris les champs spécifiques
+            metadata_for_memory = metadata_from_db
             
             memory = Memory(
                 id=row["id"],
-                memory_type=metadata.get("memory_type", "event"),  # Valeur par défaut "event"
-                event_type=metadata.get("event_type", "log"),      # Valeur par défaut "log"
-                role_id=metadata.get("role_id", 1),                # Valeur par défaut 1 = system
+                memory_type=memory_type,
+                event_type=event_type,
+                role_id=role_id,
                 content=json.loads(row["content"]) if isinstance(row["content"], str) else row["content"],
-                metadata={k: v for k, v in metadata.items() if k not in ["memory_type", "event_type", "role_id", "expiration"]},
+                metadata=metadata_for_memory,  # Métadonnées incluant les champs spécifiques
                 timestamp=row["timestamp"],
                 embedding=self._parse_embedding(row["embedding"]),
-                expiration=metadata.get("expiration")
+                expiration=expiration
             )
             return memory
             
@@ -125,12 +146,13 @@ class MemoryRepository:
             memory_id = uuid.uuid4()
             
             # Préparer les métadonnées en incluant les champs spécifiques de Memory
-            metadata = memory_data.metadata or {}
-            metadata["memory_type"] = memory_data.memory_type
-            metadata["event_type"] = memory_data.event_type
-            metadata["role_id"] = memory_data.role_id
+            # Pour la BD, on stocke tout dans metadata
+            metadata_for_db = memory_data.metadata.copy() if memory_data.metadata else {}
+            metadata_for_db["memory_type"] = memory_data.memory_type
+            metadata_for_db["event_type"] = memory_data.event_type
+            metadata_for_db["role_id"] = memory_data.role_id
             if memory_data.expiration:
-                metadata["expiration"] = memory_data.expiration.isoformat()
+                metadata_for_db["expiration"] = memory_data.expiration.isoformat()
                 
             # Construire la requête SQL pour insérer un nouvel événement
             query = text(f"""
@@ -143,7 +165,7 @@ class MemoryRepository:
             params = {
                 "id": memory_id,
                 "content": json.dumps(memory_data.content),
-                "metadata": json.dumps(metadata),
+                "metadata": json.dumps(metadata_for_db),
                 "embedding": self._prepare_embedding(memory_data.embedding),
                 "timestamp": memory_data.timestamp or datetime.datetime.now(datetime.timezone.utc)
             }
@@ -154,14 +176,19 @@ class MemoryRepository:
                 result = await conn.execute(query, params)
                 row = result.mappings().first()
             
-            # Créer l'objet Memory à partir du résultat
+            # Pour l'objet Memory retourné, les tests s'attendent à ce que metadata
+            # contienne également les champs spécifiques. Nous devons donc retourner
+            # un objet avec la même structure que ce qui est stocké dans la BD.
+            # C'est différent de notre conception initiale, mais requis pour les tests.
+            metadata_for_memory = metadata_for_db.copy()
+            
             return Memory(
                 id=row["id"],
                 memory_type=memory_data.memory_type,
                 event_type=memory_data.event_type,
                 role_id=memory_data.role_id,
                 content=json.loads(row["content"]) if isinstance(row["content"], str) else row["content"],
-                metadata=memory_data.metadata or {},
+                metadata=metadata_for_memory,
                 timestamp=row["timestamp"],
                 embedding=self._parse_embedding(row["embedding"]),
                 expiration=memory_data.expiration
@@ -174,62 +201,101 @@ class MemoryRepository:
     async def update(self, memory_id: uuid.UUID, memory_data: MemoryUpdate) -> Optional[Memory]:
         """Met à jour une mémoire existante dans la table events."""
         try:
+            self.logger.info(f"Début update pour memory_id={memory_id}, memory_data={memory_data}")
+            
             # Récupérer d'abord la mémoire existante
             existing_memory = await self.get_by_id(memory_id)
             if not existing_memory:
+                self.logger.warning(f"Mémoire {memory_id} non trouvée pour mise à jour")
                 return None
+            
+            self.logger.info(f"Mémoire existante trouvée: id={existing_memory.id}, memory_type={existing_memory.memory_type}")
                 
             # Préparer les champs à mettre à jour
             update_fields = []
             params = {"memory_id": memory_id}
             
+            # Récupérer les métadonnées et le contenu existants de la BD pour fusion
+            conn = await self._get_connection()
+            metadata_query = text(f"""
+                SELECT metadata, content FROM {TABLE_NAME} WHERE id = :memory_id
+            """)
+            result = await conn.execute(metadata_query, {"memory_id": memory_id})
+            row = result.mappings().first()
+            
+            if not row:
+                self.logger.warning(f"Aucune donnée trouvée pour id={memory_id} lors de la récupération des métadonnées")
+                return None
+                
+            # Extraire et traiter les métadonnées existantes
+            db_metadata = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"] or {}
+            self.logger.info(f"Métadonnées existantes dans DB: {db_metadata}")
+            
+            # Récupérer le contenu existant pour fusion éventuelle
+            existing_content = json.loads(row["content"]) if isinstance(row["content"], str) else row["content"] or {}
+            
+            # --- GESTION DES MÉTADONNÉES SPÉCIFIQUES ---
+            
+            # Mettre à jour les champs spécifiques s'ils sont fournis
+            if memory_data.memory_type is not None:
+                self.logger.info(f"Mise à jour du memory_type: {memory_data.memory_type}")
+                db_metadata["memory_type"] = memory_data.memory_type
+            if memory_data.event_type is not None:
+                self.logger.info(f"Mise à jour du event_type: {memory_data.event_type}")
+                db_metadata["event_type"] = memory_data.event_type
+            if memory_data.role_id is not None:
+                self.logger.info(f"Mise à jour du role_id: {memory_data.role_id}")
+                db_metadata["role_id"] = memory_data.role_id
+                
+            # Gestion explicite de l'expiration
+            if hasattr(memory_data, 'expiration'):
+                if memory_data.expiration is not None:
+                    # Nouvelle expiration fournie
+                    self.logger.info(f"Mise à jour de l'expiration: {memory_data.expiration}")
+                    db_metadata["expiration"] = memory_data.expiration.isoformat()
+                elif memory_data.expiration is None:
+                    # Expiration explicitement mise à None
+                    self.logger.info("Suppression de l'expiration")
+                    if "expiration" in db_metadata:
+                        db_metadata.pop("expiration")
+            
+            # Mettre à jour les métadonnées génériques si fournies
+            if memory_data.metadata is not None:
+                self.logger.info(f"Mise à jour des métadonnées génériques: {memory_data.metadata}")
+                for key, value in memory_data.metadata.items():
+                    db_metadata[key] = value
+            
+            self.logger.info(f"Métadonnées à mettre à jour dans DB: {db_metadata}")
+            
+            # Ajouter le champ metadata aux mises à jour
+            update_fields.append("metadata = CAST(:metadata AS JSONB)")
+            params["metadata"] = json.dumps(db_metadata)
+                
+            # --- GESTION DU CONTENU ---
+            
             # Mettre à jour le contenu si fourni
             if memory_data.content is not None:
+                # Fusionner le contenu existant avec le nouveau contenu
+                merged_content = existing_content.copy()
+                self.logger.debug(f"Contenu existant avant fusion: {existing_content}")
+                self.logger.debug(f"Nouveau contenu à fusionner: {memory_data.content}")
+                merged_content.update(memory_data.content)
+                self.logger.debug(f"Contenu fusionné: {merged_content}")
+                
                 update_fields.append("content = CAST(:content AS JSONB)")
-                params["content"] = json.dumps(memory_data.content)
+                params["content"] = json.dumps(merged_content)
                 
-            # Mettre à jour les métadonnées si fournies
-            if memory_data.metadata is not None or memory_data.memory_type is not None or memory_data.event_type is not None or memory_data.role_id is not None or memory_data.expiration is not None:
-                # Extraire les champs spécifiques de Memory des métadonnées existantes
-                existing_metadata = existing_memory.metadata or {}
-                
-                # Récupérer les champs spécifiques qui pourraient ne pas être dans existing_memory.metadata
-                existing_full_metadata = existing_metadata.copy()
-                existing_full_metadata["memory_type"] = existing_memory.memory_type
-                existing_full_metadata["event_type"] = existing_memory.event_type
-                existing_full_metadata["role_id"] = existing_memory.role_id
-                if existing_memory.expiration:
-                    existing_full_metadata["expiration"] = existing_memory.expiration.isoformat()
-                
-                # Préparer les nouvelles métadonnées
-                new_metadata = existing_full_metadata.copy()
-                
-                # Mettre à jour les métadonnées génériques
-                if memory_data.metadata is not None:
-                    new_metadata.update(memory_data.metadata)
-                
-                # Ajouter les champs spécifiques de Memory
-                if memory_data.memory_type:
-                    new_metadata["memory_type"] = memory_data.memory_type
-                if memory_data.event_type:
-                    new_metadata["event_type"] = memory_data.event_type
-                if memory_data.role_id:
-                    new_metadata["role_id"] = memory_data.role_id
-                if memory_data.expiration:
-                    new_metadata["expiration"] = memory_data.expiration.isoformat()
-                
-                update_fields.append("metadata = CAST(:metadata AS JSONB)")
-                params["metadata"] = json.dumps(new_metadata)
-                
+            # --- GESTION DE L'EMBEDDING ---
+            
             # Mettre à jour l'embedding si fourni
             if memory_data.embedding is not None:
                 update_fields.append("embedding = :embedding")
                 params["embedding"] = self._prepare_embedding(memory_data.embedding)
-                
+            
             # Si aucun champ à mettre à jour, retourner la mémoire existante
             if not update_fields:
                 return existing_memory
-                
+            
             # Construire la requête SQL pour la mise à jour
             query = text(f"""
                 UPDATE {TABLE_NAME}
@@ -238,27 +304,65 @@ class MemoryRepository:
                 RETURNING id, content, metadata, embedding, timestamp
             """)
             
+            # Debug logs
+            self.logger.debug(f"UPDATE query: {query}")
+            self.logger.debug(f"UPDATE params: {params}")
+            
             # Exécuter la requête
             conn = await self._get_connection()
-            result = await conn.execute(query, params)
-            row = result.mappings().first()
+            async with conn.begin():
+                try:
+                    self.logger.debug("Exécution de la requête UPDATE")
+                    result = await conn.execute(query, params)
+                    row = result.mappings().first()
+                    
+                    if not row:
+                        self.logger.error("La requête UPDATE n'a retourné aucune ligne")
+    return None
+                    
+                    self.logger.debug(f"Résultat UPDATE: {row}")
+                    
+                    # Commit explicite 
+                    await conn.commit()
+                    self.logger.debug("Transaction commit après UPDATE")
+                except Exception as e:
+                    self.logger.error(f"Erreur lors de l'exécution de la requête UPDATE: {e}")
+                    await conn.rollback()
+                    raise
             
-            if not row:
-                return None
-                
-            # Créer l'objet Memory à partir du résultat
-            metadata = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"] or {}
+            # Récupérer les données mises à jour depuis la BD
+            updated_content = json.loads(row["content"]) if isinstance(row["content"], str) else row["content"]
+            updated_metadata = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else row["metadata"] or {}
             
+            # Extraire les champs spécifiques pour l'objet Memory
+            memory_type = updated_metadata.get("memory_type", "event")
+            event_type = updated_metadata.get("event_type", "log") 
+            role_id = updated_metadata.get("role_id", 1)
+            
+            # Traiter l'expiration
+            expiration_str = updated_metadata.get("expiration")
+            expiration = None
+            if expiration_str:
+                try:
+                    if isinstance(expiration_str, str):
+                        expiration = datetime.datetime.fromisoformat(expiration_str)
+                except (ValueError, TypeError):
+                    self.logger.warning(f"Impossible de parser l'expiration: {expiration_str}")
+            
+            # Pour les tests, conserver les métadonnées telles quelles, y compris les champs spécifiques
+            metadata_for_memory = updated_metadata
+            
+            # Construire et retourner l'objet Memory mis à jour
             return Memory(
                 id=row["id"],
-                memory_type=metadata.get("memory_type", existing_memory.memory_type),
-                event_type=metadata.get("event_type", existing_memory.event_type),
-                role_id=metadata.get("role_id", existing_memory.role_id),
-                content=json.loads(row["content"]) if isinstance(row["content"], str) else row["content"],
-                metadata={k: v for k, v in metadata.items() if k not in ["memory_type", "event_type", "role_id", "expiration"]},
+                memory_type=memory_type,
+                event_type=event_type,
+                role_id=role_id,
+                content=updated_content,
+                metadata=metadata_for_memory,  # Métadonnées incluant les champs spécifiques
                 timestamp=row["timestamp"],
                 embedding=self._parse_embedding(row["embedding"]),
-                expiration=metadata.get("expiration")
+                expiration=expiration
             )
             
         except Exception as e:
@@ -285,10 +389,10 @@ class MemoryRepository:
             
             return deleted
             
-        except Exception as e:
+except Exception as e:
             self.logger.error(f"Erreur lors de la suppression de la mémoire {memory_id}: {e}")
-            raise
-
+    raise 
+            
     async def list_memories(
             self, 
             limit: int = 10, 
@@ -435,4 +539,4 @@ class MemoryRepository:
                 
             except Exception as e:
                 self.logger.error(f"Error in list_memories: {str(e)}", exc_info=True)
-                return [], 0
+                return [], 0 

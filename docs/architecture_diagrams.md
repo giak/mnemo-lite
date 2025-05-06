@@ -25,6 +25,7 @@ graph TD
     
     EP --> |Dépend de| ER
     EP --> |Dépend de| ES
+    EP --> |Dépend de| MR
     
     subgraph "Couche API"
         API
@@ -55,8 +56,8 @@ graph TD
     
     subgraph "Domaine (Core)"
         Interfaces[Protocoles/Interfaces]
-        MemoryService[Services de Mémoire]
-        EventService[Services d'Événements]
+        MemorySearchService[MemorySearchService]
+        EventProcessor[EventProcessor]
         NotificationService[Service de Notification]
     end
     
@@ -67,12 +68,12 @@ graph TD
     end
     
     RESTRoutes --> |Utilise| Interfaces
-    Interfaces --> MemoryService
-    Interfaces --> EventService
+    Interfaces --> MemorySearchService
+    Interfaces --> EventProcessor
     Interfaces --> NotificationService
     
-    MemoryService --> |Dépend de| Interfaces
-    EventService --> |Dépend de| Interfaces
+    MemorySearchService --> |Dépend de| Interfaces
+    EventProcessor --> |Dépend de| Interfaces
     NotificationService --> |Dépend de| Interfaces
     
     Interfaces --> EventRepo
@@ -103,6 +104,7 @@ flowchart TB
     
     GetEP --> |Depends| GetER
     GetEP --> |Depends| GetES
+    GetEP --> |Depends| GetMR
     
     GetEngine --> |Obtient depuis| AppState[Application State]
     
@@ -130,14 +132,16 @@ sequenceDiagram
     
     Client->>API: POST /events
     API->>EP: process_event(event)
-    EP->>ES: generate_embedding(event.content)
-    ES-->>EP: embedding
-    EP->>ER: update_metadata(event_id, enriched_metadata)
-    ER->>DB: UPDATE events SET metadata = ...
-    DB-->>ER: OK
-    ER-->>EP: Updated Event
-    EP-->>API: Enriched Metadata
-    API-->>Client: 201 Created
+    alt Event Lacks Embedding
+        EP->>ES: generate_embedding(event.content)
+        ES-->>EP: embedding
+        EP->>ER: update_metadata(event_id, {**metadata, "has_embedding": True})
+        ER->>DB: UPDATE events SET metadata = ..., embedding = ...
+        DB-->>ER: OK
+        ER-->>EP: Updated EventModel (potentially)
+    end
+    EP-->>API: Enriched Metadata (or original)
+    API-->>Client: 201 Created (original event response)
 ```
 
 ## Flux de Recherche de Mémoires
@@ -149,28 +153,27 @@ sequenceDiagram
     participant MS as MemorySearchService
     participant ES as EmbeddingService
     participant ER as EventRepository
-    participant MR as MemoryRepository
     participant DB as PostgreSQL
     
-    Client->>API: GET /search/similarity
-    API->>MS: search_by_similarity(query, limit)
+    Client->>API: GET /search/?vector_query=text...
+    API->>MS: search_hybrid(query=text, ...)
     MS->>ES: generate_embedding(query)
     ES-->>MS: query_embedding
-    MS->>ER: search_by_embedding(query_embedding, limit)
+    MS->>ER: search_vector(vector=query_embedding, ...)
     ER->>DB: SELECT ... ORDER BY embedding <-> vector_query
-    DB-->>ER: Events
-    ER-->>MS: Similar Events
-    MS-->>API: Memory Results
-    API-->>Client: 200 OK (Memories)
+    DB-->>ER: Event Records
+    ER-->>MS: Tuple[List[EventModel], int]
+    MS-->>API: SearchResponse{ data: List[EventModel], meta: ...}
+    API-->>Client: 200 OK (EventModel list)
     
-    Client->>API: GET /search/metadata
-    API->>MS: search_by_metadata(metadata_filter, limit)
-    MS->>MR: list_memories(metadata_filter, limit)
-    MR->>DB: SELECT ... WHERE metadata @> filter
-    DB-->>MR: Matching Records
-    MR-->>MS: Matching Memories
-    MS-->>API: Memory Results
-    API-->>Client: 200 OK (Memories)
+    Client->>API: GET /search/?filter_metadata=...
+    API->>MS: search_hybrid(metadata_filter=..., ...)
+    MS->>ER: search_vector(metadata=..., ...)
+    ER->>DB: SELECT ... WHERE metadata @> filter
+    DB-->>ER: Event Records
+    ER-->>MS: Tuple[List[EventModel], int]
+    MS-->>API: SearchResponse{ data: List[EventModel], meta: ...}
+    API-->>Client: 200 OK (EventModel list)
 ```
 
 ## Relations Entre Modèles
@@ -194,38 +197,21 @@ classDiagram
     }
     
     class Memory {
-        +str id
-        +datetime timestamp
-        +str memory_type
-        +str event_type
-        +int role_id
-        +Dict content
-        +Dict metadata
-        +datetime expiration
+        <<Derived>>
+        +memory_type: str
+        +event_type: str
+        +role_id: int
+        +expiration: datetime
+        +id: UUID
+        +timestamp: datetime
+        +content: Dict
+        +metadata: Dict
+        +embedding: List[float]
+        +similarity_score: float
     }
     
-    class MemoryCreate {
-        +str memory_type
-        +str event_type
-        +int role_id
-        +Dict content
-        +Dict metadata
-        +datetime expiration
-    }
-    
-    class MemoryUpdate {
-        +str memory_type
-        +str event_type
-        +int role_id
-        +Dict content
-        +Dict metadata
-        +datetime expiration
-    }
-    
-    EventCreate --|> EventModel: creates
-    MemoryCreate --|> Memory: creates
-    MemoryUpdate --|> Memory: updates
-    EventModel --|> Memory: can generate
+    EventCreate --|> EventModel : "Input for creation"
+    EventModel ..|> Memory : "Can be represented as"
 ```
 
 ## Protocoles et Implémentations
@@ -238,8 +224,8 @@ classDiagram
         +get_by_id(event_id: UUID) EventModel
         +update_metadata(event_id: UUID, metadata: Dict) EventModel
         +delete(event_id: UUID) bool
-        +search_by_embedding(embedding: List[float], limit: int) List[EventModel]
         +filter_by_metadata(metadata_filter: Dict, limit: int, offset: int) List[EventModel]
+        +search_vector(vector, metadata, ts_start, ts_end, limit, offset, distance_threshold) Tuple[List[EventModel], int]
     }
     
     class MemoryRepositoryProtocol {
@@ -248,36 +234,34 @@ classDiagram
         +get_by_id(memory_id: UUID) Memory
         +update(memory_id: UUID, memory_update: MemoryUpdate) Memory
         +delete(memory_id: UUID) bool
-        +list_memories(limit: int, offset: int, metadata_filter: Dict) List[Memory]
+        +list_memories(limit, skip, memory_type, event_type, role_id, session_id, metadata_filter, ts_start, ts_end, offset) tuple[List[Memory], int]
+        +search_by_embedding(embedding, limit, skip, ts_start, ts_end) tuple[List[Memory], int]
     }
     
     class EmbeddingServiceProtocol {
         <<interface>>
         +generate_embedding(text: str) List[float]
-        +compute_similarity(embedding1: List[float], embedding2: List[float]) float
+        +compute_similarity(item1: Union[str, List[float]], item2: Union[str, List[float]]) float
     }
     
     class MemorySearchServiceProtocol {
         <<interface>>
         +search_by_content(query: str, limit: int) List[Memory]
-        +search_by_metadata(metadata_filter: Dict, limit: int) List[Memory]
-        +search_by_similarity(query: str, limit: int) List[Memory]
+        +search_by_metadata(metadata_filter: Dict, limit: int, offset: int, ts_start: datetime, ts_end: datetime) List[Memory]
+        +search_by_similarity(query: str, limit: int, offset: int, ts_start: datetime, ts_end: datetime) List[Memory]
+        +search_hybrid(query, metadata_filter, ts_start, ts_end, limit, offset, distance_threshold) Tuple[List[EventModel], int]
     }
     
-    class EventProcessor {
-        +event_repository: EventRepositoryProtocol
-        +embedding_service: EmbeddingServiceProtocol
-        +process_event(event: EventModel) Dict
-        +generate_memory_from_event(event: EventModel) Memory
+    class EventProcessorProtocol {
+        <<interface>>
+        +process_event(event: EventModel) Dict[str, Any]
+        +generate_memory_from_event(event: EventModel) Optional[Memory]
     }
     
-    class NotificationService {
-        +smtp_host: str
-        +smtp_port: int
-        +smtp_user: str
-        +smtp_password: str
-        +send_notification(user_id: str, message: str, metadata: Dict) bool
-        +broadcast_notification(message: str, user_ids: List[str]) Dict[str, bool]
+    class NotificationServiceProtocol {
+        <<interface>>
+        +send_notification(user_id: str, message: str, metadata: Optional[Dict[str, Any]]) bool
+        +broadcast_notification(message: str, user_ids: Optional[List[str]]) Dict[str, bool]
     }
     
     EventRepositoryProtocol <|.. EventRepository: implements
@@ -294,24 +278,27 @@ classDiagram
 erDiagram
     EVENTS {
         uuid id PK
-        timestamp timestamp
+        timestamp timestamp PK
         jsonb content
         jsonb metadata
         vector embedding
     }
     
     NODES {
-        uuid id PK
+        uuid node_id PK
+        text node_type
         text label
         jsonb properties
+        timestamp created_at
     }
     
     EDGES {
-        uuid id PK
-        uuid source_id FK
-        uuid target_id FK
-        text label
+        uuid edge_id PK
+        uuid source_node_id FK
+        uuid target_node_id FK
+        text relation_type
         jsonb properties
+        timestamp created_at
     }
     
     NODES ||--o{ EDGES : "source"

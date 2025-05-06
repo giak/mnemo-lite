@@ -4,7 +4,7 @@
 **Date**: 2025-04-27
 
 ## 1. Vue d'ensemble
-MnemoLite adopte une architecture **CQRS cognitive et modulaire**, optimisée pour un déploiement local. Elle repose **exclusivement sur PostgreSQL 17** avec ses extensions pour gérer les aspects relationnels, vectoriels (`pgvector`), le partitionnement temporel (`pg_partman`), les tâches asynchrones (`pgmq` optionnel) et le graphe relationnel (tables + CTE).
+MnemoLite adopte une architecture **CQRS cognitive et modulaire**, optimisée pour un déploiement local. Elle repose **exclusivement sur PostgreSQL 17** avec ses extensions pour gérer les aspects relationnels, vectoriels (`pgvector`), le partitionnement temporel (`pg_partman`), les tâches asynchrones (`pgmq` optionnel via lib Python) et le graphe relationnel (tables + CTE).
 L'interface utilisateur Web utilise **FastAPI + HTMX** pour une expérience réactive sans SPA complexe.
 
 ---
@@ -15,9 +15,9 @@ L'interface utilisateur Web utilise **FastAPI + HTMX** pour une expérience réa
 ```mermaid
 flowchart TD
   CLI_API["CLI/API REST (FastAPI)"] --> WriteHandler["Write Handler"]
-  WriteHandler --> Queue["pgmq Queue (Optionnel, découplage)"]
-  Queue --> Worker["Ingestion Worker"]
-  WriteHandler --> DirectWrite["Write Directe (si pas de pgmq)"]
+  WriteHandler --> Queue["pgmq Queue (Optionnel, via tembo-pgmq-python)"]
+  Queue --> Worker["Ingestion/Async Worker"]
+  WriteHandler --> DirectWrite["Write Directe (API -> Repo -> DB)"]
   
   subgraph PostgreSQL_17 ["(PostgreSQL 17)"]
     direction LR
@@ -34,12 +34,12 @@ flowchart TD
   DirectWrite --> PG_Embeddings
   DirectWrite --> PG_Graph
 ```
-*Note: L'utilisation de `pgmq` et d'un worker est optionnelle pour un déploiement local simple, l'écriture peut être directe.* 
+*Note: L'utilisation de `pgmq` et d'un worker est optionnelle pour un découplage asynchrone, l'écriture peut être directe depuis l'API via les repositories.* 
 
 ### Query Side (Lecture)
 ```mermaid
 flowchart TD
-  UI["HTMX/Jinja2 UI"] --> FastAPI_Query["FastAPI Query Handler"]
+  UI["HTMX/Jinja2 UI"] --> FastAPI_Query["FastAPI Query Handler (Routes -> Services -> Repositories)"]
   
   subgraph PostgreSQL_17 ["(PostgreSQL 17)"]
      direction LR
@@ -52,13 +52,13 @@ flowchart TD
   FastAPI_Query --> PG_SQLSearch
   FastAPI_Query --> PG_GraphSearch
 
-  PG_VectorSearch --> Fusion["Fusion & Ranking"]
+  PG_VectorSearch --> Fusion["Fusion & Ranking (in Service/Repo)"]
   PG_SQLSearch --> Fusion
   PG_GraphSearch --> Fusion
   
   Fusion --> UI
 ```
-*Toutes les recherches (vectorielle, SQL, graphe) sont effectuées directement dans PostgreSQL.* 
+*Toutes les recherches (vectorielle, SQL, graphe) sont initiées par l'API et exécutées via les repositories directement dans PostgreSQL.* 
 
 ---
 
@@ -66,66 +66,77 @@ flowchart TD
 
 ### Table `events`
 ```sql
-CREATE TABLE events (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  -- expiration TIMESTAMPTZ, -- Remplacé par partitionnement/TTL
-  memory_type TEXT, -- Référence à une table `memory_types` si nécessaire
-  event_type TEXT,  -- Référence à une table `event_types` si nécessaire
-  -- role_id INTEGER, -- Simplifié, peut être dans metadata
-  content JSONB NOT NULL, -- Contenu principal de l'événement
-  embedding VECTOR(1536), -- Stockage direct du vecteur
-  metadata JSONB DEFAULT '{}' -- Tags, sources, IDs externes, etc.
-) PARTITION BY RANGE (timestamp);
+-- Aligned with docs/bdd_schema.md v1.2.x
+CREATE TABLE IF NOT EXISTS events (
+    id          UUID NOT NULL DEFAULT gen_random_uuid(),
+    timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    content     JSONB NOT NULL,             -- Contenu flexible: { "type": "prompt", ... } ou { "type": "decision", ... }
+    embedding   VECTOR(1536),               -- Embedding (ex: text-embedding-3-small)
+    metadata    JSONB DEFAULT '{}'::jsonb,  -- Tags, source, IDs, types, etc.
+    -- Clé primaire composite, incluant la clé de partitionnement
+    PRIMARY KEY (id, timestamp)
+)
+PARTITION BY RANGE (timestamp);
 
--- Index principal pour recherche temporelle (automatique sur partition)
--- CREATE INDEX ON events(timestamp);
+COMMENT ON TABLE events IS 'Table principale stockant tous les evenements atomiques (partitionnee par mois sur timestamp).';
+COMMENT ON COLUMN events.content IS 'Contenu detaille de l evenement au format JSONB.';
+COMMENT ON COLUMN events.embedding IS 'Vecteur semantique du contenu (dimension 1536 pour text-embedding-3-small).';
+COMMENT ON COLUMN events.metadata IS 'Metadonnees additionnelles (tags, IDs, types) au format JSONB.';
 
--- Index HNSW pour recherche vectorielle (sur chaque partition)
--- DO $$ BEGIN
---   EXECUTE format('CREATE INDEX ON %I USING hnsw (embedding vector_cosine_ops)', 'events_pYYYY_MM'); 
--- END $$;
--- (Nécessite gestion dynamique via pg_partman hooks ou manuelle)
+-- Index B-tree sur timestamp (clé de partitionnement), hérité par les partitions
+CREATE INDEX IF NOT EXISTS events_timestamp_idx ON events (timestamp);
 
--- Index sur metadonnées fréquentes
-CREATE INDEX events_metadata_gin_idx ON events USING GIN (metadata jsonb_path_ops);
--- Ou index spécifiques si certains chemins sont très utilisés:
--- CREATE INDEX ON events ((metadata->>'rule_id'));
+-- Index GIN sur metadata pour recherches flexibles, hérité par les partitions
+CREATE INDEX IF NOT EXISTS events_metadata_gin_idx ON events USING GIN (metadata jsonb_path_ops);
+
+-- NOTE IMPORTANTE sur l'index vectoriel (HNSW/IVFFlat):
+-- Il DOIT etre cree sur chaque partition individuelle, PAS sur la table mere.
+-- Ceci est generalement gere via des hooks pg_partman ou des scripts de maintenance.
+-- Exemple pour une partition 'events_pYYYY_MM':
+-- CREATE INDEX CONCURRENTLY IF NOT EXISTS events_pYYYY_MM_embedding_hnsw_idx
+-- ON events_pYYYY_MM USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 ```
 *Note: La gestion des index HNSW sur les partitions nécessite une attention particulière (ex: via les fonctions hook de `pg_partman`).* 
 
 ### Tables `nodes` et `edges` (pour le graphe)
 ```sql
-CREATE TABLE nodes (
-    node_id UUID PRIMARY KEY, -- Peut être event.id ou un ID dédié
-    node_type TEXT NOT NULL, -- Ex: 'event', 'concept', 'entity'
-    label TEXT,             -- Nom lisible
-    properties JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ DEFAULT NOW()
+-- Aligned with docs/bdd_schema.md v1.2.x
+CREATE TABLE IF NOT EXISTS nodes (
+    node_id         UUID PRIMARY KEY, -- Generalement un event.id, mais peut etre autre chose (concept genere)
+    node_type       TEXT NOT NULL,    -- Ex: 'event', 'concept', 'entity', 'rule', 'document'
+    label           TEXT,             -- Nom lisible pour affichage/requete
+    properties      JSONB DEFAULT '{}'::jsonb, -- Attributs additionnels du nœud
+    created_at      TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX ON nodes(node_type);
+COMMENT ON TABLE nodes IS 'Noeuds du graphe conceptuel (evenements, concepts, entites).';
 
-CREATE TABLE edges (
-    edge_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_node_id UUID NOT NULL, -- Reference logique nodes.node_id
-    target_node_id UUID NOT NULL, -- Reference logique nodes.node_id
-    relation_type TEXT NOT NULL, -- Ex: 'causes', 'mentions', 'related_to'
-    properties JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ DEFAULT NOW()
+CREATE INDEX IF NOT EXISTS nodes_type_idx ON nodes(node_type);
+
+CREATE TABLE IF NOT EXISTS edges (
+    edge_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_node_id  UUID NOT NULL, -- Reference logique nodes.node_id
+    target_node_id  UUID NOT NULL, -- Reference logique nodes.node_id
+    relation_type   TEXT NOT NULL, -- Ex: 'causes', 'mentions', 'related_to', 'follows', 'uses_tool', 'part_of'
+    properties      JSONB DEFAULT '{}'::jsonb, -- Poids, timestamp de la relation, etc.
+    created_at      TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX ON edges(source_node_id);
-CREATE INDEX ON edges(target_node_id);
-CREATE INDEX ON edges(relation_type);
+COMMENT ON TABLE edges IS 'Relations (aretes) entre les noeuds du graphe conceptuel.';
+COMMENT ON COLUMN edges.source_node_id IS 'ID du noeud source (pas de FK physique).';
+COMMENT ON COLUMN edges.target_node_id IS 'ID du noeud cible (pas de FK physique).';
+
+CREATE INDEX IF NOT EXISTS edges_source_idx ON edges(source_node_id);
+CREATE INDEX IF NOT EXISTS edges_target_idx ON edges(target_node_id);
+CREATE INDEX IF NOT EXISTS edges_relation_type_idx ON edges(relation_type);
 ```
 *Note: La création des nœuds et des arêtes est gérée par la logique applicative. Pas de contraintes FK physiques sur edges pour flexibilité; cohérence gérée par l'application ou des checks périodiques.*
 
 ### Autres tables (optionnelles)
-*   `memory_types`, `event_types` : Pour standardiser les types via clés étrangères.
-*   Tables de configuration.
+*   `memory_types`, `event_types` : Pourraient être créées pour standardiser les types via clés étrangères si le besoin se confirme (actuellement géré via `metadata`).
+*   Tables de configuration (si la configuration via `.env` n'est pas suffisante).
 
 ### Partitionnement Mensuel avec `pg_partman`
 *   La table `events` est partitionnée par `RANGE` sur `timestamp`.
-*   `pg_partman` est configuré pour créer automatiquement les partitions mensuelles (ex: `events_p2025_05`).
+*   `pg_partman` est configuré (`db/init/02-partman-config.sql`) pour créer automatiquement les partitions mensuelles (ex: `events_p2025_05`).
 *   Une politique de rétention (`retention` dans `part_config`) peut être définie pour supprimer/détacher automatiquement les vieilles partitions (alternative au TTL par colonne).
 
 ---
@@ -133,14 +144,14 @@ CREATE INDEX ON edges(relation_type);
 ## 4. Index vectoriel (`pgvector`)
 *   **Stockage :** Directement dans la colonne `embedding VECTOR(1536)` de la table `events` (ou ses partitions).
 *   **Index :** **HNSW** (`USING hnsw`) est recommandé pour l'équilibre vitesse/précision. `vector_cosine_ops` ou `vector_l2_ops` selon la métrique de distance utilisée par le modèle d'embedding.
-*   **Gestion sur partitions :** L'index HNSW doit être créé sur chaque partition. L'utilisation des fonctions `run_maintenance_proc()` de `pg_partman` avec des scripts personnalisés est la méthode recommandée pour automatiser la création/maintenance des index sur les nouvelles partitions.
-*   **Recherche :** Utilisation des opérateurs `<->` (distance L2), `<#>` (produit scalaire négatif), ou `<=>` (distance cosinus) dans les requêtes SQL.
+*   **Gestion sur partitions :** L'index HNSW doit être créé sur **chaque partition**. L'utilisation des fonctions `run_maintenance_proc()` de `pg_partman` avec des scripts personnalisés ou des fonctions trigger est la méthode recommandée pour automatiser la création/maintenance des index sur les nouvelles partitions.
+*   **Recherche :** Utilisation des opérateurs `<->` (distance L2), `<#>` (produit scalaire négatif), ou `<=>` (distance cosinus) dans les requêtes SQL via les méthodes du repository.
 
 ---
 
 ## 5. Graphe mnésique (Tables + CTE SQL)
 *   **Modèle :** Graphe de propriétés stocké dans les tables `nodes` et `edges`.
-*   **Création :** La logique applicative identifie les entités ou concepts dans les `events` et crée/lie les nœuds et arêtes correspondants.
+*   **Création :** La logique applicative (potentiellement dans un service ou worker dédié) identifie les entités ou concepts dans les `events` et crée/lie les nœuds et arêtes correspondants.
 *   **Interrogation :** Utilisation de **Common Table Expressions (CTE) récursives** en SQL pour explorer les relations sur une profondeur limitée (cible ≤ 3 sauts pour performance locale).
     ```sql
     -- Exemple : Trouver les événements causés par event_X (max 3 sauts)
@@ -200,20 +211,19 @@ flowchart LR
   class WarmPartitions,P_M13,P_M14,P_Mdots2 warm;
 ```
 *   **Auditabilité :** Via logs applicatifs et potentiellement triggers PG sur modifications.
-*   **Monitoring Local :** Focus sur les logs PostgreSQL, `pg_stat_statements`, `pg_stat_activity`, et les outils système (`htop`, `iotop`).
+*   **Monitoring Local :** Focus sur les logs PostgreSQL, `pg_stat_statements`, `pg_stat_activity`, et les outils système (`htop`, `iotop`). Option via endpoint `/metrics` Prometheus.
 
 ---
 
 ## 7. Déploiement (Docker Compose Local)
 ```yaml
 # Extrait simplifié et aligné sur le docker-compose.yml réel
+# Voir docs/docker_setup.md pour la version complète et commentée
 version: '3.8'
 
 services:
   db:
-    build:
-      context: ./db
-      dockerfile: Dockerfile # Contient FROM pgvector/pgvector:pg17 et installe partman
+    build: ./db # Contient FROM pgvector/pgvector:pg17 et installe partman
     container_name: mnemo-postgres
     restart: unless-stopped
     environment:
@@ -230,9 +240,7 @@ services:
     # ... autres configs (command, shm_size, networks, logging)
 
   api:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
+    build: .
     container_name: mnemo-api
     restart: unless-stopped
     ports:
@@ -249,9 +257,7 @@ services:
     # ... autres configs (networks, logging, healthcheck)
 
   worker:
-    build:
-      context: .
-      dockerfile: workers/Dockerfile
+    build: .
     container_name: mnemo-worker
     restart: unless-stopped
     environment:
@@ -268,12 +274,11 @@ services:
 volumes:
   postgres_data:
 
-networks: # Définis dans le fichier réel (frontend, backend)
-  # ...
+networks:
+  # ... (frontend, backend)
 
 ```
-*Note : L'image Docker PostgreSQL doit inclure les extensions `pgvector`, `pg_partman`, `pgmq` ou celles-ci doivent être installées via un script d'initialisation.* 
-*Note : Le service `db` utilise une image buildée (`db/Dockerfile`) qui installe `pgvector` (via l'image de base) et `pg_partman`. `pgmq` est une dépendance Python (`tembo-pgmq-python`) utilisée par le worker, pas une extension PG à installer ici.*
+*Note : L'image Docker PostgreSQL (`db/Dockerfile`) doit inclure les extensions `pgvector` et `pg_partman`. `pgmq` est une dépendance Python (`tembo-pgmq-python`) utilisée par le worker, pas une extension PG à installer ici.*
 
 ---
 
@@ -287,7 +292,7 @@ networks: # Définis dans le fichier réel (frontend, backend)
 | Performance locale dégrade    | Moyen    | Monitoring PG stats, optimisation conf |
 | Gestion index sur partitions  | Moyen    | Automatisation via `pg_partman` hooks |
 | Espace disque local insuffisant| Moyen    | Politique de rétention `pg_partman` agressive |
-+| `pg_cron` non activé/configuré | Moyen    | Ajouter procédure d'activation/test |
+| `pg_cron` non activé/configuré | Moyen    | Ajouter procédure d'activation/test |
 
 ---
 
@@ -301,7 +306,7 @@ networks: # Définis dans le fichier réel (frontend, backend)
 
 ---
 
-## 10. Structure du projet (Simplifiée)
+## 10. Structure du projet (Alignée)
 ```
 mnemo-lite/
 ├── api/                # Code FastAPI (inclut /templates pour HTMX et /services, /routes, /models)
@@ -309,11 +314,11 @@ mnemo-lite/
 │   ├── requirements.txt
 │   ├── main.py
 │   ├── dependencies.py
-│   ├── config/
-│   ├── db/             # Logique DB spécifique API (repositories?)
+│   ├── db/             # Repositories SQLAlchemy Core
+│   ├── interfaces/     # Interfaces (protocoles)
 │   ├── models/
 │   ├── routes/
-│   ├── services/       # Potentiellement ici ou intégré ailleurs
+│   ├── services/
 │   └── templates/      # Templates Jinja2/HTMX
 ├── db/                 # Configuration et initialisation PostgreSQL
 │   ├── Dockerfile
@@ -321,9 +326,9 @@ mnemo-lite/
 ├── workers/            # Workers asynchrones (ex: ingestion, PGMQ consumers)
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── worker.py
-│   ├── ingestion.py    # Exemple de worker
-│   └── config/
+│   ├── worker.py       # Potentiel point d'entrée
+│   ├── tasks/          # Logique des tâches
+│   └── config/         # Configuration spécifique worker (si besoin, sinon via env)
 ├── docs/               # Documentation (PFD, PRD, ARCH...)
 ├── scripts/            # Utilitaires (seed data, bench)
 ├── tests/              # Tests automatisés (pytest)
@@ -335,7 +340,7 @@ mnemo-lite/
 └── README.md
 ```
 *Note: Le worker de synchronisation PG->Chroma (`sync.py`) n'est plus nécessaire.* 
-*Note: Structure basée sur les listings et les conventions FastAPI/Docker. L'ancienne `ui/` est intégrée dans `api/templates/`.*
+*Note: Structure basée sur les listings et les conventions FastAPI/Docker. L'ancienne `ui/` est intégrée dans `api/templates/`. `api/db` contient les repositories.*
 
 ---
 
@@ -353,7 +358,7 @@ mnemo-lite/
 ---
 
 ## 13. Documentation associée
-*Vérifier et mettre à jour les documents dans `docs/` (ex: `API.md`, `SCHEMA.md` si existants) pour refléter l'architecture 100% PostgreSQL, PGMQ, etc.* 
+*Vérifier et mettre à jour les documents dans `docs/` (ex: `Specification_API.md`, `bdd_schema.md`) pour refléter l'architecture 100% PostgreSQL, PGMQ, etc.*
 
 ---
 
@@ -362,7 +367,7 @@ mnemo-lite/
 
 ---
 
-**Version**: 1.1.0
-**Dernière mise à jour**: 2025-04-26
+**Version**: 1.1.1
+**Dernière mise à jour**: 2025-04-27
 **Auteur**: Giak
 

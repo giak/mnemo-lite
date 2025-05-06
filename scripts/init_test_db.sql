@@ -1,6 +1,24 @@
 -- scripts/init_test_db.sql
 -- Combined script to initialize the test database (mnemolite_test)
 
+BEGIN; -- Start transaction
+
+-- 0a. Clean up previous partman config for the table if it exists
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM partman.part_config WHERE parent_table = 'public.events') THEN
+        RAISE NOTICE 'Deleting existing pg_partman config for public.events...';
+        DELETE FROM partman.part_config WHERE parent_table = 'public.events';
+        RAISE NOTICE 'Deleted existing pg_partman config for public.events.';
+    ELSE
+        RAISE NOTICE 'No existing pg_partman config found for public.events.';
+    END IF;
+END;
+$$;
+
+-- 0b. Force drop existing events table to ensure schema update
+DROP TABLE IF EXISTS public.events CASCADE;
+
 -- 1. Extensions (from 01-extensions.sql and 01-init.sql)
 CREATE EXTENSION IF NOT EXISTS pgcrypto; -- Pour gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -28,6 +46,9 @@ CREATE TABLE IF NOT EXISTS public.events (
     metadata    JSONB DEFAULT '{}'::jsonb,
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
+
+-- Ensure the embedding column has the correct dimension, even if table already existed
+ALTER TABLE public.events ALTER COLUMN embedding TYPE vector(1536);
 
 -- Create indexes on the parent table (will be inherited)
 CREATE INDEX IF NOT EXISTS events_metadata_gin_idx ON public.events USING GIN (metadata jsonb_path_ops);
@@ -60,4 +81,18 @@ $$;
 -- Note: Vector indexes on partitions are NOT created here.
 -- They should be created MANUALLY in tests if needed for specific performance tests,
 -- or the test data generation logic should handle it.
--- For functional tests, they are usually not strictly required. 
+-- For functional tests, they are usually not strictly required.
+
+-- Index IVFFLAT pour la recherche vectorielle (exemple, adapter selon besoin)
+-- Le nombre de listes est une suggestion, à ajuster selon la taille des données
+CREATE INDEX IF NOT EXISTS idx_events_embedding_ivfflat 
+ON public.events 
+USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
+
+-- Note: Pour des performances optimales, envisagez HNSW pour les grands datasets:
+-- CREATE INDEX idx_events_embedding_hnsw ON events USING hnsw (embedding vector_l2_ops); 
+
+COMMIT; -- Commit transaction
+
+-- Note: Pour des performances optimales, envisagez HNSW pour les grands datasets:
+-- CREATE INDEX idx_events_embedding_hnsw ON events USING hnsw (embedding vector_l2_ops); 

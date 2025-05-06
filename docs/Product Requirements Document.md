@@ -85,12 +85,12 @@ MnemoLite doit être intégrable dans Expanse via scripts Python appelés par de
 
 ## 8. Livrables associés
 - Scripts d'initialisation DB (`db/init/*.sql`)
-- Script de données de test (`scripts/seed.py` ou similaire)
+- Script de données de test (`scripts/generate_test_data.py` ou `test_memory_api.sh`)
 - API FastAPI (`api/main.py`)
 - Templates HTMX (`api/templates/*.html`)
 - Workers Python (`workers/*.py` pour ingestion/tâches asynchrones via PGMQ)
 - Configuration `pg_cron` (SQL ou via outil d'admin) pour maintenance (quantization, etc.)
-- Documentation : `README.md` + fichiers dans `docs/` (vérifier noms exacts : `API.md`, `ARCHITECTURE.md`, `SCHEMA.md` etc.)
+- Documentation : `README.md` + fichiers dans `docs/` (`docs/Specification_API.md`, `docs/ARCHITECTURE.md`, `docs/bdd_schema.md`, `docs/docker_setup.md` etc.)
 
 ## 9. Installation et environnement
 
@@ -129,16 +129,15 @@ mnemo-lite/
 ```
 
 ### 9.4 Configuration et personnalisation
-- `.env` : Paramètres connexions, clés API, options
-- `config/app.yaml` : Configuration applicative
-- `scripts/seed.py` : Données de test
+- `.env` : Fichier principal pour les paramètres de connexions, clés API optionnelles, et variables d'environnement (ex: `ENVIRONMENT`).
+- `scripts/generate_test_data.py` ou `test_memory_api.sh` : Pour la génération ou l'injection de données de test.
 
 ### 9.5 Tests et vérification
 
 La vérification du déploiement peut être effectuée avec:
 ```bash
 make test-install   # Vérifie l'installation
-make test-e2e       # Exécute les tests end-to-end
+make test-e2e       # Exécute les tests end-to-end (si définis, ex: via test_memory_api.sh)
 make metrics        # Affiche les métriques de performance (basé sur les stats PG)
 ```
 
@@ -147,11 +146,12 @@ make metrics        # Affiche les métriques de performance (basé sur les stats
 ### 10.1 Documentation utilisateur
 - `README.md` : Vue d'ensemble et démarrage rapide
 - `docs/USER.md` : Guide d'utilisation détaillé
-- `docs/API.md` : Documentation complète de l'API REST
+- `docs/Specification_API.md` : Documentation complète de l'API REST (remplace `API.md`)
 
 ### 10.2 Documentation technique
-- `docs/ARCHITECTURE.md` : Architecture détaillée
-- `docs/SCHEMA.md` : Schéma de base de données
+- `docs/ARCHITECTURE.md` : Architecture détaillée (peut être complété par PFD et docker_setup)
+- `docs/bdd_schema.md` : Schéma de base de données (remplace `SCHEMA.md`)
+- `docs/docker_setup.md` : Configuration et explication de l'environnement Docker.
 - `docs/DEV.md` : Guide développeur
 - `docs/INTEGRATION.md` : Guide d'intégration à Expanse
 

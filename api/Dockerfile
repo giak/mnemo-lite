@@ -47,6 +47,8 @@ COPY requirements-dev.txt .
 RUN pip install --no-cache --no-index --find-links=/wheels -r requirements.txt
 # Install dev requirements separately
 RUN pip install --no-cache -r requirements-dev.txt
+# Install linting tools
+RUN pip install --no-cache-dir black flake8 pylint autopep8
 
 # Copy application code - Ensure it goes into an /app/api subdirectory
 COPY api/ /app/api/

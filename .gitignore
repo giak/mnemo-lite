@@ -4,3 +4,6 @@
 .DS_Store
 .env
 .env.production
+# SpecStory explanation file
+.specstory/
+.specstory/.what-is-this.md

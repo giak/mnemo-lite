@@ -1,7 +1,7 @@
 # Load .env file if it exists to potentially override defaults
 -include .env
 
-.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore api-shell api-test api-test-file api-test-one api-coverage api-debug worker-shell certs help db-create-test db-fill-test db-test-reset api-test-reset
+.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore api-shell api-test api-test-file api-test-one api-coverage api-debug worker-shell certs help db-create-test db-fill-test db-test-reset api-test-reset lint lint-fix
 
 # Variables
 COMPOSE_FILE := docker-compose.yml
@@ -148,6 +148,17 @@ certs:
 benchmark:
 	docker compose -f $(COMPOSE_FILE) exec -w /app api python -m scripts.benchmarks.run_benchmark
 
+# Commandes pour le linting
+lint:
+	@echo "Linting Python code..."
+	docker compose -f $(COMPOSE_FILE) exec -w /app api flake8 .
+
+lint-fix:
+	@echo "Auto-formatting Python code..."
+	docker compose -f $(COMPOSE_FILE) exec -w /app api black .
+	@echo "Running autopep8 for additional fixes..."
+	docker compose -f $(COMPOSE_FILE) exec -w /app api autopep8 --in-place --aggressive --aggressive .
+
 # Aide
 help:
 	@echo "Usage:"
@@ -188,6 +199,10 @@ help:
 	@echo "Worker:"
 	@echo "  make worker-shell    - Connect to worker container shell"
 	@echo "  make worker-run task=<module> - Run specific worker task"
+	@echo ""
+	@echo "Linting:"
+	@echo "  make lint            - Check code with flake8"
+	@echo "  make lint-fix        - Format code with black and autopep8"
 	@echo ""
 	@echo "Utils:"
 	@echo "  make certs           - Generate self-signed certificates"

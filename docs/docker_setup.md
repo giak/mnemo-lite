@@ -60,10 +60,9 @@ graph TD
 
 ```yaml
 # Extrait simplifié et aligné sur le docker-compose.yml réel
-# (Identique à celui dans docs/Document Architecture.md)
-version: '3.8'
+version: '3.8' # Top-level version
 
-x-logging: &default-logging # Optionnel: Configuration centralisée des logs
+x-logging: &default-logging
   driver: "json-file"
   options:
     max-size: "10m"
@@ -76,32 +75,41 @@ services:
       dockerfile: Dockerfile # Contient FROM pgvector/pgvector:pg17 et installe partman
     container_name: mnemo-postgres
     restart: unless-stopped
+    deploy: # Section deploy ajoutée
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-mnemo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mnemopass}
       POSTGRES_DB: ${POSTGRES_DB:-mnemolite}
+      POSTGRES_INITDB_ARGS: "--data-checksums" # Ajouté
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro # Scripts init SQL
+      - ./db/scripts:/app/scripts:ro # Volume ajouté
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
-    healthcheck: # Exemple, vérifier le fichier réel pour la commande exacte
+    healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-mnemo} -d $${POSTGRES_DB:-mnemolite} -q"]
       interval: 5s
       timeout: 5s
       retries: 5
       start_period: 10s
-    command: > # Exemple de tuning PG (vérifier fichier réel)
+    command: > # Paramètres PG mis à jour
       postgres
         -c shared_buffers=1GB
         -c effective_cache_size=3GB
-        # ... autres paramètres ...
+        -c maintenance_work_mem=256MB
+        -c work_mem=32MB
+        -c max_parallel_workers_per_gather=2
     shm_size: 1g
     networks:
       backend:
         aliases:
           - db
-    logging: *default-logging # Appliquer la config de logs
+    logging: *default-logging
 
   api:
     build:
@@ -113,24 +121,32 @@ services:
       - "127.0.0.1:${API_PORT:-8001}:8000"
     environment:
       DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
-      # TEST_DATABASE_URL: ... (si nécessaire)
-      OPENAI_API_KEY: ${OPENAI_API_KEY} # Optionnel
+      TEST_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/mnemolite_test" # Décommenté
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       ENVIRONMENT: ${ENVIRONMENT:-development}
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./api:/app # Montage pour dev
-      - ./certs:/app/certs:ro # Optionnel
-      - ./tests:/app/tests # Optionnel
-      - ./scripts:/app/scripts # Optionnel
+      - ./api:/app
+      - ./certs:/app/certs:ro
+      - ./tests:/app/tests
+      - ./scripts:/app/scripts
+    deploy: # Section deploy ajoutée
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
     networks:
       backend:
       frontend:
     logging: *default-logging
-    healthcheck: # Exemple, vérifier le fichier réel
-      test: ["CMD", "curl", "--fail", "http://localhost:8000/v1/healthz"]
-      # ... interval, timeout, etc.
+    healthcheck: # Healthcheck API mis à jour
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
 
   worker:
     build:
@@ -140,7 +156,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
-      OPENAI_API_KEY: ${OPENAI_API_KEY} # Optionnel
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       PYTHONUNBUFFERED: "1"
     depends_on:
@@ -148,8 +164,12 @@ services:
         condition: service_healthy
     volumes:
       - ./workers:/app
-      - ./certs:/app/certs:ro # Optionnel
-    # Pas de port exposé typiquement pour un worker
+      - ./certs:/app/certs:ro
+    deploy: # Section deploy ajoutée
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
     networks:
       backend:
     logging: *default-logging
@@ -169,14 +189,14 @@ networks:
 
 *   **Stack Simplifiée** : Suppression de ChromaDB. PostgreSQL est maintenant la seule base de données. L'image `pgvector/pgvector` est recommandée pour inclure l'extension `pgvector` facilement.
 *   **Gestion des Extensions PG** : L'installation et la configuration de `pgvector` et `pg_partman` sont gérées via l'image de base (`pgvector/pgvector:pg17`) et le Dockerfile (`db/Dockerfile`). L'extension `pg_cron`, nécessaire pour la quantisation planifiée, n'est **pas installée ou activée par défaut** dans cette configuration ; son ajout et sa configuration (potentiellement via `shared_preload_libraries` dans `docker-compose.yml` et des scripts SQL) sont une étape ultérieure.
-*   **Ressources Locales** : Les limites de CPU/mémoire sont des exemples et **doivent être ajustées** pour tirer parti de votre machine locale (64GB RAM). Les paramètres PostgreSQL dans la section `command` sont des suggestions pour une machine avec beaucoup de RAM.
+*   **Ressources Locales** : Les limites `deploy.resources.limits` (CPU/mémoire) sont présentes dans le `docker-compose.yml` et peuvent être ajustées. Les paramètres PostgreSQL dans la section `command` sont des suggestions pour une machine avec beaucoup de RAM.
 *   **Sécurité & Simplicité** : Exposition des ports sur `127.0.0.1`, réseau `backend` interne, alias réseau `db`. Utilisation d'utilisateurs non-root dans les Dockerfiles (supposé).
 *   **Robustesse** : Healthcheck pour `postgres`. `depends_on` avec `condition: service_healthy`.
 *   **Développement** : Montage des volumes locaux pour le code API/worker.
 
 ## Dockerfiles optimisés (Version Actuelle)
 
-*Les Dockerfiles pour l'API (api/Dockerfile) et le Worker (workers/Dockerfile) montrés précédemment restent valides. Assurez-vous qu'ils n'incluent plus de dépendances liées à ChromaDB.* 
+*Les Dockerfiles pour l'API (`api/Dockerfile`), la base de données (`db/Dockerfile`) et le Worker (`workers/Dockerfile`) sont cruciaux. Assurez-vous qu'ils n'incluent plus de dépendances liées à ChromaDB (ce qui est le cas) et que `db/Dockerfile` gère bien `pg_partman`.* 
 
 ## Configuration .env (Mise à jour)
 
@@ -207,7 +227,7 @@ Le Makefile nécessite une petite adaptation pour la cible `health`.
 
 health:
 	@echo "API Health (Port ${API_PORT:-8001}):"
-	@curl -s -o /dev/null -w '%{http_code}\n' http://localhost:${API_PORT:-8001}/v1/healthz
+	@curl -s -o /dev/null -w '%{http_code}\n' http://localhost:${API_PORT:-8001}/v1/health # Corrigé healthz -> health
 	@echo "PostgreSQL Health:"
 	@$(DC) exec db pg_isready -U $${POSTGRES_USER:-mnemo} -d $${POSTGRES_DB:-mnemolite} -q && echo "OK" || echo "FAIL"
 

@@ -2,6 +2,7 @@
 Creates HNSW indexes concurrently on all partitions of the 'events' table.
 Assumes pg_partman has created partitions named like 'events_pYYYYMMDD'.
 """
+
 import asyncio
 import asyncpg
 import os
@@ -16,11 +17,12 @@ INDEX_COLUMN = "embedding"
 # HNSW parameters (adjust based on PoC tuning later)
 M_PARAM = 16
 EF_CONSTRUCTION_PARAM = 64
-VECTOR_OPS = "vector_cosine_ops" # or vector_l2_ops, vector_ip_ops
+VECTOR_OPS = "vector_cosine_ops"  # or vector_l2_ops, vector_ip_ops
 
 # --- Functions ---
 
-async def get_partitions(pool, parent_table_name, schema_name='public'):
+
+async def get_partitions(pool, parent_table_name, schema_name="public"):
     """Retrieves a list of partition table names for a given parent table."""
     query = """
     SELECT c.relname AS partition_name
@@ -32,10 +34,19 @@ async def get_partitions(pool, parent_table_name, schema_name='public'):
     """
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, parent_table_name, schema_name)
-        return [row['partition_name'] for row in rows]
+        return [row["partition_name"] for row in rows]
 
-async def create_index_concurrently(pool, table_name, index_name, index_type, 
-                                    index_column, m, ef_construction, vector_ops):
+
+async def create_index_concurrently(
+    pool,
+    table_name,
+    index_name,
+    index_type,
+    index_column,
+    m,
+    ef_construction,
+    vector_ops,
+):
     """Creates an index using CREATE INDEX CONCURRENTLY."""
     # Note: CONCURRENTLY cannot run inside a transaction block
     query = f"""
@@ -44,11 +55,17 @@ async def create_index_concurrently(pool, table_name, index_name, index_type,
     USING {index_type} ({index_column} {vector_ops})
     WITH (m = {m}, ef_construction = {ef_construction});
     """
-    print(f"Attempting to create index {index_name} on {table_name}...", end=" ", flush=True)
+    print(
+        f"Attempting to create index {index_name} on {table_name}...",
+        end=" ",
+        flush=True,
+    )
     start_time = datetime.now()
     async with pool.acquire() as conn:
         # Set statement_timeout to avoid blocking indefinitely if something goes wrong
-        await conn.execute("SET statement_timeout = '4h'") # 4 hours timeout for index creation
+        await conn.execute(
+            "SET statement_timeout = '4h'"
+        )  # 4 hours timeout for index creation
         try:
             status = await conn.execute(query)
             elapsed = (datetime.now() - start_time).total_seconds()
@@ -62,19 +79,27 @@ async def create_index_concurrently(pool, table_name, index_name, index_type,
             return False
         finally:
             # Reset timeout just in case connection is reused
-            await conn.execute("SET statement_timeout = 0") 
+            await conn.execute("SET statement_timeout = 0")
+
 
 # --- Main Execution ---
 
+
 async def main(parent_table_schema, parent_table_base_name):
     """Main function to find partitions and create indexes."""
-    pool = await asyncpg.create_pool(DB_URL, min_size=1, max_size=5) # Index creation is heavy, less concurrency
-    print(f"Connected to database. Finding partitions for {parent_table_schema}.{parent_table_base_name}...")
-    
+    pool = await asyncpg.create_pool(
+        DB_URL, min_size=1, max_size=5
+    )  # Index creation is heavy, less concurrency
+    print(
+        f"Connected to database. Finding partitions for {parent_table_schema}.{parent_table_base_name}..."
+    )
+
     parent_full_name = f"{parent_table_schema}.{parent_table_base_name}"
 
     try:
-        partitions = await get_partitions(pool, parent_table_base_name, parent_table_schema)
+        partitions = await get_partitions(
+            pool, parent_table_base_name, parent_table_schema
+        )
         if not partitions:
             print("No partitions found.")
             return
@@ -89,7 +114,7 @@ async def main(parent_table_schema, parent_table_base_name):
             # Construct a unique index name
             # Example: ix_events_p20240101_embedding_hnsw
             index_name = f"ix_{partition_name}_{INDEX_COLUMN}_{INDEX_TYPE}"
-            
+
             success = await create_index_concurrently(
                 pool,
                 partition_name,
@@ -98,13 +123,13 @@ async def main(parent_table_schema, parent_table_base_name):
                 INDEX_COLUMN,
                 M_PARAM,
                 EF_CONSTRUCTION_PARAM,
-                VECTOR_OPS
+                VECTOR_OPS,
             )
             if success:
                 success_count += 1
             else:
                 fail_count += 1
-        
+
         overall_elapsed = (datetime.now() - overall_start_time).total_seconds()
         print(f"\nIndex creation process finished.")
         print(f"Successful: {success_count}, Failed: {fail_count}")
@@ -120,4 +145,4 @@ async def main(parent_table_schema, parent_table_base_name):
 if __name__ == "__main__":
     # Assuming parent table is always public.events for now
     # Could add arguments later if needed
-    asyncio.run(main(parent_table_schema='public', parent_table_base_name='events')) 
+    asyncio.run(main(parent_table_schema="public", parent_table_base_name="events"))

@@ -1,0 +1,21 @@
+# API Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# Database
+sqlalchemy[asyncio]>=2.0.0
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.0 # Pour SQLAlchemy sync et outils admin
+
+# Embedding
+# sentence-transformers>=2.2.0 # Ou autre librairie
+
+# Configuration & Logging
+python-dotenv>=1.0.0
+structlog>=24.1.0
+
+# Vector DB Integration
+pgvector>=0.2.0,<0.3.0
+
+# Pydantic
+pydantic>=2.5.0 
