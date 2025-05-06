@@ -27,9 +27,17 @@ from api.models.event_models import EventModel, EventCreate, EventUpdate
 # Configuration du logger
 logging.basicConfig(level=logging.INFO) # Ou logging.DEBUG pour plus de détails
 
-# Définition de la table events pour SQLAlchemy
-metadata = MetaData()
-# ... events_table definition ...
+# Définition de la table events pour SQLAlchemy Core
+metadata_obj = MetaData()
+events_table = Table(
+    "events",
+    metadata_obj,
+    Column("id", String, primary_key=True),
+    Column("content", JSONB), # Utiliser JSONB pour PostgreSQL
+    Column("metadata", JSONB, nullable=True),
+    Column("embedding", TEXT, nullable=True), # Utiliser TEXT ou un type vecteur spécifique
+    Column("timestamp", TIMESTAMP(timezone=True), nullable=False),
+)
 
 # --- Query Builder ---
 
@@ -49,52 +57,51 @@ class EventQueryBuilder:
             "embedding": EventModel._format_embedding_for_db(event_data.embedding),
             "timestamp": event_data.timestamp
         }
-        query = insert(text("events")).values(
+        query = insert(events_table).values(
             content=params["content"],
             metadata=params["metadata"],
             embedding=params["embedding"],
             timestamp=params["timestamp"]
         ).returning(
-            literal_column("id"),
-            literal_column("timestamp"),
-            literal_column("content"),
-            literal_column("metadata"),
-            literal_column("embedding")
+            events_table.c.id,
+            events_table.c.timestamp,
+            events_table.c.content,
+            events_table.c.metadata,
+            events_table.c.embedding
         )
         return query, params
 
     def build_get_by_id_query(self, event_id: uuid.UUID) -> Tuple[ColumnElement, Dict[str, Any]]:
         """Construit la requête SELECT par ID."""
         query = select(
-            literal_column("id"),
-            literal_column("timestamp"),
-            literal_column("content"),
-            literal_column("metadata"),
-            literal_column("embedding")
-        ).select_from(text("events")).where(literal_column("id") == text(":event_id"))
+            events_table.c.id,
+            events_table.c.timestamp,
+            events_table.c.content,
+            events_table.c.metadata,
+            events_table.c.embedding
+        ).select_from(events_table).where(events_table.c.id == text(":event_id"))
         params = {"event_id": event_id}
         return query, params
 
     def build_update_metadata_query(self, event_id: uuid.UUID, metadata_update: Dict[str, Any]) -> Tuple[ColumnElement, Dict[str, Any]]:
         """Construit la requête UPDATE pour fusionner les métadonnées."""
-        query = update(text("events")).where(
-            literal_column("id") == text(":event_id")
+        query = update(events_table).where(
+            events_table.c.id == text(":event_id")
         ).values(
-            # Utilise l'opérateur || de JSONB pour fusionner les objets
-            metadata=literal_column("metadata").op('||')(text(":metadata_update::jsonb"))
+            metadata=events_table.c.metadata.op('||')(text(":metadata_update::jsonb"))
         ).returning(
-            literal_column("id"),
-            literal_column("timestamp"),
-            literal_column("content"),
-            literal_column("metadata"),
-            literal_column("embedding")
+            events_table.c.id,
+            events_table.c.timestamp,
+            events_table.c.content,
+            events_table.c.metadata,
+            events_table.c.embedding
         )
         params = {"event_id": event_id, "metadata_update": json.dumps(metadata_update)}
         return query, params
 
     def build_delete_query(self, event_id: uuid.UUID) -> Tuple[ColumnElement, Dict[str, Any]]:
         """Construit la requête DELETE par ID."""
-        query = delete(text("events")).where(literal_column("id") == text(":event_id"))
+        query = delete(events_table).where(events_table.c.id == text(":event_id"))
         params = {"event_id": event_id}
         return query, params
 
@@ -210,9 +217,15 @@ class EventRepository:
             try:
                 # --- Debugging Parameter Passing ---
                 self.logger.info(f"_execute_query: Received Query Type: {type(query)}")
-                self.logger.info(f"_execute_query: Received Query String: {str(query)}")
-                self.logger.info(f"_execute_query: Received Params Type: {type(params)}")
-                self.logger.info(f"_execute_query: Received Params Value: {params}")
+                if hasattr(query, 'compile'):
+                    compiled = query.compile(bind=self.engine, compile_kwargs={"literal_binds": False})
+                    self.logger.info(f"_execute_query: Received Compiled Query: {str(compiled)}")
+                    self.logger.info(f"_execute_query: Received Compiled Params: {compiled.params}")
+                # Use isinstance against the imported 'TextClause' type
+                elif isinstance(query, TextClause):
+                    self.logger.info(f"_execute_query: Received Query String (TextClause): {str(query)}")
+                else:
+                    self.logger.info(f"_execute_query: Received Query object is not directly compilable or TextClause: {type(query)}")
                 
                 # Remove list/tuple conversion - pass params dict directly
                 # execution_params = params

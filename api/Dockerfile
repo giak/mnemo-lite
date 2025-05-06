@@ -53,6 +53,10 @@ RUN pip install --no-cache-dir black flake8 pylint autopep8
 # Copy application code - Ensure it goes into an /app/api subdirectory
 COPY api/ /app/api/
 
+# Copy scripts needed by tests into the image
+# This ensures init_test_db.sql is present even if volume mount has issues
+COPY scripts/init_test_db.sql /app/scripts/init_test_db.sql
+
 # Create necessary directories
 RUN mkdir -p /app/logs /app/certs
 

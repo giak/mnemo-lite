@@ -67,9 +67,11 @@ services:
         condition: service_healthy
     volumes:
       - ./api:/app
+      - ./scripts:/app/scripts
       - ./certs:/app/certs:ro
       - ./tests:/app/tests
-      - ./scripts:/app/scripts
+      - ./logs:/app/logs
+      - postgres_data:/var/lib/postgresql/data
     deploy:
       resources:
         limits:

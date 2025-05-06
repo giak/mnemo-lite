@@ -156,7 +156,8 @@ async def test_db_pool():
         # Use the direct URL for asyncpg.connect
         conn_schema = await asyncpg.connect(test_url_direct)
 
-        init_script_path = Path("scripts/init_test_db.sql")
+        # Path is relative to the workspace root /app inside the container
+        init_script_path = Path("/app/scripts/init_test_db.sql")
 
         if init_script_path.is_file():
             print(f"  Applying {init_script_path}...")
