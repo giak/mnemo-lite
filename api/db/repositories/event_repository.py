@@ -36,7 +36,7 @@ events_table = Table(
     Column("id", String, primary_key=True),
     Column("content", JSONB), # Utiliser JSONB pour PostgreSQL
     Column("metadata", JSONB, nullable=True),
-    Column("embedding", VECTOR(1536), nullable=True), # Corrected type and dimension
+    Column("embedding", VECTOR(768), nullable=True), # Dimension for nomic-embed-text-v1.5
     Column("timestamp", TIMESTAMP(timezone=True), nullable=False),
 )
 

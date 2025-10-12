@@ -11,7 +11,7 @@ API_BASE_URL = os.getenv(
 )  # Utilise le port interne du conteneur par défaut
 API_ENDPOINT = "/v1/events/"
 API_URL = f"{API_BASE_URL.rstrip('/')}{API_ENDPOINT}"
-EMBEDDING_DIM = 1536  # Doit correspondre à la définition VECTOR() dans le SQL
+EMBEDDING_DIM = 768  # Doit correspondre à la définition VECTOR(768) dans le SQL (nomic-embed-text-v1.5)
 
 
 def generate_fake_embedding(dim: int) -> list[float]:

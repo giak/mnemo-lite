@@ -22,7 +22,7 @@ DATABASE_URL = os.getenv(
 )  # Conversion pour asyncpg natif
 
 # Constantes
-VECTOR_DIM = 1536  # Dimension des vecteurs d'embedding
+VECTOR_DIM = 768  # Dimension des vecteurs d'embedding (nomic-embed-text-v1.5)
 NUM_EVENTS = 100  # Nombre d'événements à générer
 
 # Catégories de test

@@ -19,7 +19,7 @@ DEFAULT_NUM_EVENTS = 30000  # Nombre d'événements à générer
 DEFAULT_DB_DSN = os.environ.get(
     "DATABASE_URL", "postgresql://user:password@localhost:5432/mnemolite_db"
 )
-DEFAULT_EMBEDDING_DIM = 1536  # Ajusté selon le schéma DB (01-init.sql)
+DEFAULT_EMBEDDING_DIM = 768  # Ajusté selon le schéma DB (01-init.sql) - nomic-embed-text-v1.5
 BATCH_SIZE = 1000  # Taille des lots pour l'insertion
 
 # Période pour les timestamps (3 mois)

@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS events (
     id          UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
     timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     content     JSONB NOT NULL,
-    embedding   VECTOR(1536),
+    embedding   VECTOR(768),
     metadata    JSONB DEFAULT '{}'::jsonb
 );
 -- CREATE INDEX IF NOT EXISTS events_timestamp_idx ON events (timestamp);
@@ -81,7 +81,7 @@ async def db_engine() -> AsyncGenerator[AsyncEngine, None]:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         await conn.execute(
             text(
-                "CREATE TABLE IF NOT EXISTS events (id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(), timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(), content JSONB NOT NULL, embedding VECTOR(1536), metadata JSONB DEFAULT '{}'::jsonb)"
+                "CREATE TABLE IF NOT EXISTS events (id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(), timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(), content JSONB NOT NULL, embedding VECTOR(768), metadata JSONB DEFAULT '{}'::jsonb)"
             )
         )
         await conn.execute(

@@ -45,9 +45,9 @@ def mock_embedding_service():
     """Fixture pour créer un mock du service d'embeddings."""
     mock_service = AsyncMock()
     # Configuration du mock pour renvoyer un embedding de test
-    # Generate 1536 dimensions (e.g., repeat a small pattern)
+    # Generate 768 dimensions (e.g., repeat a small pattern)
     pattern = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] # 8 elements
-    mock_service.generate_embedding.return_value = pattern * 192 # 8 * 192 = 1536
+    mock_service.generate_embedding.return_value = pattern * 96 # 8 * 96 = 768
     return mock_service
 
 
@@ -125,7 +125,7 @@ async def test_search_by_content(
         0.3,
         0.4,
         0.5,
-    ] * 307  # 1535 + 1 = 1536
+    ] * 154  # 770 elements (close to 768 for testing)
 
     # Appel de la méthode à tester avec espionnage (spy)
     with patch.object(
@@ -188,7 +188,7 @@ async def test_search_by_similarity(
         sample_memories.append(memory)
 
     # Configuration des mocks
-    test_embedding = [0.1, 0.2, 0.3, 0.4, 0.5] * 307  # 1535 + 1 = 1536
+    test_embedding = [0.1, 0.2, 0.3, 0.4, 0.5] * 154  # 770 elements (close to 768 for testing)
     mock_embedding_service.generate_embedding.return_value = test_embedding
 
     # Patcher la méthode search_by_vector pour retourner notre liste de mémoires
@@ -217,9 +217,9 @@ async def test_search_by_vector(
 ):
     """Test de la recherche par vecteur."""
     # Création d'un faux embedding
-    test_embedding = [0.1] * 1536 # Correct dimension
+    test_embedding = [0.1] * 768 # Correct dimension
     # Prepare mock events that EventModel.from_db_record can handle
-    mock_embedding_list = [0.11] * 1536
+    mock_embedding_list = [0.11] * 768
     mock_event_data = [
         {
             "id": uuid.uuid4(),
@@ -277,7 +277,7 @@ async def test_search_hybrid(
     """Teste la recherche hybride nominale."""
     query = "test query"
     metadata_filter = {"tag": "test"}
-    embedding = [0.1] * 1536 # Correct dimension
+    embedding = [0.1] * 768 # Correct dimension
     mock_embedding_service.generate_embedding.return_value = embedding
     
     # Configure mock_event_repo.search_vector to return some mock events
@@ -322,7 +322,7 @@ async def test_search_hybrid_with_empty_results(
 ):
     """Teste la recherche hybride retournant des résultats vides."""
     query = "no results query"
-    embedding = [0.9] * 1536 # Correct dimension
+    embedding = [0.9] * 768 # Correct dimension
     mock_embedding_service.generate_embedding.return_value = embedding
     mock_event_repo.search_vector.return_value = ([], 0) # Simulate no results found (empty list, 0 count)
 
@@ -375,7 +375,7 @@ async def test_search_hybrid_with_none_metadata(
 ):
     """Teste la recherche hybride avec seulement une query textuelle (pas de filtre metadata)."""
     query = "vector only query"
-    embedding = [0.3] * 1536 # Correct dimension
+    embedding = [0.3] * 768 # Correct dimension
     mock_embedding_service.generate_embedding.return_value = embedding
     mock_event_repo.search_vector.return_value = ([], 0) # Simulate no results found
 

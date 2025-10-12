@@ -253,7 +253,7 @@ async def test_process_event_different_embedding_dimensions(
     event_repo, embedding_service = mocks
 
     # Configuration du mock pour générer un embedding de dimension différente
-    embedding_service.generate_embedding.return_value = [0.1] * 384  # 384 dimensions
+    embedding_service.generate_embedding.return_value = [0.1] * 768  # 768 dimensions
 
     # Traitement de l'événement
     result = await processor.process_event(event_model)
@@ -261,7 +261,7 @@ async def test_process_event_different_embedding_dimensions(
     # Vérifications
     assert isinstance(result, dict)
     assert result["has_embedding"] == True
-    assert result["embedding_dimension"] == 384
+    assert result["embedding_dimension"] == 768
 
 
 # Test pour process_event avec des métadonnées nulles

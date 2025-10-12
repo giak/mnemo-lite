@@ -107,8 +107,8 @@ echo -e "${BLUE}UUID de cette exécution de test: ${TEST_RUN_UUID}${NC}"
 
 print_section "1.1 CREATE - Créer un nouvel événement"
 # Utilisation de _test_only endpoint
-# Generate a full 1536-dim embedding
-EMBEDDING_CRUD=$(python3 -c "import json; print(json.dumps([0.1]*1536))") 
+# Generate a full 768-dim embedding
+EMBEDDING_CRUD=$(python3 -c "import json; print(json.dumps([0.1]*768))") 
 CREATE_RESPONSE=$(curl -s -X POST "${API_URL_EVENTS}/" \
     -H "Content-Type: application/json" \
     -d '{
@@ -197,8 +197,8 @@ print_header "3. TESTS AVEC DONNÉES COMPLEXES (via /v1/_test_only/events)"
 ###############################################
 
 print_section "3.1 CREATE avec contenu complexe et multilingue"
-# Generate a full 1536-dim embedding
-EMBEDDING_COMPLEX=$(python3 -c "import json; print(json.dumps([0.5]*1536))") 
+# Generate a full 768-dim embedding
+EMBEDDING_COMPLEX=$(python3 -c "import json; print(json.dumps([0.5]*768))") 
 COMPLEX_CONTENT_RESPONSE=$(curl -s -X POST "${API_URL_EVENTS}/" \
     -H "Content-Type: application/json" \
     -d '{
@@ -251,7 +251,7 @@ for i in {0..6}; do
     CAT=$(( ( RANDOM % 2 ) + 1 )) # Catégorie 1 ou 2
     TS=$(date -u -d "-${i} hour" '+%Y-%m-%dT%H:%M:%SZ') # Timestamps distincts UTC
     # Generate embedding for filter tests
-    FILTER_EMBEDDING=$(python3 -c "import json; print(json.dumps([0.3 + $i * 0.01]*1536))")
+    FILTER_EMBEDDING=$(python3 -c "import json; print(json.dumps([0.3 + $i * 0.01]*768))")
     EV_RESPONSE=$(curl -s -X POST "${API_URL_EVENTS}/" \
     -H "Content-Type: application/json" \
     -d '{
@@ -342,7 +342,7 @@ TS1=$(date -u -d "-2 hour" '+%Y-%m-%dT%H:%M:%SZ')
 EV1_CONTENT='{"text": "Ceci est le premier log pour la recherche vectorielle.", "lang": "fr"}'
 EV1_META='{"source": "search_test", "type": "log", "tag": "'"$SEARCH_TAG"'", "nested": {"val": 1}}'
 # Générer un embedding spécifique (exemple simple, devrait être plus réaliste)
-EV1_EMBEDDING=$(python3 -c "import json; print(json.dumps([0.1]*1536))") 
+EV1_EMBEDDING=$(python3 -c "import json; print(json.dumps([0.1]*768))") 
 EV1_RESPONSE=$(curl -s -X POST "${API_URL_EVENTS}/" -H "Content-Type: application/json" -d '{ "content": '"$EV1_CONTENT"', "metadata": '"$EV1_META"', "timestamp": "'"$TS1"'", "embedding": '"$EV1_EMBEDDING"' }')
 EV1_ID=$(echo "$EV1_RESPONSE" | jq -r '.id')
 EVENT_IDS_SEARCH+=("$EV1_ID")
@@ -352,7 +352,7 @@ echo "Event 1 (Log, Vec 0.1) créé: ${EV1_ID}"
 TS2=$(date -u -d "-1 hour" '+%Y-%m-%dT%H:%M:%SZ')
 EV2_CONTENT='{"value": 42, "unit": "test/sec"}'
 EV2_META='{"source": "search_test", "type": "metric", "tag": "'"$SEARCH_TAG"'", "nested": {"val": 2}}'
-EV2_EMBEDDING=$(python3 -c "import json; print(json.dumps([0.9]*1536))") 
+EV2_EMBEDDING=$(python3 -c "import json; print(json.dumps([0.9]*768))") 
 EV2_RESPONSE=$(curl -s -X POST "${API_URL_EVENTS}/" -H "Content-Type: application/json" -d '{ "content": '"$EV2_CONTENT"', "metadata": '"$EV2_META"', "timestamp": "'"$TS2"'", "embedding": '"$EV2_EMBEDDING"' }')
 EV2_ID=$(echo "$EV2_RESPONSE" | jq -r '.id')
 EVENT_IDS_SEARCH+=("$EV2_ID")
@@ -362,7 +362,7 @@ echo "Event 2 (Metric, Vec 0.9) créé: ${EV2_ID}"
 TS3=$(date -u -d "-30 minute" '+%Y-%m-%dT%H:%M:%SZ')
 EV3_CONTENT='{"text": "Un autre log, différent du premier.", "lang": "fr"}'
 EV3_META='{"source": "search_test", "type": "log", "tag": "'"$SEARCH_TAG"'", "nested": {"val": 3}}'
-EV3_EMBEDDING=$(python3 -c "import json; print(json.dumps([0.2]*1536))") 
+EV3_EMBEDDING=$(python3 -c "import json; print(json.dumps([0.2]*768))") 
 EV3_RESPONSE=$(curl -s -X POST "${API_URL_EVENTS}/" -H "Content-Type: application/json" -d '{ "content": '"$EV3_CONTENT"', "metadata": '"$EV3_META"', "timestamp": "'"$TS3"'", "embedding": '"$EV3_EMBEDDING"' }')
 EV3_ID=$(echo "$EV3_RESPONSE" | jq -r '.id')
 EVENT_IDS_SEARCH+=("$EV3_ID")
@@ -410,7 +410,7 @@ print_section "5.4 Recherche hybride (Vecteur JSON + Metadata + Temps)"
 TS_HYBRID_START=$(date -u -d "-90 minute" '+%Y-%m-%dT%H:%M:%SZ')
 TS_HYBRID_END=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 HYBRID_META='{"type": "log", "source": "search_test"}'
-HYBRID_VEC=$(python3 -c "import json; print(json.dumps([0.21]*1536))") # Vecteur proche de EV3
+HYBRID_VEC=$(python3 -c "import json; print(json.dumps([0.21]*768))") # Vecteur proche de EV3
 
 HYBRID_RESPONSE=$(curl -s -G "${API_URL_SEARCH}/" \
     --data-urlencode "vector_query=$HYBRID_VEC" \

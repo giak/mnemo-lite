@@ -29,7 +29,7 @@ class MemorySearchService(MemorySearchServiceProtocol):
     """
 
     # Constante pour la dimension attendue des vecteurs
-    EXPECTED_EMBEDDING_DIM = 384  # Align with MiniLM
+    EXPECTED_EMBEDDING_DIM = 768  # Align with nomic-embed-text-v1.5
 
     def __init__(
         self,

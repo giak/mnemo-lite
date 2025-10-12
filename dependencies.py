@@ -50,11 +50,11 @@ async def get_memory_repository(engine: AsyncEngine = Depends(get_db_engine)) ->
 
 async def get_embedding_service() -> EmbeddingServiceProtocol:
     """Injecte une instance du service d'embeddings.
-    
+
     Returns:
         Une implémentation du protocole EmbeddingServiceProtocol.
     """
-    return EmbeddingService(model_name="all-MiniLM-L6-v2", embedding_size=384)
+    return EmbeddingService(model_name="simple-model", embedding_size=768)
 
 async def get_memory_search_service(
     event_repo: EventRepositoryProtocol = Depends(get_event_repository),
