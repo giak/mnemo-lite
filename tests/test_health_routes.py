@@ -222,8 +222,8 @@ def test_metrics_endpoint(client):
     )  # Vérification partielle du content-type
 
 
+@pytest.mark.anyio
 @patch("api.routes.health_routes.DATABASE_URL", None)
-@patch.object(AsyncMock, "connect", side_effect=Exception("Connexion non configurée"))
 async def test_check_postgres_no_database_url():
     """Teste check_postgres quand DATABASE_URL n'est pas défini."""
     # Action
@@ -234,6 +234,7 @@ async def test_check_postgres_no_database_url():
     assert "DATABASE_URL not set" in result["message"]
 
 
+@pytest.mark.anyio
 @patch("api.routes.health_routes.DATABASE_URL", "postgresql://user:pass@host:5432/db")
 @patch("asyncpg.connect")
 async def test_check_postgres_connection_error(mock_connect):
@@ -249,6 +250,7 @@ async def test_check_postgres_connection_error(mock_connect):
     assert "Connection refused" in result["message"]
 
 
+@pytest.mark.anyio
 @patch("api.routes.health_routes.DATABASE_URL", "postgresql://user:pass@host:5432/db")
 @patch("asyncpg.connect")
 async def test_check_postgres_success(mock_connect):
