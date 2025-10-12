@@ -334,7 +334,7 @@ components:
             type: number
             format: float
           nullable: true
-          description: "Vecteur sémantique (si calculé par le client, 1536 dimensions)."
+          description: "Vecteur sémantique (si calculé par le client, 768 dimensions)."
           example: [0.1, 0.2, ..., 0.9]
         timestamp:
           type: string

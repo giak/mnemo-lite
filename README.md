@@ -95,7 +95,7 @@ curl -X POST http://localhost:8001/v1/events \
   -d '{
     "content": {"message": "User asked about project status"},
     "metadata": {"type": "interaction", "project": "Expanse", "user_id": "user123"},
-    "embedding": [0.05, -0.12, ..., 0.88] # Your 1536-dim vector
+    "embedding": [0.05, -0.12, ..., 0.88] # Your 768-dim vector
   }'
 ```
 

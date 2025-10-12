@@ -142,7 +142,7 @@ CREATE INDEX IF NOT EXISTS edges_relation_type_idx ON edges(relation_type);
 ---
 
 ## 4. Index vectoriel (`pgvector`)
-*   **Stockage :** Directement dans la colonne `embedding VECTOR(1536)` de la table `events` (ou ses partitions).
+*   **Stockage :** Directement dans la colonne `embedding VECTOR(768)` de la table `events` (ou ses partitions).
 *   **Index :** **HNSW** (`USING hnsw`) est recommandé pour l'équilibre vitesse/précision. `vector_cosine_ops` ou `vector_l2_ops` selon la métrique de distance utilisée par le modèle d'embedding.
 *   **Gestion sur partitions :** L'index HNSW doit être créé sur **chaque partition**. L'utilisation des fonctions `run_maintenance_proc()` de `pg_partman` avec des scripts personnalisés ou des fonctions trigger est la méthode recommandée pour automatiser la création/maintenance des index sur les nouvelles partitions.
 *   **Recherche :** Utilisation des opérateurs `<->` (distance L2), `<#>` (produit scalaire négatif), ou `<=>` (distance cosinus) dans les requêtes SQL via les méthodes du repository.
