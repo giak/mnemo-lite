@@ -1,7 +1,7 @@
 # MnemoLite – Document d'Architecture (ARCH) détaillé
 
-**Version**: 1.1.1 (Aligné PFD 1.2.2 / PRD 1.0.2)
-**Date**: 2025-04-27
+**Version**: 1.2.0 (Aligné PFD 1.2.2 / PRD 1.0.2)
+**Date**: 2025-10-12
 
 ## 1. Vue d'ensemble
 MnemoLite adopte une architecture **CQRS cognitive et modulaire**, optimisée pour un déploiement local. Elle repose **exclusivement sur PostgreSQL 17** avec ses extensions pour gérer les aspects relationnels, vectoriels (`pgvector`), le partitionnement temporel (`pg_partman`), les tâches asynchrones (`pgmq` optionnel via lib Python) et le graphe relationnel (tables + CTE).
@@ -58,7 +58,46 @@ flowchart TD
   
   Fusion --> UI
 ```
-*Toutes les recherches (vectorielle, SQL, graphe) sont initiées par l'API et exécutées via les repositories directement dans PostgreSQL.* 
+*Toutes les recherches (vectorielle, SQL, graphe) sont initiées par l'API et exécutées via les repositories directement dans PostgreSQL.*
+
+### Couche Service et Auto-Embedding
+
+**EventService** : Couche métier introduite pour orchestrer la création d'événements avec génération automatique d'embeddings.
+
+```mermaid
+flowchart LR
+  Route[Event Routes] --> EventService
+  EventService --> EmbeddingService[Sentence-Transformers<br>nomic-embed-text-v1.5]
+  EventService --> EventRepo[Event Repository]
+  EventRepo --> PostgreSQL[(PostgreSQL)]
+
+  style EventService fill:#e1f5fe
+  style EmbeddingService fill:#fff3e0
+```
+
+**Fonctionnalités** :
+- **Auto-génération d'embeddings** : Si aucun embedding n'est fourni dans la requête, EventService extrait automatiquement le texte depuis `content.text` (ou fields configurables) et génère un embedding 768-dim via Sentence-Transformers
+- **Configuration flexible** :
+  - `EMBEDDING_AUTO_GENERATE` : active/désactive la génération automatique (défaut: true)
+  - `EMBEDDING_FAIL_STRATEGY` : `soft` (continue sans embedding) ou `hard` (échoue la création) (défaut: soft)
+  - `EMBEDDING_SOURCE_FIELDS` : priorité des champs pour extraction de texte (défaut: `text,body,message,content,title`)
+- **Fail-soft** : En cas d'échec de génération d'embedding, l'événement est créé sans embedding (si `fail_strategy=soft`)
+- **Injection de dépendances** : EventService injecté via `Depends(get_event_service)` dans les routes
+
+**Flux de création** :
+```
+POST /v1/events
+  ↓
+EventService.create_event()
+  ↓ (si embedding absent)
+EventService._extract_text_for_embedding()
+  ↓
+EmbeddingService.generate_embedding(text)
+  ↓
+EventRepository.add(event)
+  ↓
+PostgreSQL INSERT
+```
 
 ---
 
@@ -318,7 +357,12 @@ mnemo-lite/
 │   ├── interfaces/     # Interfaces (protocoles)
 │   ├── models/
 │   ├── routes/
-│   ├── services/
+│   ├── services/       # Services métier (event_service.py, embedding_service.py, etc.)
+│   │   ├── event_service.py                        # Orchestration événements + auto-embedding
+│   │   ├── sentence_transformer_embedding_service.py  # Embeddings locaux (nomic-embed-text-v1.5)
+│   │   ├── embedding_service.py                    # Mock embeddings (dev/test)
+│   │   ├── memory_search_service.py
+│   │   └── ...
 │   └── templates/      # Templates Jinja2/HTMX
 ├── db/                 # Configuration et initialisation PostgreSQL
 │   ├── Dockerfile
@@ -367,7 +411,8 @@ mnemo-lite/
 
 ---
 
-**Version**: 1.1.1
-**Dernière mise à jour**: 2025-04-27
+**Version**: 1.2.0
+**Dernière mise à jour**: 2025-10-12
+**Changements** : Ajout EventService + auto-embedding (nomic-embed-text-v1.5), fix health check DSN
 **Auteur**: Giak
 

@@ -1,7 +1,7 @@
-# MnemoLite – Spécification API (v1.1.0 - Alignée Code)
+# MnemoLite – Spécification API (v1.2.0 - Alignée Code)
 
 > **Objectif (Ω)** : Définir un contrat clair, versionné, testable et documenté pour intégrer MnemoLite à Expanse et à tout client externe, basé sur REST/JSON et OpenAPI 3.1.
-> **Dernière MàJ**: 2025-04-27 (Aligné code base)
+> **Dernière MàJ**: 2025-10-12 (Auto-embedding + Health check fix)
 
 ---
 
@@ -44,7 +44,7 @@
 openapi: 3.1.0
 info:
   title: MnemoLite API
-  version: "1.1.0" # Version alignée code
+  version: "1.2.0" # Version alignée code (auto-embedding + health check fix)
 servers:
   - url: http://localhost:8001/v1 # URL locale par défaut
 paths:
@@ -321,7 +321,11 @@ components:
       properties:
         content:
           type: object
-          description: "Contenu flexible de l'événement."
+          description: |
+            Contenu flexible de l'événement.
+            **Auto-embedding** : Si le champ `embedding` n'est pas fourni et que `content` contient
+            un champ texte (priorité : `text`, `body`, `message`, `content`, `title`), un embedding
+            768-dim sera généré automatiquement via Sentence-Transformers (nomic-embed-text-v1.5).
           example: { "type": "prompt", "role": "user", "text": "Explique X." }
         metadata:
           type: object
@@ -334,7 +338,10 @@ components:
             type: number
             format: float
           nullable: true
-          description: "Vecteur sémantique (si calculé par le client, 768 dimensions)."
+          description: |
+            Vecteur sémantique (768 dimensions pour nomic-embed-text-v1.5).
+            **Optionnel** : Si omis, sera généré automatiquement depuis `content.text` (ou autre champ texte configuré).
+            Fournir ce champ bypass l'auto-génération.
           example: [0.1, 0.2, ..., 0.9]
         timestamp:
           type: string
