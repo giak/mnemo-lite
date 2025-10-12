@@ -89,32 +89,32 @@ services:
       retries: 5
       start_period: 120s
 
-  worker:
-    build:
-      context: .
-      dockerfile: workers/Dockerfile
-    container_name: mnemo-worker
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v1.5}
-      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
-      ENVIRONMENT: ${ENVIRONMENT:-development}
-      PYTHONUNBUFFERED: "1"
-    depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      - ./workers:/app
-      - ./certs:/app/certs:ro
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-    networks:
-      backend:
-    logging: *default-logging
+  # worker:
+  #   build:
+  #     context: .
+  #     dockerfile: workers/Dockerfile
+  #   container_name: mnemo-worker
+  #   restart: unless-stopped
+  #   environment:
+  #     DATABASE_URL: "postgresql://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
+  #     EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v1.5}
+  #     EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
+  #     ENVIRONMENT: ${ENVIRONMENT:-development}
+  #     PYTHONUNBUFFERED: "1"
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./workers:/app
+  #     - ./certs:/app/certs:ro
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.5'
+  #         memory: 512M
+  #   networks:
+  #     backend:
+  #   logging: *default-logging
 
 volumes:
   postgres_data:
