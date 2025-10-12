@@ -11,7 +11,7 @@ import asyncio
 from sqlalchemy.orm import sessionmaker
 
 # Supprimer l'importation de Base qui n'existe pas
-# from api.models.base import Base
+# from models.base import Base
 
 # Import the class to test and supporting models
 from db.repositories.memory_repository import MemoryRepository

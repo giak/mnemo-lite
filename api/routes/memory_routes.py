@@ -8,9 +8,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, Body
 
-from api.models.memory_models import Memory, MemoryCreate, MemoryUpdate
-from api.interfaces.repositories import MemoryRepositoryProtocol
-from api.dependencies import get_memory_repository
+from models.memory_models import Memory, MemoryCreate, MemoryUpdate
+from interfaces.repositories import MemoryRepositoryProtocol
+from dependencies import get_memory_repository
 
 # Configuration du logger
 logger = logging.getLogger(__name__)

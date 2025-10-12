@@ -23,7 +23,7 @@ import logging
 from .base import RepositoryError
 
 # Import the canonical EventModel using absolute path
-from api.models.event_models import EventModel, EventCreate, EventUpdate
+from models.event_models import EventModel, EventCreate, EventUpdate
 
 # Configuration du logger
 logging.basicConfig(level=logging.INFO) # Ou logging.DEBUG pour plus de détails

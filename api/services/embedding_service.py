@@ -50,12 +50,13 @@ class EmbeddingServiceInterface(ABC):
         pass
 
 
-class SimpleEmbeddingService(EmbeddingServiceInterface):
+class MockEmbeddingService(EmbeddingServiceInterface):
     """
-    Implémentation simple du service d'embedding utilisant un modèle basique.
-    Pour un environnement de production, cette classe devrait être remplacée
-    par une implémentation utilisant sentence-transformers (voir workers/utils/embeddings.py)
-    ou d'autres modèles locaux (Hugging Face, etc.)
+    Mock embedding service using hash-based deterministic vectors.
+    Fast and deterministic for development/testing purposes.
+
+    WARNING: This service does NOT generate semantic embeddings!
+    For production use, switch to SentenceTransformerEmbeddingService.
     """
 
     def __init__(self, model_name: str = "simple-model", dimension: int = 768):
@@ -69,7 +70,8 @@ class SimpleEmbeddingService(EmbeddingServiceInterface):
         self.model_name = model_name
         self.dimension = dimension
         logger.info(
-            f"Initialisation du service d'embedding avec le modèle {model_name}"
+            f"MockEmbeddingService initialized (dimension={dimension})",
+            extra={"embedding_mode": "mock", "dimension": dimension}
         )
 
     async def generate_embedding(self, text: str) -> List[float]:

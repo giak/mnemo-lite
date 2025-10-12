@@ -9,3 +9,46 @@ CLAUDE.md
 # SpecStory explanation file
 .specstory/
 .specstory/.what-is-this.md
+
+# Migration archives
+archives/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+
+# Backup files
+.backup*/
+.archive/
+.phase*_backup*/
+*.bak
+*.swp
+*~

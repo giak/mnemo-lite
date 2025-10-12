@@ -1,0 +1,139 @@
+{
+  "similarity_tests": [
+    {
+      "text1": "cat",
+      "text2": "kitten",
+      "expected_min_similarity": 0.70,
+      "reason": "Closely related animals (adult and baby)"
+    },
+    {
+      "text1": "dog",
+      "text2": "puppy",
+      "expected_min_similarity": 0.70,
+      "reason": "Closely related animals (adult and baby)"
+    },
+    {
+      "text1": "happy",
+      "text2": "joyful",
+      "expected_min_similarity": 0.75,
+      "reason": "Synonymous positive emotions"
+    },
+    {
+      "text1": "car",
+      "text2": "automobile",
+      "expected_min_similarity": 0.80,
+      "reason": "Direct synonyms for vehicle"
+    },
+    {
+      "text1": "run",
+      "text2": "running",
+      "expected_min_similarity": 0.85,
+      "reason": "Base form and gerund of same verb"
+    },
+    {
+      "text1": "doctor",
+      "text2": "physician",
+      "expected_min_similarity": 0.80,
+      "reason": "Professional synonyms"
+    },
+    {
+      "text1": "big",
+      "text2": "large",
+      "expected_min_similarity": 0.80,
+      "reason": "Size synonyms"
+    }
+  ],
+  "dissimilarity_tests": [
+    {
+      "text1": "I love my pet cat",
+      "text2": "My car is very fast",
+      "expected_max_similarity": 0.75,
+      "reason": "Different topics (animal vs vehicle)"
+    },
+    {
+      "text1": "I feel happy today",
+      "text2": "The weather is cold outside",
+      "expected_max_similarity": 0.75,
+      "reason": "Different topics (emotion vs weather)"
+    },
+    {
+      "text1": "Computer programming is difficult",
+      "text2": "The ocean is beautiful",
+      "expected_max_similarity": 0.75,
+      "reason": "Completely unrelated concepts"
+    },
+    {
+      "text1": "Mathematical equations are complex",
+      "text2": "Dogs are loyal companions",
+      "expected_max_similarity": 0.75,
+      "reason": "Different domains (math vs animals)"
+    },
+    {
+      "text1": "Water flows in the river",
+      "text2": "The computer needs repair",
+      "expected_max_similarity": 0.75,
+      "reason": "Unrelated: nature vs technology"
+    }
+  ],
+  "search_tests": [
+    {
+      "query": "feline animals",
+      "documents": [
+        {"text": "I love my pet cat", "relevance": "high"},
+        {"text": "Kittens are cute and playful", "relevance": "high"},
+        {"text": "My car is fast", "relevance": "low"},
+        {"text": "Dogs are loyal companions", "relevance": "medium"},
+        {"text": "Computer programming", "relevance": "none"}
+      ],
+      "expected_top_2_contain": ["cat", "Kittens"],
+      "expected_not_in_top_2": ["car", "Computer"]
+    },
+    {
+      "query": "vehicle transportation",
+      "documents": [
+        {"text": "Automobile driving on highway", "relevance": "high"},
+        {"text": "Car racing competition", "relevance": "high"},
+        {"text": "Cat sleeping on couch", "relevance": "low"},
+        {"text": "Train station platform", "relevance": "high"},
+        {"text": "Mathematics equation", "relevance": "none"}
+      ],
+      "expected_top_2_contain": ["Automobile", "Car"],
+      "expected_not_in_top_2": ["Cat", "Mathematics"]
+    },
+    {
+      "query": "medical doctor",
+      "documents": [
+        {"text": "Physician examining patient", "relevance": "high"},
+        {"text": "Hospital emergency room", "relevance": "high"},
+        {"text": "Teacher in classroom", "relevance": "low"},
+        {"text": "Chef cooking food", "relevance": "none"}
+      ],
+      "expected_top_2_contain": ["Physician", "Hospital"],
+      "expected_not_in_top_2": ["Teacher", "Chef"]
+    }
+  ],
+  "robustness_tests": [
+    {
+      "test_name": "case_insensitivity",
+      "variants": [
+        "Hello World",
+        "hello world",
+        "HELLO WORLD",
+        "HeLLo WoRLd"
+      ],
+      "expected_min_similarity": 0.95,
+      "reason": "Case variations should be nearly identical"
+    },
+    {
+      "test_name": "punctuation_variations",
+      "variants": [
+        "Hello, world!",
+        "Hello world",
+        "Hello. World.",
+        "Hello - world"
+      ],
+      "expected_min_similarity": 0.90,
+      "reason": "Punctuation should have minimal impact"
+    }
+  ]
+}

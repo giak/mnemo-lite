@@ -26,7 +26,6 @@ from sqlalchemy.event import listen
 
 # Import des routes
 from routes import memory_routes, health_routes, event_routes, search_routes
-from routes.health_routes import router as health_router
 
 # Configuration de base
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -62,6 +61,7 @@ async def lifespan(app: FastAPI):
     # Initialisation au démarrage: Créer le moteur SQLAlchemy
     logger.info(f"Starting MnemoLite API in {ENVIRONMENT} mode")
 
+    # 1. Initialize database engine
     db_url_to_use = TEST_DATABASE_URL if ENVIRONMENT == "test" else DATABASE_URL
 
     if not db_url_to_use:
@@ -100,6 +100,37 @@ async def lifespan(app: FastAPI):
             )
             app.state.db_engine = None  # Set to None on failure
 
+    # 2. Pre-load embedding model (si mode=real)
+    embedding_mode = os.getenv("EMBEDDING_MODE", "real").lower()
+    if embedding_mode == "real":
+        try:
+            logger.info("⏳ Pre-loading embedding model during startup...")
+            from dependencies import get_embedding_service
+            embedding_service = await get_embedding_service()
+
+            # Forcer le chargement du modèle maintenant
+            if hasattr(embedding_service, '_ensure_model_loaded'):
+                await embedding_service._ensure_model_loaded()
+
+            logger.info("✅ Embedding model pre-loaded successfully")
+            app.state.embedding_service = embedding_service
+        except Exception as e:
+            logger.error(
+                "❌ Failed to pre-load embedding model",
+                error=str(e),
+                exc_info=True
+            )
+            # Décision: Fail fast (recommandé pour production)
+            # Pour développement, on peut continuer avec le mode mock
+            if ENVIRONMENT == "production":
+                raise RuntimeError(f"Failed to load embedding model: {e}")
+            else:
+                logger.warning("Continuing in development mode without pre-loaded model")
+                app.state.embedding_service = None
+    else:
+        logger.info("Using mock embeddings, no model pre-loading needed")
+        app.state.embedding_service = None
+
     yield
 
     # Nettoyage à l'arrêt: Disposer le moteur
@@ -107,6 +138,11 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, "db_engine") and app.state.db_engine:
         await app.state.db_engine.dispose()
         logger.info("Database engine disposed.")
+
+    # Cleanup embedding service
+    if hasattr(app.state, "embedding_service") and app.state.embedding_service:
+        del app.state.embedding_service
+        logger.info("Embedding service cleaned up.")
 
 
 # Création de l'application
@@ -138,7 +174,7 @@ app.include_router(
 )
 app.include_router(event_routes.router, prefix="/v1/events", tags=["v1_Events"])
 app.include_router(search_routes.router, prefix="/v1/search", tags=["v1_Search"])
-app.include_router(health_router)
+app.include_router(health_routes.router)
 # app.include_router(embedding_routes.router)
 
 # --- Endpoint pour la création d'événements PENDANT LES TESTS ---

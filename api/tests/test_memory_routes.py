@@ -13,10 +13,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
-from api.models.memory_models import Memory, MemoryCreate, MemoryUpdate
-from api.interfaces.repositories import MemoryRepositoryProtocol
-from api.dependencies import get_memory_repository
-from api.routes.memory_routes import router as memory_router
+from models.memory_models import Memory, MemoryCreate, MemoryUpdate
+from interfaces.repositories import MemoryRepositoryProtocol
+from dependencies import get_memory_repository
+from routes.memory_routes import router as memory_router
 
 # Classe de mock pour le repository de mémoires
 class MockMemoryRepository:

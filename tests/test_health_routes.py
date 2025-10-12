@@ -36,9 +36,9 @@ for p in prometheus_patches:
 from main import app
 
 # Import des dépendances et modèles
-from api.dependencies import get_db_engine
+from dependencies import get_db_engine
 from sqlalchemy.ext.asyncio import AsyncEngine
-from api.routes.health_routes import check_postgres
+from routes.health_routes import check_postgres
 
 # --- Fixtures ---
 

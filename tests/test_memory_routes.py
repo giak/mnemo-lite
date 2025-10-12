@@ -15,7 +15,7 @@ from main import app
 
 # Import des dépendances et modèles
 from models.memory_models import Memory, MemoryCreate, MemoryUpdate
-from api.dependencies import get_memory_repository
+from dependencies import get_memory_repository
 
 # --- Fixtures ---
 

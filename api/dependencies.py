@@ -4,6 +4,7 @@ Fournit les fonctions d'injection pour les repositories et services.
 Respecte le principe d'inversion des dépendances (DIP).
 """
 
+import os
 import logging
 from typing import Dict, Any, Optional
 from fastapi import Request, HTTPException, Depends
@@ -21,12 +22,16 @@ from interfaces.services import (
 # Import des implémentations concrètes
 from db.repositories.event_repository import EventRepository
 from db.repositories.memory_repository import MemoryRepository
-from services.embedding_service import SimpleEmbeddingService
+from services.embedding_service import MockEmbeddingService
+from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
 from services.memory_search_service import MemorySearchService
 from services.event_processor import EventProcessor
 from services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
+
+# Cache global pour singleton embedding service
+_embedding_service_instance: Optional[EmbeddingServiceProtocol] = None
 
 
 # Fonction pour récupérer le moteur de base de données
@@ -112,12 +117,52 @@ async def get_memory_repository(
 # Fonction pour injecter le service d'embedding
 async def get_embedding_service() -> EmbeddingServiceProtocol:
     """
-    Récupère une instance du service d'embedding.
+    Récupère une instance du service d'embedding (mock ou real selon config).
+    Utilise un singleton pour réutiliser l'instance (et le modèle chargé).
 
     Returns:
         Une instance du service d'embedding
+
+    Raises:
+        ValueError: Si EMBEDDING_MODE invalide
     """
-    return SimpleEmbeddingService()
+    global _embedding_service_instance
+
+    if _embedding_service_instance is not None:
+        return _embedding_service_instance
+
+    # Déterminer le mode
+    embedding_mode = os.getenv("EMBEDDING_MODE", "real").lower()
+
+    if embedding_mode == "mock":
+        logger.warning(
+            "🔶 EMBEDDING MODE: MOCK (development/testing only) 🔶",
+            extra={"embedding_mode": "mock"}
+        )
+        _embedding_service_instance = MockEmbeddingService(
+            model_name="mock-model",
+            dimension=int(os.getenv("EMBEDDING_DIMENSION", "768"))
+        )
+
+    elif embedding_mode == "real":
+        logger.info(
+            "✅ EMBEDDING MODE: REAL (Sentence-Transformers)",
+            extra={"embedding_mode": "real"}
+        )
+        _embedding_service_instance = SentenceTransformerEmbeddingService(
+            model_name=os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5"),
+            dimension=int(os.getenv("EMBEDDING_DIMENSION", "768")),
+            cache_size=int(os.getenv("EMBEDDING_CACHE_SIZE", "1000")),
+            device=os.getenv("EMBEDDING_DEVICE", "cpu")
+        )
+
+    else:
+        raise ValueError(
+            f"Invalid EMBEDDING_MODE: '{embedding_mode}'. "
+            f"Must be 'mock' or 'real'."
+        )
+
+    return _embedding_service_instance
 
 
 # Fonction pour injecter le service de recherche de mémoires
