@@ -47,7 +47,7 @@ class EventQueryBuilder:
     def _get_vector_dimensions(self) -> int:
         """Retourne la dimension attendue pour les vecteurs (à configurer)."""
         # TODO: Rendre configurable ou récupérer depuis une source externe
-        return 1536 # Exemple: dimension pour text-embedding-ada-002
+        return 768  # Dimension pour nomic-embed-text-v1.5
 
     def build_add_query(self, event_data: EventCreate) -> Tuple[ColumnElement, Dict[str, Any]]:
         """Construit la requête INSERT."""

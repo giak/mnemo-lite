@@ -49,7 +49,7 @@ MnemoLite doit être intégrable dans Expanse via scripts Python appelés par de
 |---------|-----------------------------------------------|----------|----------------------------------------------|
 | F-001   | Ingestion JSON/REST d'événements              | Haute    |                                              |
 | F-002   | Stockage dans PostgreSQL (métadonnées)        | Haute    | Tables principales (events, nodes, edges)    |
-| F-003   | Vectorisation (OpenAI ou modèle local)        | Haute    | Worker ou application logic                |
+| F-003   | Vectorisation (modèle local Sentence-Transformers) | Haute    | Worker ou application logic (nomic-embed-text-v1.5) |
 | F-004   | Indexation vectorielle via pgvector (HNSW)    | Haute    | Remplacement de ChromaDB                     |
 | F-005   | Interface Web HTMX avec timeline et tags      | Haute    | Pour exploration locale                      |
 | F-006   | Requête vectorielle + sémantique              | Haute    | API `/search`                                |

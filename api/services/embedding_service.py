@@ -54,10 +54,11 @@ class SimpleEmbeddingService(EmbeddingServiceInterface):
     """
     Implémentation simple du service d'embedding utilisant un modèle basique.
     Pour un environnement de production, cette classe devrait être remplacée
-    par une implémentation utilisant des modèles plus sophistiqués (OpenAI, Hugging Face, etc.)
+    par une implémentation utilisant sentence-transformers (voir workers/utils/embeddings.py)
+    ou d'autres modèles locaux (Hugging Face, etc.)
     """
 
-    def __init__(self, model_name: str = "simple-model", dimension: int = 1536):
+    def __init__(self, model_name: str = "simple-model", dimension: int = 768):
         """
         Initialise le service d'embedding.
 

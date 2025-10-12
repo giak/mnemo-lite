@@ -34,11 +34,11 @@ except ImportError as e:
 # --- Configuration ---
 DB_URL = os.getenv("DATABASE_URL", "postgresql://mnemo:mnemo@localhost:5432/mnemolite")
 TABLE_NAME = "public.events"
-EMBEDDING_DIMENSION = 1536  # Assuming OpenAI embeddings
+EMBEDDING_DIMENSION = 768  # nomic-embed-text-v1.5 embeddings
 DEFAULT_DB_DSN = os.environ.get(
     "DATABASE_URL", "postgresql://user:password@localhost:5432/mnemolite_db"
 )
-DEFAULT_EMBEDDING_DIM = 1536  # Doit correspondre au schéma et aux données
+DEFAULT_EMBEDDING_DIM = 768  # Doit correspondre au schéma (nomic-embed-text-v1.5)
 DEFAULT_NUM_RUNS = 20  # Nombre d'exécutions par scénario
 DEFAULT_TOP_K = 10
 DEFAULT_LIMIT = 10  # Limite finale retournée par l'API (via search_vector)

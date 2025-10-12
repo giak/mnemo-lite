@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS events (
     id          UUID NOT NULL DEFAULT gen_random_uuid(),
     timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),         
     content     JSONB NOT NULL,             -- Contenu flexible: { "type": "prompt", ... } ou { "type": "decision", ... }
-    embedding   VECTOR(1536),               -- Embedding (ex: text-embedding-3-small)
+    embedding   VECTOR(768),                -- Embedding (nomic-embed-text-v1.5)
     metadata    JSONB DEFAULT '{}'::jsonb,  -- Tags, source, IDs, types, etc.
     -- Clé primaire composite, incluant la clé de partitionnement
     -- Commented out partitioning for test setup simplicity
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS events (
 
 COMMENT ON TABLE events IS 'Table principale stockant tous les evenements atomiques (NON partitionnee pour test setup).';
 COMMENT ON COLUMN events.content IS 'Contenu detaille de l evenement au format JSONB.';
-COMMENT ON COLUMN events.embedding IS 'Vecteur semantique du contenu (dimension 1536 pour text-embedding-3-small).';
+COMMENT ON COLUMN events.embedding IS 'Vecteur semantique du contenu (dimension 768 pour nomic-embed-text-v1.5).';
 COMMENT ON COLUMN events.metadata IS 'Metadonnees additionnelles (tags, IDs, types) au format JSONB.';
 
 CREATE INDEX IF NOT EXISTS events_timestamp_idx ON events (timestamp);
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS events (
     id          UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
     timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     content     JSONB NOT NULL,
-    embedding   VECTOR(1536),
+    embedding   VECTOR(768),
     metadata    JSONB DEFAULT '{}'::jsonb
 );
 CREATE INDEX IF NOT EXISTS events_timestamp_idx ON events (timestamp);

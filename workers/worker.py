@@ -13,7 +13,7 @@ import json
 import time
 import structlog
 from datetime import datetime
-from pgmq import Queue, Notification
+from tembo_pgmq import Queue, Notification
 import asyncpg
 from rich.console import Console
 from rich.panel import Panel

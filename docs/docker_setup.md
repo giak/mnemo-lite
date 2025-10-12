@@ -122,7 +122,8 @@ services:
     environment:
       DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
       TEST_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/mnemolite_test" # Décommenté
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v1.5}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
       ENVIRONMENT: ${ENVIRONMENT:-development}
     depends_on:
       db:
@@ -156,7 +157,8 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v1.5}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       PYTHONUNBUFFERED: "1"
     depends_on:
@@ -210,8 +212,9 @@ POSTGRES_PORT=5432 # Port interne PG, mapper différemment si besoin
 # API
 API_PORT=8001 # Port externe exposé pour l'API
 
-# Clés API (Optionnel)
-# OPENAI_API_KEY=votre_clé_openai
+# Embedding Model Configuration (Local)
+EMBEDDING_MODEL=nomic-ai/nomic-embed-text-v1.5
+EMBEDDING_DIMENSION=768
 
 # Options Dev/Prod
 # ENVIRONMENT=production

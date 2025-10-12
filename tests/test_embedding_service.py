@@ -158,7 +158,7 @@ async def test_generate_embedding():
 
     # Vérifications
     assert isinstance(embedding, list)
-    assert len(embedding) == 1536  # Dimension par défaut = 1536
+    assert len(embedding) == 768  # Dimension par défaut = 768
     assert all(
         isinstance(x, float) for x in embedding
     )  # Tous les éléments sont des flottants
@@ -175,7 +175,7 @@ async def test_generate_embedding_empty_text():
 
     # Vérifications
     assert isinstance(embedding, list)
-    assert len(embedding) == 1536  # Dimension par défaut = 1536
+    assert len(embedding) == 768  # Dimension par défaut = 768
     assert all(
         isinstance(x, float) for x in embedding
     )  # Tous les éléments sont des flottants
@@ -187,7 +187,7 @@ async def test_dimension_property():
     service = SimpleEmbeddingService()
 
     # Vérifier la dimension par défaut
-    assert service.dimension == 1536  # Dimension par défaut = 1536
+    assert service.dimension == 768  # Dimension par défaut = 768
 
     # Tester différentes dimensions
     service_dim_512 = SimpleEmbeddingService(dimension=512)
@@ -236,8 +236,8 @@ async def test_batch_embedding():
     assert len(embeddings) == len(texts)
     assert all(isinstance(emb, list) for emb in embeddings)
     assert all(
-        len(emb) == 1536 for emb in embeddings
-    )  # Dimension par défaut = 1536
+        len(emb) == 768 for emb in embeddings
+    )  # Dimension par défaut = 768
 
 
 @pytest.mark.asyncio

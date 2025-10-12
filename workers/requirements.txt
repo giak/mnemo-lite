@@ -9,8 +9,7 @@ psycopg2-binary
 # redis>=5.0.3 # If using Redis as Celery broker
 
 # Data processing / AI
-openai>=1.12.0
-sentence-transformers==2.2.2
+sentence-transformers>=2.7.0
 numpy==1.26.3
 httpx==0.26.0
 tembo-pgmq-python==0.10.0

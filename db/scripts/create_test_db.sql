@@ -20,14 +20,14 @@ CREATE TABLE IF NOT EXISTS events (
     id          UUID NOT NULL DEFAULT gen_random_uuid(),
     timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),         
     content     JSONB NOT NULL,
-    embedding   VECTOR(1536),
+    embedding   VECTOR(768),
     metadata    JSONB DEFAULT '{}'::jsonb,
     PRIMARY KEY (id)
 );
 
 COMMENT ON TABLE events IS 'Table principale stockant tous les événements atomiques (sans partitionnement pour les tests).';
 COMMENT ON COLUMN events.content IS 'Contenu détaillé de l''événement au format JSONB.';
-COMMENT ON COLUMN events.embedding IS 'Vecteur sémantique du contenu (dimension 1536 pour text-embedding-3-small).';
+COMMENT ON COLUMN events.embedding IS 'Vecteur sémantique du contenu (dimension 768 pour nomic-embed-text-v1.5).';
 COMMENT ON COLUMN events.metadata IS 'Métadonnées additionnelles (tags, IDs, types) au format JSONB.';
 
 -- Index GIN sur metadata

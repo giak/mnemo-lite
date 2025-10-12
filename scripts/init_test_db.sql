@@ -42,13 +42,13 @@ CREATE TABLE IF NOT EXISTS public.events (
     id          UUID NOT NULL DEFAULT gen_random_uuid(),
     timestamp   TIMESTAMPTZ NOT NULL DEFAULT NOW(),         
     content     JSONB NOT NULL,
-    embedding   VECTOR(1536),
+    embedding   VECTOR(768),
     metadata    JSONB DEFAULT '{}'::jsonb,
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
 
 -- Ensure the embedding column has the correct dimension, even if table already existed
-ALTER TABLE public.events ALTER COLUMN embedding TYPE vector(1536);
+ALTER TABLE public.events ALTER COLUMN embedding TYPE vector(768);
 
 -- Create indexes on the parent table (will be inherited)
 CREATE INDEX IF NOT EXISTS events_metadata_gin_idx ON public.events USING GIN (metadata jsonb_path_ops);
