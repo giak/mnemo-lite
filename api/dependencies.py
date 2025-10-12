@@ -27,6 +27,7 @@ from services.sentence_transformer_embedding_service import SentenceTransformerE
 from services.memory_search_service import MemorySearchService
 from services.event_processor import EventProcessor
 from services.notification_service import NotificationService
+from services.event_service import EventService
 
 logger = logging.getLogger(__name__)
 
@@ -231,4 +232,36 @@ async def get_notification_service(
         smtp_port=settings.get("SMTP_PORT", 25),
         smtp_user=settings.get("SMTP_USER", ""),
         smtp_password=settings.get("SMTP_PASSWORD", ""),
+    )
+
+
+# Fonction pour injecter le service d'événements
+async def get_event_service(
+    event_repository: EventRepositoryProtocol = Depends(get_event_repository),
+    embedding_service: EmbeddingServiceProtocol = Depends(get_embedding_service),
+) -> EventService:
+    """
+    Récupère une instance du service d'événements.
+
+    Args:
+        event_repository: Le repository d'événements
+        embedding_service: Le service d'embedding
+
+    Returns:
+        Une instance du service d'événements
+    """
+    # Configuration depuis env vars
+    config = {
+        "auto_generate_embeddings": os.getenv("EMBEDDING_AUTO_GENERATE", "true").lower() == "true",
+        "embedding_fail_strategy": os.getenv("EMBEDDING_FAIL_STRATEGY", "soft"),  # soft | hard
+        "embedding_source_fields": os.getenv(
+            "EMBEDDING_SOURCE_FIELDS",
+            "text,body,message,content,title"
+        ).split(",")
+    }
+
+    return EventService(
+        repository=event_repository,
+        embedding_service=embedding_service,
+        config=config
     )

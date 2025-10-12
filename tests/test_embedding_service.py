@@ -22,7 +22,7 @@ from main import app
 # Ajout du chemin racine du projet pour permettre les importations relatives
 sys.path.append(str(Path(__file__).parent.parent))
 
-from services.embedding_service import SimpleEmbeddingService, EmbeddingServiceInterface
+from services.embedding_service import MockEmbeddingService as SimpleEmbeddingService
 
 # Créer un router pour les endpoints de test
 test_router = APIRouter(prefix="/test", tags=["test"])

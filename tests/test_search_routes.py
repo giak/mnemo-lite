@@ -34,7 +34,7 @@ import uuid
 from main import app  # Import the FastAPI app instance
 from db.repositories.event_repository import EventRepository, EventCreate, EventModel
 from dependencies import get_event_repository  # Import the dependency function
-from services.embedding_service import SimpleEmbeddingService # Add this import
+from services.embedding_service import MockEmbeddingService as SimpleEmbeddingService  # Alias for compatibility
 
 # --- Configuration ---
 # URL de la DB de test, DOIT être fournie via la variable d'environnement

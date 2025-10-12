@@ -3,7 +3,6 @@ import psutil
 import time
 from fastapi import APIRouter, Depends, HTTPException
 import httpx
-import asyncpg
 from prometheus_client import (
     generate_latest,
     CONTENT_TYPE_LATEST,
@@ -36,26 +35,16 @@ api_request_duration = Histogram(
 )
 api_memory_usage = Gauge("api_memory_usage_bytes", "API memory usage in bytes")
 
-# Récupération des variables d'environnement PostgreSQL
-# Idéalement, utiliser DATABASE_URL fourni par docker-compose
-DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Variables ChromaDB supprimées
-# CHROMA_HOST = os.getenv("CHROMA_HOST", "chromadb")
-# CHROMA_PORT = os.getenv("CHROMA_PORT", "8000")
-
-
-async def check_postgres():
-    """Vérifie la connexion à la base de données PostgreSQL."""
-    if not DATABASE_URL:
-        return {"status": "error", "message": "DATABASE_URL not set"}
+async def check_postgres_via_engine(engine: AsyncEngine):
+    """Vérifie la connexion à la base de données PostgreSQL via SQLAlchemy engine."""
     try:
-        # Utilisation de DATABASE_URL pour la connexion
-        conn = await asyncpg.connect(DATABASE_URL)
-        version = await conn.fetchval("SELECT version();")
-        await conn.close()
-        return {"status": "ok", "version": version}
+        async with engine.connect() as conn:
+            result = await conn.execute(text("SELECT version()"))
+            version = result.scalar()
+            return {"status": "ok", "version": version}
     except Exception as e:
+        logger.error(f"PostgreSQL health check failed: {str(e)}")
         return {"status": "error", "message": str(e)}
 
 
@@ -99,7 +88,7 @@ async def readiness(db_engine: AsyncEngine = Depends(get_db_engine)) -> Dict[str
 
 
 @router.get("/health")
-async def health_check():
+async def health_check(db_engine: AsyncEngine = Depends(get_db_engine)):
     """Endpoint de vérification de santé."""
     start_time = time.time()
 
@@ -107,9 +96,8 @@ async def health_check():
     # connaître le vrai statut
     api_memory_usage.set(psutil.Process().memory_info().rss)
 
-    # Vérification de la santé de PostgreSQL
-    pg_status = await check_postgres()
-    # Appel à check_chroma supprimé
+    # Vérification de la santé de PostgreSQL via engine
+    pg_status = await check_postgres_via_engine(db_engine)
 
     # Systèmes critiques fonctionnels?
     is_healthy = pg_status["status"] == "ok"

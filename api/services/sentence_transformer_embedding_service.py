@@ -99,8 +99,12 @@ class SentenceTransformerEmbeddingService:
                     self._load_model_sync
                 )
 
-                # Vérifier dimension
-                test_embedding = self._model.encode("test")
+                # Vérifier dimension (aussi dans executor pour ne pas bloquer)
+                test_embedding = await loop.run_in_executor(
+                    None,
+                    self._model.encode,
+                    "test"
+                )
                 actual_dim = len(test_embedding)
 
                 if actual_dim != self.dimension:

@@ -38,7 +38,7 @@ from main import app
 # Import des dépendances et modèles
 from dependencies import get_db_engine
 from sqlalchemy.ext.asyncio import AsyncEngine
-from routes.health_routes import check_postgres
+# from routes.health_routes import check_postgres  # Renamed to check_postgres_via_engine
 
 # --- Fixtures ---
 
