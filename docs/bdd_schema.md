@@ -1,4 +1,8 @@
-# MnemoLite – Schéma SQL Raffiné (v1.2.0 / 2025.04.27)
+# MnemoLite – Schéma SQL Raffiné
+
+> 📅 **Dernière mise à jour**: 2025-10-13
+> 📝 **Version**: v1.3.0
+> ✅ **Statut**: À jour avec le code
 
 ## Contexte
 Ce schéma documente la structure de la base de données MnemoLite, alignée avec le PFD v1.2.2, le PRD v1.0.2 et l'ARCH v1.1.1. Il s'appuie sur une architecture 100% PostgreSQL optimisée pour un déploiement local, combinant une table principale `events` partitionnée (temps/vecteur) et des tables `nodes`/`edges` pour le graphe conceptuel.
@@ -182,6 +186,6 @@ Ce schéma est un **concentré de pragmatisme** pour un déploiement local : il 
 
 ---
 
-**Version :** 1.2.1 (aligné ARCH 1.1.1)
-**Date :** 2025-04-27
+**Version :** v1.3.0
+**Date :** 2025-10-13
 **Auteur :** Giak

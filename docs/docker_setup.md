@@ -1,7 +1,8 @@
 # MnemoLite - Configuration Docker (100% PostgreSQL)
 
-**Version**: 1.3.1 (Aligné ARCH 1.1.1)
-**Date**: 2025-04-27
+> 📅 **Dernière mise à jour**: 2025-10-13
+> 📝 **Version**: v1.3.0
+> ✅ **Statut**: À jour avec le code
 
 ## Vue d'ensemble
 
@@ -245,6 +246,6 @@ health:
 
 ---
 
-**Version**: 1.3.0
-**Dernière mise à jour**: 2025-04-26
+**Version**: v1.3.0
+**Dernière mise à jour**: 2025-10-13
 **Auteur**: Giak (mis à jour par Kosmos) 

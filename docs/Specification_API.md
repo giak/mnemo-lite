@@ -1,7 +1,10 @@
-# MnemoLite – Spécification API (v1.2.0 - Alignée Code)
+# MnemoLite – Spécification API
+
+> 📅 **Dernière mise à jour**: 2025-10-13
+> 📝 **Version**: v1.3.0
+> ✅ **Statut**: À jour avec le code
 
 > **Objectif (Ω)** : Définir un contrat clair, versionné, testable et documenté pour intégrer MnemoLite à Expanse et à tout client externe, basé sur REST/JSON et OpenAPI 3.1.
-> **Dernière MàJ**: 2025-10-12 (Auto-embedding + Health check fix)
 
 ---
 
@@ -44,7 +47,7 @@
 openapi: 3.1.0
 info:
   title: MnemoLite API
-  version: "1.2.0" # Version alignée code (auto-embedding + health check fix)
+  version: "1.3.0" # Version harmonisée (auto-embedding + health check fix + versioning)
 servers:
   - url: http://localhost:8001/v1 # URL locale par défaut
 paths:

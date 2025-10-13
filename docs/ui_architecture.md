@@ -1,7 +1,8 @@
 # MnemoLite - UI Architecture (HTMX + Alpine.js Sprinkles)
 
-**Version**: 1.0.0
-**Date**: 2025-05-04
+> 📅 **Dernière mise à jour**: 2025-10-13
+> 📝 **Version**: v1.3.0
+> ✅ **Statut**: À jour avec le code
 
 ## 1. Introduction & Objectifs
 

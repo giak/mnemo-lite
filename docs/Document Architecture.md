@@ -1,7 +1,8 @@
 # MnemoLite – Document d'Architecture (ARCH) détaillé
 
-**Version**: 1.2.0 (Aligné PFD 1.2.2 / PRD 1.0.2)
-**Date**: 2025-10-12
+> 📅 **Dernière mise à jour**: 2025-10-13
+> 📝 **Version**: v1.3.0
+> ✅ **Statut**: À jour avec le code
 
 ## 1. Vue d'ensemble
 MnemoLite adopte une architecture **CQRS cognitive et modulaire**, optimisée pour un déploiement local. Elle repose **exclusivement sur PostgreSQL 17** avec ses extensions pour gérer les aspects relationnels, vectoriels (`pgvector`), le partitionnement temporel (`pg_partman`), les tâches asynchrones (`pgmq` optionnel via lib Python) et le graphe relationnel (tables + CTE).
@@ -411,8 +412,8 @@ mnemo-lite/
 
 ---
 
-**Version**: 1.2.0
-**Dernière mise à jour**: 2025-10-12
-**Changements** : Ajout EventService + auto-embedding (nomic-embed-text-v1.5), fix health check DSN
+**Version**: v1.3.0
+**Dernière mise à jour**: 2025-10-13
+**Changements** : Ajout EventService + auto-embedding (nomic-embed-text-v1.5), fix health check DSN, harmonisation versioning
 **Auteur**: Giak
 

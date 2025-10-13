@@ -1,10 +1,11 @@
 # MnemoLite – Product Requirements Document (PRD)
 
+> 📅 **Dernière mise à jour**: 2025-10-13
+> 📝 **Version**: v1.3.0
+> ✅ **Statut**: À jour avec le code
+
 ## 1. Titre du produit
 **MnemoLite** — Mémoire cognitive autonome pour assistant conversationnel Expanse
-
-**Version**: 1.0.2 (Aligné PFD 1.2.2)
-**Date**: 2025-10-13
 
 ## 2. Objectif du produit
 Fournir une **mémoire cognitive réutilisable, autonome et interrogeable**, optimisée pour un déploiement local, destinée à simuler, tester, visualiser et enrichir les capacités mémorielles d'un agent IA, en reproduisant les grands types de mémoire humaine (épisodique, sémantique, procédurale, prospective, de travail).

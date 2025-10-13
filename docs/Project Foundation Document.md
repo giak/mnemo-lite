@@ -1,8 +1,10 @@
 # MnemoLite – Project Foundation Document (PFD)
 
-**Version** : **1.2.2** (Local Deployment Focus - Code Aligned)
-**Date** : 2025-10-13
-**Auteur / Sponsor** : Giak & Expanse Cognition Team
+> 📅 **Dernière mise à jour**: 2025-10-13
+> 📝 **Version**: v1.3.0
+> ✅ **Statut**: À jour avec le code
+
+**Auteur / Sponsor** : Giak & Expanse Cognition Team
 
 ---
 
@@ -136,7 +138,7 @@ flowchart LR
 | 3 | API v1 + CI | 15‑05 | Backend | schemathesis 100 % |
 | 4 | Setup Monitoring Local (logs/pg_stats/Prometheus) | 18‑05 | DevOps/Dev | Check logs, pg_stats, endpoint |
 | 5 | Bench Local Scale (e.g., 10M events) | 25‑05 | QA | p95 local < 10 ms |
-| 6 | Release v1.2.2 | 30‑05 | Lead | tag Git |
+| 6 | Release v1.3.0 | 30‑05 | Lead | tag Git |
 
 ---
 
@@ -188,5 +190,5 @@ flowchart LR
 ---
 
 ### Document Status
-_Le PFD **v1.2.2** adapte l'architecture et les objectifs pour un déploiement local optimisé sur une machine personnelle, simplifiant le cycle de vie des données et l'observabilité, et aligne la terminologie (table `events`, PGMQ) avec le code actuel._
+_Le PFD **v1.3.0** adapte l'architecture et les objectifs pour un déploiement local optimisé sur une machine personnelle, simplifiant le cycle de vie des données et l'observabilité, et aligne la terminologie (table `events`, PGMQ) avec le code actuel._
 
