@@ -251,7 +251,7 @@ class MemorySearchService(MemorySearchServiceProtocol):
         ts_end: Optional[datetime] = None,
         limit: int = 10,
         offset: int = 0,
-        distance_threshold: Optional[float] = 0.5,
+        distance_threshold: Optional[float] = 1.0,
     ) -> Tuple[List[EventModel], int]:
         """
         Effectue une recherche hybride: embedding + filtres metadata/timestamp.

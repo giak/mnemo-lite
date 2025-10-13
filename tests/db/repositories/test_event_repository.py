@@ -420,7 +420,7 @@ async def test_search_vector_metadata_only(mocker):
         ts_end=None,
         limit=test_limit,
         offset=test_offset,
-        distance_threshold=5.0 # Default from method signature
+        distance_threshold=None # Updated default: 5.0 → None
     )
 
     # Assert execute calls (data query only)
@@ -494,7 +494,7 @@ async def test_search_vector_vector_only(mocker):
         ts_end=None,
         limit=test_limit,
         offset=test_offset,
-        distance_threshold=5.0 # Default from method signature
+        distance_threshold=None # Updated default: 5.0 → None
     )
 
     # Assert execute calls (data query only)
@@ -576,7 +576,7 @@ async def test_search_vector_hybrid(mocker):
         ts_end=None,
         limit=test_limit,
         offset=test_offset,
-        distance_threshold=5.0 # Default from method signature
+        distance_threshold=None # Updated default: 5.0 → None
     )
     
     # Assert execute calls (data query only)
@@ -691,8 +691,9 @@ def test_build_search_vector_query_vector_only(query_builder: EventQueryBuilder)
     """Teste build_search_vector_query avec seulement un vecteur."""
     vector = [0.1] * query_builder._get_vector_dimensions()
     limit, offset = 5, 0
+    distance_threshold_test = 1.0  # Explicitly pass a threshold for this test
     query_tuple = query_builder.build_search_vector_query(
-        vector=vector, limit=limit, offset=offset 
+        vector=vector, limit=limit, offset=offset, distance_threshold=distance_threshold_test
     )
     assert isinstance(query_tuple, tuple) and len(query_tuple) == 2
     query, params = query_tuple
@@ -704,7 +705,7 @@ def test_build_search_vector_query_vector_only(query_builder: EventQueryBuilder)
     assert "LIMIT :LIM" in query_str
     assert "OFFSET :OFF" in query_str
     assert params.get("vec_query") == EventModel._format_embedding_for_db(vector)
-    assert params.get("dist_threshold") == 5.0 # Corrected: dist_threshold
+    assert params.get("dist_threshold") == distance_threshold_test  # Check against explicit value
 
 
 def test_build_search_vector_query_metadata_only(query_builder: EventQueryBuilder):
@@ -761,7 +762,7 @@ def test_build_search_vector_query_hybrid(query_builder: EventQueryBuilder):
     ts_start = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
     ts_end = datetime.datetime.now(datetime.timezone.utc)
     limit, offset = 20, 10
-    distance_threshold_val = 0.5 # Renamed to avoid conflict with builder default
+    distance_threshold_val = 1.0 # Updated default: 0.5 → 1.0
 
     query_tuple = query_builder.build_search_vector_query(
         vector=vector,

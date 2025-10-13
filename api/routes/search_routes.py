@@ -63,7 +63,19 @@ async def search(
     memory_search_service: MemorySearchServiceProtocol = Depends(
         get_memory_search_service
     ),
-    distance_threshold: float = Query(0.5, description="Seuil de distance pour la recherche vectorielle"),
+    distance_threshold: Optional[float] = Query(
+        1.0,
+        ge=0.0,
+        le=2.0,
+        description=(
+            "Distance L2 threshold for vector search (cosine distance range: 0-2). "
+            "Lower = stricter. Recommended values: "
+            "0.8 (strict, high precision), "
+            "1.0 (balanced, default), "
+            "1.2 (relaxed, high recall). "
+            "Set to None or 2.0 to return top-K without distance filtering."
+        )
+    ),
 ):
     """
     Recherche hybride de mémoires (métadonnées + vectorielle)

@@ -129,7 +129,7 @@ class EventQueryBuilder:
         ts_end: Optional[datetime] = None,
         limit: int = 10,
         offset: int = 0,
-        distance_threshold: Optional[float] = 5.0
+        distance_threshold: Optional[float] = None
     ) -> Tuple[TextClause, Dict[str, Any]]:
         """
         Construit la requête SELECT en utilisant des paramètres nommés (:param).
@@ -284,12 +284,48 @@ class EventRepository:
         ts_end: Optional[datetime] = None,
         limit: int = 10,
         offset: int = 0,
-        distance_threshold: Optional[float] = 5.0
+        distance_threshold: Optional[float] = None,
+        enable_fallback: bool = True
     ) -> Tuple[List[EventModel], int]:
         """
-        Effectue une recherche combinée (vecteur, métadonnées, temps) et retourne les événements et le nombre total.
-        NOTE: Le nombre total n'est pas encore implémenté de manière optimisée. Pour l'instant, retourne 0.
+        Effectue une recherche combinée (vecteur, métadonnées, temps) avec fallback automatique.
+
+        Args:
+            vector: Vecteur d'embedding pour la recherche sémantique
+            metadata: Filtres de métadonnées
+            ts_start: Timestamp de début
+            ts_end: Timestamp de fin
+            limit: Nombre maximum de résultats
+            offset: Offset pour pagination
+            distance_threshold: Seuil de distance L2 (None = pas de filtrage)
+            enable_fallback: Si True, réessaie sans threshold si 0 résultat en recherche pure vectorielle
+
+        Returns:
+            Tuple[List[EventModel], int]: (événements, nombre total estimé)
+
+        Fallback Logic:
+            Si threshold défini ET 0 résultats ET recherche vectorielle pure (pas de metadata/time filters)
+            → Réessaie en mode top-K (sans threshold) pour garantir des résultats pertinents
         """
+
+        # === Phase 3: VALIDATION & WARNINGS ===
+        if distance_threshold is not None:
+            if distance_threshold < 0.0:
+                raise ValueError(f"distance_threshold must be >= 0.0, got {distance_threshold}")
+
+            if distance_threshold > 2.0:
+                self.logger.warning(
+                    f"distance_threshold {distance_threshold} > 2.0 is unusually high. "
+                    f"Max L2 distance for normalized vectors is ~2.0. Consider using None instead."
+                )
+
+            if distance_threshold < 0.6 and vector is not None:
+                self.logger.warning(
+                    f"distance_threshold {distance_threshold} < 0.6 is very strict. "
+                    f"You may get 0 results. Recommended: 0.8-1.2 for balanced recall/precision."
+                )
+
+        # === Première tentative avec threshold ===
         query_data, params_data = self.query_builder.build_search_vector_query(
             vector=vector,
             metadata=metadata,
@@ -306,7 +342,41 @@ class EventRepository:
             db_result = await self._execute_query(query_data, params_data)
             rows = db_result.mappings().all()
             events = [EventModel.from_db_record(row) for row in rows]
-            
+
+            # === Phase 2: FALLBACK LOGIC ===
+            should_fallback = (
+                len(events) == 0  # Aucun résultat
+                and enable_fallback  # Fallback activé
+                and distance_threshold is not None  # Threshold était défini
+                and vector is not None  # C'est une recherche vectorielle
+                and not metadata  # Pas de filtre metadata (= vectoriel pur)
+                and not ts_start  # Pas de filtre temporel
+                and not ts_end
+            )
+
+            if should_fallback:
+                self.logger.warning(
+                    f"Vector search with threshold {distance_threshold} returned 0 results. "
+                    f"Falling back to top-K mode (no threshold)."
+                )
+
+                # Réessayer sans threshold
+                query_data_fallback, params_data_fallback = self.query_builder.build_search_vector_query(
+                    vector=vector,
+                    metadata=metadata,
+                    ts_start=ts_start,
+                    ts_end=ts_end,
+                    limit=limit,
+                    offset=offset,
+                    distance_threshold=None  # Désactiver threshold
+                )
+
+                db_result_fallback = await self._execute_query(query_data_fallback, params_data_fallback)
+                rows_fallback = db_result_fallback.mappings().all()
+                events = [EventModel.from_db_record(row) for row in rows_fallback]
+
+                self.logger.info(f"Fallback returned {len(events)} results in top-K mode.")
+
             # TODO: Implement total_hits calculation correctly without re-querying if possible,
             # or by a separate count query if necessary.
             total_hits = len(events) # Placeholder, not accurate if limit < total matches
