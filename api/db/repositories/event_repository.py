@@ -105,20 +105,30 @@ class EventQueryBuilder:
         params = {"event_id": str(event_id)}
         return query, params
 
-    def build_filter_by_metadata_query(self, metadata_criteria: Dict[str, Any]) -> Tuple[TextClause, Dict[str, Any]]:
+    def build_filter_by_metadata_query(
+        self,
+        metadata_criteria: Dict[str, Any],
+        limit: int = 10,
+        offset: int = 0
+    ) -> Tuple[TextClause, Dict[str, Any]]:
         """Construit la requête SELECT avec filtres sur les métadonnées JSON."""
         if not metadata_criteria:
             raise ValueError("Metadata criteria cannot be empty")
 
         query_str = """
-            SELECT 
+            SELECT
                 id, content, metadata, embedding, timestamp
             FROM events
-            WHERE 
-                metadata @> :criteria::jsonb
+            WHERE
+                metadata @> CAST(:criteria AS jsonb)
             ORDER BY timestamp DESC
+            LIMIT :lim OFFSET :off
         """
-        params = {"criteria": json.dumps(metadata_criteria)}
+        params = {
+            "criteria": json.dumps(metadata_criteria),
+            "lim": limit,
+            "off": offset
+        }
         return text(query_str), params
 
     def build_search_vector_query(
@@ -265,9 +275,16 @@ class EventRepository:
             self.logger.error(f"Failed to delete event {event_id}: {e}", exc_info=True)
             raise RepositoryError(f"Failed to delete event {event_id}: {e}") from e
 
-    async def filter_by_metadata(self, metadata_criteria: Dict[str, Any]) -> List[EventModel]:
-        """Filtre les événements par critères de métadonnées."""
-        query, params = self.query_builder.build_filter_by_metadata_query(metadata_criteria)
+    async def filter_by_metadata(
+        self,
+        metadata_criteria: Dict[str, Any],
+        limit: int = 10,
+        offset: int = 0
+    ) -> List[EventModel]:
+        """Filtre les événements par critères de métadonnées avec pagination."""
+        query, params = self.query_builder.build_filter_by_metadata_query(
+            metadata_criteria, limit, offset
+        )
         try:
             db_result = await self._execute_query(query, params)
             rows = db_result.mappings().all()
