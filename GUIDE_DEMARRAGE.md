@@ -250,6 +250,65 @@ curl -G http://localhost:8001/v1/search/ \
 
 **Ce qui se passe** : "Trouve-moi tout ce qui parle d'IA **ET** qui est lié au projet Expanse"
 
+### 3.5 🎯 Optimiser la précision avec le seuil de distance (distance_threshold)
+
+Le paramètre **`distance_threshold`** contrôle à quel point les résultats doivent être **similaires** à votre requête. C'est comme régler la "sensibilité" de votre recherche.
+
+**Comment ça marche ?**
+- MnemoLite utilise la **distance L2** (Euclidienne) entre les embeddings
+- Plus la distance est **petite**, plus les résultats sont **proches** sémantiquement
+- La plage va de **0 à 2** (pour des vecteurs normalisés)
+
+**Valeurs recommandées** :
+
+| Valeur | Mode | Usage | Résultats attendus |
+|--------|------|-------|-------------------|
+| **0.8** | Strict | Haute précision | Peu de résultats, très pertinents |
+| **1.0** | Équilibré (défaut) | Usage général | Bon compromis précision/rappel |
+| **1.2** | Relax | Haute couverture | Plus de résultats, pertinence élargie |
+| **None** ou **2.0** | Top-K | Sans filtrage | K résultats les plus proches |
+
+**Exemple - Recherche stricte** :
+```bash
+curl -G http://localhost:8001/v1/search/ \
+  --data-urlencode 'vector_query=erreur critique système' \
+  --data-urlencode "distance_threshold=0.8" \
+  --data-urlencode "limit=5" \
+  -H "Accept: application/json"
+```
+
+**Exemple - Recherche large** :
+```bash
+curl -G http://localhost:8001/v1/search/ \
+  --data-urlencode 'vector_query=projet IA' \
+  --data-urlencode "distance_threshold=1.2" \
+  --data-urlencode "limit=10" \
+  -H "Accept: application/json"
+```
+
+**🛡️ Protection automatique (Adaptive Fallback)** :
+
+Si votre `distance_threshold` est trop strict et retourne **0 résultats**, MnemoLite active automatiquement le **mode fallback** :
+- Il réessaie la recherche **sans threshold** (mode top-K)
+- Vous obtenez les K résultats les plus proches, garantis
+- Un avertissement est logué pour vous informer
+
+**Conditions du fallback** :
+- ✅ Recherche vectorielle pure (pas de filtres metadata ou time)
+- ✅ Threshold défini ET 0 résultats obtenus
+- ✅ Fallback activé par défaut (`enable_fallback=true`)
+
+**Exemple de log** :
+```
+WARNING: Vector search with threshold 0.5 returned 0 results.
+Falling back to top-K mode (no threshold).
+```
+
+**💡 Conseil pratique** :
+- **Commencez avec 1.0** (valeur par défaut) et ajustez selon vos besoins
+- **0.8 ou moins** : Réservé aux recherches très spécifiques (ex: détection de doublons)
+- **1.2 ou plus** : Pour des recherches exploratoires larges
+
 ### 4. Recherche par période (time-based)
 
 Grâce au **partitionnement automatique** (pg_partman), les recherches temporelles sont ultra-rapides :

@@ -118,6 +118,28 @@ curl -G http://localhost:8001/v1/search/ \
   --data-urlencode "vector_query=project status update" \
   --data-urlencode "filter_metadata={"type":"interaction"}" \
   --data-urlencode "limit=5" \
+  --data-urlencode "distance_threshold=1.0" \
+  -H "Accept: application/json"
+```
+
+**🎯 Distance Threshold Optimization:**
+
+The `distance_threshold` parameter controls the strictness of vector similarity matching (L2 distance, range 0-2):
+
+- **0.8** - Strict matching, high precision (fewer but very relevant results)
+- **1.0** - Balanced (default, recommended for most use cases)
+- **1.2** - Relaxed matching, high recall (more results, broader relevance)
+- **None** or **2.0** - Top-K mode (returns K nearest neighbors without distance filtering)
+
+**Adaptive Fallback:** If a pure vector search with a threshold returns 0 results, MnemoLite automatically falls back to top-K mode to guarantee relevant results. This fallback only applies to pure vector searches (no metadata or time filters).
+
+Example with custom threshold:
+```bash
+# Strict search for very similar events
+curl -G http://localhost:8001/v1/search/ \
+  --data-urlencode "vector_query=critical system error" \
+  --data-urlencode "distance_threshold=0.8" \
+  --data-urlencode "limit=5" \
   -H "Accept: application/json"
 ```
 

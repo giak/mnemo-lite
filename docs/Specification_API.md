@@ -216,11 +216,16 @@ paths:
             format: date-time
         - in: query
           name: distance_threshold
-          description: "Seuil de distance pour la similarité vectorielle (plus bas = plus similaire)."
+          description: |
+            Seuil de distance L2 pour la similarité vectorielle (range: 0-2, plus bas = plus similaire).
+            Valeurs recommandées: 0.8 (strict), 1.0 (balanced), 1.2 (relaxed), None/2.0 (top-K).
+            Si un threshold strict retourne 0 résultats en recherche vectorielle pure, fallback automatique en mode top-K.
           schema:
             type: number
             format: float
-            default: 0.5
+            default: 1.0
+            minimum: 0.0
+            maximum: 2.0
         - in: query
           name: limit
           description: "Nombre maximum de résultats finaux à retourner."
