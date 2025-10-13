@@ -108,12 +108,28 @@ class EventModel(BaseModel):
                 )
                 record_dict["embedding"] = None
         elif embedding_value is not None and not isinstance(embedding_value, list):
-            # Si ce n'est ni une chaîne ni une liste (et pas None), c'est inattendu
-            logger.warn(
-                "Unexpected type for embedding from DB",
-                type=type(embedding_value).__name__,
-            )
-            record_dict["embedding"] = None
+            # pgvector retourne parfois un ndarray (numpy array)
+            # Essayons de le convertir en liste
+            try:
+                # Si c'est un objet avec .tolist() (comme numpy ndarray)
+                if hasattr(embedding_value, 'tolist'):
+                    record_dict["embedding"] = embedding_value.tolist()
+                # Sinon tenter une conversion directe
+                elif hasattr(embedding_value, '__iter__'):
+                    record_dict["embedding"] = list(embedding_value)
+                else:
+                    logger.warn(
+                        "Unexpected type for embedding from DB",
+                        type=type(embedding_value).__name__,
+                    )
+                    record_dict["embedding"] = None
+            except (TypeError, AttributeError) as e:
+                logger.warn(
+                    "Failed to convert embedding to list",
+                    type=type(embedding_value).__name__,
+                    error=str(e)
+                )
+                record_dict["embedding"] = None
 
         # Le score de similarité peut être absent
         if "similarity_score" not in record_dict:
