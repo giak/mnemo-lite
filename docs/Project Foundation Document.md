@@ -1,7 +1,7 @@
 # MnemoLite – Project Foundation Document (PFD)
 
 **Version** : **1.2.2** (Local Deployment Focus - Code Aligned)
-**Date** : 2025-04-27
+**Date** : 2025-10-13
 **Auteur / Sponsor** : Giak & Expanse Cognition Team
 
 ---

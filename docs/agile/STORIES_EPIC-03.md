@@ -1,5 +1,18 @@
 # EPIC-03: Recherche Sémantique & Hybride
 
+> ## ⚠️ DOCUMENT HISTORIQUE (Q1-Q2 2025)
+>
+> **Ce document contient des informations obsolètes** issues de la phase initiale de développement.
+>
+> **Notamment** :
+> - ⚠️ Ligne 115 : Mention de **"embeddings dim=1536"** (ancien modèle OpenAI)
+> - ✅ **Version actuelle** : **768 dimensions** avec nomic-embed-text-v1.5 (Sentence-Transformers local)
+>
+> **Pour la documentation à jour**, consultez :
+> - [`/docs/Document Architecture.md`](../Document%20Architecture.md)
+> - [`/docs/Specification_API.md`](../Specification_API.md)
+> - [`/docs/agile/README.md`](README.md) - Contexte de cette archive
+
 *(Perspective: Développeur Système MnemoLite, Développeur API, Client API)*
 
 ## Objectifs de l'Epic:

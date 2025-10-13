@@ -4,7 +4,7 @@
 **MnemoLite** — Mémoire cognitive autonome pour assistant conversationnel Expanse
 
 **Version**: 1.0.2 (Aligné PFD 1.2.2)
-**Date**: 2025-04-27
+**Date**: 2025-10-13
 
 ## 2. Objectif du produit
 Fournir une **mémoire cognitive réutilisable, autonome et interrogeable**, optimisée pour un déploiement local, destinée à simuler, tester, visualiser et enrichir les capacités mémorielles d'un agent IA, en reproduisant les grands types de mémoire humaine (épisodique, sémantique, procédurale, prospective, de travail).
@@ -55,10 +55,10 @@ MnemoLite doit être intégrable dans Expanse via scripts Python appelés par de
 | F-006   | Requête vectorielle + sémantique              | Haute    | API `/search`                                |
 | F-007   | Graphe mnésique (Tables nodes/edges + CTE SQL)| Moyenne  | Limité à ≤ 3 sauts pour performance locale   |
 | F-008   | Export CSV / JSONL de tout ou partie mémoire  | Moyenne  | Utile pour analyse / backup manuel         |
-| F-009   | API réflexive (`/psi/`)                       | Moyenne  | Requiert logique LLM externe               |
+| F-009   | API réflexive (`/psi/`)                       | Moyenne  | **⚠️ TODO (Non implémenté)** - Requiert logique LLM externe |
 | F-010   | Mécanisme d'oubli actif (TTL / filtre)        | Moyenne  | Via partitionnement `pg_partman`             |
-| F-011   | Visualisation cause/effet / cluster            | Faible   | Potentiellement via UI ou export + outil ext |
-| F-012   | Cycle de vie Hot/Warm (Quantisation INT8)     | Haute    | Géré par `pg_cron` après ~1 an ; Cold/Archive différé |
+| F-011   | Visualisation cause/effet / cluster            | Faible   | **⚠️ TODO (Non implémenté)** - Potentiellement via UI ou export + outil ext |
+| F-012   | Cycle de vie Hot/Warm (Quantisation INT8)     | Haute    | **⚠️ TODO (Non implémenté)** - Géré par `pg_cron` (nécessite installation/config) ; Cold/Archive différé |
 | F-013   | Documentation d'installation et déploiement    | Haute    | Focus sur Docker local                       |
 | F-014   | Guides d'intégration (Expanse, standalone)     | Haute    | Script Python simple pour `.mdc`             |
 
@@ -143,22 +143,35 @@ make metrics        # Affiche les métriques de performance (basé sur les stats
 
 ## 10. Documentation
 
-### 10.1 Documentation utilisateur
+### 10.1 Documentation utilisateur ✅
 - `README.md` : Vue d'ensemble et démarrage rapide
-- `docs/USER.md` : Guide d'utilisation détaillé
-- `docs/Specification_API.md` : Documentation complète de l'API REST (remplace `API.md`)
+- `GUIDE_DEMARRAGE.md` : Guide utilisateur détaillé avec exemples pratiques
+- `docs/Specification_API.md` : Documentation complète de l'API REST (OpenAPI 3.1)
 
-### 10.2 Documentation technique
-- `docs/ARCHITECTURE.md` : Architecture détaillée (peut être complété par PFD et docker_setup)
-- `docs/bdd_schema.md` : Schéma de base de données (remplace `SCHEMA.md`)
-- `docs/docker_setup.md` : Configuration et explication de l'environnement Docker.
-- `docs/DEV.md` : Guide développeur
-- `docs/INTEGRATION.md` : Guide d'intégration à Expanse
+### 10.2 Documentation technique ✅
+- `docs/Document Architecture.md` : Architecture détaillée (H-VG-T, pgvector, partitioning)
+- `docs/bdd_schema.md` : Schéma de base de données (tables, indexes, partitions)
+- `docs/docker_setup.md` : Configuration et explication de l'environnement Docker
+- `CLAUDE.md` : Guide développeur pour Claude Code (contexte projet, commands)
+- `docs/test_inventory.md` : Inventaire et couverture des tests
+- `docs/architecture_diagrams.md` : Diagrammes d'architecture (Mermaid)
+- `docs/ui_architecture.md` : Architecture de l'interface HTMX
 
-### 10.3 Support et maintenance
-- `docs/BACKUP.md` : Procédures de sauvegarde/restauration
-- `docs/UPGRADE.md` : Guide de mise à jour
-- `docs/TROUBLESHOOTING.md` : Diagnostics et résolution de problèmes
+### 10.3 Documents Fondateurs ✅
+- `docs/Product Requirements Document.md` : PRD - Spécifications fonctionnelles
+- `docs/Project Foundation Document.md` : PFD - Fondations et décisions d'architecture
+
+### 10.4 Support et maintenance ⚠️ TODO
+> **⚠️ Documentation manquante - À créer selon besoin**:
+> - `docs/INTEGRATION.md` - Guide d'intégration à Expanse (.mdc)
+> - `docs/BACKUP.md` - Procédures de sauvegarde/restauration
+> - `docs/UPGRADE.md` - Guide de mise à jour
+> - `docs/TROUBLESHOOTING.md` - Diagnostics et résolution de problèmes
+>
+> **En attendant**, consulter :
+> - README.md section "Dépannage"
+> - GUIDE_DEMARRAGE.md section "🐛 Dépannage"
+> - Issues GitHub pour le support communautaire
 
 ---
 
