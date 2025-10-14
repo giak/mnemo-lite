@@ -1,0 +1,99 @@
+<!-- Filters Bar - Phase 1 MVP -->
+<div class="filters-bar">
+    <form id="filters-form">
+
+        <!-- Period Buttons -->
+        <div class="filter-group">
+            <label class="filter-label">Période</label>
+            <div class="period-buttons">
+                <button type="button"
+                        class="period-btn {% if filters.period == '1h' %}active{% endif %}"
+                        onclick="setPeriod(this, '1h')">1H</button>
+                <button type="button"
+                        class="period-btn {% if filters.period == '6h' %}active{% endif %}"
+                        onclick="setPeriod(this, '6h')">6H</button>
+                <button type="button"
+                        class="period-btn {% if filters.period == '24h' %}active{% endif %}"
+                        onclick="setPeriod(this, '24h')">24H</button>
+                <button type="button"
+                        class="period-btn {% if filters.period == '7d' %}active{% endif %}"
+                        onclick="setPeriod(this, '7d')">7J</button>
+                <button type="button"
+                        class="period-btn {% if filters.period == '30d' %}active{% endif %}"
+                        onclick="setPeriod(this, '30d')">30J</button>
+                <button type="button"
+                        class="period-btn {% if filters.period == 'all' or not filters.period %}active{% endif %}"
+                        onclick="setPeriod(this, 'all')">TOUT</button>
+            </div>
+            <input type="hidden"
+                   name="period"
+                   id="period-input"
+                   value="{{ filters.period or 'all' }}"
+                   hx-get="{{ target_url }}"
+                   hx-target="#dashboard-content"
+                   hx-trigger="change"
+                   hx-include="#filters-form">
+        </div>
+
+        <!-- Filters Grid -->
+        <div class="filters-grid">
+            <!-- Project Filter -->
+            <div class="filter-group">
+                <label class="filter-label" for="filter-project">Projet</label>
+                <select name="project"
+                        id="filter-project"
+                        class="filter-select"
+                        hx-get="{{ target_url }}"
+                        hx-target="#dashboard-content"
+                        hx-trigger="change"
+                        hx-include="#filters-form">
+                    <option value="">Tous les projets</option>
+                    <option value="mco" {% if filters.project == 'mco' %}selected{% endif %}>MCO</option>
+                    <option value="mco_test" {% if filters.project == 'mco_test' %}selected{% endif %}>MCO Test</option>
+                    <option value="other" {% if filters.project == 'other' %}selected{% endif %}>Other</option>
+                </select>
+            </div>
+
+            <!-- Category Filter -->
+            <div class="filter-group">
+                <label class="filter-label" for="filter-category">Catégorie</label>
+                <select name="category"
+                        id="filter-category"
+                        class="filter-select"
+                        hx-get="{{ target_url }}"
+                        hx-target="#dashboard-content"
+                        hx-trigger="change"
+                        hx-include="#filters-form">
+                    <option value="">Toutes catégories</option>
+                    <option value="cooking" {% if filters.category == 'cooking' %}selected{% endif %}>Cooking</option>
+                    <option value="demo" {% if filters.category == 'demo' %}selected{% endif %}>Demo</option>
+                    <option value="automotive" {% if filters.category == 'automotive' %}selected{% endif %}>Automotive</option>
+                </select>
+            </div>
+
+            <!-- Limit Filter -->
+            <div class="filter-group">
+                <label class="filter-label" for="filter-limit">Limite</label>
+                <select name="limit"
+                        id="filter-limit"
+                        class="filter-select"
+                        hx-get="{{ target_url }}"
+                        hx-target="#dashboard-content"
+                        hx-trigger="change"
+                        hx-include="#filters-form">
+                    <option value="10" {% if filters.limit == 10 %}selected{% endif %}>10</option>
+                    <option value="20" {% if filters.limit == 20 %}selected{% endif %}>20</option>
+                    <option value="50" {% if filters.limit == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if filters.limit == 100 %}selected{% endif %}>100</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Filter Actions -->
+        <div class="filter-actions">
+            <button type="button" class="btn btn-clear" onclick="clearFilters()">Effacer filtres</button>
+        </div>
+    </form>
+</div>
+
+<!-- JavaScript loaded from /static/js/components/filters.js -->

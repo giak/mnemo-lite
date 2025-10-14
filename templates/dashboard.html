@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - MnemoLite{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <p class="subtitle">Recent events in your MnemoLite memory</p>
+</div>
+
+<!-- Filters -->
+{% include "partials/filters.html" with context %}
+
+<!-- HTMX target container - stats + events get replaced together -->
+<div id="dashboard-content">
+    {% include "partials/dashboard_events.html" with context %}
+</div>
+{% endblock %}

@@ -1,0 +1,698 @@
+{% extends "base.html" %}
+
+{% block title %}Graph - MnemoLite{% endblock %}
+{% block nav_graph %}active{% endblock %}
+
+{% block extra_head %}
+<!-- Cytoscape.js 3.28.1 -->
+<script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<style>
+    /* ===== SCADA INDUSTRIAL DESIGN - SOBRE ET DENSE ===== */
+
+    /* Remove default container padding */
+    .container {
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .graph-wrapper {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 140px);
+        background: #0a0e27;
+    }
+
+    /* ===== KPI CARDS - STYLE SCADA SOBRE ===== */
+    .kpi-section {
+        display: flex;
+        gap: 8px;
+        padding: 12px;
+        background: #0d1117;
+        border-bottom: 1px solid #21262d;
+    }
+
+    .kpi-card {
+        flex: 1;
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-top: 2px solid #21262d;
+        padding: 12px;
+        position: relative;
+        transition: border-top-color 0.08s ease;
+    }
+
+    .kpi-card:hover {
+        border-top-color: #4a90e2;
+    }
+
+    .kpi-icon {
+        font-size: 18px;
+        opacity: 0.6;
+        margin-bottom: 6px;
+        display: block;
+    }
+
+    .kpi-label {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6e7681;
+        margin-bottom: 6px;
+    }
+
+    .kpi-value {
+        font-family: 'SF Mono', Consolas, monospace;
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1;
+        color: #20e3b2;
+        display: block;
+        letter-spacing: -1px;
+    }
+
+    /* ===== MAIN LAYOUT ===== */
+    .graph-content {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+    }
+
+    /* ===== LEFT SIDEBAR - COMPACT SCADA ===== */
+    .left-sidebar {
+        width: 260px;
+        background: #0d1117;
+        border-right: 1px solid #21262d;
+        padding: 12px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .sidebar-section {
+        background: #161b22;
+        border: 1px solid #30363d;
+        padding: 12px;
+    }
+
+    .sidebar-section-title {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: #6e7681;
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #21262d;
+    }
+
+    /* Filter Checkboxes - SCADA Style */
+    .filter-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px;
+        margin-bottom: 6px;
+        background: #0d1117;
+        border: 1px solid #21262d;
+        border-left: 2px solid #21262d;
+        cursor: pointer;
+        transition: border-left-color 0.08s ease;
+    }
+
+    .filter-item:hover {
+        border-left-color: #4a90e2;
+    }
+
+    .filter-item.active {
+        border-left-color: #20e3b2;
+        background: rgba(32, 227, 178, 0.05);
+    }
+
+    .filter-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+    }
+
+    .filter-checkbox input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        accent-color: #20e3b2;
+    }
+
+    .filter-color-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        border: 1px solid #fff;
+    }
+
+    .filter-label {
+        flex: 1;
+        font-size: 12px;
+        font-weight: 600;
+        color: #c9d1d9;
+    }
+
+    .filter-count {
+        background: #21262d;
+        color: #20e3b2;
+        padding: 2px 7px;
+        font-size: 11px;
+        font-weight: 700;
+        font-family: 'SF Mono', Consolas, monospace;
+    }
+
+    /* Layout Controls - Boutons SCADA */
+    .layout-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .layout-btn {
+        width: 100%;
+        padding: 9px 12px;
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-left: 2px solid #21262d;
+        color: #c9d1d9;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.08s ease;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .layout-btn:hover {
+        border-left-color: #4a90e2;
+        background: #161b22;
+    }
+
+    .layout-btn.active {
+        border-left-color: #20e3b2;
+        background: rgba(32, 227, 178, 0.08);
+        color: #20e3b2;
+    }
+
+    /* ===== CANVAS ===== */
+    .graph-canvas {
+        flex: 1;
+        position: relative;
+        background: #0a0e27;
+    }
+
+    #cy {
+        width: 100%;
+        height: 100%;
+        background: #0a0e27;
+    }
+
+    /* Floating Controls - Style SCADA minimal */
+    .floating-controls {
+        position: absolute;
+        bottom: 16px;
+        left: 16px;
+        display: flex;
+        gap: 6px;
+        z-index: 100;
+    }
+
+    .floating-btn {
+        width: 38px;
+        height: 38px;
+        background: rgba(22, 27, 34, 0.95);
+        border: 1px solid #30363d;
+        color: #c9d1d9;
+        font-size: 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.08s ease;
+    }
+
+    .floating-btn:hover {
+        background: #161b22;
+        border-color: #4a90e2;
+        color: #4a90e2;
+    }
+
+    /* Minimap - Compact SCADA */
+    .minimap-container {
+        position: absolute;
+        bottom: 16px;
+        right: 16px;
+        width: 180px;
+        height: 130px;
+        background: rgba(13, 17, 23, 0.95);
+        border: 1px solid #30363d;
+        overflow: hidden;
+        z-index: 100;
+    }
+
+    .minimap-header {
+        background: #161b22;
+        padding: 6px 10px;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6e7681;
+        border-bottom: 1px solid #21262d;
+    }
+
+    #minimap {
+        width: 100%;
+        height: calc(100% - 26px);
+    }
+
+    /* Loading State - Sobre */
+    .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(10, 14, 39, 0.95);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .loading-content {
+        text-align: center;
+    }
+
+    .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid #30363d;
+        border-top-color: #20e3b2;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin: 0 auto 16px;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+        font-size: 14px;
+        font-weight: 600;
+        color: #c9d1d9;
+        margin-bottom: 6px;
+    }
+
+    .loading-subtext {
+        font-size: 11px;
+        color: #6e7681;
+    }
+
+    /* ===== RIGHT SIDEBAR - DENSE SCADA ===== */
+    .right-sidebar {
+        width: 340px;
+        background: #0d1117;
+        border-left: 1px solid #21262d;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        transition: width 0.15s ease;
+    }
+
+    .right-sidebar.collapsed {
+        width: 0;
+        border: none;
+    }
+
+    .sidebar-header {
+        padding: 12px;
+        background: #161b22;
+        border-bottom: 1px solid #30363d;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .sidebar-title {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: #c9d1d9;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .sidebar-close {
+        background: none;
+        border: none;
+        color: #6e7681;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 0;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.08s ease;
+    }
+
+    .sidebar-close:hover {
+        background: #21262d;
+        color: #ff4757;
+    }
+
+    .sidebar-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px;
+    }
+
+    .detail-section {
+        margin-bottom: 16px;
+    }
+
+    .detail-section-title {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: #6e7681;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #21262d;
+    }
+
+    .detail-row {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-left: 2px solid #21262d;
+        padding: 10px;
+        margin-bottom: 6px;
+    }
+
+    .detail-label {
+        font-size: 10px;
+        font-weight: 700;
+        color: #6e7681;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+    }
+
+    .detail-value {
+        font-size: 13px;
+        font-weight: 600;
+        color: #c9d1d9;
+        word-break: break-word;
+    }
+
+    .detail-value code {
+        background: rgba(32, 227, 178, 0.08);
+        padding: 2px 5px;
+        font-size: 11px;
+        font-family: 'SF Mono', Consolas, monospace;
+        color: #20e3b2;
+    }
+
+    .detail-value strong {
+        color: #20e3b2;
+        font-weight: 700;
+    }
+
+    .node-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 12px;
+        border: 1px solid;
+    }
+
+    .node-badge.event {
+        background: rgba(102, 126, 234, 0.12);
+        color: #667eea;
+        border-color: rgba(102, 126, 234, 0.3);
+    }
+
+    .node-badge.entity {
+        background: rgba(245, 87, 108, 0.12);
+        color: #f5576c;
+        border-color: rgba(245, 87, 108, 0.3);
+    }
+
+    .node-badge.concept {
+        background: rgba(0, 242, 254, 0.12);
+        color: #00f2fe;
+        border-color: rgba(0, 242, 254, 0.3);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 50px 20px;
+        color: #6e7681;
+    }
+
+    .empty-state-icon {
+        font-size: 48px;
+        opacity: 0.25;
+        margin-bottom: 16px;
+    }
+
+    .empty-state-text {
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+
+    .empty-state-subtext {
+        font-size: 11px;
+        opacity: 0.7;
+    }
+
+    /* Scrollbar Styling - Minimal */
+    .left-sidebar::-webkit-scrollbar,
+    .sidebar-content::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .left-sidebar::-webkit-scrollbar-track,
+    .sidebar-content::-webkit-scrollbar-track {
+        background: #0d1117;
+    }
+
+    .left-sidebar::-webkit-scrollbar-thumb,
+    .sidebar-content::-webkit-scrollbar-thumb {
+        background: #30363d;
+    }
+
+    .left-sidebar::-webkit-scrollbar-thumb:hover,
+    .sidebar-content::-webkit-scrollbar-thumb:hover {
+        background: #4a90e2;
+    }
+
+    /* Hover Tooltip - SCADA Style */
+    .node-tooltip {
+        position: absolute;
+        background: rgba(22, 27, 34, 0.98);
+        border: 1px solid #4a90e2;
+        padding: 10px;
+        pointer-events: none;
+        z-index: 10000;
+        max-width: 220px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+    }
+
+    .tooltip-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #20e3b2;
+        margin-bottom: 6px;
+    }
+
+    .tooltip-type {
+        font-size: 10px;
+        font-weight: 700;
+        color: #6e7681;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+        letter-spacing: 0.5px;
+    }
+
+    .tooltip-content {
+        font-size: 11px;
+        color: #8b949e;
+        line-height: 1.3;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="graph-wrapper">
+    <!-- KPI Cards - SCADA Style -->
+    <div class="kpi-section">
+        <div class="kpi-card">
+            <div class="kpi-label">Nodes</div>
+            <span class="kpi-value" id="kpi-nodes">0</span>
+            <span class="kpi-icon">🟦</span>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Edges</div>
+            <span class="kpi-value" id="kpi-edges">0</span>
+            <span class="kpi-icon">🔗</span>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Layout</div>
+            <span class="kpi-value" id="kpi-layout" style="font-size: 18px; text-transform: uppercase;">COSE</span>
+            <span class="kpi-icon">🎨</span>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Selected</div>
+            <span class="kpi-value" id="kpi-selected">0</span>
+            <span class="kpi-icon">🔍</span>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="graph-content">
+        <!-- Left Sidebar -->
+        <div class="left-sidebar">
+            <!-- Node Type Filters -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Node Types</div>
+                <div class="filter-item active" data-type="event">
+                    <div class="filter-checkbox">
+                        <input type="checkbox" id="filter-event" checked onchange="updateFilters()">
+                        <span class="filter-color-indicator" style="background: #667eea;"></span>
+                        <label for="filter-event" class="filter-label">Events</label>
+                    </div>
+                    <span class="filter-count" id="count-event">0</span>
+                </div>
+                <div class="filter-item active" data-type="entity">
+                    <div class="filter-checkbox">
+                        <input type="checkbox" id="filter-entity" checked onchange="updateFilters()">
+                        <span class="filter-color-indicator" style="background: #f5576c;"></span>
+                        <label for="filter-entity" class="filter-label">Entities</label>
+                    </div>
+                    <span class="filter-count" id="count-entity">0</span>
+                </div>
+                <div class="filter-item active" data-type="concept">
+                    <div class="filter-checkbox">
+                        <input type="checkbox" id="filter-concept" checked onchange="updateFilters()">
+                        <span class="filter-color-indicator" style="background: #00f2fe;"></span>
+                        <label for="filter-concept" class="filter-label">Concepts</label>
+                    </div>
+                    <span class="filter-count" id="count-concept">0</span>
+                </div>
+            </div>
+
+            <!-- Layout Controls -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Layout Engine</div>
+                <div class="layout-controls">
+                    <button class="layout-btn active" data-layout="cose" onclick="changeLayout('cose')">
+                        <span>🌀</span> Cose (Force)
+                    </button>
+                    <button class="layout-btn" data-layout="circle" onclick="changeLayout('circle')">
+                        <span>⭕</span> Circle
+                    </button>
+                    <button class="layout-btn" data-layout="grid" onclick="changeLayout('grid')">
+                        <span>⊞</span> Grid
+                    </button>
+                    <button class="layout-btn" data-layout="breadthfirst" onclick="changeLayout('breadthfirst')">
+                        <span>🌳</span> Breadthfirst
+                    </button>
+                    <button class="layout-btn" data-layout="concentric" onclick="changeLayout('concentric')">
+                        <span>🎯</span> Concentric
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Quick Actions</div>
+                <div class="layout-controls">
+                    <button class="layout-btn" onclick="loadGraph()">
+                        <span>↻</span> Reload Graph
+                    </button>
+                    <button class="layout-btn" onclick="fitGraph()">
+                        <span>⊡</span> Fit to View
+                    </button>
+                    <button class="layout-btn" onclick="resetZoom()">
+                        <span>⊙</span> Reset Zoom
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas -->
+        <div class="graph-canvas">
+            <div id="cy"></div>
+
+            <!-- Loading Overlay -->
+            <div class="loading-overlay" id="loading-overlay">
+                <div class="loading-content">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">LOADING GRAPH DATA</div>
+                    <div class="loading-subtext">Please wait...</div>
+                </div>
+            </div>
+
+            <!-- Floating Controls -->
+            <div class="floating-controls">
+                <button class="floating-btn" title="Zoom Out" onclick="zoomOut()">−</button>
+                <button class="floating-btn" title="Fit to View" onclick="fitGraph()">⊡</button>
+                <button class="floating-btn" title="Zoom In" onclick="zoomIn()">+</button>
+            </div>
+
+            <!-- Minimap -->
+            <div class="minimap-container">
+                <div class="minimap-header">OVERVIEW</div>
+                <div id="minimap"></div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar -->
+        <div class="right-sidebar collapsed" id="right-sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-title">
+                    <span id="sidebar-icon">ℹ️</span>
+                    <span id="sidebar-title-text">Details</span>
+                </div>
+                <button class="sidebar-close" onclick="closeRightSidebar()">×</button>
+            </div>
+            <div class="sidebar-content" id="sidebar-content">
+                <div class="empty-state">
+                    <div class="empty-state-icon">🎯</div>
+                    <div class="empty-state-text">SELECT A NODE OR EDGE</div>
+                    <div class="empty-state-subtext">Click on any element to view details</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Graph Component JavaScript -->
+<script src="/static/js/components/graph.js"></script>
+{% endblock %}
+
+{# Original JavaScript extracted to /static/js/components/graph.js #}

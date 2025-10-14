@@ -1,0 +1,11 @@
+/**
+ * Stats - MnemoLite UI
+ * Statistics bar and metrics display
+ */
+
+.stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-lg);
+    margin-bottom: var(--space-xl);
+}

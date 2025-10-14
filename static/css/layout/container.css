@@ -1,0 +1,16 @@
+/**
+ * Container Layout - MnemoLite UI
+ */
+
+.container {
+    width: 100%;
+    max-width: 1800px;
+    margin: 0 auto;
+    padding: 0 var(--space-xl);
+}
+
+/* Main content area */
+main {
+    min-height: calc(100vh - 88px);
+    padding: var(--space-lg) 0;
+}

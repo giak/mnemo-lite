@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Search - MnemoLite{% endblock %}
+{% block nav_search %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Semantic Search</h1>
+    <p class="subtitle">Find memories using natural language queries</p>
+</div>
+
+<div class="search-box">
+    <form id="search-form"
+          hx-get="/ui/search/results"
+          hx-target="#search-results"
+          hx-trigger="submit"
+          hx-indicator="#search-loading">
+
+        <div class="search-input-group">
+            <input type="text"
+                   name="q"
+                   id="search-query"
+                   placeholder="Enter your search query..."
+                   class="search-input"
+                   autofocus>
+            <button type="submit" class="btn btn-primary">
+                Search
+            </button>
+        </div>
+    </form>
+
+    <div id="search-loading" class="htmx-indicator">
+        <span class="spinner"></span> Searching...
+    </div>
+</div>
+
+<!-- Filters for Search -->
+<div class="filters-bar">
+    <form id="filters-form"
+          hx-get="/ui/search/results"
+          hx-target="#search-results"
+          hx-trigger="change from:find input, change from:find select, click from:find .period-btn"
+          hx-include="#search-query">
+
+        <!-- Period Buttons -->
+        <div class="filter-group">
+            <label class="filter-label">Période</label>
+            <div class="period-buttons">
+                <button type="button" class="period-btn active" onclick="setPeriod(this, 'all')">TOUT</button>
+                <button type="button" class="period-btn" onclick="setPeriod(this, '1h')">1H</button>
+                <button type="button" class="period-btn" onclick="setPeriod(this, '6h')">6H</button>
+                <button type="button" class="period-btn" onclick="setPeriod(this, '24h')">24H</button>
+                <button type="button" class="period-btn" onclick="setPeriod(this, '7d')">7J</button>
+                <button type="button" class="period-btn" onclick="setPeriod(this, '30d')">30J</button>
+            </div>
+            <input type="hidden" name="period" id="period-input" value="all">
+        </div>
+
+        <!-- Filters Grid -->
+        <div class="filters-grid">
+            <!-- Project Filter -->
+            <div class="filter-group">
+                <label class="filter-label" for="filter-project">Projet</label>
+                <select name="project" id="filter-project" class="filter-select">
+                    <option value="">Tous les projets</option>
+                    <option value="mco">MCO</option>
+                    <option value="mco_test">MCO Test</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+
+            <!-- Category Filter -->
+            <div class="filter-group">
+                <label class="filter-label" for="filter-category">Catégorie</label>
+                <select name="category" id="filter-category" class="filter-select">
+                    <option value="">Toutes catégories</option>
+                    <option value="cooking">Cooking</option>
+                    <option value="demo">Demo</option>
+                    <option value="automotive">Automotive</option>
+                </select>
+            </div>
+
+            <!-- Limit Filter -->
+            <div class="filter-group">
+                <label class="filter-label" for="filter-limit">Limite</label>
+                <select name="limit" id="filter-limit" class="filter-select">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Filter Actions -->
+        <div class="filter-actions">
+            <button type="button" class="btn btn-clear" onclick="clearFilters()">Effacer filtres</button>
+            <button type="submit" class="btn btn-primary">Appliquer filtres</button>
+        </div>
+    </form>
+</div>
+
+<div id="search-results" class="search-results">
+    <!-- Results will be loaded here via HTMX -->
+    <div class="empty-state">
+        <p>Enter a search query to find relevant memories</p>
+        <p class="text-muted">Uses semantic vector search with nomic-embed-text-v1.5</p>
+    </div>
+</div>
+
+<!-- JavaScript loaded from /static/js/components/filters.js -->
+{% endblock %}

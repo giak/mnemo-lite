@@ -1,0 +1,22 @@
+{% if search_performed %}
+<div class="search-info">
+    <strong>{{ total }}</strong> results found for "{{ query }}"
+</div>
+{% endif %}
+
+{% if events %}
+<div class="event-list">
+    {% for event in events %}
+        {% set truncate_length = 200 %}
+        {% set show_similarity = True %}
+        {% include "partials/event_card.html" %}
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No events found matching your search.</p>
+    {% if search_performed %}
+    <p class="text-muted">Try a different query or check your database.</p>
+    {% endif %}
+</div>
+{% endif %}

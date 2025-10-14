@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Error - MnemoLite{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Error</h1>
+</div>
+
+<div class="error-container">
+    <p>An error occurred:</p>
+    <pre><code>{{ error }}</code></pre>
+    <p><a href="/ui/" class="btn">Back to Dashboard</a></p>
+</div>
+{% endblock %}

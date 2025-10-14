@@ -1,0 +1,31 @@
+<!-- Dashboard Stats + Events - Partial for HTMX updates -->
+<div>
+    <div class="stats-bar">
+        <div class="stat-card">
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Events</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ events|length }}</div>
+            <div class="stat-label">Showing</div>
+        </div>
+    </div>
+
+    <div class="events-section">
+        <h2>Recent Events</h2>
+
+        {% if events %}
+        <div class="event-list">
+    {% for event in events %}
+            {% set truncate_length = 150 %}
+            {% include "partials/event_card.html" %}
+    {% endfor %}
+</div>
+        {% else %}
+        <div class="empty-state">
+            <p>No events found with current filters.</p>
+            <p class="text-muted">Try adjusting your filters or add more events.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>

@@ -1,0 +1,58 @@
+{#
+  Reusable Event Card Component
+
+  Required context variables:
+  - event: EventModel object with .id, .timestamp, .content, .metadata, .similarity_score (optional)
+
+  Optional context variables:
+  - truncate_length: Max characters for content text (default: 150)
+  - show_similarity: Boolean to show similarity score (default: False)
+
+  Usage:
+    {% include "partials/event_card.html" %}
+    {% include "partials/event_card.html" with truncate_length=200, show_similarity=True %}
+#}
+
+{# Set defaults #}
+{% set truncate_length = truncate_length | default(150) %}
+{% set show_similarity = show_similarity | default(False) %}
+
+<div class="event-card"
+     hx-get="/ui/events/{{ event.id }}"
+     hx-target="#modal-body"
+     hx-swap="innerHTML"
+     onclick="if (typeof ModalManager !== 'undefined') { ModalManager.open('modal'); } else { document.getElementById('modal').style.display='flex'; }">
+
+    <div class="event-header">
+        <span class="event-id">{{ event.id|string|truncate(8, True, '...') }}</span>
+        <span class="event-timestamp">{{ event.timestamp|date_fr }}</span>
+        {% if show_similarity and event.similarity_score %}
+        <span class="similarity-score">Distance: {{ "%.3f"|format(event.similarity_score) }}</span>
+        {% endif %}
+    </div>
+
+    <div class="event-content">
+        {% if event.content.text %}
+            <p>{{ event.content.text|truncate(truncate_length) }}</p>
+        {% elif event.content.message %}
+            <p>{{ event.content.message|truncate(truncate_length) }}</p>
+        {% elif event.content.body %}
+            <p>{{ event.content.body|truncate(truncate_length) }}</p>
+        {% else %}
+            <p class="text-muted">No text content</p>
+        {% endif %}
+    </div>
+
+    {% if event.metadata %}
+    <div class="event-metadata">
+        {% for key, value in event.metadata.items() %}
+            {% if loop.index <= 3 %}
+            <span class="badge">{{ key }}: {{ value|string|truncate(30) }}</span>
+            {% endif %}
+        {% endfor %}
+        {% if event.metadata|length > 3 %}
+            <span class="badge">+{{ event.metadata|length - 3 }} more</span>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>

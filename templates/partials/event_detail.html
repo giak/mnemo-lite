@@ -1,0 +1,40 @@
+<div class="event-detail">
+    <h2>Event Details</h2>
+
+    <div class="detail-section">
+        <h3>ID</h3>
+        <code>{{ event.id }}</code>
+    </div>
+
+    <div class="detail-section">
+        <h3>Timestamp</h3>
+        <p>{{ event.timestamp|date_fr }}</p>
+    </div>
+
+    <div class="detail-section">
+        <h3>Content</h3>
+        <pre><code>{{ event.content|tojson(indent=2) }}</code></pre>
+    </div>
+
+    <div class="detail-section">
+        <h3>Metadata</h3>
+        {% if event.metadata %}
+        <pre><code>{{ event.metadata|tojson(indent=2) }}</code></pre>
+        {% else %}
+        <p class="text-muted">No metadata</p>
+        {% endif %}
+    </div>
+
+    <div class="detail-section">
+        <h3>Embedding</h3>
+        {% if event.embedding %}
+        <p><strong>Dimension:</strong> {{ event.embedding|length }}</p>
+        <details>
+            <summary>View embedding vector (click to expand)</summary>
+            <pre><code>{{ event.embedding|tojson(indent=2) }}</code></pre>
+        </details>
+        {% else %}
+        <p class="text-muted">No embedding</p>
+        {% endif %}
+    </div>
+</div>

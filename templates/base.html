@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}MnemoLite{% endblock %}</title>
+
+    <!-- HTMX 2.0.3 -->
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+
+    <!-- Custom CSS - Modular Architecture v4.0 -->
+    <link rel="stylesheet" href="/static/css/style.css?v=4.0">
+
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <a href="/ui/" class="brand-link">
+                    <img src="/static/img/logo_mnemolite.jpg" alt="MnemoLite Logo" class="brand-logo">
+                    <span class="brand-text">MnemoLite</span>
+                </a>
+                <span class="version">v1.3.0</span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/ui/" class="{% block nav_dashboard %}{% endblock %}">Dashboard</a></li>
+                <li><a href="/ui/search" class="{% block nav_search %}{% endblock %}">Search</a></li>
+                <li><a href="/ui/graph" class="{% block nav_graph %}{% endblock %}">Graph</a></li>
+                <li><a href="/ui/monitoring" class="{% block nav_monitoring %}{% endblock %}">Monitoring</a></li>
+                <li><a href="/docs" target="_blank">API Docs</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>MnemoLite v1.3.0 - PostgreSQL-native cognitive memory system</p>
+        </div>
+    </footer>
+
+    <!-- Modal container for HTMX -->
+    <div id="modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-content">
+            <span class="modal-close"
+                  aria-label="Fermer la fenêtre"
+                  onclick="if (typeof ModalManager !== 'undefined') { ModalManager.close('modal'); } else { document.getElementById('modal').style.display='none'; }">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Core JavaScript - Loaded globally -->
+    <script src="/static/js/core/error-handler.js"></script>
+    <script src="/static/js/core/modal.js"></script>
+    <script src="/static/js/core/htmx-helpers.js"></script>
+    <script src="/static/js/components/filters.js"></script>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
