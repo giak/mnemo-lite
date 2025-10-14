@@ -33,11 +33,13 @@ def mock_embedding_service():
     return mock_service
 
 @pytest.fixture
-def memory_search_service(mock_event_repository, mock_memory_repository, mock_embedding_service):
-    """Fixture pour créer une instance du service de recherche de mémoires."""
+def memory_search_service(mock_event_repository, mock_embedding_service):
+    """Fixture pour créer une instance du service de recherche de mémoires.
+
+    Phase 3.3: Removed mock_memory_repository parameter as MemorySearchService no longer uses it.
+    """
     return MemorySearchService(
         event_repository=mock_event_repository,
-        memory_repository=mock_memory_repository,
         embedding_service=mock_embedding_service
     )
 

@@ -169,15 +169,16 @@ async def get_embedding_service() -> EmbeddingServiceProtocol:
 # Fonction pour injecter le service de recherche de mémoires
 async def get_memory_search_service(
     event_repository: EventRepositoryProtocol = Depends(get_event_repository),
-    memory_repository: MemoryRepositoryProtocol = Depends(get_memory_repository),
     embedding_service: EmbeddingServiceProtocol = Depends(get_embedding_service),
 ) -> MemorySearchServiceProtocol:
     """
     Récupère une instance du service de recherche de mémoires.
 
+    Phase 3.3: Removed memory_repository injection as it's no longer used by MemorySearchService.
+    All search operations now use event_repository.search_vector() (since Phase 3.2).
+
     Args:
         event_repository: Le repository d'événements
-        memory_repository: Le repository de mémoires
         embedding_service: Le service d'embedding
 
     Returns:
@@ -185,7 +186,6 @@ async def get_memory_search_service(
     """
     return MemorySearchService(
         event_repository=event_repository,
-        memory_repository=memory_repository,
         embedding_service=embedding_service,
     )
 

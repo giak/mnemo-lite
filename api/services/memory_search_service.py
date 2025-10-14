@@ -12,7 +12,7 @@ import inspect
 import traceback
 import sys
 
-from interfaces.repositories import EventRepositoryProtocol, MemoryRepositoryProtocol
+from interfaces.repositories import EventRepositoryProtocol
 from interfaces.services import EmbeddingServiceProtocol, MemorySearchServiceProtocol
 from models.memory_models import Memory
 from models.event_models import EventModel
@@ -34,19 +34,19 @@ class MemorySearchService(MemorySearchServiceProtocol):
     def __init__(
         self,
         event_repository: EventRepositoryProtocol,
-        memory_repository: MemoryRepositoryProtocol,
         embedding_service: EmbeddingServiceProtocol,
     ):
         """
         Initialise le service de recherche de mémoires.
 
+        Phase 3.3: Removed memory_repository parameter as it was never used.
+        All search operations use event_repository.search_vector() since Phase 3.2.
+
         Args:
             event_repository: Le repository d'événements
-            memory_repository: Le repository de mémoires
             embedding_service: Le service d'embeddings
         """
         self.event_repository = event_repository
-        self.memory_repository = memory_repository
         self.embedding_service = embedding_service
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initialisation du service de recherche de mémoires")
