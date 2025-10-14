@@ -5,8 +5,6 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-# Remove asyncpg import
-# import asyncpg
 import structlog
 from fastapi.routing import APIRoute
 import uuid
@@ -20,10 +18,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy.event import listen
 
-# Import pgvector setup for SQLAlchemy (assuming a utility exists or needs creation)
-# from db.utils import register_vector_sqlalchemy # Placeholder for pgvector setup
-# import pgvector.asyncpg # Keep for potential raw connection access if needed?
-
 # Import des routes
 from routes import memory_routes, health_routes, event_routes, search_routes
 
@@ -36,20 +30,6 @@ DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 
 logger = structlog.get_logger()
-
-# Placeholder: Function to register pgvector type handler on connect
-# Needs to be implemented correctly based on sqlalchemy/pgvector interaction
-# async def register_vector_on_connect(dbapi_connection, connection_record):
-#    logger.info("Registering pgvector type for new SQLAlchemy connection...")
-#    # This part depends on how pgvector integrates with SQLAlchemy's async driver
-#    # Might involve registering type handlers on the raw DBAPI connection
-#    # Or perhaps SQLAlchemy dialect handles it automatically? Needs verification.
-#    # Example for asyncpg raw connection (if accessible):
-#    # raw_conn = await dbapi_connection.get_raw_connection() # Hypothetical
-#    # await pgvector.asyncpg.register_vector(raw_conn) # Using old asyncpg method as example
-#    # Example based on psycopg: register_vector(dbapi_connection)
-#    pass # Requires proper implementation
-
 
 # Models Pydantic pour les réponses d'erreur
 class ErrorResponse(BaseModel):
@@ -80,14 +60,6 @@ async def lifespan(app: FastAPI):
             )
             logger.info(
                 f"Database engine created using: {db_url_to_use.split('@')[1] if '@' in db_url_to_use else '[URL hidden]'}"
-            )
-
-            # Register pgvector type handler listener (if needed)
-            # This approach might need adjustment based on how pgvector works with SQLAlchemy async drivers
-            # listen(app.state.db_engine.sync_engine, "connect", register_vector_on_connect) # Using sync_engine might be incorrect for async
-            # TODO: Verify correct way to register pgvector types with SQLAlchemy async engine
-            logger.warning(
-                "pgvector type registration with SQLAlchemy async engine needs verification."
             )
 
             # Optional: Test connection
@@ -207,27 +179,6 @@ async def create_event_for_testing(
 
 
 # --- Fin Endpoint de test ---
-
-# --- Endpoint de Debug Temporaire ---
-# @app.get("/debug/routes")
-# async def list_routes():
-#     """Liste toutes les routes enregistrées dans l'application."""
-#     routes_info = []
-#     for route in app.routes:
-#         if isinstance(route, APIRoute):
-#             routes_info.append({
-#                 "path": route.path,
-#                 "name": route.name,
-#                 "methods": sorted(list(route.methods))
-#             })
-#     return routes_info
-# --- Fin Endpoint de Debug ---
-
-# --- Route de Test Temporaire ---
-# @app.get("/v1/test")
-# async def test_route():
-#     return {"status": "test route ok"}
-# --- Fin Route de Test ---
 
 
 @app.get("/")
