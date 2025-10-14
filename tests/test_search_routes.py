@@ -642,28 +642,18 @@ async def test_search_invalid_vector_query(client: TestClient):
 @pytest.mark.anyio
 async def test_search_invalid_vector_content(client: TestClient):
     """Teste l'envoi d'une query vector dont le contenu décodé n'est pas valide."""
-    # On envoie un objet JSON valide mais qui n'est pas un tableau comme
-    # attendu
-    invalid_content = '{"not": "a list"}'
+    # On envoie un JSON qui ressemble à une liste mais contient des chaînes au lieu de nombres
+    # IMPORTANT: Doit commencer par '[' pour être traité comme un vecteur, sinon c'est traité comme du texte
+    invalid_content = '["not", "a", "valid", "vector"]'  # Liste de strings au lieu de nombres
     response = client.get(f"/v1/search/", params={"vector_query": invalid_content})
 
-    # L'API peut retourner 422 (validation error) ou 200 (vide) selon
-    # l'implémentation
-    assert response.status_code in [
-        200,
-        422,
-    ], f"Status code inattendu: {response.status_code}"
+    # L'API doit retourner 422 (validation error) car le contenu n'est pas une liste de nombres
+    assert response.status_code == 422, f"Expected 422, got {response.status_code}: {response.text}"
 
-    if response.status_code == 422:
-        response_data = response.json()
-        assert "detail" in response_data, "Réponse d'erreur sans détails"
-    else:
-        # Si 200, vérifier que la réponse est une liste vide (pas de résultats)
-        response_data = response.json()
-        assert "data" in response_data, "Champ data manquant dans la réponse"
-        assert (
-            len(response_data["data"]) == 0
-        ), "Des résultats ont été trouvés avec une requête invalide"
+    response_data = response.json()
+    assert "detail" in response_data, "Réponse d'erreur sans détails"
+    assert "nombres" in response_data["detail"].lower() or "number" in response_data["detail"].lower(), \
+        f"Expected error about numbers/nombres, got: {response_data['detail']}"
 
 
 @pytest.mark.anyio
