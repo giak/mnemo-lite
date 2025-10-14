@@ -11,7 +11,7 @@ from fastapi import Request, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 # Import des interfaces (protocols)
-from interfaces.repositories import EventRepositoryProtocol, MemoryRepositoryProtocol
+from interfaces.repositories import EventRepositoryProtocol
 from interfaces.services import (
     EmbeddingServiceProtocol,
     MemorySearchServiceProtocol,
@@ -21,7 +21,6 @@ from interfaces.services import (
 
 # Import des implémentations concrètes
 from db.repositories.event_repository import EventRepository
-from db.repositories.memory_repository import MemoryRepository
 from services.embedding_service import MockEmbeddingService
 from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
 from services.memory_search_service import MemorySearchService
@@ -97,22 +96,6 @@ async def get_event_repository(
         Une instance du repository d'événements
     """
     return EventRepository(engine)
-
-
-# Fonction pour injecter le repository de mémoires
-async def get_memory_repository(
-    engine: AsyncEngine = Depends(get_db_engine),
-) -> MemoryRepositoryProtocol:
-    """
-    Récupère une instance du repository de mémoires.
-
-    Args:
-        engine: Le moteur de base de données
-
-    Returns:
-        Une instance du repository de mémoires
-    """
-    return MemoryRepository(engine)
 
 
 # Fonction pour injecter le service d'embedding

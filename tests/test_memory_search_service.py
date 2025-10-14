@@ -17,7 +17,7 @@ from services.memory_search_service import MemorySearchService
 from models.memory_models import Memory
 from models.event_models import EventModel
 # Correct the imports for the protocols
-from interfaces.repositories import EventRepositoryProtocol, MemoryRepositoryProtocol
+from interfaces.repositories import EventRepositoryProtocol
 from interfaces.services import EmbeddingServiceProtocol
 
 
@@ -30,14 +30,7 @@ def mock_event_repo():
     return repo
 
 
-@pytest.fixture
-def mock_memory_repo():
-    repo = AsyncMock(spec=MemoryRepositoryProtocol)
-    # Mock methods that might be called directly (though we aim to reduce this)
-    repo.search_by_embedding = AsyncMock(return_value=([], 0))
-    repo.list_memories = AsyncMock(return_value=([], 0))
-    repo.get_by_id = AsyncMock(return_value=None)
-    return repo
+# Phase 3.4: Removed mock_memory_repo fixture - MemoryRepository no longer exists
 
 
 @pytest.fixture
@@ -295,15 +288,17 @@ async def test_search_by_vector(
 async def test_search_hybrid(
     search_service: MemorySearchService,
     mock_event_repo: AsyncMock,
-    mock_embedding_service: AsyncMock,
-    mock_memory_repo: AsyncMock # Keep memory repo mock for potential other calls
+    mock_embedding_service: AsyncMock
 ):
-    """Teste la recherche hybride nominale."""
+    """Teste la recherche hybride nominale.
+
+    Phase 3.4: Removed mock_memory_repo - MemoryRepository no longer exists.
+    """
     query = "test query"
     metadata_filter = {"tag": "test"}
     embedding = [0.1] * 768 # Correct dimension
     mock_embedding_service.generate_embedding.return_value = embedding
-    
+
     # Configure mock_event_repo.search_vector to return some mock events
     mock_event1 = MagicMock(spec=EventModel)
     mock_event1.id = uuid.uuid4()
@@ -327,10 +322,6 @@ async def test_search_hybrid(
     assert call_args[1]['metadata'] == metadata_filter
     assert call_args[1]['limit'] == 5
     assert call_args[1]['offset'] == 0
-    
-    # Ensure memory_repo methods were NOT called by search_hybrid
-    mock_memory_repo.search_by_embedding.assert_not_called()
-    mock_memory_repo.list_memories.assert_not_called()
 
     assert len(results) == 1
     assert results[0] == mock_event1 # Check if the correct event model is returned
@@ -339,12 +330,14 @@ async def test_search_hybrid(
 
 @pytest.mark.anyio
 async def test_search_hybrid_with_empty_results(
-    search_service: MemorySearchService, 
-    mock_event_repo: AsyncMock, 
-    mock_embedding_service: AsyncMock,
-    mock_memory_repo: AsyncMock
+    search_service: MemorySearchService,
+    mock_event_repo: AsyncMock,
+    mock_embedding_service: AsyncMock
 ):
-    """Teste la recherche hybride retournant des résultats vides."""
+    """Teste la recherche hybride retournant des résultats vides.
+
+    Phase 3.4: Removed mock_memory_repo - MemoryRepository no longer exists.
+    """
     query = "no results query"
     embedding = [0.9] * 768 # Correct dimension
     mock_embedding_service.generate_embedding.return_value = embedding
@@ -354,25 +347,24 @@ async def test_search_hybrid_with_empty_results(
 
     mock_embedding_service.generate_embedding.assert_awaited_once_with(query)
     mock_event_repo.search_vector.assert_awaited_once()
-    # Ensure memory_repo methods were NOT called
-    mock_memory_repo.search_by_embedding.assert_not_called()
-    mock_memory_repo.list_memories.assert_not_called()
-    
+
     assert results == []
     assert total_hits == 0
 
 @pytest.mark.anyio
 async def test_search_hybrid_with_none_query(
-    search_service: MemorySearchService, 
-    mock_event_repo: AsyncMock, 
-    mock_embedding_service: AsyncMock,
-    mock_memory_repo: AsyncMock
+    search_service: MemorySearchService,
+    mock_event_repo: AsyncMock,
+    mock_embedding_service: AsyncMock
 ):
-    """Teste la recherche hybride avec seulement un filtre metadata (pas de query textuelle)."""
+    """Teste la recherche hybride avec seulement un filtre metadata (pas de query textuelle).
+
+    Phase 3.4: Removed mock_memory_repo - MemoryRepository no longer exists.
+    """
     metadata_filter = {"tag": "metadata_only"}
     # Mock should still return a tuple, even if vector=None was passed
     mock_event_repo.search_vector.return_value = ([], 0)
-    
+
     results, total_hits = await search_service.search_hybrid(query="", metadata_filter=metadata_filter)
 
     # generate_embedding should NOT be called if query is empty
@@ -383,21 +375,19 @@ async def test_search_hybrid_with_none_query(
     assert call_args[1]['vector'] is None
     assert call_args[1]['metadata'] == metadata_filter
 
-    # Ensure memory_repo methods were NOT called
-    mock_memory_repo.search_by_embedding.assert_not_called()
-    mock_memory_repo.list_memories.assert_not_called()
-    
     assert results == []
     assert total_hits == 0
 
 @pytest.mark.anyio
 async def test_search_hybrid_with_none_metadata(
-    search_service: MemorySearchService, 
-    mock_event_repo: AsyncMock, 
-    mock_embedding_service: AsyncMock,
-    mock_memory_repo: AsyncMock
+    search_service: MemorySearchService,
+    mock_event_repo: AsyncMock,
+    mock_embedding_service: AsyncMock
 ):
-    """Teste la recherche hybride avec seulement une query textuelle (pas de filtre metadata)."""
+    """Teste la recherche hybride avec seulement une query textuelle (pas de filtre metadata).
+
+    Phase 3.4: Removed mock_memory_repo - MemoryRepository no longer exists.
+    """
     query = "vector only query"
     embedding = [0.3] * 768 # Correct dimension
     mock_embedding_service.generate_embedding.return_value = embedding
@@ -412,9 +402,5 @@ async def test_search_hybrid_with_none_metadata(
     assert call_args[1]['vector'] == embedding
     assert call_args[1]['metadata'] is None
 
-    # Ensure memory_repo methods were NOT called
-    mock_memory_repo.search_by_embedding.assert_not_called()
-    mock_memory_repo.list_memories.assert_not_called()
-    
     assert results == []
     assert total_hits == 0

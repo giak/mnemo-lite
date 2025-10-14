@@ -9,11 +9,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 # Import des interfaces
-from interfaces.repositories import EventRepositoryProtocol, MemoryRepositoryProtocol
+from interfaces.repositories import EventRepositoryProtocol
 from interfaces.services import EmbeddingServiceProtocol
 
 # Import des fonctions d'injection de dépendances
-from dependencies import get_db_engine, get_event_repository, get_memory_repository
+# Phase 3.4: Removed get_memory_repository import - MemoryRepository no longer exists
+from dependencies import get_db_engine, get_event_repository
 
 # Import de l'app
 from main import app
@@ -62,43 +63,20 @@ class MockEventRepository:
         return await self.filter_by_metadata_mock(metadata_filter, limit, offset)
 
 
-# Classe mock pour MemoryRepository
-class MockMemoryRepository:
-    """Implémentation fictive du MemoryRepositoryProtocol pour les tests."""
-
-    def __init__(self, engine=None):
-        self.engine = engine
-        self.add_mock = AsyncMock()
-        self.get_by_id_mock = AsyncMock()
-        self.update_mock = AsyncMock()
-        self.delete_mock = AsyncMock()
-        self.list_memories_mock = AsyncMock()
-
-    async def add(self, memory):
-        return await self.add_mock(memory)
-
-    async def get_by_id(self, memory_id):
-        return await self.get_by_id_mock(memory_id)
-
-    async def update(self, memory_id, memory_update):
-        return await self.update_mock(memory_id, memory_update)
-
-    async def delete(self, memory_id):
-        return await self.delete_mock(memory_id)
-
-    async def list_memories(self, limit=10, offset=0, metadata_filter=None):
-        return await self.list_memories_mock(limit, offset, metadata_filter)
+# Phase 3.4: Removed MockMemoryRepository class - MemoryRepository no longer exists
 
 
 # Fixture pour créer une instance d'application avec dépendances remplacées
 @pytest.fixture
 def client_with_mocks():
-    """Client FastAPI avec toutes les dépendances mockées."""
+    """Client FastAPI avec toutes les dépendances mockées.
+
+    Phase 3.4: Removed mock_memory_repo - MemoryRepository no longer exists.
+    """
 
     # Créer les mocks
     mock_engine = MockAsyncEngine()
     mock_event_repo = MockEventRepository(engine=mock_engine)
-    mock_memory_repo = MockMemoryRepository(engine=mock_engine)
 
     # Définir l'état de l'app pour le test
     app.state.db_engine = mock_engine
@@ -106,11 +84,10 @@ def client_with_mocks():
     # Remplacer les dépendances
     original_overrides = app.dependency_overrides.copy()
     app.dependency_overrides[get_event_repository] = lambda: mock_event_repo
-    app.dependency_overrides[get_memory_repository] = lambda: mock_memory_repo
 
     # Créer et retourner le client de test avec les mocks
     with TestClient(app) as test_client:
-        yield test_client, mock_engine, mock_event_repo, mock_memory_repo
+        yield test_client, mock_engine, mock_event_repo
 
     # Nettoyer après le test
     app.dependency_overrides = original_overrides
@@ -120,8 +97,11 @@ def client_with_mocks():
     reason="Le mocking des dépendances pourrait nécessiter plus d'ajustements"
 )
 def test_injection_in_event_routes(client_with_mocks):
-    """Teste l'injection correcte des dépendances dans les routes d'événements."""
-    client, _, mock_event_repo, _ = client_with_mocks
+    """Teste l'injection correcte des dépendances dans les routes d'événements.
+
+    Phase 3.4: Removed test_injection_in_memory_routes - MemoryRepository no longer exists.
+    """
+    client, _, mock_event_repo = client_with_mocks
 
     # Configurer le mock pour retourner None (événement non trouvé)
     mock_event_repo.get_by_id_mock.return_value = None
@@ -134,36 +114,17 @@ def test_injection_in_event_routes(client_with_mocks):
     assert response.status_code == 404  # L'événement n'est pas trouvé comme prévu
 
 
-@pytest.mark.xfail(
-    reason="Le mocking des dépendances pourrait nécessiter plus d'ajustements"
-)
-def test_injection_in_memory_routes(client_with_mocks):
-    """Teste l'injection correcte des dépendances dans les routes de mémoires."""
-    client, _, _, mock_memory_repo = client_with_mocks
-
-    # Configurer le mock pour retourner une liste vide
-    mock_memory_repo.list_memories_mock.return_value = []
-
-    # Appeler une route qui utilise le repository
-    # Note: Selon main.py, la route est enregistrée avec le préfixe '/v0/memories'
-    response = client.get("/v0/memories/")
-
-    # Vérifier que le mock a été appelé
-    mock_memory_repo.list_memories_mock.assert_called_once()
-    assert response.status_code == 200
-    assert response.json() == []  # Liste vide comme attendu
-
-
 def test_chain_of_dependencies(client_with_mocks):
     """
     Teste que la chaîne d'injection de dépendances fonctionne correctement.
     Vérifie que le repository reçoit bien le moteur injecté.
-    """
-    _, mock_engine, mock_event_repo, mock_memory_repo = client_with_mocks
 
-    # Vérifier que les repositories ont bien reçu le moteur mocké
+    Phase 3.4: Removed mock_memory_repo verification - MemoryRepository no longer exists.
+    """
+    _, mock_engine, mock_event_repo = client_with_mocks
+
+    # Vérifier que le repository a bien reçu le moteur mocké
     assert mock_event_repo.engine is mock_engine
-    assert mock_memory_repo.engine is mock_engine
 
 
 # Test pour vérifier le comportement en cas d'erreur d'injection

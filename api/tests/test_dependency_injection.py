@@ -10,15 +10,14 @@ import os
 import json
 
 from dependencies import (
-    get_db_engine, 
-    get_event_repository, 
-    get_memory_repository,
+    get_db_engine,
+    get_event_repository,
     get_embedding_service,
     get_memory_search_service,
     get_event_processor,
     get_notification_service
 )
-from interfaces.repositories import EventRepositoryProtocol, MemoryRepositoryProtocol
+from interfaces.repositories import EventRepositoryProtocol
 from interfaces.services import (
     EmbeddingServiceProtocol, 
     MemorySearchServiceProtocol,
@@ -55,11 +54,7 @@ def app_with_engine():
     @app.get("/test-event-repository")
     async def test_event_repository(repo = Depends(get_event_repository)):
         return {"repository_available": repo is not None, "type": type(repo).__name__}
-    
-    @app.get("/test-memory-repository")
-    async def test_memory_repository(repo = Depends(get_memory_repository)):
-        return {"repository_available": repo is not None, "type": type(repo).__name__}
-    
+
     @app.get("/test-embedding-service")
     async def test_embedding_service(service = Depends(get_embedding_service)):
         return {"service_available": service is not None, "type": type(service).__name__}
@@ -112,19 +107,14 @@ def test_db_engine_injection(client_with_engine):
 
 # Test pour l'injection du repository d'événements
 def test_event_repository_injection(client_with_engine):
-    """Teste l'injection du repository d'événements."""
+    """Teste l'injection du repository d'événements.
+
+    Phase 3.4: Removed test_memory_repository_injection - MemoryRepository no longer exists.
+    """
     response = client_with_engine.get("/test-event-repository")
     assert response.status_code == 200
     assert response.json()["repository_available"] == True
     assert response.json()["type"] == "EventRepository"
-
-# Test pour l'injection du repository de mémoires
-def test_memory_repository_injection(client_with_engine):
-    """Teste l'injection du repository de mémoires."""
-    response = client_with_engine.get("/test-memory-repository")
-    assert response.status_code == 200
-    assert response.json()["repository_available"] == True
-    assert response.json()["type"] == "MemoryRepository"
 
 # Test pour l'injection du service d'embedding
 def test_embedding_service_injection(client_with_engine):
