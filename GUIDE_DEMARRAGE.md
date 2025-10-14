@@ -1,4 +1,8 @@
-# 🧠 MnemoLite - Guide de Démarrage
+<p align="center">
+  <img src="static/img/logo_mnemolite.jpg" alt="MnemoLite Logo" width="200" style="border-radius: 50%;">
+</p>
+
+# 🧠 MnemoLite v1.3.0 - Guide de Démarrage
 
 > **Pour qui ?** Ce guide est fait pour vous si vous voulez installer et utiliser MnemoLite, même sans être expert en bases de données ou en Docker. On vous prend par la main, étape par étape.
 
@@ -17,12 +21,15 @@ Imaginez une **bibliothèque immense** où chaque livre représente un souvenir,
 ### 🎯 Ce que vous obtiendrez
 
 À la fin de ce guide, vous aurez :
-- ✅ MnemoLite installé et opérationnel sur votre machine
+- ✅ MnemoLite v1.3.0 installé et opérationnel sur votre machine
 - ✅ Compris comment stocker des événements (vos "livres")
 - ✅ Appris à rechercher dans vos données avec différentes stratégies
 - ✅ Une API prête à connecter à vos projets
+- ✅ Un système stable et performant (102 tests passent, architecture consolidée)
 
 **Temps estimé** : 15-20 minutes pour l'installation ⏱️
+
+**🎉 Nouveauté v1.3.0** : Architecture simplifiée avec EventRepository comme source unique de vérité (-1,909 lignes de code, zéro régression détectée)
 
 ---
 
@@ -156,17 +163,19 @@ docker compose ps
 # Tous doivent être "Up" ou "Up (healthy)"
 
 # Tester la santé de l'API
-curl http://localhost:8001/v1/health
+curl http://localhost:8001/health
 ```
 
 **Réponse attendue** :
 ```json
 {
-  "status": "ok",
-  "checks": {
-    "database": true
+  "status": "healthy",
+  "services": {
+    "postgres": {
+      "status": "ok"
+    }
   },
-  "timestamp": "2025-10-12T20:00:00Z"
+  "timestamp": "2025-10-14T20:00:00Z"
 }
 ```
 
@@ -326,17 +335,61 @@ curl -G http://localhost:8001/v1/search/ \
 
 ---
 
-## 🎨 Interface Web (Bonus)
+## 🎨 Interface Web v4.0 - Design SCADA Industriel
 
-MnemoLite inclut une **interface Web légère** (HTMX) pour explorer visuellement vos données.
+MnemoLite inclut une **interface Web moderne** (HTMX 2.0) avec un design **SCADA industriel** pour explorer visuellement vos données.
 
-Ouvrez simplement votre navigateur : **http://localhost:8001/**
+Ouvrez simplement votre navigateur : **http://localhost:8001/ui/**
 
-Vous pourrez :
-- 📊 Visualiser vos événements
-- 🔍 Faire des recherches avec des filtres
-- 📈 Voir des statistiques
-- 🧪 Tester l'API interactivement
+### 🖥️ Pages disponibles
+
+**Dashboard** (`/ui/`)
+- Vue d'ensemble des événements récents
+- Filtres par période (24h, 7j, 30j, tout)
+- Filtres par projet et catégorie
+- Cartes de statistiques en temps réel
+
+**Recherche Sémantique** (`/ui/search`)
+- Recherche vectorielle par sens (pas par mots-clés)
+- Recherche hybride (vecteur + métadonnées + temps)
+- Ajustement du seuil de similarité
+- Résultats avec scores de pertinence
+
+**Graphe de Connaissances** (`/ui/graph`)
+- Visualisation interactive des relations (Cytoscape.js)
+- 5 algorithmes de layout (cose, circle, grid, breadthfirst, concentric)
+- Filtres par type de nœud (event, entity, concept)
+- Détails des nœuds et arêtes au clic
+- Minimap pour navigation
+
+**Monitoring** (`/ui/monitoring`)
+- Graphiques ECharts en temps réel
+- Timeline d'activité des événements
+- Distribution par type et projet
+- Événements critiques récents
+- Auto-refresh toutes les 30 secondes
+
+### ✨ Fonctionnalités UI v4.0
+
+**🎨 Design System SCADA Industriel**
+- Ultra dark palette (#0d1117 à #2d333b)
+- Zéro border-radius (aesthetic industrielle)
+- Compact spacing (haute densité d'information)
+- Transitions ultra-rapides (80ms)
+- Couleurs vives pour les statuts (critical, warning, ok)
+
+**⚡ Performance & UX**
+- Architecture CSS modulaire (16 modules + variables)
+- JavaScript organisé (3 core + 3 composants)
+- Composants réutilisables (event_card, filters, modal)
+- Gestion d'erreurs globale avec retry automatique
+- Patterns HTMX standardisés (data-attributes)
+
+**♿ Accessibilité**
+- ARIA attributes pour lecteurs d'écran
+- Navigation clavier complète
+- Focus trapping dans les modaux
+- Indicateurs de chargement accessibles
 
 **Documentation API interactive** :
 - **Swagger UI** : http://localhost:8001/docs
@@ -473,6 +526,64 @@ docker compose down -v
 
 ---
 
+## 📊 Nouveautés v1.3.0
+
+La version 1.3.0 apporte des **améliorations majeures** :
+
+### ✨ Changements principaux
+
+**🏗️ Architecture consolidée**
+- **Avant** : 2 repositories (EventRepository + MemoryRepository) accédant à la même table
+- **Maintenant** : 1 seul repository (EventRepository) comme **source unique de vérité**
+- **Résultat** : -1,909 lignes de code supprimées, plus de duplication !
+
+**✅ Tests renforcés**
+- **102 tests unitaires passent** (11 skipped, 1 xfailed)
+- **16 tests d'intégration** pour la similarité sémantique
+- **Durée** : ~13 secondes pour la suite complète
+- **Couverture** : ~87% du code
+
+**🚀 Performance maintenue**
+- Recherche vectorielle (HNSW) : **~12ms P95**
+- Recherche hybride (vecteur + métadonnées + temps) : **~11ms P95**
+- Recherche métadonnées + temps : **~3ms P95**
+- Génération d'embeddings : **~30ms moyenne** (100% local)
+
+**🔍 Validation exhaustive**
+- ✅ Zéro régression détectée
+- ✅ Tous les services fonctionnels
+- ✅ Architecture plus claire et maintenable
+- 📖 Rapport complet : [`docs/VALIDATION_FINALE_PHASE3.md`](docs/VALIDATION_FINALE_PHASE3.md)
+
+**🎨 Interface Web v4.0 (UI Refactoring)**
+- Interface complète avec 4 pages : Dashboard, Search, Graph, Monitoring
+- Design SCADA industriel (ultra dark, compact, haute densité)
+- CSS modulaire : 16 modules organisés (base, layout, components, utils)
+- JavaScript structuré : 6 modules (error-handler, modal, htmx-helpers, filters, graph, monitoring)
+- Composants réutilisables : event_card, filters, modal
+- HTMX 2.0 standardisé avec data-attributes patterns
+- Accessibilité ARIA complète + navigation clavier
+- Gestion d'erreurs globale avec retry automatique
+- Visualisation graphe avec Cytoscape.js (5 layouts)
+- Monitoring temps réel avec ECharts
+
+### 💡 Ce que ça change pour vous
+
+**En tant qu'utilisateur** :
+- ✅ API REST inchangée (rétrocompatibilité totale)
+- ✅ Nouvelle interface Web complète et moderne
+- ✅ Système plus stable (moins de code = moins de bugs)
+- ✅ Meilleures performances (requêtes optimisées)
+- ✅ Base solide pour les futures fonctionnalités
+
+**En tant que développeur** : Tout est simplifié :
+- 1 seul repository à maintenir au lieu de 2
+- Injection de dépendances plus claire
+- Tests plus simples et fiables
+- Documentation à jour
+
+---
+
 ## 🎓 Aller plus loin
 
 Maintenant que vous maîtrisez les bases, explorez :
@@ -482,6 +593,9 @@ Maintenant que vous maîtrisez les bases, explorez :
 - 🏗️ [Schéma de Base de Données](docs/bdd_schema.md) - Tables, indexes, partitions
 - 🐳 [Configuration Docker Avancée](docs/docker_setup.md) - Tuning et optimisations
 - 🔬 [Tests et Benchmarks](tests/README.md) - Performance et qualité
+- ✅ [Rapport de Validation Phase 3.4](docs/VALIDATION_FINALE_PHASE3.md) - Vérification exhaustive de la v1.3.0
+- 🎨 [Design System UI](docs/ui_design_system.md) - Principes SCADA et composants
+- 📁 [Architecture CSS](static/css/README.md) - Guide CSS modulaire v4.0
 
 ---
 
@@ -501,6 +615,6 @@ Vous avez maintenant votre propre bibliothèque cognitive locale, prête à alim
 
 ---
 
-**Version** : 1.0.0
-**Dernière mise à jour** : 2025-10-12
+**Version** : 1.3.0
+**Dernière mise à jour** : 2025-10-14
 **Auteur** : Giak
