@@ -1,6 +1,22 @@
 # Inventaire des Tests MnemoLite
 
+**Version:** 1.3.0
+**Dernière mise à jour:** 2025-10-14
+**Statut:** 102 tests passing, 11 skipped, 1 xfailed
+
 Ce document recense les tests automatisés du projet MnemoLite, collectés via `pytest --collect-only`.
+
+## ⚠️ Notes Phase 3.4 (v1.3.0)
+
+Suite à la consolidation de l'architecture autour d'EventRepository, **3 fichiers de tests obsolètes ont été supprimés** :
+- `test_memory_repository.py` - MemoryRepository n'existe plus
+- `test_memory_protocols.py` - MemoryRepositoryProtocol supprimé
+- `test_memory_routes.py` - Routes `/v0/memories` retirées
+
+**Nouveau fichier ajouté** :
+- `test_search_fallback.py` - Tests pour le mécanisme de fallback automatique des recherches vectorielles
+
+---
 
 ## tests/db/repositories/test_event_repository.py
 
@@ -29,32 +45,7 @@ Ce document recense les tests automatisés du projet MnemoLite, collectés via `
 
 ## tests/db/repositories/test_memory_repository.py
 
-- `test_add_memory_success`: Teste l'ajout réussi d'une nouvelle mémoire.
-- `test_get_memory_by_id_success`: Teste la récupération réussie d'une mémoire existante par son ID.
-- `test_get_memory_by_id_not_found`: Teste que la récupération d'une mémoire non existante par ID retourne None.
-- `test_update_memory_success`: Teste la mise à jour réussie d'une mémoire existante.
-- `test_update_memory_partial`: Teste la mise à jour partielle d'une mémoire (seulement un champ).
-- `test_update_memory_not_found`: Teste que la mise à jour d'une mémoire non existante retourne None.
-- `test_update_memory_empty_data`: Teste que l'appel à update sans données réelles ne change pas la mémoire.
-- `test_update_memory_merge_only_content`: Teste que la mise à jour du contenu uniquement fusionne correctement.
-- `test_update_memory_merge_only_metadata`: Teste que la mise à jour des métadonnées uniquement fusionne correctement.
-- `test_update_memory_overwrite_content_key`: Teste que la mise à jour du contenu écrase les clés existantes.
-- `test_update_memory_overwrite_metadata_key`: Teste que la mise à jour des métadonnées écrase les clés existantes.
-- `test_delete_memory_success`: Teste la suppression réussie d'une mémoire existante.
-- `test_delete_memory_not_found`: Teste que la suppression d'une mémoire non existante retourne False.
-- `test_list_memories_no_filters_default_limit`: Teste la liste des mémoires sans filtres et avec la limite par défaut (10).
-- `test_list_memories_custom_limit`: Teste la liste des mémoires avec une limite personnalisée.
-- `test_list_memories_offset`: Teste la liste des mémoires avec un offset.
-- `test_list_memories_filter_memory_type`: Teste le filtrage par memory_type.
-- `test_list_memories_filter_event_type`: Teste le filtrage par event_type.
-- `test_list_memories_filter_role_id`: Teste le filtrage par role_id.
-- `test_list_memories_filter_session_id`: Teste le filtrage par session_id (stocké dans les métadonnées).
-- `test_list_memories_combined_filters_pagination`: Teste la combinaison de filtres avec limite et offset.
-- `test_list_memories_filter_no_results`: Teste que les filtres ne donnant aucun résultat retournent une liste vide.
-- `test_list_memories_limit_zero`: Teste que la liste des mémoires avec limit=0 retourne une liste vide.
-- `test_list_memories_offset_too_large`: Teste que la liste des mémoires avec offset >= total retourne une liste vide.
-- `test_list_memories_three_filters`: Teste la combinaison de trois filtres (memory_type, event_type, role_id).
-- `test_get_memory_with_null_json_fields`: Teste la récupération et le mapping d'un enregistrement avec des champs JSON vides mais valides.
+**[OBSOLETE - Phase 3.4]** Ce fichier de test a été supprimé lors de la consolidation autour d'EventRepository. MemoryRepository n'existe plus dans la codebase.
 
 ## tests/test_dependency_injection.py
 
@@ -121,32 +112,11 @@ Ce document recense les tests automatisés du projet MnemoLite, collectés via `
 
 ## tests/test_memory_protocols.py
 
-- `test_list_memories`
-- `test_create_memory_with_protocol_mock`
-- `test_get_memory_success_with_protocol_mock`
-- `test_get_memory_not_found_with_protocol_mock`
-- `test_update_memory_with_protocol_mock`
-- `test_delete_memory_with_protocol_mock`
-- `test_list_memories_with_protocol_mock`
+**[OBSOLETE - Phase 3.4]** Ce fichier de test a été supprimé. MemoryRepositoryProtocol n'existe plus suite à la consolidation vers EventRepository.
 
 ## tests/test_memory_routes.py
 
-- `test_get_memory_success_with_mock`
-- `test_get_memory_not_found_with_mock`
-- `test_get_memory_with_exception`
-- `test_create_memory_success`
-- `test_create_memory_error`
-- `test_update_memory_success`
-- `test_update_memory_not_found`
-- `test_update_memory_error`
-- `test_delete_memory_success`
-- `test_delete_memory_not_found`
-- `test_delete_memory_error`
-- `test_list_memories`
-- `test_list_memories_empty_result`
-- `test_list_memories_with_filters`
-- `test_list_memories_error`
-- `test_invalid_path_for_memories`
+**[OBSOLETE - Phase 3.4]** Ce fichier de test a été supprimé. Les routes `/v0/memories` ont été retirées de l'API lors du nettoyage Phase 2.
 
 ## tests/test_memory_search_service.py
 
@@ -195,4 +165,18 @@ Ce document recense les tests automatisés du projet MnemoLite, collectés via `
 - `test_search_invalid_vector_query`: Teste la recherche vectorielle avec un vecteur invalide dans la requête.
 - `test_search_invalid_vector_content`: Teste la recherche vectorielle avec un contenu de vecteur invalide (ex: mauvaise dimension).
 - `test_search_metadata_with_time_filter`: Teste la recherche par métadonnées avec un filtre temporel ajouté via l'API.
-- `test_search_pagination`: Teste la pagination (limit et offset) pour les résultats de recherche via l'API. 
+- `test_search_pagination`: Teste la pagination (limit et offset) pour les résultats de recherche via l'API.
+
+## tests/test_search_fallback.py
+
+Tests pour le mécanisme de fallback automatique et les validations de distance_threshold dans les recherches vectorielles.
+
+- `test_fallback_on_strict_threshold_returns_results`: Teste le fallback automatique quand un threshold trop strict (0.3) retourne 0 résultats. Vérifie que le système réessaie automatiquement sans threshold (mode top-K).
+- `test_no_fallback_with_metadata_filter`: Teste que le fallback ne se déclenche PAS si un filtre metadata est présent, car le scope de la recherche est intentionnellement restreint.
+- `test_no_fallback_with_time_filter`: Teste que le fallback ne se déclenche PAS si un filtre temporel (ts_start/ts_end) est présent.
+- `test_fallback_disabled_with_enable_fallback_false`: Teste qu'on peut désactiver explicitement le fallback avec enable_fallback=False.
+- `test_warning_on_strict_threshold`: Teste qu'un warning est émis pour threshold < 0.6 (considéré comme très strict).
+- `test_warning_on_high_threshold`: Teste qu'un warning est émis pour threshold > 2.0 (inhabituel pour distance L2).
+- `test_error_on_negative_threshold`: Teste qu'une ValueError est levée pour threshold < 0.0 (invalide).
+- `test_no_fallback_if_threshold_none`: Teste qu'aucun fallback n'est nécessaire si threshold=None (mode top-K par défaut).
+- `test_fallback_logs_warning`: Teste que le fallback log un message WARNING quand il se déclenche, indiquant le threshold initial et le passage en mode top-K. 

@@ -1,8 +1,11 @@
 import os
 import json
+from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
 
 import structlog
@@ -19,7 +22,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy.event import listen
 
 # Import des routes
-from routes import health_routes, event_routes, search_routes
+from routes import health_routes, event_routes, search_routes, ui_routes, graph_routes, monitoring_routes
 
 # Configuration de base
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -140,10 +143,64 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Configuration UI: Templates et Static Files
+BASE_DIR = Path(__file__).parent  # /app in Docker
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+# Custom Jinja2 filter for French date formatting
+def format_date_french(value) -> str:
+    """
+    Format datetime to French format: 'lundi 12 septembre 15h 12min 35s'
+
+    Args:
+        value: datetime object or ISO string
+
+    Returns:
+        French formatted date string
+    """
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except (ValueError, AttributeError):
+            return value
+
+    if not isinstance(value, datetime):
+        return str(value)
+
+    # French day names
+    days_fr = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+
+    # French month names
+    months_fr = [
+        'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+        'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
+    ]
+
+    day_name = days_fr[value.weekday()]
+    day_num = value.day
+    month_name = months_fr[value.month - 1]
+    hour = value.hour
+    minute = value.minute
+    second = value.second
+
+    return f"{day_name} {day_num} {month_name} {hour}h {minute}min {second}s"
+
+# Register the filter
+templates.env.filters['date_fr'] = format_date_french
+
+# Inject templates instance into ui_routes
+ui_routes.set_templates(templates)
+
+logger.info("UI configured: templates and static files mounted")
+
 # Enregistrement des routes
 app.include_router(event_routes.router, prefix="/v1/events", tags=["v1_Events"])
 app.include_router(search_routes.router, prefix="/v1/search", tags=["v1_Search"])
 app.include_router(health_routes.router)
+app.include_router(ui_routes.router)
+app.include_router(graph_routes.router)
+app.include_router(monitoring_routes.router)
 # app.include_router(embedding_routes.router)
 
 # --- Endpoint pour la création d'événements PENDANT LES TESTS ---

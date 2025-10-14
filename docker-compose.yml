@@ -72,6 +72,8 @@ services:
       - ./certs:/app/certs:ro
       - ./tests:/app/tests
       - ./logs:/app/logs
+      - ./templates:/app/templates
+      - ./static:/app/static
       - postgres_data:/var/lib/postgresql/data
     deploy:
       resources:
