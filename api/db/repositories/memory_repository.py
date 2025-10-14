@@ -290,8 +290,8 @@ class MemoryRepository:
             raise
 
     async def list_memories(
-            self, 
-            limit: int = 10, 
+            self,
+            limit: int = 10,
             skip: int = 0,
             offset: int = None,  # Alias pour skip, pour compatibilité avec les tests
             memory_type: str = None,
@@ -304,7 +304,17 @@ class MemoryRepository:
         ) -> Tuple[List[Memory], int]:
             """
             Liste les mémoires (events) avec filtres optionnels
-            
+
+            ⚠️ DEPRECATED (Phase 3.2): This method is kept for backward compatibility with existing tests.
+            New code should use EventRepository.search_vector(vector=None, metadata=..., ts_start=..., ts_end=...)
+            which provides the same functionality with better performance and maintainability.
+
+            Rationale:
+            - EventRepository.search_vector() uses SQLAlchemy Core properly
+            - Supports same filters: metadata, ts_start, ts_end, limit, offset
+            - Returns EventModel (can be converted to Memory via _event_to_memory)
+            - Already used by MemorySearchService.search_by_metadata() since Phase 3.2
+
             Args:
                 limit: Nombre maximum d'enregistrements à retourner
                 skip: Nombre d'enregistrements à sauter (pour pagination)
@@ -316,7 +326,7 @@ class MemoryRepository:
                 metadata_filter: Filtre sur les métadonnées (format dict)
                 ts_start: Timestamp de début pour filtrer par date
                 ts_end: Timestamp de fin pour filtrer par date
-                
+
             Returns:
                 Tuple contenant (liste des mémoires, nombre total de résultats)
             """

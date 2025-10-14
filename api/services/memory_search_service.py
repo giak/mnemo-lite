@@ -105,38 +105,39 @@ class MemorySearchService(MemorySearchServiceProtocol):
     ) -> List[Memory]:
         """
         Recherche des mémoires par métadonnées.
-        
+
+        Phase 3.2: Migrated to use EventRepository.search_vector() instead of MemoryRepository.list_memories()
+
         Args:
             metadata_filter: Dictionnaire de critères de métadonnées
             limit: Nombre maximum de résultats
             offset: Décalage pour la pagination
             ts_start: Timestamp de début pour filtrer par date
             ts_end: Timestamp de fin pour filtrer par date
-            
+
         Returns:
             Liste de mémoires correspondant aux critères
         """
         try:
             self.logger.info(f"Recherche par métadonnées avec filtres: {metadata_filter}")
-            
-            # Appeler list_memories une seule fois avec gestion du résultat
-            result = await self.memory_repository.list_memories(
-                metadata_filter=metadata_filter,
-                limit=limit,
-                skip=offset,
+
+            # Phase 3.2: Use EventRepository.search_vector() with vector=None
+            # This provides consistent interface for all searches
+            events, total_hits = await self.event_repository.search_vector(
+                vector=None,  # No vector search, only metadata + time filtering
+                metadata=metadata_filter,
                 ts_start=ts_start,
-                ts_end=ts_end
+                ts_end=ts_end,
+                limit=limit,
+                offset=offset
             )
-            
-            # Vérifier si le résultat est un tuple (nouvelle interface) ou une liste (ancienne interface)
-            if isinstance(result, tuple) and len(result) == 2:
-                memories, _ = result
-            else:
-                memories = result
-            
-            self.logger.info(f"Recherche par métadonnées: {len(memories)} résultats trouvés")
+
+            # Convert events to Memory objects
+            memories = [self._event_to_memory(event) for event in events]
+
+            self.logger.info(f"Recherche par métadonnées: {len(memories)} résultats trouvés (total: {total_hits})")
             return memories
-            
+
         except Exception as e:
             self.logger.error(f"Erreur dans search_by_metadata: {str(e)}", exc_info=True)
             return []

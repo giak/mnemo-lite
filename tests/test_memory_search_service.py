@@ -144,28 +144,48 @@ async def test_search_by_content(
 
 @pytest.mark.asyncio
 async def test_search_by_metadata(
-    search_service, mock_memory_repo, sample_memories
+    search_service, mock_event_repo, sample_events
 ):
-    """Test de la recherche par métadonnées."""
-    # Configuration du mock
-    mock_memory_repo.list_memories.return_value = sample_memories
+    """Test de la recherche par métadonnées.
+
+    Phase 3.2: Updated to use EventRepository.search_vector() instead of MemoryRepository.list_memories()
+    """
+    # Prepare sample memories from events (simulating _event_to_memory conversion)
+    sample_memories = []
+    for event in sample_events:
+        memory = Memory(
+            id=str(event.id),
+            content=event.content,
+            metadata=event.metadata,
+            timestamp=event.timestamp,
+            embedding=event.embedding,
+            memory_type="episodic",
+            event_type="user_input",
+            role_id=1,
+        )
+        sample_memories.append(memory)
+
+    # Configuration du mock - EventRepository.search_vector now returns (events, total_hits)
+    mock_event_repo.search_vector.return_value = (sample_events, len(sample_events))
 
     # Exécution de la méthode à tester
     result = await search_service.search_by_metadata(
         {"tag": "test", "category": "recherche"}, 10
     )
 
-    # Vérifications
-    # Vérifier que les paramètres corrects ont été passés, y compris les valeurs par défaut
-    mock_memory_repo.list_memories.assert_called_once_with(
-        metadata_filter={"tag": "test", "category": "recherche"},
+    # Vérifications - search_vector should be called instead of list_memories
+    mock_event_repo.search_vector.assert_called_once_with(
+        vector=None,  # Phase 3.2: metadata-only search uses vector=None
+        metadata={"tag": "test", "category": "recherche"},
+        ts_start=None,
+        ts_end=None,
         limit=10,
-        skip=0,  # Valeur par défaut
-        ts_start=None,  # Valeur par défaut
-        ts_end=None,  # Valeur par défaut
+        offset=0,
     )
-    assert result == sample_memories
+
+    # Result should be Memory objects (converted from EventModel)
     assert len(result) == 3
+    assert all(isinstance(m, Memory) for m in result)
 
 
 @pytest.mark.asyncio
