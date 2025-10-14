@@ -216,6 +216,8 @@ class EventService:
         """
         Search events by embedding similarity.
 
+        Phase 3.3: Fixed to use EventRepository.search_vector() instead of non-existent search_by_embedding()
+
         Args:
             embedding: Query embedding vector
             limit: Max results
@@ -223,4 +225,10 @@ class EventService:
         Returns:
             List of similar events
         """
-        return await self.repo.search_by_embedding(embedding, limit)
+        # Use unified search_vector interface
+        events, _ = await self.repo.search_vector(
+            vector=embedding,
+            limit=limit,
+            offset=0
+        )
+        return events

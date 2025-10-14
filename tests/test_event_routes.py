@@ -25,7 +25,10 @@ def client():
 # Fixture pour mocker directement le repository
 @pytest.fixture
 def mock_event_repo():
-    """Crée un mock pour EventRepositoryProtocol."""
+    """Crée un mock pour EventRepositoryProtocol.
+
+    Phase 3.3: Updated to mock search_vector() instead of deprecated search_by_embedding()
+    """
     mock_repo = AsyncMock()
 
     # Configuration automatique des méthodes les plus courantes
@@ -34,7 +37,8 @@ def mock_event_repo():
     mock_repo.update_metadata.return_value = None  # Configurer dans chaque test
     mock_repo.delete.return_value = True  # Par défaut, suppression réussie
     mock_repo.filter_by_metadata.return_value = []  # Par défaut, aucun résultat
-    mock_repo.search_by_embedding.return_value = []  # Par défaut, aucun résultat
+    # Phase 3.3: search_vector() returns tuple (events, total_hits)
+    mock_repo.search_vector.return_value = ([], 0)  # Par défaut, aucun résultat
 
     return mock_repo
 
@@ -308,7 +312,10 @@ def test_filter_events_by_metadata(client_with_mock_repo):
 
 
 def test_search_events_by_embedding(client_with_mock_repo):
-    """Teste la recherche d'événements par embedding."""
+    """Teste la recherche d'événements par embedding.
+
+    Phase 3.3: Updated to mock search_vector() instead of search_by_embedding()
+    """
     client, app = client_with_mock_repo
     mock_repo = app.dependency_overrides[get_event_repository]()
 
@@ -329,7 +336,9 @@ def test_search_events_by_embedding(client_with_mock_repo):
         for i in range(2)
     ]
 
-    mock_repo.search_by_embedding.return_value = events
+    # Phase 3.3: Mock search_vector() instead of search_by_embedding()
+    # search_vector() returns tuple (events, total_hits)
+    mock_repo.search_vector.return_value = (events, len(events))
 
     # 2. Action - Utiliser POST avec le body JSON
     response = client.post(
@@ -337,7 +346,12 @@ def test_search_events_by_embedding(client_with_mock_repo):
     )
 
     # 3. Vérification
-    mock_repo.search_by_embedding.assert_called_once_with(test_embedding, test_limit)
+    # Phase 3.3: Verify search_vector() was called with correct parameters
+    mock_repo.search_vector.assert_called_once_with(
+        vector=test_embedding,
+        limit=test_limit,
+        offset=0
+    )
 
     assert response.status_code == 200
     response_data = response.json()
