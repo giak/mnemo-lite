@@ -193,15 +193,16 @@ async def get_memory_search_service(
 # Fonction pour injecter le processeur d'événements
 async def get_event_processor(
     event_repository: EventRepositoryProtocol = Depends(get_event_repository),
-    memory_repository: MemoryRepositoryProtocol = Depends(get_memory_repository),
     embedding_service: EmbeddingServiceProtocol = Depends(get_embedding_service),
 ) -> EventProcessorProtocol:
     """
     Récupère une instance du processeur d'événements.
 
+    Phase 3.3: Removed memory_repository injection as EventProcessor doesn't use it.
+    EventProcessor only uses event_repository and embedding_service.
+
     Args:
         event_repository: Le repository d'événements
-        memory_repository: Le repository de mémoires
         embedding_service: Le service d'embedding
 
     Returns:
@@ -209,7 +210,6 @@ async def get_event_processor(
     """
     return EventProcessor(
         event_repository=event_repository,
-        memory_repository=memory_repository,
         embedding_service=embedding_service,
     )
 
