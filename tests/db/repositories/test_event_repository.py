@@ -302,7 +302,7 @@ async def test_filter_by_metadata_found(mocker):
     found_events = await repository.filter_by_metadata(metadata_criteria=criteria)
 
     # 3. Vérification (Assert)
-    mock_builder.build_filter_by_metadata_query.assert_called_once_with(criteria)
+    mock_builder.build_filter_by_metadata_query.assert_called_once_with(criteria, 10, 0)
     mock_connection.execute.assert_awaited_once_with(mock_query, mock_params)
     assert len(found_events) == 2
     assert all(isinstance(event, EventModel) for event in found_events)
@@ -343,7 +343,7 @@ async def test_filter_by_metadata_not_found(mocker):
     found_events = await repository.filter_by_metadata(metadata_criteria=criteria)
 
     # 3. Vérification (Assert)
-    mock_builder.build_filter_by_metadata_query.assert_called_once_with(criteria)
+    mock_builder.build_filter_by_metadata_query.assert_called_once_with(criteria, 10, 0)
     mock_connection.execute.assert_awaited_once_with(mock_query, mock_params)
     assert len(found_events) == 0
 
@@ -673,15 +673,18 @@ def test_build_delete_query(query_builder: EventQueryBuilder):
 def test_build_filter_by_metadata_query(query_builder: EventQueryBuilder):
     """Teste la construction de la requête SELECT filtrée par metadata."""
     criteria = {"source": "builder_test", "level": 5}
-    query_tuple = query_builder.build_filter_by_metadata_query(criteria)
+    limit = 10
+    offset = 0
+    query_tuple = query_builder.build_filter_by_metadata_query(criteria, limit, offset)
     assert isinstance(query_tuple, tuple), "Should return a tuple (query, params)"
     assert len(query_tuple) == 2, "Tuple should have two elements"
     query, params = query_tuple
     # La requête est un TextClause, pas un Select directement à cause de la construction manuelle de la string SQL
     assert isinstance(query, TextClause), "Query should be a TextClause object"
-    assert "metadata @> :criteria::jsonb" in str(query).lower() # Check for key part of the query
+    assert "metadata @> cast(:criteria as jsonb)" in str(query).lower() # Updated: ::jsonb → CAST
     assert "order by timestamp desc" in str(query).lower()
-    assert params == {"criteria": json.dumps(criteria)}
+    assert "limit :lim offset :off" in str(query).lower()
+    assert params == {"criteria": json.dumps(criteria), "lim": limit, "off": offset}
 
 
 # Tests plus spécifiques pour build_search_vector_query
