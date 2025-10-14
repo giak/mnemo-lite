@@ -12,7 +12,11 @@ from models.memory_models import Memory, MemoryCreate, MemoryUpdate
 
 
 class EventRepositoryProtocol(Protocol):
-    """Interface définissant les opérations possibles sur les événements."""
+    """Interface définissant les opérations possibles sur les événements.
+
+    Phase 3.3: Removed deprecated search_by_embedding() and search_hybrid().
+    EventRepository only implements search_vector() for unified search interface.
+    """
 
     async def add(self, event: EventCreate) -> EventModel:
         """Ajoute un nouvel événement."""
@@ -30,29 +34,6 @@ class EventRepositoryProtocol(Protocol):
 
     async def delete(self, event_id: UUID) -> bool:
         """Supprime un événement par son ID."""
-        ...
-
-    async def search_by_embedding(
-        self,
-        embedding: List[float],
-        limit: int = 5,
-        skip: int = 0,
-        ts_start: Optional[datetime.datetime] = None,
-        ts_end: Optional[datetime.datetime] = None,
-    ) -> List[EventModel]:
-        """Recherche les événements similaires à un embedding."""
-        ...
-
-    async def search_hybrid(
-        self,
-        embedding: List[float],
-        metadata_filter: Dict[str, Any],
-        limit: int = 10,
-        skip: int = 0,
-        ts_start: Optional[datetime.datetime] = None,
-        ts_end: Optional[datetime.datetime] = None,
-    ) -> List[EventModel]:
-        """Recherche hybride combinant filtrage par métadonnées et similarité vectorielle."""
         ...
 
     async def filter_by_metadata(

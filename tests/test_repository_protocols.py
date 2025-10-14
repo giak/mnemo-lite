@@ -98,7 +98,10 @@ async def endpoint_delete_event(
 
 
 class MockEventRepository:
-    """Implémentation fictive du EventRepositoryProtocol pour les tests."""
+    """Implémentation fictive du EventRepositoryProtocol pour les tests.
+
+    Phase 3.3: Removed search_by_embedding as it's no longer in EventRepositoryProtocol.
+    """
 
     def __init__(self):
         self.events = {}
@@ -106,7 +109,6 @@ class MockEventRepository:
         self.get_by_id = AsyncMock()
         self.update_metadata = AsyncMock()
         self.delete = AsyncMock()
-        self.search_by_embedding = AsyncMock()
         self.filter_by_metadata = AsyncMock()
 
 
