@@ -1,0 +1,372 @@
+/**
+ * Reveal.js SCADA Overrides
+ * v1.0.0 - 2025-10-14
+ *
+ * Custom styling for Reveal.js controls, progress bar, slide numbers
+ * Follows MnemoLite SCADA industrial design principles
+ */
+
+/* ============================================ */
+/* PROGRESS BAR */
+/* ============================================ */
+
+.reveal .progress {
+    height: 4px;
+    background: rgba(74, 144, 226, 0.2);
+    bottom: 0;
+}
+
+.reveal .progress span {
+    background: linear-gradient(90deg, #4a90e2, #fbbf24);
+    transition: width 0.8s cubic-bezier(0.26, 0.86, 0.44, 0.985);
+}
+
+/* ============================================ */
+/* NAVIGATION CONTROLS */
+/* ============================================ */
+
+.reveal .controls {
+    color: #4a90e2;
+    bottom: 24px;
+    right: 24px;
+}
+
+.reveal .controls button {
+    width: 40px;
+    height: 40px;
+    transition: all 80ms ease-out;
+    opacity: 0.7;
+}
+
+.reveal .controls button:hover {
+    color: #fbbf24;
+    opacity: 1;
+    transform: scale(1.15);
+}
+
+.reveal .controls button:active {
+    transform: scale(0.95);
+}
+
+.reveal .controls .navigate-left,
+.reveal .controls .navigate-right,
+.reveal .controls .navigate-up,
+.reveal .controls .navigate-down {
+    border-color: currentColor;
+}
+
+/* ============================================ */
+/* SLIDE NUMBERS */
+/* ============================================ */
+
+.reveal .slide-number {
+    background: rgba(0, 0, 0, 0.8);
+    color: #fbbf24;
+    padding: 8px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border-radius: 0; /* SCADA zero radius */
+    border-left: 2px solid #4a90e2;
+    bottom: 16px;
+    right: 16px;
+}
+
+/* ============================================ */
+/* SPEAKER NOTES */
+/* ============================================ */
+
+.reveal .speaker-notes {
+    background: #0d1117;
+    border-left: 4px solid #4a90e2;
+    color: #e6edf3;
+    font-family: 'Inter', sans-serif;
+    font-size: 16px;
+    padding: 24px;
+}
+
+.reveal .speaker-notes strong {
+    color: #fbbf24;
+}
+
+/* ============================================ */
+/* SLIDE BACKGROUNDS */
+/* ============================================ */
+
+.reveal .backgrounds {
+    background: #0d1117;
+}
+
+.reveal .slide-background {
+    background: #0d1117;
+}
+
+/* ============================================ */
+/* FRAGMENT ANIMATIONS */
+/* ============================================ */
+
+.reveal .fragment {
+    transition: all 0.3s ease-out;
+}
+
+.reveal .fragment.visible {
+    opacity: 1;
+}
+
+.reveal .fragment.highlight-current-blue.visible {
+    color: #4a90e2;
+}
+
+.reveal .fragment.highlight-current-gold.visible {
+    color: #fbbf24;
+}
+
+/* ============================================ */
+/* OVERVIEW MODE */
+/* ============================================ */
+
+.reveal.overview .slides section {
+    border: 2px solid #4a90e2;
+    background: rgba(13, 17, 23, 0.95);
+}
+
+.reveal.overview .slides section.present {
+    border-color: #fbbf24;
+}
+
+/* ============================================ */
+/* POINTER / LASER MODE */
+/* ============================================ */
+
+.reveal .pointer {
+    color: #fbbf24;
+    pointer-events: none;
+}
+
+/* ============================================ */
+/* PAUSE OVERLAY */
+/* ============================================ */
+
+.reveal .pause-overlay {
+    background: rgba(0, 0, 0, 0.95);
+}
+
+.reveal .pause-overlay .resume-button {
+    background: #4a90e2;
+    color: #ffffff;
+    padding: 16px 32px;
+    border-radius: 0;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    cursor: pointer;
+    transition: all 80ms ease-out;
+    border-left: 4px solid #fbbf24;
+}
+
+.reveal .pause-overlay .resume-button:hover {
+    background: #fbbf24;
+    color: #0d1117;
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
+}
+
+/* ============================================ */
+/* HELP OVERLAY (? key) */
+/* ============================================ */
+
+.reveal .help-overlay {
+    background: rgba(13, 17, 23, 0.98);
+    color: #e6edf3;
+    font-family: 'Inter', sans-serif;
+    border: 2px solid #4a90e2;
+}
+
+.reveal .help-overlay .title {
+    color: #fbbf24;
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    border-bottom: 2px solid #4a90e2;
+    padding-bottom: 16px;
+}
+
+.reveal .help-overlay table {
+    color: #e6edf3;
+}
+
+.reveal .help-overlay table th {
+    color: #4a90e2;
+    text-transform: uppercase;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.reveal .help-overlay table td {
+    padding: 8px 16px;
+    border-bottom: 1px solid #30363d;
+}
+
+.reveal .help-overlay .key {
+    background: #161b22;
+    color: #fbbf24;
+    padding: 4px 12px;
+    border-radius: 0;
+    border: 1px solid #4a90e2;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+}
+
+/* ============================================ */
+/* PRINT STYLES */
+/* ============================================ */
+
+@media print {
+    .reveal .controls,
+    .reveal .progress,
+    .reveal .slide-number {
+        display: none !important;
+    }
+
+    .reveal .slides section {
+        page-break-after: always;
+        page-break-inside: avoid;
+    }
+
+    .reveal pre code {
+        max-height: none;
+        overflow: visible;
+    }
+}
+
+/* ============================================ */
+/* ACCESSIBILITY - FOCUS STATES */
+/* ============================================ */
+
+.reveal a:focus,
+.reveal button:focus,
+.reveal .controls button:focus {
+    outline: 2px solid #fbbf24;
+    outline-offset: 4px;
+}
+
+/* ============================================ */
+/* HIGH CONTRAST MODE SUPPORT */
+/* ============================================ */
+
+@media (prefers-contrast: high) {
+    .reveal {
+        --accent-blue: #88a0ff;
+        --accent-gold: #ffd700;
+        --success: #00ff00;
+        --danger: #ff3333;
+    }
+
+    .reveal .progress span {
+        background: #ffd700;
+    }
+
+    .reveal .controls {
+        color: #88a0ff;
+    }
+}
+
+/* ============================================ */
+/* REDUCED MOTION SUPPORT */
+/* ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+    .reveal * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    .reveal .progress span {
+        transition: none;
+    }
+
+    .reveal .controls button {
+        transition: none;
+    }
+}
+
+/* ============================================ */
+/* FULLSCREEN MODE */
+/* ============================================ */
+
+.reveal.fullscreen {
+    cursor: none;
+}
+
+.reveal.fullscreen .controls,
+.reveal.fullscreen .progress,
+.reveal.fullscreen .slide-number {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.reveal.fullscreen:hover .controls,
+.reveal.fullscreen:hover .progress,
+.reveal.fullscreen:hover .slide-number {
+    opacity: 1;
+}
+
+/* ============================================ */
+/* AUTO-SLIDE PROGRESS */
+/* ============================================ */
+
+.reveal .slide-background .slide-background-content {
+    opacity: 1;
+}
+
+.reveal .slide-background.past {
+    opacity: 0.5;
+}
+
+.reveal .slide-background.future {
+    opacity: 0.3;
+}
+
+/* ============================================ */
+/* CUSTOM: DEMO MODE INDICATOR */
+/* ============================================ */
+
+.demo-mode-indicator {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    background: rgba(244, 63, 94, 0.9);
+    color: #ffffff;
+    padding: 8px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    border-left: 4px solid #ffffff;
+    z-index: 1000;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+/* ============================================ */
+/* CUSTOM: LIVE DEMO BADGE */
+/* ============================================ */
+
+.live-demo-badge {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 700;
+    border-left: 2px solid #10b981;
+    z-index: 100;
+}
+
+.live-demo-badge::before {
+    content: "●";
+    margin-right: 8px;
+    animation: pulse 1.5s ease-in-out infinite;
+}
