@@ -52,9 +52,9 @@ Ajouter **code intelligence** à MnemoLite (indexation, search sémantique, call
 
 ### Stratégie
 **Architecture dual-purpose**:
-- Table `events` (INCHANGÉE) → agent conversations, docs
-- Table `code_chunks` (NOUVELLE) → code intelligence
-- Dual embeddings: nomic-text (137M) + jina-code (161M) = ~700 MB
+- Table `events` (INCHANGÉE) → agent conversations, docs (nomic-embed-text-v1.5)
+- Table `code_chunks` (NOUVELLE) → code intelligence (jina-embeddings-v2-base-code)
+- Dual embeddings: nomic-text (137M, 768D) + jina-code (161M, 768D) = ~700 MB RAM
 
 ### Timeline
 **13 semaines** (3 mois) réparties en 5 phases:
@@ -176,9 +176,10 @@ Ajouter **code intelligence** à MnemoLite (indexation, search sémantique, call
    - **PAS de migration DB** tolérée
    - Validation: `len(embedding) == 768` dans tous tests
 
-4. **PostgreSQL 17 Only**
+4. **PostgreSQL 18 Only** ✅ MIGRÉ
+   - Migration PostgreSQL 17 → 18 complétée (Phase 0)
    - **Aucune** dépendance externe (Elasticsearch, Meilisearch, etc.)
-   - Extensions natives uniquement (pgvector, pg_trgm)
+   - Extensions natives uniquement (pgvector 0.8.1, pg_trgm)
 
 ### ⚡ Décisions Critiques Validées
 

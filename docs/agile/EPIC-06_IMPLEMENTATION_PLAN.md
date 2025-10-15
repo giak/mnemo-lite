@@ -24,7 +24,7 @@
 ## ⚠️ Contraintes Critiques Validées
 
 ### Contraintes Techniques
-- ✅ **PostgreSQL 17 only**: Pas d'autres DB, pas de services externes
+- ✅ **PostgreSQL 18 only**: Pas d'autres DB, pas de services externes
 - ✅ **100% local**: Aucune dépendance cloud/API (embeddings locaux)
 - ✅ **CPU-friendly**: Déploiement sans GPU requis
 - ✅ **RAM budget**: Total embeddings < 1 GB (target: ~700 MB)

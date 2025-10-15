@@ -616,7 +616,7 @@ CREATE TABLE memory_items (
 
 ### Checklist Contraintes MnemoLite
 
-- ✅ **PostgreSQL 17 Only** : Tables séparées, indexes HNSW natifs
+- ✅ **PostgreSQL 18 Only** : Tables séparées, indexes HNSW natifs
 - ✅ **Local deployment** : jina-v2 + nomic-text = 300M+400M, CPU-friendly
 - ✅ **Async-first** : SQLAlchemy 2.0 async, compatible architecture
 - ✅ **Backward compatible** : Table events intacte, API v1 inchangée

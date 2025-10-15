@@ -66,8 +66,8 @@ Total: 8 pts | Durée: 1 semaine
 
 **Livrables**:
 - ✅ Alembic configuré avec template async
-- ✅ Dual embeddings (nomic-text + jina-code) opérationnels
-- ✅ RAM < 1 GB validé
+- ✅ Dual embeddings (nomic-embed-text-v1.5 + jina-embeddings-v2-base-code) opérationnels
+- ✅ RAM < 1 GB validé (~700 MB total)
 - ✅ Tests infrastructure passent
 
 ---
@@ -335,11 +335,13 @@ Story 0.1 (Alembic)
 ## ✅ Checklist Go-Live (Fin Semaine 13)
 
 ### Infrastructure
+- [ ] PostgreSQL 18 + pgvector 0.8.1 opérationnels
 - [ ] Migration Alembic testée (upgrade + downgrade)
 - [ ] Table code_chunks créée (main + test DB)
 - [ ] Index HNSW opérationnels (EXPLAIN ANALYZE validé)
 - [ ] pg_trgm extension installée
-- [ ] RAM usage < 1 GB validé (monitoring actif)
+- [ ] Dual embeddings (nomic-embed-text-v1.5 + jina-embeddings-v2-base-code) chargés
+- [ ] RAM usage < 1 GB validé (monitoring actif, target ~700 MB)
 
 ### Code Quality
 - [ ] Tests coverage >85% (tous nouveaux modules)
@@ -380,10 +382,10 @@ Story 0.1 (Alembic)
 ### Fonctionnalités
 ✅ **Code Indexing**: Pipeline complet (6+ langages)
 ✅ **Semantic Chunking**: AST-based (tree-sitter)
-✅ **Dual Embeddings**: Text (nomic) + Code (jina)
+✅ **Dual Embeddings**: Text (nomic-embed-text-v1.5, 137M, 768D) + Code (jina-embeddings-v2-base-code, 161M, 768D)
 ✅ **Metadata Extraction**: Complexity, docstrings, imports, calls
 ✅ **Dependency Graph**: Call graph, import graph (≤3 hops)
-✅ **Hybrid Search**: pg_trgm + pgvector + RRF fusion
+✅ **Hybrid Search**: pg_trgm + pgvector 0.8.1 + RRF fusion
 ✅ **Graph Expansion**: Optionnel (enrich search results)
 
 ### API Endpoints

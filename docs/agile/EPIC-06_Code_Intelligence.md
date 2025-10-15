@@ -226,7 +226,7 @@ CREATE INDEX idx_edges_target ON edges(target_node);
 │  └─────────────────┬───────────────────────────┘    │
 │                    │                                  │
 │  ┌─────────────────▼───────────────────────────┐    │
-│  │  PostgreSQL 17 + pgvector                   │    │
+│  │  PostgreSQL 18 + pgvector                   │    │
 │  │  • code_chunks (nouveau)                    │    │
 │  │  • nodes/edges (étendu pour code)           │    │
 │  │  • events (existant)                        │    │

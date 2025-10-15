@@ -259,7 +259,7 @@ SELECT id, bm25_score(document, query, tf, df, N) FROM table;
 
 **Justification**:
 - **Phase 1-3**: pg_trgm simple, natif, performant
-- **Contrainte critique**: Pas de dépendances externes (PostgreSQL 17 only)
+- **Contrainte critique**: Pas de dépendances externes (PostgreSQL 18 only)
 - **Acceptable v1.4.0**: pg_trgm suffisant pour MVP
 - **Upgrade path v1.5.0**:
   - plpgsql_bm25 = meilleur respect contraintes (pur SQL)
