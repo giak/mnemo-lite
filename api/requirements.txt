@@ -44,4 +44,8 @@ tenacity==8.2.3
 structlog==24.1.0
 rich==13.7.0
 psutil==5.9.6
-pgvector 
+pgvector
+
+# EPIC-06 Phase 1: Code Intelligence
+tree-sitter-languages>=1.10.0  # AST parsing for code chunking (Story 1)
+radon>=6.0.1  # Code complexity analysis (Story 3) 
