@@ -1,22 +1,29 @@
 # EPIC-06: Code Intelligence - Documentation Complète
 
-**Version**: 1.0.0
-**Date**: 2025-10-15
-**Statut**: 📋 PLANIFICATION APPROFONDIE TERMINÉE
+**Version**: 1.2.0
+**Date**: 2025-10-16 (Updated: Phase 0 COMPLETE)
+**Statut**: ✅ **PHASE 0 COMPLETE (100%)** → Phase 1 READY
 
 ---
 
-## 📚 Documentation Structure (119 KB)
+## 📚 Documentation Structure (~150 KB)
 
 ```
 EPIC-06/
-├─ EPIC-06_README.md                    ← VOUS ÊTES ICI (point d'entrée)
-├─ EPIC-06_Code_Intelligence.md         (33 KB) ← Vue d'ensemble Epic
-├─ EPIC-06_DEEP_ANALYSIS.md             (22 KB) ← Analyse comparative embeddings
-├─ EPIC-06_IMPLEMENTATION_PLAN.md       (31 KB) ← Plan détaillé étape par étape
-├─ EPIC-06_ROADMAP.md                   (16 KB) ← Timeline visuelle & métriques
-├─ EPIC-06_DECISIONS_LOG.md             (17 KB) ← ADRs (Architecture Decision Records)
-└─ STORIES_EPIC-06.md                   (~100 KB) ← User stories détaillées (6 stories)
+├─ EPIC-06_README.md                           ← VOUS ÊTES ICI (point d'entrée) ⚡ UPDATED
+├─ EPIC-06_Code_Intelligence.md                (33 KB) ← Vue d'ensemble Epic
+├─ EPIC-06_DEEP_ANALYSIS.md                    (22 KB) ← Analyse comparative embeddings
+├─ EPIC-06_IMPLEMENTATION_PLAN.md              (31 KB) ← Plan détaillé étape par étape
+├─ EPIC-06_ROADMAP.md                          (17 KB) ← Timeline visuelle & métriques ⚡ UPDATED v1.2.0
+├─ EPIC-06_DECISIONS_LOG.md                    (17 KB) ← ADRs (Architecture Decision Records)
+├─ STORIES_EPIC-06.md                          (~100 KB) ← User stories détaillées (6 stories)
+├─ EPIC-06_PHASE_0_DEEP_DIVE.md                (33 KB) ← Recherches Phase 0 (20+ refs web)
+├─ EPIC-06_PHASE_0_IMPLEMENTATION_ULTRADEEP.md (54 KB) ← Guide implémentation Phase 0
+├─ EPIC-06_PHASE_0_CRITICAL_INSIGHTS.md        (17 KB) ← 7 insights critiques Phase 0 ⏳ TO UPDATE
+├─ EPIC-06_PHASE_0_REVIEW_REPORT.md            (26 KB) ← Review quality (score 8.7/10)
+├─ EPIC-06_PHASE_0_STORY_0.1_REPORT.md         (83 KB) ← Rapport complétion Story 0.1 ✅
+├─ EPIC-06_PHASE_0_STORY_0.2_REPORT.md         (NEW 15 KB) ← Rapport complétion Story 0.2 ✅
+└─ EPIC-06_PHASE_0_STORY_0.2_AUDIT_REPORT.md   (NEW 40 KB) ← Audit approfondi Story 0.2 ✅
 ```
 
 ---
@@ -248,29 +255,60 @@ Ajouter **code intelligence** à MnemoLite (indexation, search sémantique, call
 - [x] Alembic async setup défini
 
 ### Infrastructure
-- [ ] Alembic initialisé (Phase 0 Story 0.1)
-- [ ] Dual embeddings testé (Phase 0 Story 0.2)
-- [ ] Variables environnement définies (.env.example)
+- [x] PostgreSQL 18 + pgvector 0.8.1 ✅ (Pré-Phase 0)
+- [x] Alembic 1.17.0 installé et configuré ✅ (Story 0.1 - 2025-10-15)
+- [x] Baseline migration créée et stampée ✅ (Story 0.1 - revision 9dde1f9db172)
+- [x] Pydantic v2 settings avec dual embeddings ✅ (Story 0.1 - workers/config/settings.py)
+- [x] DualEmbeddingService créé et testé ✅ (Story 0.2 - 2025-10-16)
+- [x] Lazy loading + RAM safeguard actifs ✅ (Story 0.2 - thread-safe)
+- [x] Backward compatibility 100% validée ✅ (Story 0.2 - Adapter pattern)
+- [x] Audit complet: Score 9.4/10 ✅ (Story 0.2 - Production Ready)
+- [ ] Tree-sitter-languages installé (Story 1 - Phase 1)
 
 ---
 
 ## 🎯 Prochaines Actions
 
-### Immédiat (Cette semaine)
+### ✅ Complété - Phase 0 (100%)
 1. ✅ **Validation stakeholders** : Présenter plan complet
 2. ✅ **Priorisation**: Confirmer allocation 13 semaines
 3. ✅ **Ressources**: Assigner équipe développement
+4. ✅ **Story 0.1**: Alembic Async Setup (3 pts) - **COMPLETE 2025-10-15**
+5. ✅ **Story 0.2**: Dual Embeddings Service (5 pts) - **COMPLETE 2025-10-16**
 
-### Semaine 1 (Phase 0 Kickoff)
-1. **Story 0.1**: Alembic Async Setup (3 pts)
-   - Initialiser: `alembic init -t async alembic`
-   - Configurer env.py
-   - Migration baseline
+### Phase 0 Achievements (3 jours - AHEAD OF SCHEDULE)
 
-2. **Story 0.2**: Dual Embeddings Service (5 pts)
-   - Installer: `sentence-transformers`, `tree-sitter-languages`
-   - Étendre `EmbeddingService`
-   - Benchmark local (RAM < 1 GB)
+**Story 0.1: Alembic Async Setup** ✅ COMPLETE (2025-10-15)
+- ✅ Alembic 1.17.0 installé avec template async
+- ✅ `workers/config/settings.py` migré Pydantic v2
+- ✅ `api/alembic/env.py` configuré (psycopg2 + NullPool)
+- ✅ Baseline migration créée (9dde1f9db172)
+- ✅ Database stampée, `alembic_version` opérationnelle
+- ✅ Documentation: `EPIC-06_PHASE_0_STORY_0.1_REPORT.md`
+
+**Story 0.2: Dual Embeddings Service** ✅ COMPLETE (2025-10-16)
+- ✅ `DualEmbeddingService` créé (450 lines, EmbeddingDomain enum)
+- ✅ Lazy loading + double-checked locking (thread-safe)
+- ✅ RAM safeguard (bloque CODE model si > 900 MB)
+- ✅ Adapter pattern (backward compatibility 100%)
+- ✅ 24 unit tests + 19 regression tests passent
+- ✅ Audit complet: Score 9.4/10 - Production Ready
+- ✅ 2 bugs critiques corrigés (empty HYBRID, deprecated API)
+- ✅ Documentation:
+  - `EPIC-06_PHASE_0_STORY_0.2_REPORT.md` (15 KB)
+  - `EPIC-06_PHASE_0_STORY_0.2_AUDIT_REPORT.md` (40 KB)
+
+### ⏳ Phase 1 - Story 1 (NEXT - 5 jours, 13 pts)
+
+**Story 1: Tree-sitter Integration & AST Chunking**
+- [ ] Install tree-sitter-languages (pré-compilé)
+- [ ] Create CodeChunker service (AST-based)
+- [ ] Language detection (Python, JS, TS, Go, Rust, Java)
+- [ ] Chunking strategies (functions, classes, blocks)
+- [ ] Tests: 50+ code samples
+- [ ] Fallback: fixed-size chunking si parsing fails
+
+**Blockers**: None (Phase 0 100% complete)
 
 ---
 
@@ -312,8 +350,16 @@ Ajouter **code intelligence** à MnemoLite (indexation, search sémantique, call
 
 ---
 
-**Date**: 2025-10-15
-**Version**: 1.0.0
-**Statut**: ✅ DOCUMENTATION COMPLÈTE - PRÊT POUR VALIDATION STAKEHOLDERS
+**Date**: 2025-10-16 (Updated: Phase 0 COMPLETE)
+**Version**: 1.2.0
+**Statut**: ✅ **PHASE 0 COMPLETE (100%)** → Phase 1 READY
 
-**Prochaine Étape**: Présentation plan → Validation → Kickoff Phase 0 Story 0.1
+**Prochaine Étape**: Kickoff Phase 1 Story 1 - Tree-sitter Integration (5 jours, 13 pts)
+
+**Progrès EPIC-06**: 8/74 story points (10.8%) | 2/8 stories complètes | Phase 0: 100% ✅
+
+**Achievements**:
+- Phase 0 complétée en 3 jours (vs 5 jours estimés) - **AHEAD OF SCHEDULE**
+- 0 breaking changes API
+- Audit complet: Score 9.4/10 - Production Ready
+- Infrastructure robuste et testée (43 tests passed)

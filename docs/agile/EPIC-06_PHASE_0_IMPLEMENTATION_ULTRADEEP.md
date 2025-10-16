@@ -1,9 +1,22 @@
 # EPIC-06 Phase 0: Ultra-Deep Implementation Analysis
 
-**Date**: 2025-10-15
-**Version**: 1.0.0
+**Date**: 2025-10-15 (Updated: Story 0.1 Complete)
+**Version**: 1.1.0
 **Branch**: migration/postgresql-18
-**Status**: 🔬 ULTRA-DEEP ANALYSIS
+**Status**: ⚡ PHASE 0 EN COURS - Story 0.1 ✅ COMPLETE | Story 0.2 ⏳ NEXT
+
+---
+
+## 🎉 Story 0.1 - COMPLETE (2025-10-15)
+
+✅ **Alembic Async Setup** - 3 story points - COMPLETE
+- Alembic 1.17.0 installé avec template async
+- `workers/config/settings.py` migré Pydantic v2
+- Baseline migration créée (9dde1f9db172)
+- Database stampée, alembic_version opérationnelle
+- **Rapport détaillé**: `EPIC-06_PHASE_0_STORY_0.1_REPORT.md`
+
+⏳ **Story 0.2 - NEXT**: Dual Embeddings Service (3 jours)
 
 ---
 
@@ -420,12 +433,12 @@ Utilise Pydantic BaseSettings pour validation et env vars.
 
 from typing import Literal
 from pydantic_settings import BaseSettings
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    """Settings validées via Pydantic."""
+    """Settings validées via Pydantic v2."""
 
     # Database
     DATABASE_URL: str = Field(..., description="PostgreSQL connection URL")
@@ -455,10 +468,11 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "mnemolite"
     POSTGRES_PORT: int = 5432
 
-    @validator("CODE_EMBEDDING_DIMENSION")
-    def validate_same_dimension(cls, v, values):
+    @field_validator("CODE_EMBEDDING_DIMENSION")
+    @classmethod
+    def validate_same_dimension(cls, v, info):
         """Valide que text et code ont même dimension (768)."""
-        text_dim = values.get("EMBEDDING_DIMENSION", 768)
+        text_dim = info.data.get("EMBEDDING_DIMENSION", 768)
         if v != text_dim:
             raise ValueError(
                 f"CODE_EMBEDDING_DIMENSION ({v}) must match "
@@ -466,9 +480,10 @@ class Settings(BaseSettings):
             )
         return v
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True,
+    }
 
 
 @lru_cache()
@@ -1422,6 +1437,160 @@ class DualEmbeddingServiceProtocol(Protocol):
 
 ---
 
+## 4.5 Checklist Pre-Kickoff Phase 0
+
+**⚠️ OBLIGATOIRE**: Valider TOUS ces points AVANT Jour 1
+
+### Infrastructure ✅
+
+- [ ] **PostgreSQL 18.0 opérationnel**
+  ```bash
+  $ docker exec mnemo-postgres psql -U mnemo -d mnemolite -c "SELECT version();"
+  # Expected: PostgreSQL 18.0 (Debian 18.0-1.pgdg120+1)
+  ```
+
+- [ ] **pgvector 0.8.1 installé**
+  ```bash
+  $ docker exec mnemo-postgres psql -U mnemo -d mnemolite -c "SELECT extversion FROM pg_extension WHERE extname='vector';"
+  # Expected: 0.8.1
+  ```
+
+- [ ] **Python 3.11+ disponible**
+  ```bash
+  $ python --version
+  # Expected: Python 3.11.x or 3.12.x
+  ```
+
+- [ ] **Docker + docker-compose running**
+  ```bash
+  $ docker-compose ps
+  # Expected: mnemo-postgres (healthy), mnemo-api (healthy)
+  ```
+
+### Dependencies ✅
+
+- [ ] **requirements.txt à jour**
+  - ✅ `sqlalchemy[asyncio]>=2.0.0` présent
+  - ✅ `asyncpg>=0.29.0` présent
+  - ✅ `sentence-transformers>=2.7.0` présent
+  - ✅ `pgvector>=0.2.0,<0.3.0` présent
+  - ✅ `pydantic>=2.5.0` présent
+  - ❌ `alembic` PAS encore dans requirements.txt (sera ajouté Jour 2)
+  - ❌ `psutil` PAS encore dans requirements.txt (sera ajouté Jour 2)
+
+- [ ] **Models embeddings téléchargés**
+  ```bash
+  # Vérifier nomic-embed-text-v1.5 présent
+  $ ls ~/.cache/huggingface/hub/ | grep nomic
+  # Si absent, sera téléchargé au premier run (10-30s)
+  ```
+
+### Environment ✅
+
+- [ ] **.env configuré avec variables minimales**
+  ```bash
+  # Vérifier présence dans .env
+  DATABASE_URL=postgresql+asyncpg://mnemo:mnemo_pass@mnemo-postgres:5432/mnemolite
+  TEST_DATABASE_URL=postgresql+asyncpg://mnemo:mnemo_pass@mnemo-postgres:5432/mnemolite_test
+  EMBEDDING_MODEL=nomic-ai/nomic-embed-text-v1.5
+  EMBEDDING_DIMENSION=768
+  ENVIRONMENT=development
+  DEBUG=True
+  ```
+
+- [ ] **Test database créée**
+  ```bash
+  $ make db-create-test
+  # OU
+  $ docker exec mnemo-postgres psql -U mnemo -c "CREATE DATABASE mnemolite_test;"
+  ```
+
+### Tests Baseline ✅
+
+- [ ] **Tests passent AVANT Phase 0**
+  ```bash
+  $ make api-test
+  # Expected: ALL PASS (baseline validation)
+  # Si échecs, corriger AVANT Phase 0
+  ```
+
+- [ ] **API health OK**
+  ```bash
+  $ curl http://localhost:8001/health
+  # Expected: {"status": "healthy"}
+  ```
+
+- [ ] **Embedding model chargé**
+  ```bash
+  $ curl http://localhost:8001/health
+  # Vérifier: embedding_model_loaded: true
+  ```
+
+### Backup & Safety ✅
+
+- [ ] **Database backup créé**
+  ```bash
+  $ make db-backup
+  # OU
+  $ docker exec mnemo-postgres pg_dump -U mnemo mnemolite > backup_before_phase0_$(date +%Y%m%d).sql
+  ```
+
+- [ ] **Git branch créée et pushed**
+  ```bash
+  $ git checkout -b phase-0-implementation
+  $ git push -u origin phase-0-implementation
+  ```
+
+- [ ] **Git working directory clean**
+  ```bash
+  $ git status
+  # Expected: nothing to commit, working tree clean
+  ```
+
+### Team & Communication ✅
+
+- [ ] **Développeur assigné Phase 0**
+  - Nom: _______________
+  - Disponibilité: 5-6 jours continus
+
+- [ ] **Review partner identifié**
+  - Nom: _______________
+  - Disponibilité pour reviews quotidiennes
+
+- [ ] **Stakeholders informés**
+  - Kickoff date: _______________
+  - Expected completion: _______________ (+6j)
+  - Communication channel: _______________
+
+### Documentation ✅
+
+- [ ] **EPIC-06 docs lus et compris**
+  - ✅ EPIC-06_README.md
+  - ✅ EPIC-06_PHASE_0_IMPLEMENTATION_ULTRADEEP.md (ce document)
+  - ✅ EPIC-06_PHASE_0_CRITICAL_INSIGHTS.md
+  - ✅ EPIC-06_PHASE_0_REVIEW_REPORT.md
+
+- [ ] **Corrections review appliquées**
+  - ✅ Pydantic v2 syntax corrigée
+  - ✅ Timeline harmonisée (5j NET + 1j buffer = 6j)
+  - ✅ Checklist pre-kickoff ajoutée (ce document)
+
+---
+
+### ✅ Pre-Kickoff Validation
+
+**Tous les points ci-dessus doivent être ✅ AVANT de démarrer Jour 1**
+
+**Si 1 seul point ❌**: BLOCKER → Corriger avant kickoff
+
+**Validation finale**:
+```bash
+# Run complete validation
+$ make api-test && echo "✅ READY FOR PHASE 0 KICKOFF"
+```
+
+---
+
 ## 5. Plan d'Implémentation Détaillé
 
 ### Phase 0.1 - Alembic Setup (Jour 1-2)
@@ -1777,7 +1946,16 @@ async def test_phase_0_complete_integration():
 **Version**: 1.0.0
 **Status**: ✅ READY FOR PHASE 0 KICKOFF
 
-**Estimated Total Time**: 5-7 jours (Story 0.1: 2j + Story 0.2: 3j + buffer: 2j)
+**Estimated Total Time**:
+- **5 jours NET** (Story 0.1: 2j + Story 0.2: 3j)
+- **+ buffer contingence: 1-2 jours**
+- **= TOTAL: 6-7 jours** (estimation SAFE)
+
+**Breakdown optimisé**:
+- Jour 1-2: Alembic Async + Settings centralisés
+- Jour 3-4: Dual Embeddings Service + RAM validation
+- Jour 5: Integration, tests regression, documentation
+- Jour 6-7 (buffer): Contingence pour imprévus, refactoring supplémentaire
 
 ---
 
