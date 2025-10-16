@@ -68,6 +68,7 @@ services:
         condition: service_healthy
     volumes:
       - ./api:/app
+      - ./workers:/app/workers
       - ./scripts:/app/scripts
       - ./certs:/app/certs:ro
       - ./tests:/app/tests

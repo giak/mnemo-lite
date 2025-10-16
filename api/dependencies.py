@@ -6,7 +6,7 @@ Respecte le principe d'inversion des dépendances (DIP).
 
 import os
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from fastapi import Request, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -23,12 +23,81 @@ from interfaces.services import (
 from db.repositories.event_repository import EventRepository
 from services.embedding_service import MockEmbeddingService
 from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
+from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomain
 from services.memory_search_service import MemorySearchService
 from services.event_processor import EventProcessor
 from services.notification_service import NotificationService
 from services.event_service import EventService
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Adapter pour backward compatibility DualEmbeddingService
+# ============================================================================
+class DualEmbeddingServiceAdapter:
+    """
+    Adapter pour rendre DualEmbeddingService compatible avec EmbeddingServiceProtocol.
+
+    Phase 0 Story 0.2 - Assure backward compatibility complète:
+    - generate_embedding(text) → génère embedding TEXT uniquement
+    - compute_similarity() → supporte str et List[float]
+
+    Permet au code existant (EventService, MemorySearchService) de fonctionner
+    sans changement avec le nouveau DualEmbeddingService.
+    """
+
+    def __init__(self, dual_service: DualEmbeddingService):
+        """
+        Initialize adapter with DualEmbeddingService instance.
+
+        Args:
+            dual_service: Instance de DualEmbeddingService à wrapper
+        """
+        self._dual_service = dual_service
+
+    async def generate_embedding(self, text: str) -> List[float]:
+        """
+        Génère un embedding TEXT à partir d'un texte (backward compatible).
+
+        Utilise generate_embedding_legacy() qui retourne uniquement
+        l'embedding TEXT (nomic-embed-text-v1.5).
+
+        Args:
+            text: Texte à embedder
+
+        Returns:
+            Embedding TEXT (list de 768 floats)
+        """
+        return await self._dual_service.generate_embedding_legacy(text)
+
+    async def compute_similarity(
+        self,
+        item1: Any,  # Union[str, List[float]]
+        item2: Any   # Union[str, List[float]]
+    ) -> float:
+        """
+        Calcule la similarité entre deux éléments (textes ou embeddings).
+
+        Args:
+            item1: Premier élément (str ou List[float])
+            item2: Deuxième élément (str ou List[float])
+
+        Returns:
+            Score de similarité cosinus (0.0 à 1.0)
+        """
+        # Convert str to embeddings if needed
+        emb1 = item1
+        if isinstance(item1, str):
+            emb1 = await self.generate_embedding(item1)
+
+        emb2 = item2
+        if isinstance(item2, str):
+            emb2 = await self.generate_embedding(item2)
+
+        # Compute similarity using dual service
+        return await self._dual_service.compute_similarity(emb1, emb2)
+
 
 # Cache global pour singleton embedding service
 _embedding_service_instance: Optional[EmbeddingServiceProtocol] = None
@@ -130,15 +199,25 @@ async def get_embedding_service() -> EmbeddingServiceProtocol:
 
     elif embedding_mode == "real":
         logger.info(
-            "✅ EMBEDDING MODE: REAL (Sentence-Transformers)",
-            extra={"embedding_mode": "real"}
+            "✅ EMBEDDING MODE: DUAL (TEXT + CODE) - Phase 0 Story 0.2",
+            extra={
+                "embedding_mode": "dual",
+                "text_model": os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5"),
+                "code_model": os.getenv("CODE_EMBEDDING_MODEL", "jinaai/jina-embeddings-v2-base-code")
+            }
         )
-        _embedding_service_instance = SentenceTransformerEmbeddingService(
-            model_name=os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5"),
+
+        # Create DualEmbeddingService (supports TEXT + CODE domains)
+        dual_service = DualEmbeddingService(
+            text_model_name=os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5"),
+            code_model_name=os.getenv("CODE_EMBEDDING_MODEL", "jinaai/jina-embeddings-v2-base-code"),
             dimension=int(os.getenv("EMBEDDING_DIMENSION", "768")),
-            cache_size=int(os.getenv("EMBEDDING_CACHE_SIZE", "1000")),
-            device=os.getenv("EMBEDDING_DEVICE", "cpu")
+            device=os.getenv("EMBEDDING_DEVICE", "cpu"),
+            cache_size=int(os.getenv("EMBEDDING_CACHE_SIZE", "1000"))
         )
+
+        # Wrap with adapter for backward compatibility
+        _embedding_service_instance = DualEmbeddingServiceAdapter(dual_service)
 
     else:
         raise ValueError(

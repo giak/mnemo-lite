@@ -1,0 +1,455 @@
+"""
+Dual Embedding Service for TEXT + CODE domains.
+
+Phase 0 Story 0.2 - Manages two SentenceTransformer models simultaneously:
+- TEXT: nomic-embed-text-v1.5 (137M params, 768D, ~260 MB RAM)
+- CODE: jina-embeddings-v2-base-code (161M params, 768D, ~400 MB RAM)
+
+Features:
+- Lazy loading (models loaded on-demand)
+- Domain-specific selection (TEXT | CODE | HYBRID)
+- RAM monitoring via psutil
+- Double-checked locking (thread-safe)
+- Backward compatible via generate_embedding_legacy()
+"""
+
+import os
+import logging
+import asyncio
+from typing import List, Dict, Optional
+from enum import Enum
+
+from sentence_transformers import SentenceTransformer
+import psutil
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+
+class EmbeddingDomain(str, Enum):
+    """
+    Embedding domain types for model selection.
+
+    TEXT: General text, conversations, documents (nomic-embed-text-v1.5)
+    CODE: Code snippets, functions, classes (jina-embeddings-v2-base-code)
+    HYBRID: Generate both embeddings (for code with docstrings)
+    """
+    TEXT = "text"
+    CODE = "code"
+    HYBRID = "hybrid"
+
+
+class DualEmbeddingService:
+    """
+    Service managing dual embeddings for text and code.
+
+    Models:
+    - TEXT: nomic-embed-text-v1.5 (137M params, 768D, ~260 MB RAM)
+    - CODE: jina-embeddings-v2-base-code (161M params, 768D, ~400 MB RAM)
+    - Total: ~660-700 MB RAM (< 1 GB target)
+
+    Features:
+    - Lazy loading (models loaded on-demand)
+    - Domain-specific selection (TEXT | CODE | HYBRID)
+    - RAM monitoring via psutil
+    - Double-checked locking (thread-safe)
+
+    Example:
+        >>> service = DualEmbeddingService()
+        >>>
+        >>> # TEXT domain (conversations, docs)
+        >>> result = await service.generate_embedding(
+        ...     "Hello world",
+        ...     domain=EmbeddingDomain.TEXT
+        ... )
+        >>> # {'text': [0.1, 0.2, ...]}
+        >>>
+        >>> # CODE domain (code snippets)
+        >>> result = await service.generate_embedding(
+        ...     "def foo(): pass",
+        ...     domain=EmbeddingDomain.CODE
+        ... )
+        >>> # {'code': [0.3, 0.4, ...]}
+        >>>
+        >>> # HYBRID domain (both)
+        >>> result = await service.generate_embedding(
+        ...     "def foo():\\n  '''Docstring'''",
+        ...     domain=EmbeddingDomain.HYBRID
+        ... )
+        >>> # {'text': [...], 'code': [...]}
+    """
+
+    def __init__(
+        self,
+        text_model_name: Optional[str] = None,
+        code_model_name: Optional[str] = None,
+        dimension: int = 768,
+        device: str = "cpu",
+        cache_size: int = 1000
+    ):
+        """
+        Initialize dual embedding service.
+
+        Args:
+            text_model_name: Sentence-Transformers model for text
+                            (default: nomic-ai/nomic-embed-text-v1.5)
+            code_model_name: Sentence-Transformers model for code
+                            (default: jinaai/jina-embeddings-v2-base-code)
+            dimension: Expected embedding dimension (must be 768)
+            device: PyTorch device ('cpu', 'cuda', 'mps')
+            cache_size: Not used (kept for backward compat)
+        """
+        self.text_model_name = text_model_name or os.getenv(
+            "EMBEDDING_MODEL",
+            "nomic-ai/nomic-embed-text-v1.5"
+        )
+        self.code_model_name = code_model_name or os.getenv(
+            "CODE_EMBEDDING_MODEL",
+            "jinaai/jina-embeddings-v2-base-code"
+        )
+        self.dimension = dimension
+        self.device = device
+
+        # Models (lazy loaded)
+        self._text_model: Optional[SentenceTransformer] = None
+        self._code_model: Optional[SentenceTransformer] = None
+
+        # Locks for thread-safe lazy loading
+        self._text_lock = asyncio.Lock()
+        self._code_lock = asyncio.Lock()
+
+        # Load attempt tracking
+        self._text_load_attempted = False
+        self._code_load_attempted = False
+
+        logger.info(
+            "DualEmbeddingService initialized",
+            extra={
+                "text_model": self.text_model_name,
+                "code_model": self.code_model_name,
+                "dimension": dimension,
+                "device": device
+            }
+        )
+
+    def _load_text_model_sync(self) -> SentenceTransformer:
+        """
+        Synchronous text model loading (runs in executor).
+
+        Returns:
+            Loaded SentenceTransformer model for text
+        """
+        logger.info(f"Loading TEXT model: {self.text_model_name}")
+        model = SentenceTransformer(
+            self.text_model_name,
+            device=self.device,
+            trust_remote_code=True
+        )
+
+        # Validate dimension
+        test_emb = model.encode("test")
+        if len(test_emb) != self.dimension:
+            raise ValueError(
+                f"TEXT model dimension mismatch: "
+                f"expected {self.dimension}, got {len(test_emb)}"
+            )
+
+        logger.info(
+            f"✅ TEXT model loaded: {self.text_model_name} ({self.dimension}D)"
+        )
+        return model
+
+    def _load_code_model_sync(self) -> SentenceTransformer:
+        """
+        Synchronous code model loading (runs in executor).
+
+        Returns:
+            Loaded SentenceTransformer model for code
+        """
+        logger.info(f"Loading CODE model: {self.code_model_name}")
+        model = SentenceTransformer(
+            self.code_model_name,
+            device=self.device,
+            trust_remote_code=True
+        )
+
+        # Validate dimension
+        test_emb = model.encode("def test(): pass")
+        if len(test_emb) != self.dimension:
+            raise ValueError(
+                f"CODE model dimension mismatch: "
+                f"expected {self.dimension}, got {len(test_emb)}"
+            )
+
+        logger.info(
+            f"✅ CODE model loaded: {self.code_model_name} ({self.dimension}D)"
+        )
+        return model
+
+    async def _ensure_text_model(self):
+        """
+        Load text model if not already loaded (thread-safe with double-checked locking).
+
+        Raises:
+            RuntimeError: If model loading failed previously or fails now
+        """
+        # First check (no lock)
+        if self._text_model is not None:
+            return
+
+        async with self._text_lock:
+            # Double-checked locking
+            if self._text_model is not None:
+                return
+
+            if self._text_load_attempted:
+                raise RuntimeError(
+                    "Text model loading failed previously. Restart service."
+                )
+
+            self._text_load_attempted = True
+
+            try:
+                loop = asyncio.get_running_loop()
+                self._text_model = await loop.run_in_executor(
+                    None,
+                    self._load_text_model_sync
+                )
+
+            except Exception as e:
+                logger.error(f"❌ Failed to load TEXT model: {e}", exc_info=True)
+                self._text_model = None
+                raise RuntimeError(f"Failed to load TEXT model: {e}") from e
+
+    async def _ensure_code_model(self):
+        """
+        Load code model if not already loaded (thread-safe with double-checked locking).
+
+        Raises:
+            RuntimeError: If model loading failed previously or fails now
+        """
+        # First check (no lock)
+        if self._code_model is not None:
+            return
+
+        async with self._code_lock:
+            # Double-checked locking
+            if self._code_model is not None:
+                return
+
+            if self._code_load_attempted:
+                raise RuntimeError(
+                    "Code model loading failed previously. Restart service."
+                )
+
+            self._code_load_attempted = True
+
+            try:
+                # Check RAM before loading CODE model
+                ram_usage = self.get_ram_usage_mb()
+                if ram_usage['process_rss_mb'] > 900:  # > 900 MB
+                    logger.warning(
+                        "⚠️ RAM limit approaching, refusing to load CODE model",
+                        extra={"ram_mb": ram_usage['process_rss_mb']}
+                    )
+                    raise RuntimeError(
+                        f"RAM budget exceeded ({ram_usage['process_rss_mb']:.1f} MB > 900 MB). "
+                        "CODE model loading disabled to prevent OOM."
+                    )
+
+                loop = asyncio.get_running_loop()
+                self._code_model = await loop.run_in_executor(
+                    None,
+                    self._load_code_model_sync
+                )
+
+            except Exception as e:
+                logger.error(f"❌ Failed to load CODE model: {e}", exc_info=True)
+                self._code_model = None
+                raise RuntimeError(f"Failed to load CODE model: {e}") from e
+
+    async def generate_embedding(
+        self,
+        text: str,
+        domain: EmbeddingDomain = EmbeddingDomain.TEXT
+    ) -> Dict[str, List[float]]:
+        """
+        Generate embedding(s) based on domain.
+
+        Args:
+            text: Text or code to embed
+            domain: TEXT (text model), CODE (code model), HYBRID (both)
+
+        Returns:
+            Dict with keys 'text' and/or 'code' containing embeddings
+
+        Examples:
+            # TEXT domain (conversations, docs)
+            result = await svc.generate_embedding(
+                "Hello world",
+                domain=EmbeddingDomain.TEXT
+            )
+            # {'text': [0.1, 0.2, ...]}
+
+            # CODE domain (code snippets)
+            result = await svc.generate_embedding(
+                "def foo(): pass",
+                domain=EmbeddingDomain.CODE
+            )
+            # {'code': [0.3, 0.4, ...]}
+
+            # HYBRID domain (code with docstrings)
+            result = await svc.generate_embedding(
+                "def foo():\\n  '''Docstring'''",
+                domain=EmbeddingDomain.HYBRID
+            )
+            # {'text': [...], 'code': [...]}
+        """
+        if not text or not text.strip():
+            logger.warning("Empty text provided for embedding")
+            # Return zero vector(s) with correct keys based on domain
+            zero_vector = [0.0] * self.dimension
+            result = {}
+            if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
+                result['text'] = zero_vector.copy()
+            if domain in (EmbeddingDomain.CODE, EmbeddingDomain.HYBRID):
+                result['code'] = zero_vector.copy()
+            return result
+
+        result = {}
+
+        if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
+            # Generate text embedding
+            await self._ensure_text_model()
+
+            loop = asyncio.get_running_loop()
+            text_emb = await loop.run_in_executor(
+                None,
+                self._text_model.encode,
+                text
+            )
+            result['text'] = text_emb.tolist()
+
+        if domain in (EmbeddingDomain.CODE, EmbeddingDomain.HYBRID):
+            # Generate code embedding
+            await self._ensure_code_model()
+
+            loop = asyncio.get_running_loop()
+            code_emb = await loop.run_in_executor(
+                None,
+                self._code_model.encode,
+                text
+            )
+            result['code'] = code_emb.tolist()
+
+        return result
+
+    async def generate_embedding_legacy(self, text: str) -> List[float]:
+        """
+        Backward compatible method (returns text embedding only).
+
+        Used by existing EventService, MemorySearchService, etc.
+        Ensures zero breaking changes for existing code.
+
+        Args:
+            text: Text to embed
+
+        Returns:
+            Text embedding (list of floats)
+
+        Example:
+            >>> # Old API still works
+            >>> embedding = await service.generate_embedding_legacy("Hello")
+            >>> assert isinstance(embedding, list)
+            >>> assert len(embedding) == 768
+        """
+        result = await self.generate_embedding(text, domain=EmbeddingDomain.TEXT)
+        return result['text']
+
+    async def compute_similarity(
+        self,
+        embedding1: List[float],
+        embedding2: List[float]
+    ) -> float:
+        """
+        Compute cosine similarity between two embeddings.
+
+        Args:
+            embedding1: First embedding vector
+            embedding2: Second embedding vector
+
+        Returns:
+            Cosine similarity score (0.0 to 1.0)
+        """
+        # Convert to numpy arrays
+        emb1 = np.array(embedding1)
+        emb2 = np.array(embedding2)
+
+        # Compute cosine similarity
+        dot_product = np.dot(emb1, emb2)
+        norm1 = np.linalg.norm(emb1)
+        norm2 = np.linalg.norm(emb2)
+
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+
+        similarity = dot_product / (norm1 * norm2)
+
+        # Clip to [0, 1] range
+        return float(np.clip(similarity, 0.0, 1.0))
+
+    def get_ram_usage_mb(self) -> Dict[str, float]:
+        """
+        Get current RAM usage in MB.
+
+        Returns:
+            Dict with process RAM and model estimates
+
+        Example:
+            >>> ram = service.get_ram_usage_mb()
+            >>> print(ram)
+            {
+                'process_rss_mb': 850.5,
+                'process_vms_mb': 2048.3,
+                'text_model_loaded': True,
+                'code_model_loaded': True,
+                'estimated_models_mb': 660.0
+            }
+        """
+        process = psutil.Process()
+        mem_info = process.memory_info()
+
+        return {
+            "process_rss_mb": mem_info.rss / 1024 / 1024,
+            "process_vms_mb": mem_info.vms / 1024 / 1024,
+            "text_model_loaded": self._text_model is not None,
+            "code_model_loaded": self._code_model is not None,
+            "estimated_models_mb": (
+                (260 if self._text_model else 0) +
+                (400 if self._code_model else 0)
+            )
+        }
+
+    def get_stats(self) -> dict:
+        """
+        Return service statistics.
+
+        Returns:
+            Dict with model info and RAM usage
+
+        Example:
+            >>> stats = service.get_stats()
+            >>> print(stats['text_model_name'])
+            'nomic-ai/nomic-embed-text-v1.5'
+        """
+        ram_usage = self.get_ram_usage_mb()
+
+        return {
+            "text_model_name": self.text_model_name,
+            "code_model_name": self.code_model_name,
+            "dimension": self.dimension,
+            "device": self.device,
+            "text_model_loaded": self._text_model is not None,
+            "code_model_loaded": self._code_model is not None,
+            **ram_usage
+        }
