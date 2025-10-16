@@ -90,22 +90,26 @@ Total: 8/8 pts | Progression: 100% ✅
 
 ---
 
-### Phase 1: Foundation Code (Semaines 2-5)
+### Phase 1: Foundation Code (Semaines 2-5) - ✅ COMPLETE
 ```
 ┌─────────────────────────────────────────┐
-│ Story 1: Tree-sitter Chunking (13 pts) │  ████████████░ 42%
-│ Story 2: Dual Emb. Int. (5 pts)        │  ████░░░░░░░░░ 16%
-│ Story 2bis: code_chunks Table (5 pts)  │  ████░░░░░░░░░ 16%
-│ Story 3: Metadata Extract. (8 pts)     │  ███████░░░░░░ 26%
+│ Story 1: Tree-sitter Chunking (13 pts) │  ██████████████ 100% ✅
+│ ~~Story 2: Dual Emb.~~ (MOVED PH0)     │  ~~FUSIONNÉE Story 0.2 (ADR-017)~~
+│ Story 2bis: code_chunks Table (5 pts)  │  ██████████████ 100% ✅
+│ Story 3: Metadata Extract. (8 pts)     │  ██████████████ 100% ✅
 └─────────────────────────────────────────┘
-Total: 31 pts | Durée: 4 semaines
+Total: 26 pts (13+5+8) | Durée: 3 jours (vs 4 semaines) ✅ AHEAD
 ```
 
-**Livrables**:
-- ✅ Chunking sémantique via AST (Python, JS, TS, Go, Rust, Java)
-- ✅ Table `code_chunks` créée avec dual embeddings
-- ✅ Metadata extraction (complexity, docstrings, imports, calls)
-- ✅ Repository pattern `CodeChunkRepository`
+**Livrables** (2025-10-16 - ✅ COMPLETE):
+- ✅ Chunking sémantique via AST (Python) - Story 1
+- ✅ Table `code_chunks` créée avec dual embeddings VECTOR(768) - Story 2bis
+- ✅ Metadata extraction (9 fields: complexity, docstrings, imports, calls, etc.) - Story 3
+- ✅ Repository pattern `CodeChunkRepository` (431 lignes)
+- ✅ **O(n²) → O(n) optimization** (5x improvement, 0.98ms/func)
+- ✅ 44/44 tests passing (34 metadata + 10 repository)
+- ✅ Audit Story 3: Score 9.2/10 - Production Ready
+- ✅ Story 4 Brainstorm complete (Phase 2 planning)
 
 ---
 
@@ -206,10 +210,8 @@ M4: EPIC-06 Complete (Fin Semaine 13)
 
 | Semaine | Phase | Points Planifiés | Points Cumulés | % Complet | Statut |
 |---------|-------|------------------|----------------|-----------|---------|
-| S1      | Phase 0 | 8 (0.1+0.2)    | 8/74           | 10.8%     | ✅ Story 0.1 (3 pts) COMPLETE<br>✅ Story 0.2 (5 pts) COMPLETE<br>⏳ Phase 1 READY |
-| S2-3    | Phase 1 | 13 (Story 1)   | 21/74          | 28%       | ⏳ NEXT |
-| S4      | Phase 1 | 10 (S2+S2bis)  | 31/74          | 42%       |  |
-| S5      | Phase 1 | 8 (Story 3)    | 39/74          | 53%       |  |
+| S1      | Phase 0 | 8 (0.1+0.2)    | 8/74           | 10.8%     | ✅ Story 0.1 (3 pts) COMPLETE<br>✅ Story 0.2 (5 pts) COMPLETE<br>✅ Phase 0: 100% |
+| S2-5    | Phase 1 | 26 (S1+2bis+S3) | **34/74**     | **45.9%** | ✅ Story 1 (13 pts) COMPLETE<br>✅ Story 2bis (5 pts) COMPLETE<br>✅ Story 3 (8 pts) COMPLETE<br>✅ Phase 1: 100%<br>🟡 Story 4 Brainstorm DONE |
 | S6-8    | Phase 2 | 13 (Story 4)   | 52/74          | 70%       |  |
 | S9-11   | Phase 3 | 21 (Story 5)   | 73/74          | 99%       |  |
 | S12-13  | Phase 4 | 13 (Story 6)   | 86/74          | 116%*     |  |
@@ -427,24 +429,28 @@ Story 0.1 (Alembic)
 ---
 
 **Date**: 2025-10-16
-**Version**: 1.2.0 (Updated post-Story 0.2 + Audit)
-**Statut**: ✅ **PHASE 0 COMPLETE (100%)** - Phase 1 READY
+**Version**: 1.3.0 (Updated post-Phase 1 Complete + Documentation Audit)
+**Statut**: ✅ **PHASE 0 & 1 COMPLETE (100%)** - Phase 2 READY
 
-**Progrès Global**: 8/74 story points (10.8%) | 2/8 stories complètes
+**Progrès Global**: **34/74 story points (45.9%)** | **5/8 stories complètes**
 
-**Dernière Complétion**: Story 0.2 - Dual Embeddings Service (2025-10-16)
-- DualEmbeddingService créé (450 lines, EmbeddingDomain enum)
-- Lazy loading + RAM safeguard + backward compatibility
-- Audit complet: Score 9.4/10 - Production Ready
-- 2 bugs critiques corrigés (empty HYBRID, deprecated API)
+**Dernière Complétion**: Story 3 - Code Metadata Extraction (2025-10-16)
+- MetadataExtractorService créé (359 lignes, 9 metadata fields)
+- **O(n²) → O(n) optimization** (5x improvement)
+- 34/34 tests passing (100%)
+- Audit complet: Score 9.2/10 - Production Ready
 - Documentation:
-  - `EPIC-06_PHASE_0_STORY_0.2_REPORT.md`
-  - `EPIC-06_PHASE_0_STORY_0.2_AUDIT_REPORT.md`
+  - `EPIC-06_STORY_3_AUDIT_REPORT.md` (600+ lignes)
+  - `EPIC-06_STORY_4_BRAINSTORM.md` (Story 4 planning)
+  - `ADR-017` (Story 2 clarification)
+  - `EPIC-06_DOCUMENTATION_AUDIT_EXHAUSTIF.md` (946 lignes)
+  - `EPIC-06_STORY_POINTS_STANDARDIZED.md` (référence)
 
-**Prochaine Action**: Kickoff Phase 1 Story 1 (Tree-sitter Integration) - 5 jours (13 pts)
+**Prochaine Action**: Phase 2 Story 4 Implementation - Dependency Graph Construction (5-7 jours, 13 pts)
 
-**Achievements Phase 0**:
-✅ 3 jours (vs 5 jours estimés) - **AHEAD OF SCHEDULE**
+**Achievements Phase 0 + 1**:
+✅ 6 jours réels (vs 23-32 estimés) - **AHEAD OF SCHEDULE -17 jours**
 ✅ 0 breaking changes API
-✅ Infrastructure robuste et testée
-✅ RAM safeguard prevents OOM
+✅ Infrastructure robuste (Phase 0: 9.4/10, Phase 1 Story 3: 9.2/10)
+✅ 44/44 tests passing (34 metadata + 10 repository)
+✅ RAM safeguard + O(n) metadata extraction optimized
