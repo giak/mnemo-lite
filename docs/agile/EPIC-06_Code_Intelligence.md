@@ -140,9 +140,9 @@ Process RAM = Baseline + (Model Weights × 3-5)
 
 ---
 
-## ✅ Phase 1 Mostly Complete (2025-10-16)
+## ✅ Phase 1 Complete (2025-10-16)
 
-**Statut**: 🟢 **86% COMPLETE** (18/21 story points) - Stories 1, 2bis & 3 DONE
+**Statut**: ✅ **100% COMPLETE** (26/26 story points) - Stories 1, 2bis & 3 DONE
 
 ### Stories Complètes
 
@@ -161,7 +161,7 @@ Process RAM = Baseline + (Model Weights × 3-5)
 - `api/services/code_chunking_service.py` (390 lignes) - Service + Parser
 - `tests/services/test_code_chunking_service.py` (283 lignes) - 10 tests
 
-#### Story 2bis: Code Chunks Table & Repository (8 pts) - 2025-10-16 ✅
+#### Story 2bis: Code Chunks Table & Repository (5 pts) - 2025-10-16 ✅
 - ✅ Alembic migration créée (revision: a40a6de7d379)
 - ✅ Table `code_chunks` avec dual embeddings VECTOR(768)
 - ✅ HNSW indexes (m=16, ef_construction=64) sur embedding_text + embedding_code
@@ -181,7 +181,7 @@ Process RAM = Baseline + (Model Weights × 3-5)
 - `tests/db/repositories/test_code_chunk_repository.py` (226 lignes) - 10 tests
 - `tests/conftest.py` - Ajout fixture `test_engine`
 
-#### Story 3: Code Metadata Extraction (5 pts) - 2025-10-16 ✅
+#### Story 3: Code Metadata Extraction (8 pts) - 2025-10-16 ✅
 - ✅ `MetadataExtractorService` implémenté (359 lignes)
 - ✅ 9 metadata fields extracted: signature, parameters, returns, decorators, docstring, cyclomatic, LOC, imports, calls
 - ✅ Python `ast` module pour extraction (stdlib)
@@ -295,13 +295,16 @@ Process RAM = Baseline + (Model Weights × 3-5)
 
 ### 🎯 Next Steps - Phase 2
 
-**Phase 1 Complete** ✅ (18/21 pts - 86%)
+**Phase 1 Complete** ✅ (26/26 pts - 100%)
 
-**Phase 2: Graph Intelligence (Story 4)** - À FAIRE (13 pts)
-- Static analysis pour call graph + import graph
-- Stockage dans nodes/edges PostgreSQL
-- API endpoints pour graph traversal
-- Visualisation JSON pour UI
+**Note Story 2**: Story 2 "Dual Embeddings" a été **fusionnée avec Phase 0 Story 0.2** (voir ADR-017). Phase 1 n'a donc que 3 stories: 1, 2bis, 3.
+
+**Phase 2: Graph Intelligence (Story 4)** - 🟡 BRAINSTORM COMPLETE (2025-10-16)
+- ✅ Architecture brainstorm complete (EPIC-06_STORY_4_BRAINSTORM.md)
+- ⏳ Implementation pending: Static analysis pour call graph + import graph
+- ⏳ Stockage dans nodes/edges PostgreSQL
+- ⏳ API endpoints pour graph traversal
+- ⏳ Visualisation JSON pour UI
 
 ---
 
@@ -1167,9 +1170,11 @@ networkx==3.2.1  # Pour visualisation/analyse hors-DB
 
 **Contributeurs Recherche**: Claude (AI), Recherches web 2024-2025
 **Date Dernière Mise à Jour**: 2025-10-16 (Phase 1 Stories 1, 2bis & 3 Complete)
-**Progrès**: 26/74 story points (35.1%) | Phase 0: 100% ✅ | Phase 1: 86% 🟢 | Phase 2-4: 0%
+**Progrès**: 34/74 story points (45.9%) | Phase 0: 100% ✅ | Phase 1: 100% ✅ | Phase 2-4: 0%
 
 **Timeline**:
 - Phase 0: 3 jours (Oct 14-16) ✅
-- Phase 1: 3 jours (Oct 16) ✅ (18/21 pts - 86%)
+- Phase 1: 3 jours (Oct 16) ✅ (26/26 pts - 100%)
 - Total: 6 jours vs 23-32 jours estimés → **AHEAD -17 jours minimum**
+
+**Note**: Story 2 "Dual Embeddings" fusionnée avec Phase 0 Story 0.2 (ADR-017). Voir `EPIC-06_STORY_POINTS_STANDARDIZED.md` pour détails.
