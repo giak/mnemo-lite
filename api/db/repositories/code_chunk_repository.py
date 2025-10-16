@@ -68,6 +68,9 @@ class CodeChunkQueryBuilder:
 
         chunk_id = str(uuid.uuid4())
 
+        # Import CodeChunkModel to use _format_embedding_for_db
+        from models.code_chunk_models import CodeChunkModel
+
         params = {
             "id": chunk_id,
             "file_path": chunk_data.file_path,
@@ -77,8 +80,8 @@ class CodeChunkQueryBuilder:
             "source_code": chunk_data.source_code,
             "start_line": chunk_data.start_line,
             "end_line": chunk_data.end_line,
-            "embedding_text": chunk_data.embedding_text,
-            "embedding_code": chunk_data.embedding_code,
+            "embedding_text": CodeChunkModel._format_embedding_for_db(chunk_data.embedding_text),
+            "embedding_code": CodeChunkModel._format_embedding_for_db(chunk_data.embedding_code),
             "metadata": json.dumps(chunk_data.metadata),
             "indexed_at": datetime.now(timezone.utc),
             "last_modified": chunk_data.metadata.get("last_modified"),
@@ -100,6 +103,9 @@ class CodeChunkQueryBuilder:
         updates = []
         params = {"chunk_id": str(chunk_id)}
 
+        # Import CodeChunkModel to use _format_embedding_for_db
+        from models.code_chunk_models import CodeChunkModel
+
         if update_data.source_code is not None:
             updates.append("source_code = :source_code")
             params["source_code"] = update_data.source_code
@@ -110,20 +116,22 @@ class CodeChunkQueryBuilder:
 
         if update_data.embedding_text is not None:
             updates.append("embedding_text = :embedding_text")
-            params["embedding_text"] = update_data.embedding_text
+            params["embedding_text"] = CodeChunkModel._format_embedding_for_db(update_data.embedding_text)
 
         if update_data.embedding_code is not None:
             updates.append("embedding_code = :embedding_code")
-            params["embedding_code"] = update_data.embedding_code
+            params["embedding_code"] = CodeChunkModel._format_embedding_for_db(update_data.embedding_code)
 
         if update_data.last_modified is not None:
             updates.append("last_modified = :last_modified")
             params["last_modified"] = update_data.last_modified
-        else:
-            updates.append("last_modified = NOW()")
 
         if not updates:
             raise ValueError("No fields to update")
+
+        # Always update last_modified when updating other fields
+        if "last_modified" not in [u.split("=")[0].strip() for u in updates]:
+            updates.append("last_modified = NOW()")
 
         query_str = text(f"""
             UPDATE code_chunks
@@ -159,9 +167,13 @@ class CodeChunkQueryBuilder:
         """
         embedding_col = "embedding_text" if embedding_type == "text" else "embedding_code"
 
+        # Import CodeChunkModel to use _format_embedding_for_db
+        from models.code_chunk_models import CodeChunkModel
+
+        embedding_str = CodeChunkModel._format_embedding_for_db(embedding)
+
         conditions = []
         params = {
-            "embedding": embedding,
             "limit": limit,
             "offset": offset,
         }
@@ -184,10 +196,10 @@ class CodeChunkQueryBuilder:
 
         query_str = text(f"""
             SELECT *,
-                   1 - ({embedding_col} <=> :embedding::vector) AS similarity
+                   1 - ({embedding_col} <=> '{embedding_str}'::vector) AS similarity
             FROM code_chunks
             {where_clause}
-            ORDER BY {embedding_col} <=> :embedding::vector
+            ORDER BY {embedding_col} <=> '{embedding_str}'::vector
             LIMIT :limit OFFSET :offset
         """)
 
@@ -272,7 +284,7 @@ class CodeChunkRepository:
             row = db_result.mappings().first()
             if not row:
                 raise RepositoryError("Failed to add code chunk: No data returned.")
-            return CodeChunkModel(**dict(row))
+            return CodeChunkModel.from_db_record(row)
         except Exception as e:
             self.logger.error(f"Failed to add code chunk: {e}", exc_info=True)
             raise RepositoryError(f"Failed to add code chunk: {e}") from e
@@ -283,7 +295,7 @@ class CodeChunkRepository:
         try:
             db_result = await self._execute_query(query, params)
             row = db_result.mappings().first()
-            return CodeChunkModel(**dict(row)) if row else None
+            return CodeChunkModel.from_db_record(row) if row else None
         except Exception as e:
             self.logger.error(f"Failed to get code chunk {chunk_id}: {e}", exc_info=True)
             raise RepositoryError(f"Failed to get code chunk {chunk_id}: {e}") from e
@@ -294,7 +306,7 @@ class CodeChunkRepository:
         try:
             db_result = await self._execute_query(query, params, is_mutation=True)
             row = db_result.mappings().first()
-            return CodeChunkModel(**dict(row)) if row else None
+            return CodeChunkModel.from_db_record(row) if row else None
         except Exception as e:
             self.logger.error(f"Failed to update code chunk {chunk_id}: {e}", exc_info=True)
             raise RepositoryError(f"Failed to update code chunk {chunk_id}: {e}") from e
@@ -350,7 +362,7 @@ class CodeChunkRepository:
         try:
             db_result = await self._execute_query(query, params)
             rows = db_result.mappings().all()
-            return [CodeChunkModel(**dict(row)) for row in rows]
+            return [CodeChunkModel.from_db_record(row) for row in rows]
         except Exception as e:
             self.logger.error(f"Vector search failed: {e}", exc_info=True)
             raise RepositoryError(f"Vector search failed: {e}") from e
@@ -387,7 +399,7 @@ class CodeChunkRepository:
         try:
             db_result = await self._execute_query(query_builder, params)
             rows = db_result.mappings().all()
-            return [CodeChunkModel(**dict(row)) for row in rows]
+            return [CodeChunkModel.from_db_record(row) for row in rows]
         except Exception as e:
             self.logger.error(f"Similarity search failed: {e}", exc_info=True)
             raise RepositoryError(f"Similarity search failed: {e}") from e

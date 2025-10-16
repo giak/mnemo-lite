@@ -129,6 +129,49 @@ class CodeChunkModel(CodeChunkBase):
         }
     }
 
+    @staticmethod
+    def _format_embedding_for_db(embedding: Optional[list[float]]) -> Optional[str]:
+        """Format embedding list to string for pgvector."""
+        if embedding is None:
+            return None
+        return "[" + ",".join(map(str, embedding)) + "]"
+
+    @classmethod
+    def from_db_record(cls, record_data: Any) -> "CodeChunkModel":
+        """Create CodeChunkModel from database record, parsing embeddings from strings."""
+        import json
+        import ast
+
+        # Convert record to dict
+        try:
+            record_dict = dict(record_data)
+        except (TypeError, ValueError) as e:
+            raise TypeError(f"Expected dict-like record, got {type(record_data).__name__}") from e
+
+        # Parse metadata if it's a string
+        if isinstance(record_dict.get("metadata"), str):
+            try:
+                record_dict["metadata"] = json.loads(record_dict["metadata"])
+            except json.JSONDecodeError:
+                record_dict["metadata"] = {}
+
+        # Parse embeddings from strings to lists
+        for emb_field in ["embedding_text", "embedding_code"]:
+            emb_value = record_dict.get(emb_field)
+            if isinstance(emb_value, str):
+                try:
+                    parsed = ast.literal_eval(emb_value)
+                    if isinstance(parsed, list) and all(isinstance(x, (int, float)) for x in parsed):
+                        record_dict[emb_field] = parsed
+                    else:
+                        record_dict[emb_field] = None
+                except (ValueError, SyntaxError):
+                    record_dict[emb_field] = None
+            elif hasattr(emb_value, 'tolist'):  # Handle numpy arrays
+                record_dict[emb_field] = emb_value.tolist()
+
+        return cls.model_validate(record_dict)
+
 
 class CodeUnit(BaseModel):
     """

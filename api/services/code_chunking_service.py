@@ -1,10 +1,13 @@
 """
-Code chunking service for EPIC-06 Phase 1 Story 1.
+Code chunking service for EPIC-06 Phase 1 Story 1 & 3.
 
 Implements AST-based semantic chunking using tree-sitter for multiple languages.
 Inspired by cAST paper (2024) - split-then-merge algorithm for optimal chunk quality.
+
+Story 3 integration: Enriches chunks with code metadata (signature, complexity, etc.)
 """
 
+import ast
 import asyncio
 import hashlib
 import logging
@@ -16,7 +19,8 @@ from typing import Any, Optional
 from tree_sitter import Node, Tree
 from tree_sitter_languages import get_language, get_parser
 
-from api.models.code_chunk_models import ChunkType, CodeChunk, CodeUnit
+from models.code_chunk_models import ChunkType, CodeChunk, CodeUnit
+from services.metadata_extractor_service import MetadataExtractorService
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +160,7 @@ class CodeChunkingService:
         self._parsers: dict[str, LanguageParser] = {}
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._parse_cache: dict[str, Tree] = {}  # Cache parsed trees
+        self._metadata_extractor = MetadataExtractorService()  # Story 3
 
         # Initialize parsers (lazy loading)
         self._supported_languages = {
@@ -184,6 +189,7 @@ class CodeChunkingService:
         source_code: str,
         language: str,
         file_path: str = "<unknown>",
+        extract_metadata: bool = True,  # Story 3: extract metadata by default
         max_chunk_size: int = 2000,
         min_chunk_size: int = 100
     ) -> list[CodeChunk]:
@@ -194,11 +200,12 @@ class CodeChunkingService:
             source_code: Source code to chunk
             language: Programming language (python, javascript, etc.)
             file_path: Path to source file
+            extract_metadata: Whether to extract metadata (Story 3)
             max_chunk_size: Maximum chunk size in characters
             min_chunk_size: Minimum chunk size (for merging)
 
         Returns:
-            List of CodeChunk models
+            List of CodeChunk models with metadata (if extract_metadata=True)
 
         Raises:
             ValueError: If source_code is empty
@@ -233,6 +240,10 @@ class CodeChunkingService:
                 max_chunk_size,
                 min_chunk_size
             )
+
+            # Story 3: Enrich chunks with metadata
+            if extract_metadata:
+                chunks = await self._enrich_chunks_with_metadata(chunks, source_code, language)
 
             logger.info(f"Chunked {file_path}: {len(chunks)} chunks via AST")
             return chunks
@@ -411,6 +422,116 @@ class CodeChunkingService:
 
         logger.info(f"Fixed chunking: created {len(chunks)} chunks for {file_path}")
         return chunks
+
+    async def _enrich_chunks_with_metadata(
+        self,
+        chunks: list[CodeChunk],
+        source_code: str,
+        language: str
+    ) -> list[CodeChunk]:
+        """
+        Enrich chunks with metadata (Story 3).
+
+        Strategy:
+        1. Parse source_code with Python's ast module
+        2. For each chunk, find corresponding AST node by name/start_line
+        3. Extract metadata via MetadataExtractorService
+        4. Update chunk.metadata
+
+        Args:
+            chunks: List of code chunks to enrich
+            source_code: Full source code
+            language: Programming language
+
+        Returns:
+            Enriched chunks (same list, modified in-place)
+        """
+        if language.lower() != "python":
+            # Only Python supported in Phase 1
+            logger.info(f"Metadata extraction not supported for language '{language}', skipping")
+            return chunks
+
+        try:
+            # Parse source with Python's ast module
+            py_ast_tree = ast.parse(source_code)
+
+            # Build a lookup dict of AST nodes by name and line
+            ast_nodes_map = {}  # {(name, start_line): ast_node}
+
+            for node in ast.walk(py_ast_tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    key = (node.name, node.lineno)
+                    ast_nodes_map[key] = node
+
+            # OPTIMIZATION: Extract module-level imports once (Story 3 perf fix)
+            module_imports = self._extract_module_imports(py_ast_tree)
+
+            # Enrich each chunk
+            for chunk in chunks:
+                # Skip fallback chunks (no AST node)
+                if chunk.chunk_type == ChunkType.FALLBACK_FIXED:
+                    continue
+
+                # Try to find matching AST node
+                key = (chunk.name, chunk.start_line)
+                ast_node = ast_nodes_map.get(key)
+
+                if ast_node:
+                    # Extract metadata
+                    try:
+                        metadata = await self._metadata_extractor.extract_metadata(
+                            source_code=source_code,
+                            node=ast_node,
+                            tree=py_ast_tree,
+                            language=language,
+                            module_imports=module_imports  # Pass pre-extracted imports
+                        )
+
+                        # Merge with existing metadata
+                        chunk.metadata.update(metadata)
+
+                    except Exception as e:
+                        logger.warning(f"Metadata extraction failed for chunk '{chunk.name}': {e}")
+
+                else:
+                    logger.debug(f"No AST node found for chunk '{chunk.name}' at line {chunk.start_line}")
+
+            logger.info(f"Enriched {len(chunks)} chunks with metadata")
+
+        except Exception as e:
+            logger.error(f"Metadata enrichment failed: {e}", exc_info=True)
+            # Continue with chunks without metadata (graceful degradation)
+
+        return chunks
+
+    def _extract_module_imports(self, tree: ast.AST) -> dict[str, str]:
+        """
+        Extract all module-level imports once (performance optimization).
+
+        Returns:
+            Dict mapping alias names to full import names
+            e.g., {"List": "typing.List", "os": "os"}
+        """
+        module_imports = {}
+
+        try:
+            for module_node in ast.walk(tree):
+                if isinstance(module_node, ast.Import):
+                    for alias in module_node.names:
+                        name = alias.asname or alias.name
+                        module_imports[name] = alias.name
+
+                elif isinstance(module_node, ast.ImportFrom):
+                    module = module_node.module or ""
+                    for alias in module_node.names:
+                        name = alias.asname or alias.name
+                        full_name = f"{module}.{alias.name}" if module else alias.name
+                        module_imports[name] = full_name
+
+        except Exception as e:
+            logger.warning(f"Module imports extraction failed: {e}")
+
+        return module_imports
 
 
 # Singleton instance (will be injected via dependencies)

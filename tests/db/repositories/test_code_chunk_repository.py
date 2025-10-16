@@ -5,6 +5,7 @@ Tests CRUD operations, vector search, and similarity search.
 """
 
 import pytest
+import pytest_asyncio
 import uuid
 from datetime import datetime
 
@@ -12,7 +13,7 @@ from db.repositories.code_chunk_repository import CodeChunkRepository
 from models.code_chunk_models import CodeChunkCreate, CodeChunkUpdate, ChunkType
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def code_chunk_repo(test_engine):
     """Get CodeChunkRepository with test engine."""
     return CodeChunkRepository(engine=test_engine)

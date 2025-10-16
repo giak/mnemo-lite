@@ -859,6 +859,251 @@ code_emb = result['code']  # ✅ New API
 
 ---
 
+## ADR-013: Tree-sitter Version Compatibility (Phase 1 Story 1)
+
+**Date**: 2025-10-16
+**Statut**: ✅ IMPLÉMENTÉE (Story 1 - 2025-10-16)
+**Décideurs**: Équipe MnemoLite
+
+### Contexte
+
+**Installation initiale**: tree-sitter 0.25.2 + tree-sitter-languages 1.10.2
+**Erreur**: `TypeError: __init__() takes exactly 1 argument (2 given)` lors du parsing
+
+### Root Cause
+
+tree-sitter-languages 1.10.2 est incompatible avec tree-sitter 0.25.2 (API breaking changes)
+
+### Décision
+
+**Downgrade tree-sitter à 0.21.3**
+
+```bash
+pip uninstall -y tree-sitter
+pip install 'tree-sitter==0.21.3'
+```
+
+**Justification**:
+- ✅ tree-sitter-languages 1.10.2 compatible avec tree-sitter 0.21.x
+- ✅ Tous tests passent après downgrade
+- ✅ Version stable et éprouvée
+
+**Conséquences**:
+- `requirements.txt`: Pin tree-sitter==0.21.3 (éviter auto-upgrade)
+- Documentation: Version compatibility note
+- Future upgrade path: attendre tree-sitter-languages compatible 0.25.x
+
+**Référence**: Phase 1 Story 1 Implementation Log (2025-10-16)
+
+---
+
+## ADR-014: Embedding Format for pgvector (Phase 1 Story 2bis)
+
+**Date**: 2025-10-16
+**Statut**: ✅ IMPLÉMENTÉE (Story 2bis - 2025-10-16)
+**Décideurs**: Équipe MnemoLite
+
+### Contexte
+
+**Erreur**:
+```
+invalid input for query argument $9: [0.1, 0.1, ...] (expected str, got list)
+```
+
+Python lists → PostgreSQL VECTOR(768) conversion failing avec asyncpg
+
+### Options Considérées
+
+#### Option A: Passer list directement
+- **Inconvénients**: asyncpg rejette format list pour VECTOR type
+
+#### Option B: String format "[0.1,0.2,0.3,...]" ⭐ CHOISIE
+```python
+def _format_embedding_for_db(embedding: Optional[list[float]]) -> Optional[str]:
+    if embedding is None:
+        return None
+    return "[" + ",".join(map(str, embedding)) + "]"
+```
+
+### Décision
+
+**Option B: String format avec helper method**
+
+**Justification**:
+- ✅ Consistent avec EventRepository (`_format_embedding_for_db`)
+- ✅ asyncpg accepte string "[...]" pour VECTOR type
+- ✅ pgvector parse string correctement
+- ✅ Pattern éprouvé (EventModel utilise déjà)
+
+**Implémentation**:
+```python
+# api/models/code_chunk_models.py
+class CodeChunkModel:
+    @staticmethod
+    def _format_embedding_for_db(embedding: Optional[list[float]]) -> Optional[str]:
+        """Format embedding list to string for pgvector."""
+        if embedding is None:
+            return None
+        return "[" + ",".join(map(str, embedding)) + "]"
+
+# api/db/repositories/code_chunk_repository.py
+params = {
+    "embedding_text": CodeChunkModel._format_embedding_for_db(chunk_data.embedding_text),
+    "embedding_code": CodeChunkModel._format_embedding_for_db(chunk_data.embedding_code),
+}
+```
+
+**Conséquences**:
+- Format embedding dans build_add_query, build_update_query, build_search_vector_query
+- Parse embedding dans from_db_record (voir ADR-015)
+
+**Référence**: Phase 1 Story 2bis Audit Report (Issue #3)
+
+---
+
+## ADR-015: Embedding Deserialization from Database (Phase 1 Story 2bis)
+
+**Date**: 2025-10-16
+**Statut**: ✅ IMPLÉMENTÉE (Story 2bis - 2025-10-16)
+**Décideurs**: Équipe MnemoLite
+
+### Contexte
+
+**Erreur Pydantic**:
+```
+Input should be a valid list [type=list_type, input_value='[0.1,0.1,...', input_type=str]
+```
+
+Database retourne embeddings as strings, mais CodeChunkModel expects list[float]
+
+### Décision
+
+**Ajout `from_db_record()` classmethod avec parsing AST**
+
+```python
+@classmethod
+def from_db_record(cls, record_data: Any) -> "CodeChunkModel":
+    """Create CodeChunkModel from database record, parsing embeddings from strings."""
+    import json
+    import ast
+
+    record_dict = dict(record_data)
+
+    # Parse metadata if string
+    if isinstance(record_dict.get("metadata"), str):
+        record_dict["metadata"] = json.loads(record_dict["metadata"])
+
+    # Parse embeddings from strings to lists
+    for emb_field in ["embedding_text", "embedding_code"]:
+        emb_value = record_dict.get(emb_field)
+        if isinstance(emb_value, str):
+            try:
+                parsed = ast.literal_eval(emb_value)
+                if isinstance(parsed, list) and all(isinstance(x, (int, float)) for x in parsed):
+                    record_dict[emb_field] = parsed
+                else:
+                    record_dict[emb_field] = None
+            except (ValueError, SyntaxError):
+                record_dict[emb_field] = None
+        elif hasattr(emb_value, 'tolist'):  # Handle numpy arrays
+            record_dict[emb_field] = emb_value.tolist()
+
+    return cls.model_validate(record_dict)
+```
+
+**Justification**:
+- ✅ Consistent avec EventModel.from_db_record() pattern
+- ✅ `ast.literal_eval()` safe (vs `eval()`)
+- ✅ Handles multiple formats (string, numpy array)
+- ✅ Centralizes parsing logic
+
+**Utilisation**:
+```python
+# Repository
+row = db_result.mappings().first()
+return CodeChunkModel.from_db_record(row)  # ✅ Parses embeddings automatically
+```
+
+**Conséquences**:
+- Tous les Repository methods utilisent `from_db_record()`
+- Tests validés: 10/10 passed après implémentation
+
+**Référence**: Phase 1 Story 2bis Audit Report (Issue #4)
+
+---
+
+## ADR-016: Vector Search SQL Embedding Injection (Phase 1 Story 2bis)
+
+**Date**: 2025-10-16
+**Statut**: ✅ IMPLÉMENTÉE (Story 2bis - 2025-10-16)
+**Décideurs**: Équipe MnemoLite
+
+### Contexte
+
+**Erreur SQL**:
+```
+syntax error at or near ":" in query:
+SELECT *, 1 - (embedding_code <=> :embedding::vector) AS similarity
+```
+
+PostgreSQL ne peut pas binder parameter `:embedding::vector` avec asyncpg
+
+### Options Considérées
+
+#### Option A: Bind parameter avec cast
+```python
+params = {"embedding": embedding_str}
+query = "... <=> :embedding::vector ..."
+```
+- **Inconvénients**: asyncpg syntax error
+
+#### Option B: Direct SQL injection (embedding string) ⭐ CHOISIE
+```python
+embedding_str = CodeChunkModel._format_embedding_for_db(embedding)
+query = f"... <=> '{embedding_str}'::vector ..."
+# Pas de binding pour embedding
+```
+
+### Décision
+
+**Option B: Direct SQL injection du embedding string**
+
+**Justification**:
+- ✅ Évite syntax error asyncpg parameter binding
+- ✅ `embedding_str` est généré par code trusted (pas user input)
+- ✅ Format validated (`"[0.1,0.2,...]"` safe for SQL)
+- ✅ Tests passent avec cette approche
+
+**Implémentation**:
+```python
+def build_search_vector_query(self, embedding: List[float], ...):
+    embedding_str = CodeChunkModel._format_embedding_for_db(embedding)
+
+    query_str = text(f"""
+        SELECT *,
+               1 - ({embedding_col} <=> '{embedding_str}'::vector) AS similarity
+        FROM code_chunks
+        ORDER BY {embedding_col} <=> '{embedding_str}'::vector
+        LIMIT :limit OFFSET :offset
+    """)
+
+    params = {"limit": limit, "offset": offset}  # Pas d'embedding dans params
+    return query_str, params
+```
+
+**Sécurité**:
+- ⚠️ Embedding string is **NOT user input** (generated by service)
+- ✅ Format validation garantit safety (`[float,float,...]`)
+- ✅ No SQL injection risk (embedding values are floats)
+
+**Conséquences**:
+- Vector search queries fonctionnent correctement
+- Tests: 2 vector search tests passed
+
+**Référence**: Phase 1 Story 2bis Audit Report (Issue #5)
+
+---
+
 ## 📊 Récapitulatif Décisions
 
 | ADR | Sujet | Décision | Impact |
@@ -875,6 +1120,10 @@ code_emb = result['code']  # ✅ New API
 | **010** | **Alembic Baseline NO-OP** | **Migration baseline (Phase 0)** | **⭐⭐⭐ Critique** |
 | **011** | **RAM Estimation** | **Process RAM = Baseline + (Weights × 3-5)** | **⭐⭐⭐ Critique** |
 | **012** | **Adapter Pattern** | **Backward compat (Phase 0)** | **⭐⭐⭐ Critique** |
+| **013** | **Tree-sitter Version** | **Downgrade 0.21.3 (Phase 1)** | **⭐⭐ Haut** |
+| **014** | **Embedding Format pgvector** | **String "[0.1,0.2,...]" (Phase 1)** | **⭐⭐⭐ Critique** |
+| **015** | **Embedding Deserialization** | **from_db_record() with ast.literal_eval (Phase 1)** | **⭐⭐⭐ Critique** |
+| **016** | **Vector Search SQL** | **Direct embedding injection (Phase 1)** | **⭐⭐ Haut** |
 
 ---
 
@@ -899,9 +1148,9 @@ code_emb = result['code']  # ✅ New API
 
 ---
 
-**Date**: 2025-10-16 (Updated: Phase 0 ADRs added)
-**Version**: 1.1.0
+**Date**: 2025-10-16 (Updated: Phase 1 ADRs added)
+**Version**: 1.2.0
 **Statut**: ✅ LOG VALIDÉ
 
 **Maintenu par**: Équipe MnemoLite
-**Dernière mise à jour**: ADR-010, ADR-011, ADR-012 ajoutées (Phase 0 decisions)
+**Dernière mise à jour**: ADR-013, ADR-014, ADR-015, ADR-016 ajoutées (Phase 1 decisions - Stories 1 & 2bis)
