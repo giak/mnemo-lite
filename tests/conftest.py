@@ -47,3 +47,31 @@ async def test_engine() -> AsyncEngine:
 
     # Cleanup: dispose engine after test
     await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def code_chunk_repo(test_engine):
+    """Get CodeChunkRepository with test engine."""
+    from db.repositories.code_chunk_repository import CodeChunkRepository
+    return CodeChunkRepository(engine=test_engine)
+
+
+@pytest_asyncio.fixture(scope="session")
+async def dual_embedding_service():
+    """
+    Get DualEmbeddingService for tests.
+
+    Scope: session (reuse models across tests for performance)
+    """
+    from services.dual_embedding_service import DualEmbeddingService
+
+    service = DualEmbeddingService(
+        device="cpu",
+        dimension=768
+    )
+
+    # Pre-load TEXT model (commonly used)
+    # This happens on first call, so do it once at session start
+    await service.generate_embedding("warmup text", domain="TEXT")
+
+    return service

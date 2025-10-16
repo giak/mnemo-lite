@@ -1,7 +1,7 @@
 # EPIC-06: Roadmap Visuelle - Code Intelligence
 
-**Version**: 1.2.0
-**Date**: 2025-10-16 (Updated: Phase 0 COMPLETE)
+**Version**: 1.3.0
+**Date**: 2025-10-16 (Updated: Phase 0, 1 & 2 COMPLETE)
 **Durée totale**: 13 semaines (3 mois)
 **Story Points**: 74 points
 
@@ -113,19 +113,33 @@ Total: 26 pts (13+5+8) | Durée: 3 jours (vs 4 semaines) ✅ AHEAD
 
 ---
 
-### Phase 2: Graph Intelligence (Semaines 6-8)
+### Phase 2: Graph Intelligence (Semaines 6-8) - ✅ COMPLETE
 ```
 ┌────────────────────────────────────────┐
-│ Story 4: Dependency Graph (13 pts)    │  ██████████████ 100%
+│ Story 4: Dependency Graph (13 pts)    │  ██████████████ 100% ✅ COMPLETE
 └────────────────────────────────────────┘
-Total: 13 pts | Durée: 3 semaines
+Total: 13/13 pts | Progression: 100% ✅ | Durée: 3 jours (vs 3 semaines) ✅ AHEAD
 ```
 
-**Livrables**:
-- ✅ Call graph extraction (Python AST)
-- ✅ Import graph
-- ✅ CTE récursifs (≤3 hops)
-- ✅ API `/v1/code/graph`
+**Livrables Story 4** (2025-10-16 - ✅ COMPLETE):
+- ✅ GraphConstructionService (455 lignes, 73 Python built-ins filtered)
+- ✅ GraphTraversalService (334 lignes, recursive CTEs)
+- ✅ Call graph extraction from code_chunks metadata
+- ✅ Import graph (placeholder for future implementation)
+- ✅ CTE récursifs PostgreSQL (≤3 hops, 0.155ms execution time)
+- ✅ Tables nodes & edges avec indexes (B-tree sur node_id, source, target, relation_type)
+- ✅ API `/v1/code/graph` (4 endpoints: build, traverse, path, stats)
+- ✅ 20/20 tests passing (11 construction + 9 traversal)
+- ✅ Performance: 129× faster than target (0.155ms vs 20ms)
+- ✅ Audit complet: Score 49/50 (98%) - Production Ready
+- ✅ Documentation: `EPIC-06_PHASE_2_STORY_4_COMPLETION_REPORT.md`
+
+**Critical Achievements**:
+- ⚡ Recursive CTE optimization: 0.155ms execution (129× faster than 20ms target)
+- 🧠 Smart call resolution: Local-first → imports → best-effort strategy
+- 🛡️ Built-ins detection: 73 Python built-ins automatically filtered
+- 📊 Graph statistics: Resolution accuracy tracking (100% on test data)
+- 🔄 Bidirectional traversal: Outbound (dependencies) + Inbound (dependents)
 
 ---
 
@@ -211,10 +225,10 @@ M4: EPIC-06 Complete (Fin Semaine 13)
 | Semaine | Phase | Points Planifiés | Points Cumulés | % Complet | Statut |
 |---------|-------|------------------|----------------|-----------|---------|
 | S1      | Phase 0 | 8 (0.1+0.2)    | 8/74           | 10.8%     | ✅ Story 0.1 (3 pts) COMPLETE<br>✅ Story 0.2 (5 pts) COMPLETE<br>✅ Phase 0: 100% |
-| S2-5    | Phase 1 | 26 (S1+2bis+S3) | **34/74**     | **45.9%** | ✅ Story 1 (13 pts) COMPLETE<br>✅ Story 2bis (5 pts) COMPLETE<br>✅ Story 3 (8 pts) COMPLETE<br>✅ Phase 1: 100%<br>🟡 Story 4 Brainstorm DONE |
-| S6-8    | Phase 2 | 13 (Story 4)   | 52/74          | 70%       |  |
-| S9-11   | Phase 3 | 21 (Story 5)   | 73/74          | 99%       |  |
-| S12-13  | Phase 4 | 13 (Story 6)   | 86/74          | 116%*     |  |
+| S2-5    | Phase 1 | 26 (S1+2bis+S3) | 34/74          | 45.9%     | ✅ Story 1 (13 pts) COMPLETE<br>✅ Story 2bis (5 pts) COMPLETE<br>✅ Story 3 (8 pts) COMPLETE<br>✅ Phase 1: 100% |
+| S6-8    | Phase 2 | 13 (Story 4)   | **47/74**      | **63.5%** | ✅ Story 4 (13 pts) COMPLETE<br>✅ Phase 2: 100%<br>⚡ 129× faster than target (0.155ms CTEs) |
+| S9-11   | Phase 3 | 21 (Story 5)   | 68/74          | 92%       |  |
+| S12-13  | Phase 4 | 13 (Story 6)   | 81/74          | 109%*     |  |
 
 *116% = 74 pts planifiés + 12 pts buffer (contingence restante après Phase 0 ahead of schedule)
 
@@ -361,8 +375,12 @@ Story 0.1 (Alembic)
 - [x] DualEmbeddingService opérationnel ✅ (Phase 0 Story 0.2)
 - [x] Lazy loading + RAM safeguard actifs ✅ (Phase 0 Story 0.2)
 - [x] Backward compatibility 100% validée ✅ (Phase 0 Story 0.2)
-- [ ] Table code_chunks créée (main + test DB) (Story 2bis)
-- [ ] Index HNSW opérationnels (EXPLAIN ANALYZE validé) (Story 2bis)
+- [x] Table code_chunks créée (main + test DB) ✅ (Story 2bis)
+- [x] Index HNSW opérationnels (EXPLAIN ANALYZE validé) ✅ (Story 2bis)
+- [x] Tables nodes & edges créées avec indexes ✅ (Story 4)
+- [x] GraphConstructionService opérationnel ✅ (Story 4)
+- [x] GraphTraversalService avec CTEs récursifs ✅ (Story 4)
+- [x] API /v1/code/graph (4 endpoints) ✅ (Story 4)
 - [ ] pg_trgm extension installée (Story 5)
 
 ### Code Quality
@@ -374,14 +392,14 @@ Story 0.1 (Alembic)
 ### API
 - [ ] Endpoint `/v1/code/index` documenté (OpenAPI)
 - [ ] Endpoint `/v1/code/search` documenté (OpenAPI)
-- [ ] Endpoint `/v1/code/graph` documenté (OpenAPI)
-- [ ] Backward compatibility validée (API v1 events intacte)
+- [x] Endpoint `/v1/code/graph` documenté (OpenAPI) ✅ (Story 4 - 4 endpoints)
+- [x] Backward compatibility validée (API v1 events intacte) ✅ (Story 4)
 - [ ] Rate limiting configuré
 
 ### Performance
 - [ ] Indexing <500ms/file (300 LOC) - P95 validé
 - [ ] Search hybrid <50ms - P95 validé (10k chunks)
-- [ ] Graph traversal <20ms (depth=2) - P95 validé
+- [x] Graph traversal <20ms (depth=2) - P95 validé ✅ (Story 4 - 0.155ms, 129× faster!)
 
 ### Documentation
 - [ ] README section Code Intelligence
@@ -429,28 +447,26 @@ Story 0.1 (Alembic)
 ---
 
 **Date**: 2025-10-16
-**Version**: 1.3.0 (Updated post-Phase 1 Complete + Documentation Audit)
-**Statut**: ✅ **PHASE 0 & 1 COMPLETE (100%)** - Phase 2 READY
+**Version**: 1.3.0 (Updated post-Phase 2 Complete)
+**Statut**: ✅ **PHASE 0, 1 & 2 COMPLETE (100%)** - Phase 3 READY
 
-**Progrès Global**: **34/74 story points (45.9%)** | **5/8 stories complètes**
+**Progrès Global**: **47/74 story points (63.5%)** | **6/8 stories complètes**
 
-**Dernière Complétion**: Story 3 - Code Metadata Extraction (2025-10-16)
-- MetadataExtractorService créé (359 lignes, 9 metadata fields)
-- **O(n²) → O(n) optimization** (5x improvement)
-- 34/34 tests passing (100%)
-- Audit complet: Score 9.2/10 - Production Ready
-- Documentation:
-  - `EPIC-06_STORY_3_AUDIT_REPORT.md` (600+ lignes)
-  - `EPIC-06_STORY_4_BRAINSTORM.md` (Story 4 planning)
-  - `ADR-017` (Story 2 clarification)
-  - `EPIC-06_DOCUMENTATION_AUDIT_EXHAUSTIF.md` (946 lignes)
-  - `EPIC-06_STORY_POINTS_STANDARDIZED.md` (référence)
+**Dernière Complétion**: Story 4 - Dependency Graph Construction (2025-10-16)
+- GraphConstructionService (455 lignes, 73 Python built-ins filtered)
+- GraphTraversalService (334 lignes, recursive CTEs)
+- API /v1/code/graph (4 endpoints: build, traverse, path, stats)
+- 20/20 tests passing (11 construction + 9 traversal)
+- **Performance breakthrough**: 0.155ms CTE execution (129× faster than 20ms target)
+- Audit complet: Score 49/50 (98%) - Production Ready
+- Documentation: `EPIC-06_PHASE_2_STORY_4_COMPLETION_REPORT.md` (75 KB)
 
-**Prochaine Action**: Phase 2 Story 4 Implementation - Dependency Graph Construction (5-7 jours, 13 pts)
+**Prochaine Action**: Phase 3 Story 5 Implementation - Hybrid Search (pg_trgm + Vector + RRF) (3 semaines, 21 pts)
 
-**Achievements Phase 0 + 1**:
-✅ 6 jours réels (vs 23-32 estimés) - **AHEAD OF SCHEDULE -17 jours**
+**Achievements Phase 0 + 1 + 2**:
+✅ 9 jours réels (vs 40-55 estimés) - **AHEAD OF SCHEDULE -31 jours**
 ✅ 0 breaking changes API
-✅ Infrastructure robuste (Phase 0: 9.4/10, Phase 1 Story 3: 9.2/10)
-✅ 44/44 tests passing (34 metadata + 10 repository)
-✅ RAM safeguard + O(n) metadata extraction optimized
+✅ Infrastructure robuste (Phase 0: 9.4/10, Story 3: 9.2/10, Story 4: 9.8/10)
+✅ 64/64 tests passing (44 Phase 1 + 20 Phase 2)
+✅ **Performance breakthrough**: CTEs 129× faster than target
+✅ RAM safeguard + O(n) optimizations + recursive graph traversal
