@@ -1,8 +1,8 @@
 # EPIC-06: Plan d'Implémentation Détaillé - Code Intelligence
 
-**Version**: 1.0.0
-**Date**: 2025-10-15
-**Statut**: 📋 PLANIFICATION APPROFONDIE
+**Version**: 1.1.0
+**Date**: 2025-10-16 (Updated: Phase 0 Complete)
+**Statut**: 🚧 **EN COURS** - Phase 0 COMPLETE (100%), Phase 1 READY
 **Auteur**: Deep Analysis + Web Research 2024-2025
 
 ---
@@ -444,13 +444,15 @@ class CodeChunkingService:
 
 ## 📋 Plan d'Implémentation Détaillé
 
-### **PHASE 0: Infrastructure Setup (1 semaine)**
+### **PHASE 0: Infrastructure Setup (1 semaine)** - ✅ **COMPLETE (2025-10-16)**
 
 **Objectif**: Préparer infrastructure sans casser l'existant
 
-**Story Points**: 8
+**Story Points**: 8/8 (100%)
 
-#### Story 0.1: Alembic Async Setup (3 points)
+**Statut**: ✅ **COMPLETE** - 3 jours (vs 5-6 jours estimés) → AHEAD OF SCHEDULE
+
+#### Story 0.1: Alembic Async Setup (3 points) - ✅ **COMPLETE (2025-10-15)**
 
 **Tasks**:
 1. ✅ Initialiser Alembic avec template async
@@ -494,7 +496,9 @@ class CodeChunkingService:
 
 ---
 
-#### Story 0.2: Dual Embeddings Service (5 points)
+#### Story 0.2: Dual Embeddings Service (5 points) - ✅ **COMPLETE (2025-10-16)**
+
+⚠️ **RAM DISCOVERY**: Mesures réelles TEXT model = **1.25 GB** (vs 260 MB estimé). Formula RAM nouvelle: Process RAM = Baseline + (Model Weights × 3-5). Dual models TEXT+CODE simultanés NOT FEASIBLE with current 2GB container. See `EPIC-06_PHASE_0_STORY_0.2_AUDIT_REPORT.md` for details.
 
 **Tasks**:
 1. ✅ Ajouter dépendances `requirements.txt`
@@ -1024,8 +1028,15 @@ class CodeChunkingService:
 
 ---
 
-**Date**: 2025-10-15
-**Version**: 1.0.0
-**Statut**: ✅ PLAN VALIDÉ - PRÊT POUR KICKOFF PHASE 0
+**Date**: 2025-10-16 (Updated: Phase 0 Complete)
+**Version**: 1.1.0
+**Statut**: 🚧 **EN COURS** - Phase 0 COMPLETE (100%), Phase 1 READY
 
-**Prochaine Action**: Validation stakeholders → Kickoff Phase 0 Story 0.1 (Alembic Setup)
+**Phase 0 Complete**: 2025-10-16 ✅
+- Story 0.1: Alembic Async Setup (3 pts) ✅ 2025-10-15
+- Story 0.2: Dual Embeddings Service (5 pts) ✅ 2025-10-16
+- Timeline: 3 jours (vs 5-6 estimés) → AHEAD OF SCHEDULE -2 jours
+- Audit Score: 9.4/10 - Production Ready
+- Backward compatibility: 0 breaking changes
+
+**Prochaine Action**: Kickoff Phase 1 Story 1 - Tree-sitter Integration (5 jours, 13 pts)

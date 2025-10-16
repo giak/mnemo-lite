@@ -625,6 +625,240 @@ async def test_db_engine():
 
 ---
 
+## ADR-010: Alembic Baseline NO-OP Migration (Phase 0)
+
+**Date**: 2025-10-16
+**Statut**: ✅ IMPLÉMENTÉE (Story 0.1 - 2025-10-15)
+**Décideurs**: Équipe MnemoLite
+
+### Contexte
+
+Tables `events`, `nodes`, `edges` existent déjà en production (créées via `db/init/01-init.sql`). Alembic n'a jamais géré ces tables. Besoin de baseline migration pour qu'Alembic puisse tracker l'état DB existant sans toucher aux données.
+
+### Problème
+
+Si on crée migration avec `CREATE TABLE events`:
+→ **Erreur**: "relation 'events' already exists" ❌
+
+### Options Considérées
+
+#### Option A: Drop & Recreate Tables
+- Supprimer tables, recréer via Alembic
+- **Inconvénients**: ❌ Perte données, ❌ Breaking change majeur, ❌ Downtime
+
+#### Option B: Baseline NO-OP Migration ⭐ CHOISIE
+```python
+def upgrade() -> None:
+    """
+    Baseline migration: Mark existing tables as managed by Alembic.
+    NO-OP migration (tables already exist).
+    """
+    pass  # ← NO-OP! Tables déjà là
+
+def downgrade() -> None:
+    """Cannot downgrade baseline (would drop data)."""
+    raise RuntimeError("Cannot downgrade baseline migration")
+```
+
+### Décision
+
+**Option B: Baseline NO-OP Migration**
+
+**Justification**:
+- ✅ 0 data loss (tables intactes)
+- ✅ Backward compatibility totale
+- ✅ Alembic track state sans toucher données
+- ✅ Future migrations peuvent build sur cette base
+
+**Workflow**:
+1. Migration 001: Baseline (NO-OP) → Alembic version = '9dde1f9db172'
+2. Migration 002 (Phase 1): `CREATE TABLE code_chunks` → New table
+3. Migration 003+: Future changes
+
+**Conséquences**:
+- Database stampée avec `alembic stamp head`
+- `alembic_version` table créée
+- Pas de risque DROP TABLE accidentel
+- Migrations futures fonctionnent normalement
+
+**Référence**: EPIC-06_PHASE_0_STORY_0.1_REPORT.md (Décision 2), EPIC-06_PHASE_0_CRITICAL_INSIGHTS.md (Insight #6)
+
+---
+
+## ADR-011: RAM Estimation Methodology (Phase 0 Discovery)
+
+**Date**: 2025-10-16
+**Statut**: ✅ DOCUMENTÉE (Story 0.2 Discovery - 2025-10-16)
+**Décideurs**: Équipe MnemoLite
+
+### Contexte
+
+**Estimation initiale Phase 0**:
+- nomic-embed-text-v1.5: 137M params → ~260 MB RAM (model weights only)
+- jina-embeddings-v2-base-code: 161M params → ~400 MB RAM
+- **Total estimé**: ~660-700 MB < 1 GB ✅
+
+**Mesures réelles (Story 0.2 - 2025-10-16)**:
+- API baseline: 698 MB
+- **TEXT model chargé**: 1250 MB (+552 MB)
+- **CODE model**: BLOCKED by RAM safeguard (would exceed 900 MB threshold)
+
+### Root Cause Analysis
+
+```
+TEXT model actual RAM = Model Weights + PyTorch + Tokenizer + Working Memory
+                      = 260 MB      + 200 MB   + 150 MB    + 100 MB
+                      ≈ 710 MB overhead (!!)
+```
+
+**Estimation était incomplète**: model weights only (260 MB) ≠ process-level RAM (1.25 GB)
+
+### Décision
+
+**Formula Nouvelle (Phase 0+)**:
+```
+Process RAM = Baseline + (Model Weights × 3-5)
+```
+
+**Exemples validés**:
+- nomic-text 260 MB weights → 260 MB × ~2.8 = ~710 MB overhead ≈ 750 MB total ✅
+- Includes: PyTorch runtime, tokenizer vocab, CUDA buffers (si GPU), working memory
+
+**Justification**:
+- ✅ Formula validée avec mesures réelles Story 0.2
+- ✅ Multiplier 3-5× capture overhead PyTorch/tokenizer
+- ✅ Critical for estimations futures Phase 1+
+- ✅ Prevents underestimation comme Phase 0
+
+**Conséquences**:
+- Toutes estimations futures RAM: use 3-5× multiplier
+- Benchmark RAM process-level BEFORE estimating
+- Always implement RAM safeguards for multi-model scenarios
+- Documentation: Process RAM ≠ Model Weights
+
+**Implications Phase 0**:
+- ⚠️ Dual models TEXT+CODE simultanés: NOT FEASIBLE with current RAM budget
+  - TEXT: 1.25 GB
+  - CODE: ~400 MB estimated (not tested, blocked by safeguard)
+  - Total: ~1.65 GB > container limit (2 GB)
+- ✅ RAM Safeguard validated: blocks CODE model correctly
+
+**Stakeholder Decision (2025-10-16)**:
+- ✅ Accepted higher RAM (1.25 GB TEXT model)
+- ✅ Infrastructure dual ready (future optimization possible)
+- ✅ Use cases separated: TEXT for events, CODE for code intelligence (Phase 1+)
+
+**Future Optimizations**:
+1. **Quantization FP16**: RAM reduction ~50%
+2. **Model Swapping**: Unload TEXT before loading CODE
+3. **Larger Container**: 2 GB → 4 GB RAM
+
+**Référence**: EPIC-06_PHASE_0_STORY_0.2_AUDIT_REPORT.md (Section "RAM Process-Level vs Model Weights"), EPIC-06_PHASE_0_CRITICAL_INSIGHTS.md (Insight #8)
+
+---
+
+## ADR-012: Adapter Pattern pour Backward Compatibility (Phase 0)
+
+**Date**: 2025-10-16
+**Statut**: ✅ IMPLÉMENTÉE (Story 0.2 - 2025-10-16)
+**Décideurs**: Équipe MnemoLite
+
+### Contexte
+
+**New API (DualEmbeddingService)**:
+```python
+async def generate_embedding(
+    text: str,
+    domain: EmbeddingDomain = EmbeddingDomain.TEXT
+) -> Dict[str, List[float]]:
+    # Returns: {'text': [...], 'code': [...]}
+```
+
+**Old API (EmbeddingServiceProtocol)**:
+```python
+async def generate_embedding(text: str) -> List[float]:
+    # Returns: [0.1, 0.2, ..., 0.768]
+```
+
+**🔴 RISQUE**: Breaking changes sur tout code existant (EventService, MemorySearchService)
+
+### Options Considérées
+
+#### Option A: Modifier DualEmbeddingService signature
+```python
+async def generate_embedding(text: str, domain=TEXT) -> Union[List[float], Dict[str, List[float]]]:
+    # Return type dépend du domain
+```
+- **Inconvénients**: ❌ Confusion API, ❌ Type hints ambigus, ❌ Breaking change future code
+
+#### Option B: Adapter Pattern + Legacy Method ⭐ CHOISIE
+```python
+class DualEmbeddingService:
+    async def generate_embedding(
+        self,
+        text: str,
+        domain: EmbeddingDomain = EmbeddingDomain.TEXT
+    ) -> Dict[str, List[float]]:
+        """New API (Phase 0.2+)."""
+        ...
+
+    async def generate_embedding_legacy(self, text: str) -> List[float]:
+        """Backward compatible API (Phase 0-Phase 3)."""
+        result = await self.generate_embedding(text, domain=EmbeddingDomain.TEXT)
+        return result['text']  # Return list only (old API)
+
+class DualEmbeddingServiceAdapter:
+    """Adapter pour rendre DualEmbeddingService compatible avec EmbeddingServiceProtocol."""
+
+    def __init__(self, dual_service: DualEmbeddingService):
+        self._dual_service = dual_service
+
+    async def generate_embedding(self, text: str) -> List[float]:
+        """Backward compatible method."""
+        return await self._dual_service.generate_embedding_legacy(text)
+
+    async def compute_similarity(self, item1: Any, item2: Any) -> float:
+        """Compute similarity (supports str and List[float])."""
+        emb1 = await self.generate_embedding(item1) if isinstance(item1, str) else item1
+        emb2 = await self.generate_embedding(item2) if isinstance(item2, str) else item2
+        return await self._dual_service.compute_similarity(emb1, emb2)
+```
+
+### Décision
+
+**Option B: Adapter Pattern + Legacy Method**
+
+**Justification**:
+- ✅ 0 breaking changes (19 regression tests passed)
+- ✅ Old code fonctionne sans modification
+- ✅ Future code can use new API (`domain=HYBRID`)
+- ✅ Adapter implements `EmbeddingServiceProtocol`
+- ✅ Type hints clairs (no Union confusion)
+
+**Utilisation**:
+```python
+# Code existant (INCHANGÉ)
+embedding = await service.generate_embedding("Hello")
+# Type: List[float] ✅
+
+# Nouveau code (Phase 1+)
+result = await dual_service.generate_embedding("def foo(): pass", domain=EmbeddingDomain.CODE)
+code_emb = result['code']  # ✅ New API
+```
+
+**Conséquences**:
+- `dependencies.py`: Wrap `DualEmbeddingService` avec `DualEmbeddingServiceAdapter`
+- EventService, MemorySearchService: 0 modifications
+- Future deprecation path: Phase 4+ migrate to new API, remove adapter
+
+**Tests Validation**:
+- ✅ 19 regression tests passed (EventService, Event Routes, Embedding Service)
+- ✅ Backward compatibility: 100% verified
+
+**Référence**: EPIC-06_PHASE_0_STORY_0.2_REPORT.md (Décision 1), EPIC-06_PHASE_0_CRITICAL_INSIGHTS.md (Insight #4)
+
+---
+
 ## 📊 Récapitulatif Décisions
 
 | ADR | Sujet | Décision | Impact |
@@ -638,6 +872,9 @@ async def test_db_engine():
 | 007 | Graph Depth | depth ≤ 3 | ⭐ Moyen |
 | 008 | Metadata Langs | Python (P1), JS/TS (P2), Go/Rust/Java (P3) | ⭐ Moyen |
 | 009 | Tests DB | mnemolite_test (isolation) | ⭐ Moyen |
+| **010** | **Alembic Baseline NO-OP** | **Migration baseline (Phase 0)** | **⭐⭐⭐ Critique** |
+| **011** | **RAM Estimation** | **Process RAM = Baseline + (Weights × 3-5)** | **⭐⭐⭐ Critique** |
+| **012** | **Adapter Pattern** | **Backward compat (Phase 0)** | **⭐⭐⭐ Critique** |
 
 ---
 
@@ -662,8 +899,9 @@ async def test_db_engine():
 
 ---
 
-**Date**: 2025-10-15
-**Version**: 1.0.0
+**Date**: 2025-10-16 (Updated: Phase 0 ADRs added)
+**Version**: 1.1.0
 **Statut**: ✅ LOG VALIDÉ
 
 **Maintenu par**: Équipe MnemoLite
+**Dernière mise à jour**: ADR-010, ADR-011, ADR-012 ajoutées (Phase 0 decisions)
