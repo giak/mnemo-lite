@@ -1,8 +1,8 @@
 # MnemoLite – Project Foundation Document (PFD)
 
-> 📅 **Dernière mise à jour**: 2025-10-13
-> 📝 **Version**: v1.3.0
-> ✅ **Statut**: À jour avec le code
+> 📅 **Dernière mise à jour**: 2025-10-17
+> 📝 **Version**: v2.0.0
+> ✅ **Statut**: À jour avec le code (PostgreSQL 18, Dual-Purpose: Agent Memory + Code Intelligence)
 
 **Auteur / Sponsor** : Giak & Expanse Cognition Team
 
@@ -10,7 +10,7 @@
 
 ## 1 · Executive Summary
 MnemoLite dote l’assistant personnel **Expanse** d’une **mémoire cognitive auto‑adaptable** optimisée pour un déploiement local. Elle permet de simuler, tester, visualiser et interroger des souvenirs conversationnels, en expliquant leurs chaînes causales.
-La nouvelle architecture **H‑VG‑T** (_Hybrid‑Vector‑Graph‑Tiered_) repose **exclusivement** sur **PostgreSQL 17** ; elle marie :
+La nouvelle architecture **H‑VG‑T** (_Hybrid‑Vector‑Graph‑Tiered_) repose **exclusivement** sur **PostgreSQL 18** ; elle marie :
 
 * **Vecteurs sémantiques haute vitesse** (pgvector + HNSW sur table `events`) — latence locale optimisée.
 * **Graphe relationnel léger** (tables `nodes/edges` + CTE récursives ≤ 3 sauts) — traçabilité causale.
@@ -70,7 +70,7 @@ flowchart TD
   end
   subgraph Backend
     A -->|REST| API[FastAPI]
-    API -->|Writes/Reads| PG[ PostgreSQL 17]
+    API -->|Writes/Reads| PG[ PostgreSQL 18]
     API -->|Write Notification| PGMQ[PGMQ Queue]
     Worker -->|Read Notification| PGMQ
     Worker -->|Writes/Reads| PG
@@ -145,7 +145,7 @@ flowchart LR
 ## 9 · Budget & Resources
 * **Humain :** 1 Dev (30 j.h) · 1 DevOps/Test (10 j.h).
 * **Matériel :** Machine locale Linux (cible: 64GB RAM).
-* **Logiciel :** FOSS only (PostgreSQL 17, pgvector, pg_partman, pg_cron, FastAPI, HTMX).
+* **Logiciel :** FOSS only (PostgreSQL 18, pgvector, pg_partman, pg_cron, FastAPI, HTMX).
 
 ---
 
@@ -190,5 +190,5 @@ flowchart LR
 ---
 
 ### Document Status
-_Le PFD **v1.3.0** adapte l'architecture et les objectifs pour un déploiement local optimisé sur une machine personnelle, simplifiant le cycle de vie des données et l'observabilité, et aligne la terminologie (table `events`, PGMQ) avec le code actuel._
+_Le PFD **v2.0.0** adapte l'architecture et les objectifs pour un déploiement local optimisé avec système dual-purpose (Agent Memory + Code Intelligence). Migration PostgreSQL 17 → 18. Le document simplifie le cycle de vie des données et l'observabilité, et aligne la terminologie (table `events`, `code_chunks`, PGMQ) avec le code actuel._
 

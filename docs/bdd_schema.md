@@ -1,11 +1,15 @@
 # MnemoLite – Schéma SQL Raffiné
 
-> 📅 **Dernière mise à jour**: 2025-10-13
-> 📝 **Version**: v1.3.0
-> ✅ **Statut**: À jour avec le code
+> 📅 **Dernière mise à jour**: 2025-10-17
+> 📝 **Version**: v2.0.0
+> ✅ **Statut**: À jour avec le code (PostgreSQL 18, Dual-Purpose: Agent Memory + Code Intelligence)
 
 ## Contexte
-Ce schéma documente la structure de la base de données MnemoLite, alignée avec le PFD v1.2.2, le PRD v1.0.2 et l'ARCH v1.1.1. Il s'appuie sur une architecture 100% PostgreSQL optimisée pour un déploiement local, combinant une table principale `events` partitionnée (temps/vecteur) et des tables `nodes`/`edges` pour le graphe conceptuel.
+Ce schéma documente la structure de la base de données MnemoLite v2.0.0, un **système dual-purpose** combinant:
+1. **Agent Memory** - Table `events` partitionnée (temps/vecteur) pour mémoire cognitive d'agents IA
+2. **Code Intelligence** - Table `code_chunks` avec dual embeddings (TEXT + CODE) pour indexation sémantique de code
+
+Architecture 100% **PostgreSQL 18** optimisée pour un déploiement local, avec tables `nodes`/`edges` pour graphes causaux (Agent Memory) ET graphes de dépendances (Code Intelligence).
 
 ---
 
@@ -24,6 +28,9 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- Utilisé pour le partitionnement automatique de la table 'events'
 CREATE SCHEMA IF NOT EXISTS partman; -- Création du schéma dédié
 CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;
+
+-- Nécessaire pour la recherche lexicale (trigram similarity) sur le code
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- Optionnel: Non activé par défaut, mais nécessaire pour la quantisation planifiée
 -- CREATE EXTENSION IF NOT EXISTS pg_cron;
@@ -70,16 +77,78 @@ CREATE INDEX IF NOT EXISTS events_metadata_gin_idx ON events USING GIN (metadata
 -- ON events_pYYYY_MM USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 
 ------------------------------------------------------------------
--- Tables Graphe Conceptuel/Événementiel
+-- Table Code Intelligence: code_chunks (dual embeddings)
+------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS code_chunks (
+    chunk_id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    repository          TEXT NOT NULL,      -- Nom du repository/projet indexé
+    file_path           TEXT NOT NULL,      -- Chemin relatif du fichier source
+    chunk_type          TEXT NOT NULL CHECK (chunk_type IN ('function', 'class', 'method', 'file')),
+    language            TEXT NOT NULL,      -- Langage détecté (python, javascript, etc.)
+    code_text           TEXT NOT NULL,      -- Texte du chunk de code
+    start_line          INTEGER,            -- Ligne de début dans le fichier
+    end_line            INTEGER,            -- Ligne de fin dans le fichier
+    metadata            JSONB DEFAULT '{}'::jsonb,  -- Métadonnées structurées (voir ci-dessous)
+    embedding_text      VECTOR(768),        -- Embedding TEXT (nomic-embed-text-v1.5)
+    embedding_code      VECTOR(768),        -- Embedding CODE (nomic-embed-text-v1.5)
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+COMMENT ON TABLE code_chunks IS 'Chunks de code indexes avec dual embeddings (TEXT + CODE) pour recherche semantique hybride.';
+COMMENT ON COLUMN code_chunks.embedding_text IS 'Embedding semantique pour recherche par description (TEXT mode).';
+COMMENT ON COLUMN code_chunks.embedding_code IS 'Embedding semantique pour recherche par similarite de code (CODE mode).';
+COMMENT ON COLUMN code_chunks.metadata IS 'Metadonnees structurees: {name, signature, docstring, complexity, imports, calls, class_name, parameters, return_type, decorators}.';
+
+-- Index HNSW pour recherche vectorielle sur embedding TEXT (recherche par description)
+CREATE INDEX IF NOT EXISTS code_chunks_embedding_text_hnsw_idx
+    ON code_chunks USING hnsw (embedding_text vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
+
+-- Index HNSW pour recherche vectorielle sur embedding CODE (recherche par similarité de code)
+CREATE INDEX IF NOT EXISTS code_chunks_embedding_code_hnsw_idx
+    ON code_chunks USING hnsw (embedding_code vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
+
+-- Index GIN trigram pour recherche lexicale full-text sur code_text
+CREATE INDEX IF NOT EXISTS code_chunks_code_text_trgm_idx
+    ON code_chunks USING gin (code_text gin_trgm_ops);
+
+-- Index GIN trigram pour recherche lexicale sur metadata (notamment 'name' et 'signature')
+CREATE INDEX IF NOT EXISTS code_chunks_metadata_trgm_idx
+    ON code_chunks USING gin (metadata jsonb_path_ops);
+
+-- Index B-tree pour filtrage par repository
+CREATE INDEX IF NOT EXISTS code_chunks_repository_idx
+    ON code_chunks (repository);
+
+-- Index B-tree pour filtrage par file_path
+CREATE INDEX IF NOT EXISTS code_chunks_file_path_idx
+    ON code_chunks (file_path);
+
+-- Index B-tree pour filtrage par language
+CREATE INDEX IF NOT EXISTS code_chunks_language_idx
+    ON code_chunks (language);
+
+-- Index B-tree pour filtrage par chunk_type
+CREATE INDEX IF NOT EXISTS code_chunks_chunk_type_idx
+    ON code_chunks (chunk_type);
+
+-- Index composite pour requêtes fréquentes (repository + file_path)
+CREATE INDEX IF NOT EXISTS code_chunks_repo_file_idx
+    ON code_chunks (repository, file_path);
+
+------------------------------------------------------------------
+-- Tables Graphe Conceptuel/Événementiel (Dual-Purpose)
 ------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS nodes (
-    node_id         UUID PRIMARY KEY, -- Generalement un event.id, mais peut etre autre chose (concept genere)
-    node_type       TEXT NOT NULL,    -- Ex: 'event', 'concept', 'entity', 'rule', 'document'
+    node_id         UUID PRIMARY KEY, -- Generalement un event.id (Agent Memory) ou code_chunk.chunk_id (Code Intelligence)
+    node_type       TEXT NOT NULL,    -- Ex: 'event', 'concept', 'entity', 'rule', 'document', 'function', 'class', 'module'
     label           TEXT,             -- Nom lisible pour affichage/requete
     properties      JSONB DEFAULT '{}'::jsonb, -- Attributs additionnels du nœud
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
-COMMENT ON TABLE nodes IS 'Noeuds du graphe conceptuel (evenements, concepts, entites).';
+COMMENT ON TABLE nodes IS 'Noeuds du graphe (dual-purpose): graphe causal Agent Memory + graphe de dependances Code Intelligence.';
 
 CREATE INDEX IF NOT EXISTS nodes_type_idx ON nodes(node_type);
 -- Optionnel: Index sur label si recherche frequente par nom
@@ -89,11 +158,11 @@ CREATE TABLE IF NOT EXISTS edges (
     edge_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_node_id  UUID NOT NULL, -- Reference logique nodes.node_id
     target_node_id  UUID NOT NULL, -- Reference logique nodes.node_id
-    relation_type   TEXT NOT NULL, -- Ex: 'causes', 'mentions', 'related_to', 'follows', 'uses_tool', 'part_of'
+    relation_type   TEXT NOT NULL, -- Ex: 'causes', 'mentions', 'related_to' (Agent) | 'imports', 'calls', 'inherits', 'defines' (Code)
     properties      JSONB DEFAULT '{}'::jsonb, -- Poids, timestamp de la relation, etc.
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
-COMMENT ON TABLE edges IS 'Relations (aretes) entre les noeuds du graphe conceptuel.';
+COMMENT ON TABLE edges IS 'Relations (aretes) entre noeuds (dual-purpose): liens causaux Agent Memory + dependances Code Intelligence.';
 COMMENT ON COLUMN edges.source_node_id IS 'ID du noeud source (pas de FK physique).';
 COMMENT ON COLUMN edges.target_node_id IS 'ID du noeud cible (pas de FK physique).';
 
@@ -111,7 +180,7 @@ CREATE INDEX IF NOT EXISTS edges_relation_type_idx ON edges(relation_type);
 
 ## Explications Détaillées des Choix de Conception
 
-L'objectif global était de créer une base **robuste**, **performante pour les cas d'usage locaux**, **facile à déployer/maintenir** et **évolutive** dans le contexte d'une machine personnelle ou d'un petit serveur, en s'appuyant **uniquement** sur PostgreSQL 17 et ses extensions.
+L'objectif global était de créer une base **robuste**, **performante pour les cas d'usage locaux**, **facile à déployer/maintenir** et **évolutive** dans le contexte d'une machine personnelle ou d'un petit serveur, en s'appuyant **uniquement** sur PostgreSQL 18 et ses extensions.
 
 ### 1. Table `events` comme Cœur et Partitionnement Temporel (`pg_partman`)
 
@@ -180,12 +249,58 @@ L'objectif global était de créer une base **robuste**, **performante pour les 
 *   **Ce que ça apporte :** Bonnes performances générales pour les cas d'usage visés (recherche contextuelle, exploration temporelle, requêtes causales simples).
 *   **Points d'attention :** Les index consomment de l'espace disque et ralentissent (un peu) les écritures ; nécessitent une maintenance (VACUUM, REINDEX).
 
+### 7. Table `code_chunks` et Dual Embeddings (TEXT + CODE)
+
+*   **Pourquoi ?**
+    *   **Code Intelligence locale :** Indexer et rechercher sémantiquement du code sans dépendre d'APIs externes (GitHub Copilot, etc.).
+    *   **Dual embeddings :** Deux embeddings distincts pour chaque chunk de code permettent deux types de recherche complémentaires :
+        *   **TEXT embedding** : Recherche par description ("find authentication logic") - optimisé pour le langage naturel.
+        *   **CODE embedding** : Recherche par similarité de code ("find similar functions") - optimisé pour la structure/syntaxe du code.
+    *   **Recherche hybride :** Combinaison de recherche lexicale (pg_trgm) + vectorielle (HNSW) + fusion RRF (Reciprocal Rank Fusion).
+    *   **Métadonnées riches :** JSONB stocke complexité cyclomatique, imports, appels de fonctions, paramètres, etc.
+*   **Ce que ça apporte (Performance & Flexibilité) :**
+    *   **Recherche sémantique performante :** HNSW sur 2 embeddings (768D chacun) avec ~12ms de latence pour K-NN.
+    *   **Recherche lexicale rapide :** Index GIN trigram (pg_trgm) pour recherche full-text sur code (~3ms).
+    *   **Filtrage efficace :** Index B-tree sur repository, file_path, language, chunk_type pour filtrages rapides.
+    *   **Graphe de dépendances :** Tables nodes/edges réutilisées pour modéliser imports/calls/inherits entre chunks de code.
+    *   **Pipeline d'indexation complet :** 7 étapes automatisées (détection langage → AST parsing tree-sitter → chunking → metadata → dual embedding → graph → storage).
+*   **Trade-offs :**
+    *   **Espace disque :** Dual embeddings = 2 × 768 × 4 bytes = ~6KB par chunk (acceptable pour des dizaines de milliers de chunks).
+    *   **Temps d'indexation :** ~2-3s par fichier (AST parsing + dual embedding generation) - batch processing recommandé.
+    *   **Maintenance :** Index HNSW à reconstruire lors de reindexation massive (REINDEX CONCURRENTLY).
+
+### 8. Architecture Dual-Purpose (Agent Memory + Code Intelligence)
+
+*   **Pourquoi ?**
+    *   **Réutilisation maximale :** Les tables `nodes`/`edges` servent à la fois pour :
+        *   **Agent Memory** : Graphe causal entre événements (causes, mentions, related_to).
+        *   **Code Intelligence** : Graphe de dépendances entre chunks de code (imports, calls, inherits, defines).
+    *   **Simplification stack :** Une seule base PostgreSQL 18 pour deux cas d'usage distincts.
+    *   **Extensions partagées :** pgvector (HNSW), pg_trgm (trigrams), pg_partman (partitionnement) profitent aux deux.
+*   **Ce que ça apporte :**
+    *   **Opérations simplifiées :** Une seule base à sauvegarder, monitorer, optimiser.
+    *   **Requêtes cross-domain :** Possibilité de lier events (agent) et code_chunks (code) dans le graphe.
+    *   **Évolutivité :** Ajout de nouveaux types de nœuds/relations sans modification de schéma.
+
 ### Conclusion de la Rationale
 
-Ce schéma est un **concentré de pragmatisme** pour un déploiement local : il maximise la flexibilité et la puissance de recherche en exploitant les fonctionnalités natives de PostgreSQL 17 et ses extensions clés, tout en gardant une structure simple à comprendre, à déployer et à maintenir. Les compromis (absence de FK sur `edges`, performance limitée des CTE pour graphes complexes) sont conscients et jugés acceptables au vu de l'objectif de simplicité et des cas d'usage principaux ciblés.
+Ce schéma est un **concentré de pragmatisme** pour un déploiement local : il maximise la flexibilité et la puissance de recherche en exploitant les fonctionnalités natives de PostgreSQL 18 et ses extensions clés, tout en gardant une structure simple à comprendre, à déployer et à maintenir.
+
+Le système **dual-purpose** (Agent Memory + Code Intelligence) réutilise intelligemment les mêmes tables (`nodes`/`edges`) et extensions (pgvector, pg_trgm, pg_partman) pour deux cas d'usage distincts, maximisant la simplicité opérationnelle tout en offrant des capacités avancées de recherche sémantique et de graphe.
+
+Les compromis (absence de FK sur `edges`, performance limitée des CTE pour graphes complexes, temps d'indexation pour dual embeddings) sont conscients et jugés acceptables au vu de l'objectif de simplicité et des cas d'usage principaux ciblés.
 
 ---
 
-**Version :** v1.3.0
-**Date :** 2025-10-13
+**Version :** v2.0.0
+**Date :** 2025-10-17
 **Auteur :** Giak
+
+**Changements majeurs v2.0.0** :
+- Migration PostgreSQL 17 → 18 (EPIC-06)
+- Ajout table `code_chunks` avec dual embeddings (TEXT + CODE, 768D chacun)
+- Extension pg_trgm pour recherche lexicale sur code
+- 9 index sur code_chunks (2 HNSW, 2 GIN, 5 B-tree)
+- Tables nodes/edges étendues pour usage dual-purpose (Agent Memory + Code Intelligence)
+- Ajout sections rationale 7-8 (code_chunks, dual-purpose architecture)
+- Documentation complète métadonnées code (complexity, imports, calls, parameters)

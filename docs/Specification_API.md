@@ -1,8 +1,8 @@
 # MnemoLite – Spécification API
 
-> 📅 **Dernière mise à jour**: 2025-10-13
-> 📝 **Version**: v1.3.0
-> ✅ **Statut**: À jour avec le code
+> 📅 **Dernière mise à jour**: 2025-10-17
+> 📝 **Version**: v2.0.0
+> ✅ **Statut**: À jour avec le code (Agent Memory + Code Intelligence endpoints)
 
 > **Objectif (Ω)** : Définir un contrat clair, versionné, testable et documenté pour intégrer MnemoLite à Expanse et à tout client externe, basé sur REST/JSON et OpenAPI 3.1.
 
@@ -30,15 +30,38 @@
 ---
 
 ## 3. Endpoints principaux (Λ)
-| Méthode | Route                     | Fonction                                      | Auth       |
-|---------|---------------------------|-----------------------------------------------|------------|
-| POST    | `/v1/events`              | Ingestion d'un événement                      | none (dev) |
-| GET     | `/v1/events/{id}`         | Récupérer par UID                             | none       |
-| PATCH   | `/v1/events/{id}/metadata`| MàJ (fusion) métadonnées d'un événement       | none       |
-| DELETE  | `/v1/events/{id}`         | Suppression d'un événement                    | none       |
-| GET     | `/v1/search/`             | Recherche vectorielle + filtres               | none       |
-| GET     | `/v1/health`              | Liveness / readiness                          | none       |
-| GET     | `/v1/metrics`             | Métriques Prometheus                          | none       |
+
+### Agent Memory Endpoints
+| Méthode | Route                        | Fonction                                      | Auth       |
+|---------|------------------------------|-----------------------------------------------|------------|
+| POST    | `/v1/events`                 | Ingestion d'un événement                      | none (dev) |
+| GET     | `/v1/events/{id}`            | Récupérer par UID                             | none       |
+| PATCH   | `/v1/events/{id}/metadata`   | MàJ (fusion) métadonnées d'un événement       | none       |
+| DELETE  | `/v1/events/{id}`            | Suppression d'un événement                    | none       |
+| GET     | `/v1/search/`                | Recherche hybride (vecteur + filtres)         | none       |
+| GET     | `/v1/events/cache/stats`     | Statistiques cache (EPIC-08)                  | none       |
+
+### Code Intelligence Endpoints (NEW in v2.0.0)
+| Méthode | Route                        | Fonction                                      | Auth       |
+|---------|------------------------------|-----------------------------------------------|------------|
+| POST    | `/v1/code/index`             | Indexer un repository (7-step pipeline)       | none (dev) |
+| POST    | `/v1/code/search/hybrid`     | Recherche hybride (lexical + vector + RRF)    | none       |
+| POST    | `/v1/code/search/lexical`    | Recherche lexicale (pg_trgm)                  | none       |
+| POST    | `/v1/code/search/vector`     | Recherche vectorielle (dual embeddings)       | none       |
+| GET     | `/v1/code/metadata/{chunk_id}`| Récupérer métadonnées d'un chunk             | none       |
+| POST    | `/v1/code/graph/build`       | Construire graphe de dépendances              | none       |
+| POST    | `/v1/code/graph/traverse`    | Traverser graphe (recursive CTE, ≤3 hops)     | none       |
+| POST    | `/v1/code/graph/path`        | Trouver chemin entre 2 nœuds                  | none       |
+| GET     | `/v1/code/graph/stats`       | Statistiques graphe (nodes, edges, depth)     | none       |
+| GET     | `/v1/code/stats`             | Statistiques repository (files, functions)    | none       |
+| DELETE  | `/v1/code/chunks/{chunk_id}` | Supprimer un chunk de code                    | none       |
+| GET     | `/v1/code/repositories`      | Lister les repositories indexés              | none       |
+
+### System Endpoints
+| Méthode | Route                        | Fonction                                      | Auth       |
+|---------|------------------------------|-----------------------------------------------|------------|
+| GET     | `/v1/health`                 | Liveness / readiness                          | none       |
+| GET     | `/v1/metrics`                | Métriques Prometheus                          | none       |
 
 ---
 
@@ -47,7 +70,7 @@
 openapi: 3.1.0
 info:
   title: MnemoLite API
-  version: "1.3.0" # Version harmonisée (auto-embedding + health check fix + versioning)
+  version: "2.0.0" # Agent Memory + Code Intelligence (EPIC-06/07/08)
 servers:
   - url: http://localhost:8001/v1 # URL locale par défaut
 paths:
@@ -321,6 +344,149 @@ paths:
                   # TYPE python_gc_objects_collected_total counter
                   python_gc_objects_collected_total{generation="0"} 1.0
                   ...
+
+  # ============================================
+  # Code Intelligence Endpoints (NEW in v2.0.0)
+  # ============================================
+  /code/index:
+    post:
+      summary: Index code repository (7-step pipeline)
+      description: >
+        Indexes a code repository using the 7-step pipeline:
+        1. Language detection, 2. AST parsing (tree-sitter), 3. Chunking,
+        4. Metadata extraction, 5. Dual embedding (TEXT + CODE),
+        6. Graph construction, 7. Storage.
+      operationId: index_code_v1_code_index_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [repository, files]
+              properties:
+                repository: {type: string, example: "my-project"}
+                files:
+                  type: array
+                  items:
+                    type: object
+                    required: [path, content]
+                    properties:
+                      path: {type: string, example: "src/main.py"}
+                      content: {type: string, example: "def calculate_total(items):\\n    return sum(items)"}
+      responses:
+        '201':
+          description: Code indexed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  indexed_chunks: {type: integer}
+                  repository: {type: string}
+
+  /code/search/hybrid:
+    post:
+      summary: Hybrid code search (lexical + vector + RRF fusion)
+      description: Combines lexical (pg_trgm), vector TEXT, vector CODE searches with RRF fusion
+      operationId: search_hybrid_v1_code_search_hybrid_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: {type: string, example: "calculate total items"}
+                limit: {type: integer, default: 10, minimum: 1, maximum: 100}
+                repository: {type: string, nullable: true}
+                language: {type: string, nullable: true, example: "python"}
+      responses:
+        '200':
+          description: Search results with RRF-fused ranking
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CodeChunk'
+
+  /code/graph/build:
+    post:
+      summary: Build dependency graph from code chunks
+      description: Constructs nodes and edges representing function/class calls, imports, inheritance
+      operationId: build_graph_v1_code_graph_build_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [repository]
+              properties:
+                repository: {type: string, example: "my-project"}
+      responses:
+        '201':
+          description: Graph constructed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes_created: {type: integer}
+                  edges_created: {type: integer}
+
+  /code/graph/traverse:
+    post:
+      summary: Traverse dependency graph (recursive CTE, ≤3 hops)
+      description: Finds all nodes reachable from start node within max_depth hops
+      operationId: traverse_graph_v1_code_graph_traverse_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [start_node_id]
+              properties:
+                start_node_id: {type: string, format: uuid}
+                direction: {type: string, enum: [outbound, inbound, both], default: outbound}
+                relation_type: {type: string, nullable: true, example: "calls"}
+                max_depth: {type: integer, default: 3, minimum: 1, maximum: 3}
+      responses:
+        '200':
+          description: Traversal results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GraphNode'
+
+  /code/graph/stats:
+    get:
+      summary: Get graph statistics
+      description: Returns node count, edge count, max depth, etc.
+      operationId: get_graph_stats_v1_code_graph_stats_get
+      parameters:
+        - name: repository
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Graph statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_nodes: {type: integer}
+                  total_edges: {type: integer}
+                  max_depth: {type: integer}
+                  node_types: {type: object}
+
 components:
   schemas:
     NewEvent:
@@ -401,6 +567,62 @@ components:
               loc: { type: array, items: { type: string } }
               msg: { type: string }
               type: { type: string }
+
+    # ============================================
+    # Code Intelligence Schemas (NEW in v2.0.0)
+    # ============================================
+    CodeChunk:
+      type: object
+      properties:
+        chunk_id: {type: string, format: uuid}
+        repository: {type: string}
+        file_path: {type: string}
+        chunk_type: {type: string, enum: [function, class, method, file]}
+        language: {type: string, example: "python"}
+        code_text: {type: string}
+        start_line: {type: integer, nullable: true}
+        end_line: {type: integer, nullable: true}
+        metadata:
+          type: object
+          properties:
+            complexity: {type: integer, nullable: true, description: "Cyclomatic complexity"}
+            parameters: {type: array, items: {type: string}, nullable: true}
+            calls: {type: array, items: {type: string}, nullable: true, description: "Functions called"}
+            imports: {type: array, items: {type: string}, nullable: true}
+            docstring: {type: string, nullable: true}
+        embedding_text: {type: array, items: {type: number}, nullable: true, description: "TEXT embedding (768D)"}
+        embedding_code: {type: array, items: {type: number}, nullable: true, description: "CODE embedding (768D)"}
+        similarity_score: {type: number, nullable: true, description: "RRF fusion score"}
+        created_at: {type: string, format: date-time}
+
+    GraphNode:
+      type: object
+      properties:
+        node_id: {type: string, format: uuid}
+        node_type: {type: string, example: "function"}
+        label: {type: string, example: "calculate_total"}
+        properties: {type: object, nullable: true}
+        depth: {type: integer, nullable: true, description: "Depth in traversal"}
+        created_at: {type: string, format: date-time}
+
+    GraphEdge:
+      type: object
+      properties:
+        edge_id: {type: string, format: uuid}
+        source_node_id: {type: string, format: uuid}
+        target_node_id: {type: string, format: uuid}
+        relation_type: {type: string, example: "calls"}
+        properties: {type: object, nullable: true}
+        created_at: {type: string, format: date-time}
+
+    RepositoryStats:
+      type: object
+      properties:
+        repository: {type: string}
+        total_files: {type: integer}
+        total_chunks: {type: integer}
+        languages: {type: object, description: "Language counts"}
+        chunk_types: {type: object, description: "Chunk type counts"}
 ```
 
 ---
@@ -456,3 +678,18 @@ En résumé, MnemoLite agit comme une **base de connaissances contextuelle et fa
 
 ## 6. Gestion des erreurs (Exemple)
 ```
+---
+
+**Version**: v2.0.0
+**Dernière mise à jour**: 2025-10-17
+**Changements majeurs**:
+- Ajout de 12 endpoints Code Intelligence (`/v1/code/*`)
+- Ajout endpoint cache stats (`/v1/events/cache/stats`)
+- Ajout schemas OpenAPI: `CodeChunk`, `GraphNode`, `GraphEdge`, `RepositoryStats`
+- Dual embeddings (TEXT + CODE, 768D chacun) documentés
+- 7-step indexing pipeline spécifié
+- Hybrid search (lexical + vector + RRF) documenté
+- Graph traversal (recursive CTE, ≤3 hops) spécifié
+- Tous les endpoints supportent Agent Memory + Code Intelligence
+
+**Auteur**: Giak (mis à jour par Claude Code)
