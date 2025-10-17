@@ -204,9 +204,9 @@ Process RAM = Baseline + (Model Weights × 3-5)
 - `api/services/code_chunking_service.py` - Integration + optimization O(n)
 - `tests/services/test_metadata_extractor_service.py` (365 lignes) - 15 tests unitaires
 - `tests/services/test_code_chunking_service.py` (19 tests integration)
-- `scripts/validate_story3_metadata.py` (166 lignes) - Script validation
-- `scripts/audit_story3_edge_cases.py` (261 lignes) - Edge cases testing
-- `scripts/audit_story3_performance.py` (228 lignes) - Performance benchmarks
+- `scripts/archive/validate_story3_metadata.py` (166 lignes) - Script validation (archived)
+- `scripts/archive/audit_story3_edge_cases.py` (261 lignes) - Edge cases testing (archived)
+- `scripts/archive/audit_story3_performance.py` (228 lignes) - Performance benchmarks (archived)
 - `docs/agile/EPIC-06_STORY_3_AUDIT_REPORT.md` (600+ lignes) - Audit complet
 
 **Metadata Fields (9 core)**:

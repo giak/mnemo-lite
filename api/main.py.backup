@@ -57,8 +57,8 @@ async def lifespan(app: FastAPI):
             app.state.db_engine: AsyncEngine = create_async_engine(
                 db_url_to_use,
                 echo=DEBUG,  # Log SQL queries if DEBUG is True
-                pool_size=20,  # Reduced from 10 - sufficient for local app
-                max_overflow=10,  # Reduced from 5 - minimal overflow needed
+                pool_size=3,  # Reduced from 10 - sufficient for local app
+                max_overflow=1,  # Reduced from 5 - minimal overflow needed
                 pool_recycle=3600,  # Recycle connections after 1 hour
                 pool_pre_ping=False,  # Not needed for local PostgreSQL
                 future=True,

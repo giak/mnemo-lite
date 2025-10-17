@@ -86,7 +86,7 @@ MnemoLite doit être intégrable dans Expanse via scripts Python appelés par de
 
 ## 8. Livrables associés
 - Scripts d'initialisation DB (`db/init/*.sql`)
-- Script de données de test (`scripts/generate_test_data.py` ou `test_memory_api.sh`)
+- Script de données de test (`scripts/testing/generate_test_data.py` et `scripts/testing/fake_event_poster.py`)
 - API FastAPI (`api/main.py`)
 - Templates HTMX (`api/templates/*.html`)
 - Workers Python (`workers/*.py` pour ingestion/tâches asynchrones via PGMQ)
@@ -131,7 +131,8 @@ mnemo-lite/
 
 ### 9.4 Configuration et personnalisation
 - `.env` : Fichier principal pour les paramètres de connexions, clés API optionnelles, et variables d'environnement (ex: `ENVIRONMENT`).
-- `scripts/generate_test_data.py` ou `test_memory_api.sh` : Pour la génération ou l'injection de données de test.
+- `scripts/testing/generate_test_data.py` et `scripts/testing/fake_event_poster.py` : Pour la génération ou l'injection de données de test.
+- `scripts/testing/test_application.sh` : Suite de tests rapides (quick/full/load modes).
 
 ### 9.5 Tests et vérification
 

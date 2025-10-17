@@ -218,17 +218,3 @@ async def search_events_by_embedding(
             status_code=500,
             detail=f"Erreur lors de la recherche d'événements: {str(e)}",
         )
-
-# Performance optimization: Add caching
-try:
-    from services.simple_memory_cache import get_event_cache, get_all_cache_stats
-    _event_cache = get_event_cache()
-
-    @router.get("/cache/stats")
-    async def get_cache_stats():
-        """Get cache statistics."""
-        return await get_all_cache_stats()
-
-    logger.info("Cache optimization enabled for event routes")
-except ImportError:
-    logger.warning("Cache module not found, running without cache optimization")

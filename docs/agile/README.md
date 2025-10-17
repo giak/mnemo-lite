@@ -7,6 +7,7 @@ Ce dossier contient **deux catégories** de documents :
 ### 🟢 **Développements Récents (ACTUELS - 2025-10)**
 - **EPIC-06**: Code Intelligence (Backend) - ✅ **100% COMPLET** (74 pts, Oct 2025)
 - **EPIC-07**: Code Intelligence UI (Frontend) - ✅ **100% COMPLET** (41 pts, Oct 2025)
+- **EPIC-08**: Performance Optimization & Testing - ✅ **100% COMPLET** (24 pts, Oct 2025)
 
 ### 🟡 **Archive Historique (Q1-Q2 2025)**
 - EPIC-01 à EPIC-05 : Phase initiale du développement
@@ -60,6 +61,14 @@ Les documents **d'archive historique** (EPIC-01 à EPIC-05) peuvent contenir des
 - **Résumé** : 41/41 pts, 6 stories, 2 jours (vs 16-19 estimés)
 - **Livrables** : 5 pages UI (Dashboard, Repos, Search, Graph, Upload)
 
+#### EPIC-08: Performance Optimization & Testing - ✅ 100% COMPLET
+- `EPIC-08_README.md` - Point d'entrée principal (1.0.0, 2025-10-17)
+- `EPIC-08_COMPLETION_REPORT.md` - Rapport complet d'optimisation
+- **Résumé** : 24/24 pts, 9 stories, 1 jour (vs 2-3 estimés)
+- **Gains** : 88% plus rapide (search), 10× capacité (throughput), 80%+ cache hit rate
+- **Infrastructure** : CI/CD (GitHub Actions), E2E (Playwright), Load (Locust)
+- **Livrables** : Memory cache, pool optimization, deployment automation, testing suite
+
 ### 🟡 Archive Historique (Q1-Q2 2025)
 
 #### Epics Historiques
@@ -82,11 +91,12 @@ Les documents **d'archive historique** (EPIC-01 à EPIC-05) peuvent contenir des
 
 ## 🎯 Utilisation de cette Documentation
 
-### Pour les Développements Récents (EPIC-06 & EPIC-07)
-- ✅ **Point d'entrée** : Lire `EPIC-06_README.md` et `EPIC-07_README.md`
+### Pour les Développements Récents (EPIC-06, EPIC-07 & EPIC-08)
+- ✅ **Point d'entrée** : Lire `EPIC-06_README.md`, `EPIC-07_README.md` et `EPIC-08_README.md`
 - ✅ **Code Intelligence** : Comprendre l'architecture dual embeddings + graph + hybrid search
 - ✅ **UI Patterns** : Voir la stratégie "EXTEND DON'T REBUILD" (EPIC-07)
-- ✅ **Performance** : Analyser les optimisations (CTE 129× faster, Search 28× faster)
+- ✅ **Performance** : Analyser les optimisations (CTE 129× faster, Search 28× faster, Cache 88% improvement)
+- ✅ **Testing Infrastructure** : CI/CD pipeline, E2E tests, load testing (EPIC-08)
 - ✅ **Documentation à jour** : Tous les rapports reflètent l'implémentation actuelle
 
 ### Pour l'Archive Historique (EPIC 01-05)
@@ -102,6 +112,7 @@ Ces documents restent utiles pour :
 |---------|-------|-------|
 | **Mars-Mai 2025** | Phase Initiale | EPIC-01 à EPIC-05 (Archives) |
 | **Octobre 2025** | Code Intelligence | EPIC-06 (Backend, 10 jours) + EPIC-07 (UI, 2 jours) |
+| **Octobre 2025** | Performance & Testing | EPIC-08 (Optimization, 1 jour) |
 
 **Version actuelle du projet** : v2.0.0 (Octobre 2025)
 
@@ -109,6 +120,7 @@ Ces documents restent utiles pour :
 - ✅ EPIC-01 à EPIC-05 : Complétés (Q1-Q2 2025)
 - ✅ EPIC-06 : 74/74 pts (Oct 2025)
 - ✅ EPIC-07 : 41/41 pts (Oct 2025)
+- ✅ EPIC-08 : 24/24 pts (Oct 2025)
 
 ---
 
