@@ -1,0 +1,129 @@
+# .dockerignore - MnemoLite v2.0.0
+# Réduit build context de ~847 MB → ~23 MB (-97%)
+
+# Git
+.git/
+.gitignore
+.github/
+.gitattributes
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.whl
+.pyc
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-*
+
+# Logs & Data
+logs/
+*.log
+*.sqlite
+*.db
+*.sql
+!db/init/*.sql
+!db/scripts/*.sql
+!scripts/database/*.sql
+
+# Docker
+.dockerignore
+docker-compose*.yml
+Dockerfile*
+*.md
+!README.md
+
+# Documentation (pas nécessaire dans image)
+docs/
+*.md
+README*
+CHANGELOG*
+LICENSE*
+CONTRIBUTING*
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+azure-pipelines.yml
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# PostgreSQL data (NEVER include in build)
+postgres_data/
+backups/
+
+# Certificates (montés en runtime)
+certs/
+*.pem
+*.key
+*.crt
+*.p12
+
+# Node (si frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Temporary
+tmp/
+temp/
+*.tmp
+.cache/
+
+# OS
+Thumbs.db
+Desktop.ini
+.directory
+.Trash-*
+
+# Build artifacts
+*.o
+*.a
+*.lib
+*.dll
+*.exe
+*.out
+
+# Large test data
+test_data/
+*.dump
+*.backup
+
+# Monitoring data (runtime only)
+prometheus_data/
+grafana_data/
+loki_data/

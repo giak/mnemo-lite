@@ -34,6 +34,18 @@ uvloop==0.19.0
 httptools==0.6.1
 pydantic-settings==2.1.0
 asyncpg>=0.29.0
+
+# ============================================
+# Machine Learning Dependencies (CPU-only)
+# ============================================
+# OPTIMIZATION: Force PyTorch CPU-only (no CUDA)
+# Saves ~5 GB by removing nvidia CUDA libraries
+# MnemoLite runs on CPU → CUDA unnecessary
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu
+
+# Embeddings (installs after torch CPU to avoid CUDA version)
 sentence-transformers>=2.7.0
 numpy==1.26.3
 einops>=0.7.0
@@ -47,5 +59,6 @@ psutil==5.9.6
 pgvector
 
 # EPIC-06 Phase 1: Code Intelligence
-tree-sitter-languages>=1.10.0  # AST parsing for code chunking (Story 1)
+tree-sitter>=0.20.0  # Base library for AST parsing
+tree-sitter-languages>=1.10.0  # Language-specific parsers (Story 1)
 radon>=6.0.1  # Code complexity analysis (Story 3) 

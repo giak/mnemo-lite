@@ -75,12 +75,13 @@ services:
       - ./logs:/app/logs
       - ./templates:/app/templates
       - ./static:/app/static
-      - postgres_data:/var/lib/postgresql/data
+      # REMOVED: postgres_data volume (SECURITY: API should NOT access DB files directly)
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 2G
+          cpus: '2'        # Increased for parallel embedding generation
+          memory: 4G       # Increased for dual embeddings (TEXT + CODE) support
+                          # EPIC-06: TEXT=1.25GB + CODE=1.9GB + baseline=0.7GB = ~3.85GB
     networks:
       backend:
       frontend:
