@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy.event import listen
 
 # Import des routes
-from routes import health_routes, event_routes, search_routes, ui_routes, graph_routes, monitoring_routes, code_graph_routes
+from routes import health_routes, event_routes, search_routes, ui_routes, graph_routes, monitoring_routes, code_graph_routes, code_search_routes, code_indexing_routes
 
 # Configuration de base
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -198,6 +198,8 @@ logger.info("UI configured: templates and static files mounted")
 app.include_router(event_routes.router, prefix="/v1/events", tags=["v1_Events"])
 app.include_router(search_routes.router, prefix="/v1/search", tags=["v1_Search"])
 app.include_router(code_graph_routes.router, prefix="/v1", tags=["v1_Code_Graph"])
+app.include_router(code_search_routes.router, tags=["v1_Code_Search"])
+app.include_router(code_indexing_routes.router, tags=["v1_Code_Indexing"])
 app.include_router(health_routes.router)
 app.include_router(ui_routes.router)
 app.include_router(graph_routes.router)

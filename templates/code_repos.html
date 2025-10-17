@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Code Repositories - MnemoLite{% endblock %}
+{% block nav_code %}active{% endblock %}
+{% block nav_code_repos %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>📚 Code Repositories</h1>
+    <p class="subtitle">Manage indexed code repositories</p>
+</div>
+
+<!-- Repository List -->
+<div id="repos-container"
+     hx-get="/ui/code/repos/list"
+     hx-trigger="load"
+     hx-indicator="#repos-loading">
+
+    <div id="repos-loading" class="htmx-indicator" style="text-align: center; padding: 40px;">
+        <span class="spinner"></span> Loading repositories...
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal (reuse existing modal) -->
+<script>
+function confirmDeleteRepo(repoName) {
+    if (confirm(`⚠️ Delete repository "${repoName}"?\n\nThis will permanently delete:\n- All code chunks\n- All graph nodes & edges\n- All metadata\n\nThis action cannot be undone!`)) {
+        // Trigger HTMX delete
+        htmx.ajax('DELETE', `/ui/code/repos/${encodeURIComponent(repoName)}`, {
+            target: '#repos-container',
+            swap: 'innerHTML'
+        });
+    }
+}
+</script>
+
+<style>
+/* Repository Table Styles - SCADA Theme */
+.repos-table {
+    width: 100%;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-collapse: collapse;
+    margin-top: var(--space-xl);
+}
+
+.repos-table thead {
+    background: var(--color-bg-elevated);
+    border-bottom: 2px solid var(--color-accent-blue);
+}
+
+.repos-table th {
+    padding: var(--space-md) var(--space-lg);
+    text-align: left;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-tertiary);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.repos-table tbody tr {
+    border-bottom: 1px solid var(--color-border-subtle);
+    transition: background-color var(--transition);
+}
+
+.repos-table tbody tr:hover {
+    background: var(--color-bg-elevated);
+}
+
+.repos-table td {
+    padding: var(--space-md) var(--space-lg);
+    font-size: var(--text-sm);
+    color: var(--color-text-primary);
+}
+
+.repo-name {
+    font-weight: 600;
+    color: var(--color-accent-green);
+    font-family: 'SF Mono', Consolas, monospace;
+}
+
+.repo-stat {
+    font-family: 'SF Mono', Consolas, monospace;
+    color: var(--color-text-secondary);
+}
+
+.repo-date {
+    font-size: var(--text-xs);
+    color: var(--color-text-dim);
+}
+
+.language-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: var(--text-tiny);
+    font-weight: 600;
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    margin-right: 4px;
+    color: var(--color-text-tertiary);
+}
+
+.repo-actions {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.btn-delete {
+    padding: var(--space-xs) var(--space-md);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    color: var(--color-danger);
+    cursor: pointer;
+    transition: all var(--transition);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.btn-delete:hover {
+    background: rgba(255, 71, 87, 0.1);
+    border-color: var(--color-danger);
+}
+
+.empty-repos {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--color-text-dim);
+}
+
+.empty-repos-icon {
+    font-size: 48px;
+    opacity: 0.3;
+    margin-bottom: var(--space-lg);
+}
+</style>
+{% endblock %}

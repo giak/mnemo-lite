@@ -1,0 +1,60 @@
+{% if repositories and repositories|length > 0 %}
+<table class="repos-table">
+    <thead>
+        <tr>
+            <th>Repository</th>
+            <th>Files</th>
+            <th>Chunks</th>
+            <th>Last Indexed</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for repo in repositories %}
+        <tr>
+            <td>
+                <div class="repo-name">{{ repo.repository }}</div>
+            </td>
+            <td>
+                <span class="repo-stat">{{ repo.file_count }}</span>
+            </td>
+            <td>
+                <span class="repo-stat">{{ repo.chunk_count }}</span>
+            </td>
+            <td>
+                <span class="repo-date">
+                    {% if repo.last_indexed %}
+                        {{ repo.last_indexed[:19].replace('T', ' ') }}
+                    {% else %}
+                        Never
+                    {% endif %}
+                </span>
+            </td>
+            <td>
+                <div class="repo-actions">
+                    <button class="btn-delete" onclick="confirmDeleteRepo('{{ repo.repository }}')">
+                        🗑️ Delete
+                    </button>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div style="margin-top: var(--space-lg); padding: var(--space-md); background: var(--color-bg-elevated); border: 1px solid var(--color-border); border-radius: var(--radius-sm);">
+    <p style="font-size: var(--text-xs); color: var(--color-text-tertiary); margin: 0;">
+        💡 <strong>Total:</strong> {{ repositories|length }} repositories indexed
+    </p>
+</div>
+
+{% else %}
+<div class="empty-repos">
+    <div class="empty-repos-icon">📭</div>
+    <h3 style="color: var(--color-text-tertiary); margin-bottom: var(--space-sm);">No Repositories Indexed</h3>
+    <p style="font-size: var(--text-sm);">
+        Upload code files to start indexing your repositories.<br>
+        <a href="/ui/code/upload" style="color: var(--color-accent-blue);">Upload Code →</a>
+    </p>
+</div>
+{% endif %}

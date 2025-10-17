@@ -1,0 +1,221 @@
+{#
+  Code Search Results Partial (HTMX Target)
+
+  Required context variables:
+  - results: List of code search result objects
+  - total: Total number of results
+  - query: Search query string
+  - mode: Search mode (hybrid/lexical/vector)
+  - metadata: Search metadata (optional)
+
+  Usage:
+    Loaded via HTMX from /ui/code/search/results
+#}
+
+{% if results and results|length > 0 %}
+<div class="search-info">
+    <strong>{{ total }}</strong> results found for "<em>{{ query }}</em>"
+    {% if mode %}
+    <span class="mode-badge">{{ mode|upper }}</span>
+    {% endif %}
+    {% if metadata and metadata.execution_time_ms %}
+    <span class="time-badge">{{ "%.1f"|format(metadata.execution_time_ms) }} ms</span>
+    {% endif %}
+</div>
+
+<div class="code-list">
+    {% for result in results %}
+    <div class="code-card">
+        <div class="code-header">
+            <div class="code-name">{{ result.name or 'Unnamed' }}</div>
+            <div class="code-score">
+                {% if result.rrf_score %}
+                RRF: {{ "%.3f"|format(result.rrf_score) }}
+                {% elif result.similarity_score %}
+                SIM: {{ "%.3f"|format(result.similarity_score) }}
+                {% elif result.similarity %}
+                SIM: {{ "%.3f"|format(result.similarity) }}
+                {% elif result.lexical_score %}
+                LEX: {{ "%.3f"|format(result.lexical_score) }}
+                {% else %}
+                RANK: {{ result.rank }}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="code-path">
+            📁 {{ result.file_path or 'Unknown' }}
+        </div>
+
+        <div class="code-snippet">{{ result.source_code or '(No code content)' }}</div>
+
+        <div class="code-metadata">
+            <span class="badge">{{ result.language or 'unknown' }}</span>
+            <span class="badge">{{ result.chunk_type or 'unknown' }}</span>
+            {% if result.metadata %}
+                {% if result.metadata.complexity %}
+                <span class="badge">Complexity: {{ result.metadata.complexity }}</span>
+                {% endif %}
+                {% if result.metadata.lines_count %}
+                <span class="badge">Lines: {{ result.metadata.lines_count }}</span>
+                {% endif %}
+                {% if result.metadata.parameters_count is not none %}
+                <span class="badge">Params: {{ result.metadata.parameters_count }}</span>
+                {% endif %}
+            {% endif %}
+            {% if result.contribution %}
+                {% if result.contribution.lexical and result.contribution.lexical > 0 %}
+                <span class="badge badge-lexical">LEX: {{ "%.0f"|format(result.contribution.lexical * 100) }}%</span>
+                {% endif %}
+                {% if result.contribution.vector and result.contribution.vector > 0 %}
+                <span class="badge badge-vector">VEC: {{ "%.0f"|format(result.contribution.vector * 100) }}%</span>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if metadata %}
+<div class="search-metadata">
+    <div class="metadata-row">
+        {% if metadata.lexical_enabled %}
+        <span class="meta-item">
+            📝 Lexical: {{ metadata.lexical_count }} results
+            {% if metadata.lexical_time_ms %}
+            ({{ "%.1f"|format(metadata.lexical_time_ms) }} ms)
+            {% endif %}
+        </span>
+        {% endif %}
+        {% if metadata.vector_enabled %}
+        <span class="meta-item">
+            🔍 Vector: {{ metadata.vector_count }} results
+            {% if metadata.vector_time_ms %}
+            ({{ "%.1f"|format(metadata.vector_time_ms) }} ms)
+            {% endif %}
+        </span>
+        {% endif %}
+        {% if metadata.fusion_time_ms %}
+        <span class="meta-item">
+            ⚡ Fusion: {{ "%.1f"|format(metadata.fusion_time_ms) }} ms
+        </span>
+        {% endif %}
+    </div>
+    {% if metadata.lexical_enabled and metadata.vector_enabled %}
+    <div class="metadata-row">
+        <span class="meta-item">
+            ⚖️ Weights: Lexical {{ "%.0f"|format(metadata.lexical_weight * 100) }}% / Vector {{ "%.0f"|format(metadata.vector_weight * 100) }}%
+        </span>
+        <span class="meta-item">
+            🔗 Unique after fusion: {{ metadata.unique_after_fusion }}
+        </span>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    {% if query %}
+    <p>No code found matching "<em>{{ query }}</em>"</p>
+    <p class="text-muted">Try a different query or check your filters</p>
+    {% else %}
+    <p>No results</p>
+    <p class="text-muted">Try adjusting your search query</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<style>
+/* Search Info Bar */
+.search-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-accent-blue);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-lg);
+    font-size: var(--text-sm);
+}
+
+.search-info strong {
+    color: var(--color-accent-blue);
+}
+
+.search-info em {
+    color: var(--color-text-primary);
+    font-style: italic;
+}
+
+.mode-badge {
+    padding: 2px 8px;
+    font-size: var(--text-tiny);
+    font-weight: 700;
+    background: rgba(74, 144, 226, 0.12);
+    border: 1px solid rgba(74, 144, 226, 0.3);
+    border-radius: var(--radius-sm);
+    color: var(--color-accent-blue);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.time-badge {
+    padding: 2px 8px;
+    font-size: var(--text-tiny);
+    font-weight: 600;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-tertiary);
+    font-family: 'SF Mono', Consolas, monospace;
+}
+
+/* Code List */
+.code-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+/* Badge Variations */
+.badge-lexical {
+    background: rgba(255, 193, 7, 0.12) !important;
+    border-color: rgba(255, 193, 7, 0.3) !important;
+    color: #ffc107 !important;
+}
+
+.badge-vector {
+    background: rgba(156, 39, 176, 0.12) !important;
+    border-color: rgba(156, 39, 176, 0.3) !important;
+    color: #9c27b0 !important;
+}
+
+/* Search Metadata */
+.search-metadata {
+    margin-top: var(--space-xl);
+    padding: var(--space-md);
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+}
+
+.metadata-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+}
+
+.metadata-row:last-child {
+    margin-bottom: 0;
+}
+
+.meta-item {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    font-family: 'SF Mono', Consolas, monospace;
+}
+</style>

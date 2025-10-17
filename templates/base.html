@@ -28,6 +28,16 @@
                 <li><a href="/ui/search" class="{% block nav_search %}{% endblock %}">Search</a></li>
                 <li><a href="/ui/graph" class="{% block nav_graph %}{% endblock %}">Graph</a></li>
                 <li><a href="/ui/monitoring" class="{% block nav_monitoring %}{% endblock %}">Monitoring</a></li>
+                <li class="nav-dropdown">
+                    <a href="#" class="{% block nav_code %}{% endblock %}">Code ▾</a>
+                    <ul class="dropdown-menu">
+                        <li><a href="/ui/code/" class="{% block nav_code_dashboard %}{% endblock %}">Dashboard</a></li>
+                        <li><a href="/ui/code/repos" class="{% block nav_code_repos %}{% endblock %}">Repositories</a></li>
+                        <li><a href="/ui/code/search" class="{% block nav_code_search %}{% endblock %}">Search</a></li>
+                        <li><a href="/ui/code/graph" class="{% block nav_code_graph %}{% endblock %}">Graph</a></li>
+                        <li><a href="/ui/code/upload" class="{% block nav_code_upload %}{% endblock %}">Upload</a></li>
+                    </ul>
+                </li>
                 <li><a href="/docs" target="_blank">API Docs</a></li>
             </ul>
         </div>
