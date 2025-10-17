@@ -36,8 +36,8 @@ class EventModel(BaseModel):
     id: uuid.UUID
     timestamp: datetime
     content: Dict[str, Any]
-    metadata: Dict[str, Any]
-    embedding: Optional[List[float]]
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    embedding: Optional[List[float]] = None
     similarity_score: Optional[float] = None
 
     # Add Pydantic config for ORM mode / from_attributes
@@ -55,7 +55,7 @@ class EventModel(BaseModel):
     @classmethod
     def from_db_record(cls, record_data: Any) -> "EventModel":
         """Crée une instance EventModel à partir d'un dict, Row ou RowMapping."""
-        
+
         try:
             # Attempt to convert the input to a dictionary directly.
             # This should work for dict, Row, and RowMapping.
@@ -72,6 +72,15 @@ class EventModel(BaseModel):
                 f"Expected dict-like or SQLAlchemy Row/RowMapping, got {type(record_data).__name__}"
             ) from e
 
+        # Handle asyncpg UUID type
+        if "id" in record_dict:
+            id_value = record_dict["id"]
+            # Check if it's asyncpg UUID type
+            if hasattr(id_value, '__class__') and 'asyncpg' in str(id_value.__class__):
+                record_dict["id"] = str(id_value)
+            elif not isinstance(id_value, (str, uuid.UUID)):
+                record_dict["id"] = str(id_value)
+
         # Parser content et metadata si ce sont des chaînes JSON
         for field in ["content", "metadata"]:
             value = record_dict.get(field)
@@ -83,28 +92,42 @@ class EventModel(BaseModel):
                         "Failed to parse JSON field from DB", field=field, value=value
                     )
                     record_dict[field] = {}  # Mettre un dict vide par défaut
+            elif value is None:
+                # Set empty dict for None metadata to avoid validation error
+                record_dict[field] = {}
 
         # Parser embedding si c'est une chaîne (représentation de liste)
         embedding_value = record_dict.get("embedding")
         if isinstance(embedding_value, str):
             try:
-                # Utiliser ast.literal_eval pour parser la chaîne de liste Python en toute sécurité
-                parsed_embedding = ast.literal_eval(embedding_value)
-                if isinstance(parsed_embedding, list) and all(
-                    isinstance(x, (int, float)) for x in parsed_embedding
-                ):
-                    record_dict["embedding"] = parsed_embedding
+                # Handle PostgreSQL array format: [0.1,0.2,0.3,...]
+                if embedding_value.startswith('[') and embedding_value.endswith(']'):
+                    # Remove brackets and split by comma
+                    embedding_str = embedding_value[1:-1]
+                    if embedding_str:  # Non-empty array
+                        parsed_embedding = [float(x.strip()) for x in embedding_str.split(',')]
+                        record_dict["embedding"] = parsed_embedding
+                    else:
+                        record_dict["embedding"] = None
                 else:
-                    # Si ce n'est pas une liste de nombres, définir comme None ou lever une erreur
-                    logger.warn(
-                        "Parsed embedding string is not a list of numbers",
-                        value=embedding_value,
-                    )
-                    record_dict["embedding"] = None
-            except (ValueError, SyntaxError, TypeError):
+                    # Try ast.literal_eval as fallback
+                    parsed_embedding = ast.literal_eval(embedding_value)
+                    if isinstance(parsed_embedding, list) and all(
+                        isinstance(x, (int, float)) for x in parsed_embedding
+                    ):
+                        record_dict["embedding"] = parsed_embedding
+                    else:
+                        logger.warn(
+                            "Parsed embedding string is not a list of numbers",
+                            value=embedding_value[:100],  # Log only first 100 chars
+                        )
+                        record_dict["embedding"] = None
+            except (ValueError, SyntaxError, TypeError) as e:
                 # En cas d'échec du parsing, logguer et définir comme None
                 logger.warn(
-                    "Failed to parse embedding string from DB", value=embedding_value
+                    "Failed to parse embedding string from DB",
+                    value=embedding_value[:100] if embedding_value else None,
+                    error=str(e)
                 )
                 record_dict["embedding"] = None
         elif embedding_value is not None and not isinstance(embedding_value, list):

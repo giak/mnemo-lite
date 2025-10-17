@@ -52,14 +52,22 @@ async def lifespan(app: FastAPI):
         app.state.db_engine = None  # Store None if no URL
     else:
         try:
-            # Create SQLAlchemy Async Engine
+            # Create SQLAlchemy Async Engine optimized for local usage
+            # Local apps don't need large connection pools
             app.state.db_engine: AsyncEngine = create_async_engine(
                 db_url_to_use,
                 echo=DEBUG,  # Log SQL queries if DEBUG is True
-                pool_size=10,  # Example pool size
-                max_overflow=5,  # Example overflow
+                pool_size=3,  # Reduced from 10 - sufficient for local app
+                max_overflow=1,  # Reduced from 5 - minimal overflow needed
+                pool_recycle=3600,  # Recycle connections after 1 hour
+                pool_pre_ping=False,  # Not needed for local PostgreSQL
                 future=True,
-                pool_pre_ping=True,
+                connect_args={
+                    "server_settings": {
+                        "jit": "off"  # Disable JIT for small queries (local usage)
+                    },
+                    "command_timeout": 60,  # 60 seconds timeout
+                }
             )
             logger.info(
                 f"Database engine created using: {db_url_to_use.split('@')[1] if '@' in db_url_to_use else '[URL hidden]'}"

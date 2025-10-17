@@ -99,8 +99,7 @@ class DualEmbeddingServiceAdapter:
         return await self._dual_service.compute_similarity(emb1, emb2)
 
 
-# Cache global pour singleton embedding service
-_embedding_service_instance: Optional[EmbeddingServiceProtocol] = None
+# Note: Singleton is now managed via app.state.embedding_service in main.py
 
 
 # Fonction pour récupérer le moteur de base de données
@@ -168,21 +167,29 @@ async def get_event_repository(
 
 
 # Fonction pour injecter le service d'embedding
-async def get_embedding_service() -> EmbeddingServiceProtocol:
+async def get_embedding_service(request: Request) -> EmbeddingServiceProtocol:
     """
-    Récupère une instance du service d'embedding (mock ou real selon config).
-    Utilise un singleton pour réutiliser l'instance (et le modèle chargé).
+    Récupère une instance du service d'embedding depuis app.state.
+    Le service est initialisé une seule fois au démarrage dans main.py lifespan.
+
+    Args:
+        request: La requête HTTP pour accéder à app.state
 
     Returns:
         Une instance du service d'embedding
 
     Raises:
-        ValueError: Si EMBEDDING_MODE invalide
+        HTTPException: Si le service n'est pas disponible
     """
-    global _embedding_service_instance
+    # Try to get from app.state first
+    embedding_service = getattr(request.app.state, "embedding_service", None)
 
-    if _embedding_service_instance is not None:
-        return _embedding_service_instance
+    if embedding_service is not None:
+        return embedding_service
+
+    # Fallback: create service on demand if not in app.state
+    # This can happen during tests or if startup failed
+    logger.warning("Embedding service not in app.state, creating on demand")
 
     # Déterminer le mode
     embedding_mode = os.getenv("EMBEDDING_MODE", "real").lower()
@@ -192,7 +199,7 @@ async def get_embedding_service() -> EmbeddingServiceProtocol:
             "🔶 EMBEDDING MODE: MOCK (development/testing only) 🔶",
             extra={"embedding_mode": "mock"}
         )
-        _embedding_service_instance = MockEmbeddingService(
+        embedding_service = MockEmbeddingService(
             model_name="mock-model",
             dimension=int(os.getenv("EMBEDDING_DIMENSION", "768"))
         )
@@ -217,7 +224,7 @@ async def get_embedding_service() -> EmbeddingServiceProtocol:
         )
 
         # Wrap with adapter for backward compatibility
-        _embedding_service_instance = DualEmbeddingServiceAdapter(dual_service)
+        embedding_service = DualEmbeddingServiceAdapter(dual_service)
 
     else:
         raise ValueError(
@@ -225,7 +232,58 @@ async def get_embedding_service() -> EmbeddingServiceProtocol:
             f"Must be 'mock' or 'real'."
         )
 
-    return _embedding_service_instance
+    # Store in app.state for next time
+    request.app.state.embedding_service = embedding_service
+    return embedding_service
+
+
+# Fonction pour injecter le service d'embedding avec cache
+async def get_cached_embedding_service(request: Request) -> EmbeddingServiceProtocol:
+    """
+    Récupère une instance du service d'embedding avec cache intégré.
+    Améliore les performances en évitant de recalculer les embeddings identiques.
+
+    Args:
+        request: La requête HTTP pour accéder à app.state
+
+    Returns:
+        Une instance du service d'embedding avec cache
+
+    Note:
+        Le cache est partagé au niveau de l'application (app.state.embedding_cache)
+        pour maximiser le hit rate entre les requêtes.
+    """
+    # Get base embedding service
+    base_service = await get_embedding_service(request)
+
+    # Get or create cache from app.state
+    if not hasattr(request.app.state, "embedding_cache"):
+        from services.simple_cache_service import SimpleMemoryCache
+
+        logger.info("Creating embedding cache (10000 entries max, 1 hour TTL)")
+        request.app.state.embedding_cache = SimpleMemoryCache(
+            max_size=10000,  # 10k embeddings = ~30MB
+            ttl_seconds=3600,  # 1 hour TTL
+            enable_stats=True
+        )
+
+    # Check if service is already wrapped with cache
+    if hasattr(request.app.state, "cached_embedding_service"):
+        return request.app.state.cached_embedding_service
+
+    # Wrap with cache
+    from services.simple_cache_service import CachedEmbeddingService
+
+    cached_service = CachedEmbeddingService(
+        embedding_service=base_service,
+        cache=request.app.state.embedding_cache
+    )
+
+    # Store for reuse
+    request.app.state.cached_embedding_service = cached_service
+
+    logger.info("Embedding service wrapped with cache")
+    return cached_service
 
 
 # Fonction pour injecter le service de recherche de mémoires

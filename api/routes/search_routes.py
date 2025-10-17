@@ -9,7 +9,7 @@ import json
 import base64
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from models.event_models import EventModel
 from interfaces.services import MemorySearchServiceProtocol, EmbeddingServiceProtocol
@@ -42,6 +42,64 @@ class SearchResponse(BaseModel):
 
     data: List[EventModel]
     meta: SearchResponseMeta
+
+
+class SearchRequest(BaseModel):
+    """Modèle pour une requête de recherche POST."""
+
+    query: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    limit: int = Field(default=10, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+    ts_start: Optional[datetime] = None
+    ts_end: Optional[datetime] = None
+
+
+class TestSearchResponse(BaseModel):
+    """Response model for test-compatible search endpoint."""
+
+    events: List[EventModel]
+    total: int
+
+
+# POST route for test compatibility
+@router.post("/", response_model=TestSearchResponse)
+async def search_post(
+    request: SearchRequest,
+    embedding_service: EmbeddingServiceProtocol = Depends(get_embedding_service),
+    memory_search_service: MemorySearchServiceProtocol = Depends(get_memory_search_service),
+) -> TestSearchResponse:
+    """
+    POST endpoint for search (test compatibility).
+
+    Wraps the hybrid search functionality with a POST interface.
+    """
+    try:
+        # Generate embedding if query text provided
+        embedding = None
+        if request.query:
+            embedding = await embedding_service.generate_embedding(request.query)
+
+        # Call hybrid search
+        results, total_count = await memory_search_service.search_hybrid(
+            query=request.query or "",
+            metadata_filter=request.metadata or {},
+            limit=request.limit,
+            offset=request.offset,
+            ts_start=request.ts_start,
+            ts_end=request.ts_end,
+            distance_threshold=1.0  # Default threshold
+        )
+
+        # Return test-compatible response format
+        return TestSearchResponse(events=results, total=total_count)
+
+    except Exception as e:
+        logger.error(f"Error in search POST: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Search error: {str(e)}"
+        )
 
 
 # Nouvelle route principale qui supporte à la fois la recherche par métadonnées et la recherche vectorielle

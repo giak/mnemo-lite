@@ -5,6 +5,7 @@ Orchestrates the complete code indexing pipeline, coordinating all building bloc
 from previous stories to provide end-to-end code ingestion.
 """
 
+import asyncio
 import logging
 import os
 from dataclasses import dataclass
@@ -274,18 +275,57 @@ class CodeIndexingService:
             # Step 3: Metadata extraction (already done by chunking_service if enabled)
             # Metadata is in chunk.metadata
 
-            # Step 4: Generate embeddings (if enabled)
+            # Step 4: Generate embeddings (if enabled) with batch processing
             chunk_embeddings = {}
             if options.generate_embeddings:
-                for i, chunk in enumerate(chunks):
-                    embeddings = await self._generate_embeddings_for_chunk(chunk)
-                    chunk_embeddings[i] = embeddings
+                # Process embeddings in batches for better performance
+                batch_size = 10  # Process 10 chunks at a time
+
+                for batch_start in range(0, len(chunks), batch_size):
+                    batch_end = min(batch_start + batch_size, len(chunks))
+                    batch_chunks = chunks[batch_start:batch_end]
+
+                    # Create tasks for parallel processing
+                    tasks = []
+                    for i, chunk in enumerate(batch_chunks, start=batch_start):
+                        task = self._generate_embedding_with_retry(chunk, i)
+                        tasks.append(task)
+
+                    # Process batch concurrently
+                    batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                    # Store results
+                    for i, result in enumerate(batch_results, start=batch_start):
+                        if isinstance(result, Exception):
+                            self.logger.warning(f"Failed to generate embeddings for chunk {i}: {result}")
+                        elif result and (result.get("text") or result.get("code")):
+                            chunk_embeddings[i] = result
+                        else:
+                            self.logger.warning(f"Empty embeddings for chunk {i}")
+
+                    self.logger.debug(
+                        f"Processed batch {batch_start}-{batch_end}: "
+                        f"{len([r for r in batch_results if not isinstance(r, Exception)])} successful"
+                    )
 
             # Step 5: Store chunks in database
             chunks_created = 0
+            chunks_skipped = 0
+
             for i, chunk in enumerate(chunks):
                 # Get embeddings for this chunk (if generated)
-                embeddings = chunk_embeddings.get(i, {"text": None, "code": None})
+                embeddings = chunk_embeddings.get(i, {})
+                embedding_text = embeddings.get("text") if embeddings else None
+                embedding_code = embeddings.get("code") if embeddings else None
+
+                # Skip chunk if embeddings were required but not generated
+                if options.generate_embeddings and not embedding_text and not embedding_code:
+                    self.logger.warning(
+                        f"Skipping chunk {i} ({chunk.name}) - no embeddings available"
+                    )
+                    chunks_skipped += 1
+                    # Store without embeddings for later retry
+                    # This allows the chunk to be searchable by metadata at least
 
                 chunk_create = CodeChunkCreate(
                     file_path=chunk.file_path,
@@ -295,15 +335,19 @@ class CodeIndexingService:
                     source_code=chunk.source_code,
                     start_line=chunk.start_line,
                     end_line=chunk.end_line,
-                    embedding_text=embeddings.get("text"),
-                    embedding_code=embeddings.get("code"),
+                    embedding_text=embedding_text,  # May be None
+                    embedding_code=embedding_code,  # May be None
                     metadata=chunk.metadata or {},
                     repository=options.repository,
                     commit_hash=options.commit_hash,
                 )
 
-                await self.chunk_repository.add(chunk_create)
-                chunks_created += 1
+                try:
+                    await self.chunk_repository.add(chunk_create)
+                    chunks_created += 1
+                except Exception as e:
+                    self.logger.error(f"Failed to store chunk {i}: {e}")
+                    chunks_skipped += 1
 
             # Calculate processing time
             end_time = datetime.now()
@@ -339,6 +383,39 @@ class CodeIndexingService:
                 processing_time_ms=processing_time_ms,
                 error=str(e),
             )
+
+    async def _generate_embedding_with_retry(
+        self,
+        chunk: CodeChunk,
+        chunk_index: int,
+        max_retries: int = 3
+    ) -> Dict[str, Optional[List[float]]]:
+        """
+        Generate embeddings for a chunk with retry logic.
+
+        Args:
+            chunk: Code chunk to generate embeddings for
+            chunk_index: Index of the chunk (for logging)
+            max_retries: Maximum number of retry attempts
+
+        Returns:
+            {'text': [...], 'code': [...]} or {'text': None, 'code': None}
+        """
+        for attempt in range(max_retries):
+            try:
+                embeddings = await self._generate_embeddings_for_chunk(chunk)
+                if embeddings and (embeddings.get("text") or embeddings.get("code")):
+                    return embeddings
+            except Exception as e:
+                self.logger.warning(
+                    f"Attempt {attempt + 1}/{max_retries} failed for chunk {chunk_index}: {e}"
+                )
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+
+        # All retries failed
+        self.logger.error(f"Failed to generate embeddings for chunk {chunk_index} after {max_retries} attempts")
+        return {"text": None, "code": None}
 
     async def _generate_embeddings_for_chunk(
         self,

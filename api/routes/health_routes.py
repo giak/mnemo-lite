@@ -118,6 +118,7 @@ async def health_check(db_engine: AsyncEngine = Depends(get_db_engine)):
         "status": "healthy" if is_healthy else "degraded",
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "duration_ms": round(duration * 1000, 2),
+        "database": pg_status["status"] == "ok",  # For test compatibility
         "services": {
             "postgres": pg_status,
             # Section chromadb supprimée
