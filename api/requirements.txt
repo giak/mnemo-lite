@@ -59,6 +59,11 @@ psutil==5.9.6
 pgvector
 
 # EPIC-06 Phase 1: Code Intelligence
-tree-sitter>=0.20.0  # Base library for AST parsing
-tree-sitter-languages>=1.10.0  # Language-specific parsers (Story 1)
+tree-sitter>=0.25.0  # Base library for AST parsing (updated for language-pack compatibility)
+
+# EPIC-06 Phase 1.5: Multi-Language Support (JS/TS/PHP/Go/etc.)
+# Using tree-sitter-language-pack for pre-compiled binaries (165+ languages)
+# Replaces individual packages: tree-sitter-python, tree-sitter-javascript, tree-sitter-typescript
+tree-sitter-language-pack>=0.4.0  # Pre-compiled language pack (Python, JS, TS, PHP, Go, etc.)
+
 radon>=6.0.1  # Code complexity analysis (Story 3) 

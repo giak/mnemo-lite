@@ -407,10 +407,10 @@ async def delete_repository(
             WHERE repository = :repository
         """)
 
-        # Delete nodes (assuming nodes have repository in props)
+        # Delete nodes (assuming nodes have repository in properties)
         delete_nodes = text("""
             DELETE FROM nodes
-            WHERE props->>'repository' = :repository
+            WHERE properties->>'repository' = :repository
         """)
 
         # Delete orphaned edges

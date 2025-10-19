@@ -639,17 +639,17 @@ def process_numbers(numbers: List[float]) -> float:
 @pytest.mark.asyncio
 async def test_fallback_chunks_no_metadata(chunking_service):
     """Test that fallback chunks don't have extracted metadata."""
-    # Use unsupported language to trigger fallback
+    # Use unsupported language to trigger fallback (Rust not supported)
     source_code = '''
-function testFunc() {
-    return 42;
+fn main() {
+    println!("Hello, world!");
 }
 '''
 
     chunks = await chunking_service.chunk_code(
         source_code=source_code,
-        language="javascript",  # Not supported -> fallback
-        file_path="test.js"
+        language="rust",  # Not supported -> fallback
+        file_path="test.rs"
     )
 
     assert len(chunks) >= 1

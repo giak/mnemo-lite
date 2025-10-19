@@ -16,10 +16,33 @@ from pydantic import BaseModel, Field
 class ChunkType(str, Enum):
     """Type of code chunk based on AST structure."""
 
+    # Python (Phase 1)
     FUNCTION = "function"
     CLASS = "class"
     METHOD = "method"
     MODULE = "module"
+
+    # JavaScript/TypeScript (Phase 1.5)
+    ARROW_FUNCTION = "arrow_function"      # const foo = () => {}
+    ASYNC_FUNCTION = "async_function"      # async function foo() {}
+    GENERATOR = "generator"                 # function* foo() {}
+
+    # TypeScript-specific
+    INTERFACE = "interface"                 # interface User {}
+    TYPE_ALIAS = "type_alias"              # type User = {...}
+    ENUM = "enum"                          # enum Status {}
+
+    # PHP-specific (Phase 1.6)
+    TRAIT = "trait"                        # trait Loggable {}
+    NAMESPACE = "namespace"                # namespace App\Models;
+
+    # Vue-specific (Phase 1.6)
+    VUE_COMPONENT = "vue_component"        # Complete Vue SFC
+    VUE_TEMPLATE = "vue_template"          # <template> section
+    VUE_SCRIPT = "vue_script"              # <script> section
+    VUE_STYLE = "vue_style"                # <style> section
+
+    # Fallback
     FALLBACK_FIXED = "fallback_fixed"  # Fallback when AST parsing fails
 
 
