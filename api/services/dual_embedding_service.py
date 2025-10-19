@@ -247,13 +247,13 @@ class DualEmbeddingService:
             try:
                 # Check RAM before loading CODE model
                 ram_usage = self.get_ram_usage_mb()
-                if ram_usage['process_rss_mb'] > 900:  # > 900 MB
+                if ram_usage['process_rss_mb'] > 2500:  # > 2.5 GB (increased for 4GB container)
                     logger.warning(
                         "⚠️ RAM limit approaching, refusing to load CODE model",
                         extra={"ram_mb": ram_usage['process_rss_mb']}
                     )
                     raise RuntimeError(
-                        f"RAM budget exceeded ({ram_usage['process_rss_mb']:.1f} MB > 900 MB). "
+                        f"RAM budget exceeded ({ram_usage['process_rss_mb']:.1f} MB > 2500 MB). "
                         "CODE model loading disabled to prevent OOM."
                     )
 
@@ -267,6 +267,41 @@ class DualEmbeddingService:
                 logger.error(f"❌ Failed to load CODE model: {e}", exc_info=True)
                 self._code_model = None
                 raise RuntimeError(f"Failed to load CODE model: {e}") from e
+
+    async def preload_models(self):
+        """
+        Pre-load both TEXT and CODE models at startup.
+
+        This method should be called during application startup to avoid
+        lazy loading delays on first upload request.
+
+        Raises:
+            RuntimeError: If either model fails to load
+        """
+        logger.info("🚀 Pre-loading both embedding models...")
+
+        try:
+            # Load TEXT model first (smaller, faster)
+            await self._ensure_text_model()
+            logger.info("✅ TEXT model pre-loaded successfully")
+
+            # Load CODE model second
+            await self._ensure_code_model()
+            logger.info("✅ CODE model pre-loaded successfully")
+
+            # Log RAM usage after loading
+            ram_usage = self.get_ram_usage_mb()
+            logger.info(
+                "✅ Both models pre-loaded successfully",
+                extra={
+                    "ram_mb": ram_usage['process_rss_mb'],
+                    "estimated_models_mb": ram_usage['estimated_models_mb']
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"❌ Failed to pre-load models: {e}", exc_info=True)
+            raise RuntimeError(f"Model pre-loading failed: {e}") from e
 
     async def generate_embedding(
         self,
@@ -343,6 +378,104 @@ class DualEmbeddingService:
             result['code'] = code_emb.tolist()
 
         return result
+
+    async def generate_embeddings_batch(
+        self,
+        texts: List[str],
+        domain: EmbeddingDomain = EmbeddingDomain.TEXT,
+        show_progress_bar: bool = True
+    ) -> List[Dict[str, List[float]]]:
+        """
+        Generate embeddings for multiple texts in a single batch (MUCH faster).
+
+        Args:
+            texts: List of texts/code to embed
+            domain: TEXT (text model), CODE (code model), HYBRID (both)
+            show_progress_bar: Show tqdm progress bar
+
+        Returns:
+            List of dicts with keys 'text' and/or 'code' containing embeddings
+
+        Example:
+            >>> texts = ["Hello", "World", "Test"]
+            >>> results = await svc.generate_embeddings_batch(texts, domain=EmbeddingDomain.TEXT)
+            >>> # [{'text': [...]}, {'text': [...]}, {'text': [...]}]
+        """
+        if not texts:
+            return []
+
+        # Filter empty texts
+        valid_indices = [i for i, t in enumerate(texts) if t and t.strip()]
+        valid_texts = [texts[i] for i in valid_indices]
+
+        if not valid_texts:
+            # All texts empty - return zero vectors
+            zero_vector = [0.0] * self.dimension
+            results = []
+            for _ in texts:
+                result = {}
+                if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
+                    result['text'] = zero_vector.copy()
+                if domain in (EmbeddingDomain.CODE, EmbeddingDomain.HYBRID):
+                    result['code'] = zero_vector.copy()
+                results.append(result)
+            return results
+
+        # Generate embeddings for all valid texts at once
+        results = [None] * len(texts)
+
+        if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
+            # Batch encode with TEXT model
+            await self._ensure_text_model()
+
+            loop = asyncio.get_running_loop()
+            text_embeddings = await loop.run_in_executor(
+                None,
+                lambda: self._text_model.encode(
+                    valid_texts,
+                    show_progress_bar=show_progress_bar,
+                    convert_to_numpy=True
+                )
+            )
+
+            # Distribute results back to original positions
+            for i, valid_idx in enumerate(valid_indices):
+                if results[valid_idx] is None:
+                    results[valid_idx] = {}
+                results[valid_idx]['text'] = text_embeddings[i].tolist()
+
+        if domain in (EmbeddingDomain.CODE, EmbeddingDomain.HYBRID):
+            # Batch encode with CODE model
+            await self._ensure_code_model()
+
+            loop = asyncio.get_running_loop()
+            code_embeddings = await loop.run_in_executor(
+                None,
+                lambda: self._code_model.encode(
+                    valid_texts,
+                    show_progress_bar=show_progress_bar,
+                    convert_to_numpy=True
+                )
+            )
+
+            # Distribute results back to original positions
+            for i, valid_idx in enumerate(valid_indices):
+                if results[valid_idx] is None:
+                    results[valid_idx] = {}
+                results[valid_idx]['code'] = code_embeddings[i].tolist()
+
+        # Fill empty positions with zero vectors
+        zero_vector = [0.0] * self.dimension
+        for i, result in enumerate(results):
+            if result is None:
+                result = {}
+                if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
+                    result['text'] = zero_vector.copy()
+                if domain in (EmbeddingDomain.CODE, EmbeddingDomain.HYBRID):
+                    result['code'] = zero_vector.copy()
+                results[i] = result
+
+        return results
 
     async def generate_embedding_legacy(self, text: str) -> List[float]:
         """

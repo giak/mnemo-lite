@@ -88,14 +88,26 @@ async def lifespan(app: FastAPI):
     if embedding_mode == "real":
         try:
             logger.info("⏳ Pre-loading embedding model during startup...")
-            from dependencies import get_embedding_service
-            embedding_service = await get_embedding_service()
 
-            # Forcer le chargement du modèle maintenant
-            if hasattr(embedding_service, '_ensure_model_loaded'):
-                await embedding_service._ensure_model_loaded()
+            # Create DualEmbeddingService directly (can't use dependency injection here)
+            from services.dual_embedding_service import DualEmbeddingService
+            from dependencies import DualEmbeddingServiceAdapter
 
-            logger.info("✅ Embedding model pre-loaded successfully")
+            dual_service = DualEmbeddingService(
+                text_model_name=os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5"),
+                code_model_name=os.getenv("CODE_EMBEDDING_MODEL", "jinaai/jina-embeddings-v2-base-code"),
+                dimension=int(os.getenv("EMBEDDING_DIMENSION", "768")),
+                device=os.getenv("EMBEDDING_DEVICE", "cpu"),
+                cache_size=int(os.getenv("EMBEDDING_CACHE_SIZE", "1000"))
+            )
+
+            # Wrap with adapter for backward compatibility
+            embedding_service = DualEmbeddingServiceAdapter(dual_service)
+
+            # Pre-load BOTH models at startup (TEXT + CODE)
+            await dual_service.preload_models()
+
+            logger.info("✅ Both embedding models pre-loaded successfully")
             app.state.embedding_service = embedding_service
         except Exception as e:
             logger.error(
