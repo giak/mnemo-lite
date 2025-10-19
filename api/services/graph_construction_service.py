@@ -216,6 +216,7 @@ class GraphConstructionService:
                 "chunk_id": str(chunk.id),
                 "file_path": chunk.file_path,
                 "language": chunk.language,
+                "repository": chunk.repository,  # CRITICAL: Store repository for filtering
                 "signature": chunk.metadata.get("signature", ""),
                 "complexity": chunk.metadata.get("complexity", {}),
                 "is_builtin": False,
