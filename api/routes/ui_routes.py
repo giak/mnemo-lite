@@ -6,8 +6,9 @@ Uses HTMX for dynamic interactions without full page reloads.
 """
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, Request, Query
+from fastapi import APIRouter, Depends, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional, List
@@ -22,6 +23,12 @@ router = APIRouter(prefix="/ui", tags=["UI"])
 
 # Templates will be configured in main.py
 templates = None  # Will be injected
+
+# Upload security configuration
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB max payload size
+MAX_FILES_PER_UPLOAD = 10000  # Maximum number of files per upload
+MAX_CONCURRENT_UPLOADS = 50  # Global limit on concurrent uploads
+REPOSITORY_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.]{1,255}$")  # Alphanumeric + _-.  max 255 chars
 
 
 def set_templates(template_instance: Jinja2Templates):
@@ -417,7 +424,7 @@ async def code_dashboard_data(engine = Depends(get_db_engine)):
         """)
 
         # Average complexity
-        complexity_query = text("""
+        complexity_query = text(r"""
             SELECT AVG(((metadata->>'complexity')::jsonb->>'cyclomatic')::float) as avg_complexity
             FROM code_chunks
             WHERE metadata->>'complexity' IS NOT NULL
@@ -656,32 +663,39 @@ async def code_repository_delete(
 
     try:
         # Delete code chunks, nodes, and edges for this repository
-        # (same logic as EPIC-06 DELETE endpoint)
+        # Order: edges first (to avoid FK issues), then nodes, then chunks
+
+        # Step 1: Delete edges connected to nodes of this repository
+        delete_edges = text("""
+            DELETE FROM edges
+            WHERE source_node_id IN (
+                SELECT node_id FROM nodes WHERE properties->>'repository' = :repository
+            )
+            OR target_node_id IN (
+                SELECT node_id FROM nodes WHERE properties->>'repository' = :repository
+            )
+        """)
+
+        # Step 2: Delete nodes of this repository
+        delete_nodes = text("""
+            DELETE FROM nodes
+            WHERE properties->>'repository' = :repository
+        """)
+
+        # Step 3: Delete code chunks of this repository
         delete_chunks = text("""
             DELETE FROM code_chunks
             WHERE repository = :repository
         """)
 
-        delete_nodes = text("""
-            DELETE FROM nodes
-            WHERE props->>'repository' = :repository
-        """)
-
-        delete_edges = text("""
-            DELETE FROM edges
-            WHERE NOT EXISTS (
-                SELECT 1 FROM nodes WHERE nodes.node_id = edges.source_node_id
-            )
-        """)
-
         async with engine.begin() as conn:
-            result1 = await conn.execute(delete_chunks, {"repository": repository})
-            result2 = await conn.execute(delete_nodes, {"repository": repository})
-            result3 = await conn.execute(delete_edges)
+            result_edges = await conn.execute(delete_edges, {"repository": repository})
+            result_nodes = await conn.execute(delete_nodes, {"repository": repository})
+            result_chunks = await conn.execute(delete_chunks, {"repository": repository})
 
         logger.info(
             f"Deleted repository '{repository}': "
-            f"{result1.rowcount} chunks, {result2.rowcount} nodes, {result3.rowcount} orphaned edges"
+            f"{result_chunks.rowcount} chunks, {result_nodes.rowcount} nodes, {result_edges.rowcount} edges"
         )
 
         # Fetch updated repository list
@@ -999,12 +1013,14 @@ async def code_graph_data(
 @router.get("/code/upload", response_class=HTMLResponse)
 async def code_upload_page(request: Request):
     """
-    Code Upload Interface (EPIC-07 Story 4).
+    Advanced Code Upload Interface (EPIC-09).
 
-    Upload code files for indexing.
+    Upload entire codebases - folders, ZIP files, or individual files.
+    Supports recursive folder traversal, ZIP extraction, and batch processing.
+    Real-time progress tracking with polling.
     """
     return templates.TemplateResponse(
-        "code_upload.html",
+        "code_upload_advanced.html",
         {"request": request}
     )
 
@@ -1015,82 +1031,217 @@ async def code_upload_process(
     engine = Depends(get_db_engine)
 ):
     """
-    Process code upload and index files (EPIC-07 Story 4).
+    Process code upload and index files (EPIC-09 Advanced Upload).
 
-    Receives files from drag & drop interface and calls the indexing API.
+    SECURITY HARDENED VERSION with comprehensive input validation:
+    - Request size validation (max 50MB)
+    - Repository name validation (alphanumeric + _-. only)
+    - Files array structure validation
+    - Individual file validation (path safety, content type, size)
+    - Rate limiting (max concurrent uploads)
+    - Safe background task execution with exception handling
+
+    Handles batch processing of entire codebases with:
+    - Chunked processing for large uploads (batch size configurable)
+    - Memory-efficient processing
+    - Detailed error tracking per file
+    - Support for folder/ZIP uploads from frontend
+    - Real-time progress tracking via polling endpoint
+
+    Returns immediately with upload_id, processing continues in background.
+    Use GET /ui/code/upload/status/{upload_id} to poll for progress.
+
+    Raises:
+        HTTPException 413: Payload too large (>50MB)
+        HTTPException 400: Invalid input (repository name, files structure, etc.)
+        HTTPException 429: Too many concurrent uploads
     """
+    import uuid
+    import asyncio
+    from services.upload_progress_tracker import get_tracker
+    from routes.ui_upload_handler import safe_process_upload_with_tracking
+
     try:
-        # Parse request body
-        payload = await request.json()
+        # SECURITY CHECK #1: Validate Content-Length BEFORE parsing JSON
+        content_length = request.headers.get("content-length")
+        if content_length:
+            content_length_int = int(content_length)
+            if content_length_int > MAX_UPLOAD_SIZE:
+                logger.warning(f"Upload rejected: Content-Length {content_length_int} exceeds max {MAX_UPLOAD_SIZE}")
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Payload too large: {content_length_int} bytes (max {MAX_UPLOAD_SIZE} bytes / {MAX_UPLOAD_SIZE // 1024 // 1024}MB)"
+                )
 
-        # Validate payload
-        if not payload.get("repository"):
-            return {"error": "Repository name is required"}
-
-        if not payload.get("files"):
-            return {"error": "No files provided"}
-
-        # Call the indexing service directly (same pattern as API endpoint)
-        from services.code_chunking_service import CodeChunkingService
-        from services.metadata_extractor_service import MetadataExtractorService
-        from services.dual_embedding_service import DualEmbeddingService
-        from services.graph_construction_service import GraphConstructionService
-        from db.repositories.code_chunk_repository import CodeChunkRepository
-        from services.code_indexing_service import (
-            CodeIndexingService,
-            FileInput,
-            IndexingOptions,
-        )
-
-        # Create service with dependencies
-        chunking_service = CodeChunkingService()
-        metadata_service = MetadataExtractorService()
-        embedding_service = DualEmbeddingService()
-        graph_service = GraphConstructionService(engine)
-        chunk_repository = CodeChunkRepository(engine)
-
-        indexing_service = CodeIndexingService(
-            engine=engine,
-            chunking_service=chunking_service,
-            metadata_service=metadata_service,
-            embedding_service=embedding_service,
-            graph_service=graph_service,
-            chunk_repository=chunk_repository,
-        )
-
-        # Convert request to service models
-        files = [
-            FileInput(
-                path=f["path"],
-                content=f["content"],
-                language=f.get("language"),
+        # Parse request body (with exception handling for invalid JSON)
+        try:
+            payload = await request.json()
+        except ValueError as e:
+            logger.warning(f"Upload rejected: Invalid JSON - {e}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid JSON payload: {str(e)}"
             )
-            for f in payload["files"]
+
+        # SECURITY CHECK #2: Validate repository name
+        if not payload.get("repository"):
+            raise HTTPException(400, "Repository name is required")
+
+        repo_name = payload["repository"]
+        if not isinstance(repo_name, str):
+            raise HTTPException(400, "Repository name must be a string")
+
+        if not REPOSITORY_NAME_PATTERN.match(repo_name):
+            logger.warning(f"Upload rejected: Invalid repository name '{repo_name}'")
+            raise HTTPException(
+                400,
+                f"Invalid repository name. Allowed characters: a-z A-Z 0-9 _ - . (max 255 chars). Got: '{repo_name}'"
+            )
+
+        # SECURITY CHECK #3: Validate files array
+        if not payload.get("files"):
+            raise HTTPException(400, "No files provided")
+
+        if not isinstance(payload["files"], list):
+            raise HTTPException(400, "Files must be an array")
+
+        if len(payload["files"]) == 0:
+            raise HTTPException(400, "Files array is empty")
+
+        if len(payload["files"]) > MAX_FILES_PER_UPLOAD:
+            logger.warning(f"Upload rejected: Too many files ({len(payload['files'])} > {MAX_FILES_PER_UPLOAD})")
+            raise HTTPException(
+                400,
+                f"Too many files: {len(payload['files'])} files (max {MAX_FILES_PER_UPLOAD})"
+            )
+
+        # SECURITY CHECK #4: Validate each file structure (basic validation)
+        for idx, file_data in enumerate(payload["files"]):
+            if not isinstance(file_data, dict):
+                raise HTTPException(400, f"File {idx}: must be an object")
+
+            if "path" not in file_data or "content" not in file_data:
+                raise HTTPException(400, f"File {idx}: missing 'path' or 'content' field")
+
+            if not isinstance(file_data["path"], str):
+                raise HTTPException(400, f"File {idx}: 'path' must be a string")
+
+            if not isinstance(file_data["content"], str):
+                raise HTTPException(400, f"File {idx}: 'content' must be a string")
+
+            # Note: Path traversal validation is done in ui_upload_handler.validate_safe_path()
+            # during processing, not here, to avoid double-validation overhead
+
+        # SECURITY CHECK #5: Rate limiting - Check concurrent uploads
+        tracker = get_tracker()
+
+        # PHASE 2: Use async get_all_sessions() with await
+        all_sessions = await tracker.get_all_sessions()
+        active_sessions = [
+            s for s in all_sessions
+            if s.get("status") == "processing"
         ]
 
-        options = IndexingOptions(
-            extract_metadata=payload.get("extract_metadata", True),
-            generate_embeddings=payload.get("generate_embeddings", True),
-            build_graph=payload.get("build_graph", True),
-            repository=payload["repository"],
-            commit_hash=payload.get("commit_hash"),
+        if len(active_sessions) >= MAX_CONCURRENT_UPLOADS:
+            logger.warning(
+                f"Upload rejected: Too many active uploads ({len(active_sessions)} >= {MAX_CONCURRENT_UPLOADS})"
+            )
+            raise HTTPException(
+                429,
+                f"Too many active uploads ({len(active_sessions)}). Please wait and try again."
+            )
+
+        # Generate unique upload ID
+        upload_id = str(uuid.uuid4())
+        total_files = len(payload["files"])
+
+        # Create progress tracker session (PHASE 2: now async)
+        progress = await tracker.create_session(
+            upload_id=upload_id,
+            repository=repo_name,
+            total_files=total_files
         )
 
-        # Index files
-        summary = await indexing_service.index_repository(files, options)
+        logger.info(
+            f"[{upload_id}] Created upload session: {total_files} files for repository '{repo_name}' "
+            f"(active uploads: {len(active_sessions) + 1}/{MAX_CONCURRENT_UPLOADS})"
+        )
 
-        # Return response
+        # Get pre-loaded embedding service from app.state
+        embedding_service = getattr(request.app.state, "embedding_service", None)
+        if embedding_service:
+            logger.info(f"[{upload_id}] Using pre-loaded embedding service from app.state")
+        else:
+            logger.warning(f"[{upload_id}] No pre-loaded embedding service, will create new instance")
+
+        # Launch background processing task with SAFE wrapper
+        asyncio.create_task(safe_process_upload_with_tracking(
+            payload=payload,
+            engine=engine,
+            upload_id=upload_id,
+            progress=progress,
+            embedding_service=embedding_service
+        ))
+
+        logger.info(f"[{upload_id}] Background task launched successfully")
+
+        # Return immediately with upload ID for polling
         return {
-            "repository": summary.repository,
-            "indexed_files": summary.indexed_files,
-            "indexed_chunks": summary.indexed_chunks,
-            "indexed_nodes": summary.indexed_nodes,
-            "indexed_edges": summary.indexed_edges,
-            "failed_files": summary.failed_files,
-            "processing_time_ms": summary.processing_time_ms,
-            "errors": summary.errors,
+            "status": "processing",
+            "upload_id": upload_id,
+            "repository": repo_name,
+            "total_files": total_files,
+            "message": f"Upload processing started. Poll /ui/code/upload/status/{upload_id} for progress."
         }
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (they're already formatted correctly)
+        raise
+
     except Exception as e:
-        logger.error(f"Code upload processing failed: {e}", exc_info=True)
-        return {"error": str(e)}
+        # Catch-all for unexpected errors
+        logger.error(f"Unexpected error starting upload: {e}", exc_info=True)
+        raise HTTPException(
+            500,
+            f"Internal server error: {str(e)}"
+        )
+
+
+
+@router.get("/code/upload/status/{upload_id}")
+async def code_upload_status(upload_id: str):
+    """
+    Get real-time progress status for an upload session (EPIC-09).
+
+    Provides detailed progress information including:
+    - Current file being processed
+    - Pipeline stage breakdown
+    - File counters (indexed, failed, total)
+    - Elapsed time and estimated remaining time
+    - Recent file activity
+    - Error list (limited to 100)
+
+    Used by frontend for polling-based progress updates.
+    """
+    from services.upload_progress_tracker import get_tracker
+
+    try:
+        tracker = get_tracker()
+
+        # PHASE 2: get_session() is now async
+        progress = await tracker.get_session(upload_id)
+
+        if not progress:
+            return {
+                "error": "Upload session not found",
+                "status": "not_found"
+            }
+
+        return progress.to_dict()
+
+    except Exception as e:
+        logger.error(f"Failed to get upload status for {upload_id}: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e)
+        }
