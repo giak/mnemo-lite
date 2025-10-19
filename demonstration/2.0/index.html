@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MnemoLite v2.0.0 - PostgreSQL 18 Cognitive Memory + Code Intelligence</title>
+
+    <!-- Reveal.js CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/reveal.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/theme/black.css">
+
+    <!-- Syntax Highlighting -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/highlight/monokai.css">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+    <!-- Custom SCADA Theme CSS -->
+    <link rel="stylesheet" href="css/scada-theme.css">
+    <link rel="stylesheet" href="css/reveal-overrides.css">
+
+    <style>
+        :root {
+            --bg-primary: #0a0e27;
+            --bg-secondary: #161b22;
+            --accent-blue: #4a90e2;
+            --accent-gold: #fbbf24;
+            --accent-cyan: #06b6d4;
+            --accent-green: #10b981;
+            --danger: #f43f5e;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+        }
+
+        body { background: var(--bg-primary) !important; }
+        .reveal {
+            font-family: 'Inter', sans-serif;
+            font-size: 2rem;
+        }
+        .reveal h1, .reveal h2, .reveal h3 { font-weight: 700; }
+        .reveal h2 {
+            border-left: 4px solid var(--accent-blue);
+            padding-left: 1rem;
+            color: var(--accent-gold);
+            font-size: 4rem;
+            margin-bottom: 2rem;
+        }
+
+        .reveal section {
+            height: 100%;
+            overflow-y: auto !important;
+            padding: 20px 40px !important;
+        }
+
+        .reveal ul {
+            list-style: none;
+            font-size: 1.8rem;
+        }
+
+        .reveal ul li::before {
+            content: "▸ ";
+            color: var(--accent-blue);
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            padding: 1.5rem 2rem;
+            border-left: 4px solid var(--accent-blue);
+            margin: 1rem 0;
+        }
+
+        .stat-box {
+            background: var(--bg-secondary);
+            padding: 2rem;
+            border-left: 4px solid var(--accent-blue);
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 5rem;
+            font-weight: 900;
+            color: var(--accent-gold);
+            line-height: 1.1;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            margin-top: 1rem;
+            font-size: 1.9rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.5rem 1.5rem;
+            background: rgba(74, 144, 226, 0.2);
+            color: var(--accent-blue);
+            border-left: 2px solid var(--accent-blue);
+            margin: 0.5rem;
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--accent-green);
+            border-left-color: var(--accent-green);
+        }
+
+        .badge-danger {
+            background: rgba(244, 63, 94, 0.2);
+            color: var(--danger);
+            border-left-color: var(--danger);
+        }
+
+        .check { color: var(--accent-green); }
+        .cross { color: var(--danger); }
+
+        pre { font-size: 1.8rem !important; }
+        code { font-size: 1.8rem !important; }
+
+        .architecture-box {
+            background: var(--bg-secondary);
+            border: 2px solid var(--accent-blue);
+            padding: 1.5rem;
+            margin: 1rem;
+            text-align: center;
+        }
+
+        .highlight-box {
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--accent-gold);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            box-shadow: 0 0 30px rgba(251, 191, 36, 0.3);
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+
+            <!-- ========================================== -->
+            <!-- SLIDE 1: TITRE / HERO -->
+            <!-- ========================================== -->
+            <section data-background-color="#0a0e27">
+                <div style="text-align: center;">
+                    <img src="assets/images/logo_mnemolite.jpg" style="width: 250px; border-radius: 50%; box-shadow: 0 0 40px rgba(251, 191, 36, 0.3); margin-bottom: 2rem;">
+
+                    <h1 style="font-size: 6rem; color: var(--accent-gold); margin-bottom: 1rem;">
+                        MnemoLite v2.0.0
+                    </h1>
+
+                    <p style="font-size: 3rem; color: var(--text-primary); margin-bottom: 2rem;">
+                        Un projet personnel d'exploration technique
+                    </p>
+
+                    <div style="display: flex; justify-content: center; gap: 2rem; margin-top: 3rem;">
+                        <div class="badge-success">PostgreSQL 18</div>
+                        <div class="badge-success">CPU Only</div>
+                        <div class="badge-success">100% Local</div>
+                        <div class="badge-success">Open Source</div>
+                    </div>
+
+                    <p style="font-size: 1.8rem; color: var(--text-secondary); margin-top: 3rem;">
+                        📝 Side project (~1 semaine) | 💻 CPU standard | 🔧 PG18 + Python
+                    </p>
+                </div>
+
+                <aside class="notes">
+                    C'est un side project pour explorer les embeddings CPU. Projet personnel d'une semaine.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 2: L'IDÉE DE DÉPART -->
+            <!-- ========================================== -->
+            <section>
+                <h2>🎯 L'Idée de Départ</h2>
+
+                <div class="card" style="border-left-color: var(--accent-cyan); margin-top: 2rem;">
+                    <h3 style="color: var(--accent-cyan); font-size: 2.5rem;">Question Simple :</h3>
+                    <p style="font-size: 2.2rem; color: var(--text-primary); margin: 1rem 0;">
+                        "Peut-on faire de l'embedding et de la recherche sémantique sans GPU ?"
+                    </p>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin: 2rem 0;">
+                    <div class="card">
+                        <h4 style="color: var(--danger); margin-top: 0;">❌ Problèmes</h4>
+                        <ul>
+                            <li>GPUs coûtent cher (2000€+)</li>
+                            <li>APIs cloud aussi (300€/mois)</li>
+                            <li>Pour usage perso/PME, c'est overkill</li>
+                        </ul>
+                    </div>
+
+                    <div class="card" style="border-left-color: var(--accent-green);">
+                        <h4 style="color: var(--accent-green); margin-top: 0;">✅ Hypothèse</h4>
+                        <ul>
+                            <li>Modèles CPU récents sont pas mal</li>
+                            <li>PostgreSQL a pgvector maintenant</li>
+                            <li>Voyons ce qu'on peut faire...</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <p class="fragment" style="font-size: 2.5rem; color: var(--accent-gold); text-align: center; margin-top: 3rem;">
+                    💡 "J'ai voulu tester si c'était faisable pour un usage modeste"
+                </p>
+
+                <aside class="notes">
+                    J'ai voulu tester si c'était faisable pour un usage modeste. L'idée était de voir si on pouvait faire quelque chose d'utile sans GPU.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 3: CE QUE J'AI CONSTRUIT -->
+            <!-- ========================================== -->
+            <section>
+                <h2>🔬 Ce Que J'ai Construit</h2>
+
+                <div class="highlight-box" style="margin-top: 2rem;">
+                    <h3 style="color: var(--accent-gold); margin-top: 0;">MnemoLite = 2 modules principaux</h3>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin: 2rem 0;">
+                    <div class="card" style="border-left-color: var(--accent-blue);">
+                        <h4 style="color: var(--accent-blue); font-size: 2rem; margin-top: 0;">1. Agent Memory</h4>
+                        <ul>
+                            <li>Stocke des conversations/événements</li>
+                            <li>Recherche sémantique basique</li>
+                            <li>Utilise pgvector 0.8.0</li>
+                            <li>Support partitionnement (500k+)</li>
+                        </ul>
+                    </div>
+
+                    <div class="card" style="border-left-color: var(--accent-cyan);">
+                        <h4 style="color: var(--accent-cyan); font-size: 2rem; margin-top: 0;">2. Code Intelligence</h4>
+                        <ul>
+                            <li>Parse du code (Python++)</li>
+                            <li>Construit graphe de dépendances</li>
+                            <li>Double embedding (text+code)</li>
+                            <li>Recherche hybride RRF</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card" style="background: #0d1117; border-left-color: var(--accent-green);">
+                    <p style="font-size: 2rem; margin: 0;">
+                        <strong style="color: var(--accent-green);">Stack:</strong> FastAPI + PostgreSQL 18 + HTMX 2.0<br>
+                        <strong style="color: var(--accent-green);">Temps:</strong> ~1 semaine (soirs et weekends)<br>
+                        <strong style="color: var(--accent-green);">Tests:</strong> 245 tests (95.2% passing)
+                    </p>
+                </div>
+
+                <p style="font-size: 1.8rem; color: var(--text-secondary); text-align: center; margin-top: 2rem;">
+                    "Rien de révolutionnaire, juste de l'assemblage intelligent"
+                </p>
+
+                <aside class="notes">
+                    Rien de révolutionnaire, juste de l'assemblage intelligent. Deux modules : mémoire d'agent et intelligence de code.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 4: CHOIX TECHNIQUES -->
+            <!-- ========================================== -->
+            <section>
+                <h2>💡 Les Choix Techniques</h2>
+
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin: 2rem 0;">
+                    <div class="card">
+                        <h3 style="color: var(--accent-blue); margin-top: 0;">🤖 Modèle d'Embedding</h3>
+                        <ul style="line-height: 1.8;">
+                            <li><strong>nomic-embed-text-v1.5</strong></li>
+                            <li>137M paramètres (petit)</li>
+                            <li>Optimisé CPU (ONNX)</li>
+                            <li>768 dimensions</li>
+                            <li>Gratuit et open source</li>
+                            <li>50-100 emb/sec sur laptop</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <h3 style="color: var(--accent-cyan); margin-top: 0;">🗄️ Base de Données</h3>
+                        <ul style="line-height: 1.8;">
+                            <li><strong>PostgreSQL 18</strong></li>
+                            <li>pgvector 0.8.0 (HNSW)</li>
+                            <li>pg_trgm pour le texte</li>
+                            <li>CTEs récursives pour graphes</li>
+                            <li>pg_partman (500k+ events)</li>
+                            <li>pgmq (queue ready)</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="highlight-box">
+                    <p style="font-size: 2.2rem; text-align: center; margin: 0;">
+                        🔧 "J'ai pris des briques qui existent et je les ai assemblées"
+                    </p>
+                    <p style="font-size: 1.8rem; color: var(--text-secondary); text-align: center; margin-top: 1rem;">
+                        Pas de magie, juste des outils existants bien intégrés
+                    </p>
+                </div>
+
+                <aside class="notes">
+                    J'ai pris des briques qui existent et je les ai assemblées. Nomic pour les embeddings, PostgreSQL 18 avec pgvector.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 5: RÉSULTATS (HONNÊTES) -->
+            <!-- ========================================== -->
+            <section>
+                <h2>📊 Les Résultats (Honnêtes)</h2>
+
+                <div class="card" style="border-left-color: var(--accent-green); margin: 2rem 0;">
+                    <h3 style="color: var(--accent-green); margin-top: 0;">✅ Ce qui marche bien :</h3>
+                    <div class="metric-grid">
+                        <div class="stat-box">
+                            <div style="font-size: 3rem; color: var(--accent-gold);">~11ms</div>
+                            <div style="font-size: 1.5rem;">Recherche hybride</div>
+                        </div>
+                        <div class="stat-box">
+                            <div style="font-size: 3rem; color: var(--accent-gold);">50-100/s</div>
+                            <div style="font-size: 1.5rem;">Embeddings CPU</div>
+                        </div>
+                        <div class="stat-box">
+                            <div style="font-size: 3rem; color: var(--accent-gold);">0.155ms*</div>
+                            <div style="font-size: 1.5rem;">Graphe traversal</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="background: #161b22; border-left-color: var(--accent-cyan); margin: 1rem 0;">
+                    <p style="font-size: 1.8rem; color: var(--accent-cyan); margin: 0;">
+                        <strong>* Le 0.155ms c'est parce que :</strong><br>
+                        - Le graphe est petit (14 fichiers de test)<br>
+                        - Tout est en cache PostgreSQL<br>
+                        - La requête CTE est simple<br>
+                        <span style="color: var(--text-secondary);">"C'est pas un record, c'est normal"</span>
+                    </p>
+                </div>
+
+                <div class="card" style="border-left-color: var(--accent-green);">
+                    <h4 style="color: var(--accent-green);">🚀 Optimisations EPIC-08:</h4>
+                    <ul>
+                        <li>Throughput: 10→100 req/s (10x)</li>
+                        <li>P99: 9.2s→200ms (46x)</li>
+                        <li>Cache hit rate: 80%+</li>
+                        <li>Pool: 20 connexions + 10 overflow</li>
+                    </ul>
+                </div>
+
+                <p style="font-size: 1.8rem; color: var(--text-secondary); text-align: center; margin-top: 2rem;">
+                    "Les perfs sont correctes pour un usage léger"
+                </p>
+
+                <aside class="notes">
+                    Les perfs sont correctes pour un usage léger. 11ms pour la recherche, 0.155ms pour le graphe mais c'est sur un petit dataset.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 6: LES VRAIES LIMITATIONS -->
+            <!-- ========================================== -->
+            <section>
+                <h2>⚠️ Les Vraies Limitations</h2>
+
+                <div class="card" style="border-left-color: var(--danger); margin: 2rem 0;">
+                    <h3 style="color: var(--danger); font-size: 2.5rem; margin-top: 0;">Soyons clairs :</h3>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+                    <div class="card" style="background: rgba(244, 63, 94, 0.1); border-left-color: var(--danger);">
+                        <h4 style="color: var(--danger);">❌ Ce que ce N'EST PAS</h4>
+                        <ul>
+                            <li>Pas "production ready" entreprise</li>
+                            <li>Single-instance only (pas de Redis)</li>
+                            <li>Python bien supporté, le reste bof</li>
+                            <li>4GB RAM minimum quand même</li>
+                            <li>Testé sur milliers d'items max</li>
+                            <li>Pas comparable à OpenAI/Claude</li>
+                        </ul>
+                    </div>
+
+                    <div class="card" style="background: rgba(16, 185, 129, 0.1); border-left-color: var(--accent-green);">
+                        <h4 style="color: var(--accent-green);">✅ Ce que c'EST</h4>
+                        <ul>
+                            <li>Un POC qui fonctionne</li>
+                            <li>Une base solide pour expérimenter</li>
+                            <li>Un bon outil d'apprentissage</li>
+                            <li>Suffisant pour side projects</li>
+                            <li>Code propre et testé</li>
+                            <li>Architecture extensible</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="highlight-box" style="background: rgba(251, 191, 36, 0.1);">
+                    <p style="font-size: 2rem; text-align: center; margin: 0; color: var(--accent-gold);">
+                        💡 "C'est un projet perso, pas une solution entreprise"
+                    </p>
+                </div>
+
+                <aside class="notes">
+                    C'est un projet perso, pas une solution entreprise. Un POC qui fonctionne pour des usages modestes.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 7: POUR QUI C'EST UTILE ? -->
+            <!-- ========================================== -->
+            <section>
+                <h2>🎯 Pour Qui C'est Utile ?</h2>
+
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin: 2rem 0;">
+                    <div class="card" style="border-left-color: var(--accent-green);">
+                        <h3 style="color: var(--accent-green); margin-top: 0;">✅ Cas d'usage réalistes :</h3>
+                        <ul style="line-height: 2;">
+                            <li>Side projects personnels</li>
+                            <li>PME avec <1000 docs</li>
+                            <li>Prototypes/POCs</li>
+                            <li>Apprentissage/Expérimentation</li>
+                            <li>Recherche locale privée</li>
+                            <li>Agents IA locaux</li>
+                        </ul>
+                    </div>
+
+                    <div class="card" style="border-left-color: var(--danger);">
+                        <h3 style="color: var(--danger); margin-top: 0;">❌ PAS pour :</h3>
+                        <ul style="line-height: 2;">
+                            <li>Production critique</li>
+                            <li>Millions de documents</li>
+                            <li>Multi-utilisateurs intensif</li>
+                            <li>Remplacement d'OpenAI</li>
+                            <li>Applications temps réel</li>
+                            <li>Scale horizontal</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="highlight-box">
+                    <p style="font-size: 2.2rem; text-align: center; margin: 0;">
+                        🎯 <strong style="color: var(--accent-gold);">Sweet Spot:</strong>
+                        10k-500k events • Usage local • Privacy-critical
+                    </p>
+                </div>
+
+                <aside class="notes">
+                    Si vous avez un petit projet, ça peut servir. Sweet spot entre 10k et 500k événements.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 8: ARCHITECTURE v2.0 -->
+            <!-- ========================================== -->
+            <section>
+                <h2>🏗️ Architecture MnemoLite v2.0</h2>
+
+                <div style="display: flex; flex-direction: column; gap: 1rem; align-items: center; margin-top: 2rem;">
+
+                    <!-- Frontend Layer -->
+                    <div class="architecture-box" style="min-width: 700px; background: rgba(74, 144, 226, 0.1);">
+                        <div style="color: var(--accent-blue); font-size: 1.8rem; font-weight: 700;">🌐 Frontend Layer</div>
+                        <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 1rem;">
+                            <div class="badge">HTMX 2.0</div>
+                            <div class="badge">Jinja2</div>
+                            <div class="badge">Cytoscape.js</div>
+                            <div class="badge">Chart.js</div>
+                        </div>
+                    </div>
+
+                    <div style="color: var(--accent-blue); font-size: 2rem;">↓</div>
+
+                    <!-- API Layer -->
+                    <div class="architecture-box" style="min-width: 700px;">
+                        <div style="color: var(--accent-cyan); font-size: 1.8rem; font-weight: 700;">⚡ API Layer</div>
+                        <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 1rem;">
+                            <div class="badge" style="border-left-color: var(--accent-cyan); color: var(--accent-cyan);">FastAPI 0.111+</div>
+                            <div class="badge" style="border-left-color: var(--accent-cyan); color: var(--accent-cyan);">SQLAlchemy 2.0</div>
+                            <div class="badge" style="border-left-color: var(--accent-cyan); color: var(--accent-cyan);">asyncpg</div>
+                        </div>
+                    </div>
+
+                    <div style="color: var(--accent-cyan); font-size: 2rem;">↓</div>
+
+                    <!-- PostgreSQL Layer -->
+                    <div class="architecture-box" style="min-width: 800px; background: rgba(251, 191, 36, 0.1); border-color: var(--accent-gold);">
+                        <div style="color: var(--accent-gold); font-size: 1.8rem; font-weight: 700;">🗄️ PostgreSQL 18 (Single Source of Truth)</div>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-top: 1rem;">
+                            <div style="background: var(--bg-primary); padding: 0.8rem; border-left: 3px solid var(--accent-gold);">
+                                <strong>events</strong><br>
+                                <span style="font-size: 1.2rem; color: var(--text-secondary);">VECTOR(768)</span>
+                            </div>
+                            <div style="background: var(--bg-primary); padding: 0.8rem; border-left: 3px solid var(--accent-gold);">
+                                <strong>code_chunks</strong><br>
+                                <span style="font-size: 1.2rem; color: var(--text-secondary);">Dual VECTOR</span>
+                            </div>
+                            <div style="background: var(--bg-primary); padding: 0.8rem; border-left: 3px solid var(--accent-gold);">
+                                <strong>nodes/edges</strong><br>
+                                <span style="font-size: 1.2rem; color: var(--text-secondary);">Graph CTE</span>
+                            </div>
+                            <div style="background: var(--bg-primary); padding: 0.8rem; border-left: 3px solid var(--accent-gold);">
+                                <strong>pgmq</strong><br>
+                                <span style="font-size: 1.2rem; color: var(--text-secondary);">Queue ready</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="color: var(--accent-green); font-size: 2rem;">↓</div>
+
+                    <!-- AI Layer -->
+                    <div class="architecture-box" style="min-width: 600px; background: rgba(16, 185, 129, 0.1); border-color: var(--accent-green);">
+                        <div style="color: var(--accent-green); font-size: 1.8rem; font-weight: 700;">🤖 AI Layer (100% Local)</div>
+                        <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 1rem;">
+                            <div class="badge-success">Sentence-Transformers</div>
+                            <div class="badge-success">Tree-sitter AST</div>
+                            <div class="badge-success">768D • ~30ms</div>
+                        </div>
+                    </div>
+                </div>
+
+                <aside class="notes">
+                    Architecture en couches : UI HTMX, API FastAPI, PostgreSQL 18 comme single source of truth, AI 100% local.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 9: CODE INTELLIGENCE -->
+            <!-- ========================================== -->
+            <section>
+                <h2>🧠 Code Intelligence (EPIC-06)</h2>
+
+                <div class="highlight-box" style="margin-top: 2rem;">
+                    <h3 style="color: var(--accent-gold); margin-top: 0;">Pipeline 7 étapes (<100ms/fichier)</h3>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem; margin: 2rem 0;">
+                    <div class="card" style="padding: 1rem;">
+                        <strong style="color: var(--accent-blue);">1. Parse</strong><br>
+                        Tree-sitter AST
+                    </div>
+                    <div class="card" style="padding: 1rem;">
+                        <strong style="color: var(--accent-blue);">2. Chunk</strong><br>
+                        Function/Class/Method
+                    </div>
+                    <div class="card" style="padding: 1rem;">
+                        <strong style="color: var(--accent-blue);">3. Metadata</strong><br>
+                        Complexity, Signature
+                    </div>
+                    <div class="card" style="padding: 1rem;">
+                        <strong style="color: var(--accent-cyan);">4. Dual Embed</strong><br>
+                        Text + Code vectors
+                    </div>
+                    <div class="card" style="padding: 1rem;">
+                        <strong style="color: var(--accent-cyan);">5. Store</strong><br>
+                        PostgreSQL 18
+                    </div>
+                    <div class="card" style="padding: 1rem;">
+                        <strong style="color: var(--accent-cyan);">6. Graph</strong><br>
+                        Dependencies
+                    </div>
+                </div>
+
+                <div class="card" style="border-left-color: var(--accent-green); margin: 2rem 0;">
+                    <h4 style="color: var(--accent-green); margin-top: 0;">✨ Fonctionnalités Clés :</h4>
+                    <ul>
+                        <li><strong>Double embedding:</strong> TEXT (docstring+comments) + CODE (source)</li>
+                        <li><strong>Recherche hybride:</strong> RRF(k=60) + BM25 + Vector (cosine)</li>
+                        <li><strong>Graph traversal:</strong> CTE récursives ≤3 hops (0.155ms)</li>
+                        <li><strong>Resolution:</strong> Local → Imports → Best effort (100% accuracy)</li>
+                        <li><strong>Filtrage:</strong> 73 Python built-ins exclus</li>
+                    </ul>
+                </div>
+
+                <aside class="notes">
+                    Pipeline 7 étapes pour analyser le code. Double embedding pour capturer sémantique et structure.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 10: DÉMO RAPIDE -->
+            <!-- ========================================== -->
+            <section>
+                <h2>💻 Démo Rapide</h2>
+
+                <div class="card" style="border-left-color: var(--accent-green); margin: 2rem 0;">
+                    <h3 style="color: var(--accent-green); margin-top: 0;">🚀 Installation (< 2 minutes)</h3>
+                    <pre style="background: var(--bg-primary); padding: 1.5rem;"><code class="bash">git clone https://github.com/giak/MnemoLite.git
+cd MnemoLite
+cp .env.example .env
+make up
+
+# Services démarrés:
+✅ mnemo-postgres (PostgreSQL 18)
+✅ mnemo-api (FastAPI @ :8001)
+
+🌐 http://localhost:8001/ui/</code></pre>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+                    <div class="card">
+                        <h4 style="color: var(--accent-blue); margin-top: 0;">📊 Interfaces disponibles</h4>
+                        <ul>
+                            <li>/ui/ - Dashboard</li>
+                            <li>/ui/search - Recherche hybride</li>
+                            <li>/ui/graph - Visualisation</li>
+                            <li>/ui/code/ - Code Intelligence</li>
+                            <li>/docs - API Swagger</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <h4 style="color: var(--accent-cyan); margin-top: 0;">⚡ Ce que ça fait</h4>
+                        <ul>
+                            <li>Stocke du texte/code</li>
+                            <li>Transforme en vecteurs (CPU)</li>
+                            <li>Cherche par similarité</li>
+                            <li>Construit des graphes</li>
+                            <li>Retourne des résultats</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <p style="font-size: 1.8rem; color: var(--text-secondary); text-align: center; margin-top: 2rem;">
+                    "C'est basique mais ça marche"
+                </p>
+
+                <aside class="notes">
+                    Installation en 2 minutes. Interfaces web pour dashboard, recherche et visualisation de graphe.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 11: LE CODE (SIMPLE) -->
+            <!-- ========================================== -->
+            <section>
+                <h2>🔧 Le Code (Simple)</h2>
+
+                <div class="card" style="margin: 2rem 0;">
+                    <h3 style="color: var(--accent-blue); margin-top: 0;">Python - Embedding local</h3>
+                    <pre style="background: var(--bg-primary); padding: 1rem;"><code class="python"># C'est vraiment pas compliqué
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer('nomic-embed-text-v1.5')
+embedding = model.encode("votre texte")
+
+# 768 dimensions, ~30ms sur CPU</code></pre>
+                </div>
+
+                <div class="card" style="margin: 2rem 0;">
+                    <h3 style="color: var(--accent-cyan); margin-top: 0;">PostgreSQL - Recherche vectorielle</h3>
+                    <pre style="background: var(--bg-primary); padding: 1rem;"><code class="sql">-- PostgreSQL fait le reste
+SELECT * FROM events
+WHERE embedding <-> %s < 0.8  -- Distance cosine
+ORDER BY embedding <-> %s
+LIMIT 10;
+
+-- Avec pgvector 0.8.0 : ~11ms pour 50k events</code></pre>
+                </div>
+
+                <div class="highlight-box" style="background: rgba(16, 185, 129, 0.1); border-left-color: var(--accent-green);">
+                    <p style="font-size: 2rem; text-align: center; margin: 0;">
+                        📝 "~4000 lignes de Python, le reste c'est PostgreSQL"
+                    </p>
+                </div>
+
+                <aside class="notes">
+                    Code simple : Sentence Transformers pour les embeddings, PostgreSQL avec pgvector pour la recherche.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 12: CE QUE J'AI APPRIS -->
+            <!-- ========================================== -->
+            <section>
+                <h2>📈 Ce Que J'ai Appris</h2>
+
+                <div class="card" style="border-left-color: var(--accent-gold); margin: 2rem 0;">
+                    <h3 style="color: var(--accent-gold); margin-top: 0;">💡 Leçons du projet :</h3>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+                    <div class="card">
+                        <h4 style="color: var(--accent-blue); margin-top: 0;">🚀 Techniquement</h4>
+                        <ol style="line-height: 2;">
+                            <li>Les modèles CPU sont utilisables (pour usages modestes)</li>
+                            <li>PostgreSQL + pgvector = combo solide</li>
+                            <li>Pas besoin de GPU pour explorer</li>
+                            <li>HTMX c'est vraiment simple</li>
+                            <li>Tree-sitter pour parsing = excellent</li>
+                        </ol>
+                    </div>
+
+                    <div class="card">
+                        <h4 style="color: var(--accent-cyan); margin-top: 0;">📚 Méthodologie</h4>
+                        <ol style="line-height: 2;">
+                            <li>1 semaine = POC fonctionnel</li>
+                            <li>Tests first = moins de bugs</li>
+                            <li>Documentation DSL = gain temps</li>
+                            <li>EXTEND > REBUILD principe</li>
+                            <li>Honesty-first approach</li>
+                        </ol>
+                    </div>
+                </div>
+
+                <div class="highlight-box" style="margin-top: 2rem;">
+                    <p style="font-size: 2rem; text-align: center; margin: 0;">
+                        🎯 "C'était surtout pour apprendre et partager"
+                    </p>
+                </div>
+
+                <aside class="notes">
+                    C'était surtout pour apprendre. Les modèles CPU sont utilisables, PostgreSQL est solide.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 13: COMPARAISON RÉALISTE -->
+            <!-- ========================================== -->
+            <section>
+                <h2>🤔 Comparaison Réaliste</h2>
+
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin: 2rem 0;">
+                    <div class="card" style="border-left-color: var(--accent-green);">
+                        <h3 style="color: var(--accent-green); margin-top: 0;">MnemoLite</h3>
+                        <ul>
+                            <li>✅ Gratuit (0€)</li>
+                            <li>✅ 11ms local</li>
+                            <li>✅ CPU 65W</li>
+                            <li>✅ 1 semaine dev</li>
+                            <li>✅ 100% privacy</li>
+                            <li>✅ Open source</li>
+                        </ul>
+                    </div>
+
+                    <div class="card" style="border-left-color: var(--accent-blue);">
+                        <h3 style="color: var(--accent-blue); margin-top: 0;">Solutions Pro</h3>
+                        <ul>
+                            <li>💰 300€+/mois</li>
+                            <li>🌐 100ms réseau</li>
+                            <li>⚡ GPU 450W</li>
+                            <li>👥 Équipes entières</li>
+                            <li>☁️ Cloud dépendance</li>
+                            <li>🔒 Vendor lock-in</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card" style="border-left-color: var(--danger); margin: 2rem 0;">
+                    <h3 style="color: var(--danger); margin-top: 0;">⚠️ MAIS - Soyons honnêtes :</h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; margin-top: 1rem;">
+                        <div>
+                            <strong>MnemoLite</strong>
+                            <ul>
+                                <li>Capacité limitée</li>
+                                <li>Single-user</li>
+                                <li>POC/Proto</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <strong>Solutions Pro</strong>
+                            <ul>
+                                <li>Scale infini</li>
+                                <li>Multi-tenant</li>
+                                <li>Production</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <p style="font-size: 2rem; color: var(--accent-gold); text-align: center; margin-top: 2rem;">
+                    "Comparons ce qui est comparable"
+                </p>
+
+                <aside class="notes">
+                    Comparons ce qui est comparable. MnemoLite pour projets perso, solutions pro pour production.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 14: STACK TECHNIQUE DÉTAILLÉ -->
+            <!-- ========================================== -->
+            <section>
+                <h2>🛠️ Stack Technique Détaillé</h2>
+
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 2rem 0;">
+                    <div class="card">
+                        <h3 style="color: var(--accent-blue); margin-top: 0;">Backend</h3>
+                        <ul>
+                            <li>FastAPI 0.111+</li>
+                            <li>SQLAlchemy 2.0+ async</li>
+                            <li>asyncpg</li>
+                            <li>Pydantic v2</li>
+                            <li>structlog</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <h3 style="color: var(--accent-cyan); margin-top: 0;">Database</h3>
+                        <ul>
+                            <li>PostgreSQL 18</li>
+                            <li>pgvector 0.8.0</li>
+                            <li>pg_partman</li>
+                            <li>pgmq</li>
+                            <li>pg_trgm</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <h3 style="color: var(--accent-green); margin-top: 0;">AI/Frontend</h3>
+                        <ul>
+                            <li>Sentence-Transformers</li>
+                            <li>tree-sitter (parsing)</li>
+                            <li>HTMX 2.0</li>
+                            <li>Cytoscape.js</li>
+                            <li>Chart.js</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="highlight-box">
+                    <h3 style="color: var(--accent-gold); margin-top: 0;">📦 Infrastructure</h3>
+                    <ul style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+                        <li>Docker Compose (dev/prod)</li>
+                        <li>Make commands (DX)</li>
+                        <li>pytest-asyncio (245 tests)</li>
+                        <li>GitHub Actions ready</li>
+                    </ul>
+                </div>
+
+                <p style="font-size: 1.8rem; color: var(--text-secondary); text-align: center; margin-top: 2rem;">
+                    "Rien d'exotique, que du standard"
+                </p>
+
+                <aside class="notes">
+                    Technologies mainstream, pas de rocket science. FastAPI, PostgreSQL, HTMX.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 15: PERFORMANCE & TESTS -->
+            <!-- ========================================== -->
+            <section>
+                <h2>⚡ Performance & Qualité</h2>
+
+                <div class="metric-grid" style="margin: 2rem 0;">
+                    <div class="stat-box">
+                        <div class="stat-number" style="color: var(--accent-green);">245</div>
+                        <div class="stat-label">Tests Totaux</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-number" style="color: var(--accent-green);">95.2%</div>
+                        <div class="stat-label">Pass Rate</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-number" style="color: var(--accent-green);">87%</div>
+                        <div class="stat-label">Coverage</div>
+                    </div>
+                </div>
+
+                <div class="card" style="border-left-color: var(--accent-cyan); margin: 2rem 0;">
+                    <h3 style="color: var(--accent-cyan); margin-top: 0;">📊 Métriques de Performance</h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+                        <ul>
+                            <li><strong>Recherche hybride:</strong> ~11ms (P50: 7ms)</li>
+                            <li><strong>Vector search:</strong> ~12ms (P50: 8ms)</li>
+                            <li><strong>Metadata + time:</strong> ~3ms (P50: 2ms)</li>
+                            <li><strong>Graph traversal:</strong> 0.155ms (CTE)</li>
+                        </ul>
+                        <ul>
+                            <li><strong>Indexation code:</strong> 65ms/fichier</li>
+                            <li><strong>Embeddings:</strong> 50-100/sec CPU</li>
+                            <li><strong>Throughput:</strong> 100 req/s</li>
+                            <li><strong>Cache hit rate:</strong> 80%+</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <p style="font-size: 1.8rem; color: var(--text-secondary); text-align: center; margin-top: 2rem;">
+                    "Oui il y a des tests MAIS c'est 1 semaine de dev, restons modestes"
+                </p>
+
+                <aside class="notes">
+                    245 tests, 95.2% passing. Performance correcte pour l'usage prévu.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 16: SI VOUS VOULEZ ESSAYER -->
+            <!-- ========================================== -->
+            <section>
+                <h2>🚀 Si Vous Voulez Essayer</h2>
+
+                <div class="card" style="border-left-color: var(--accent-green); margin: 2rem 0;">
+                    <h3 style="color: var(--accent-green); margin-top: 0;">📦 Installation Rapide</h3>
+                    <pre style="background: var(--bg-primary); padding: 1.5rem;"><code class="bash"># C'est open source
+git clone https://github.com/giak/MnemoLite
+cd MnemoLite
+make up
+
+# 2 minutes et ça tourne
+
+# Commandes utiles:
+make api-test          # Run tests
+make db-shell          # PostgreSQL shell
+make api-shell         # API shell
+make benchmark         # Performance tests</code></pre>
+                </div>
+
+                <div class="card" style="border-left-color: var(--accent-cyan);">
+                    <h3 style="color: var(--accent-cyan); margin-top: 0;">⚠️ Mais attention :</h3>
+                    <ul>
+                        <li>C'est un projet perso (support limité)</li>
+                        <li>Bugs probables (95.2% tests pass)</li>
+                        <li>Documentation en cours</li>
+                        <li>Testé sur Linux/Mac principalement</li>
+                    </ul>
+                </div>
+
+                <div class="highlight-box">
+                    <p style="font-size: 2rem; text-align: center; margin: 0;">
+                        🐙 "C'est dispo si ça intéresse quelqu'un"<br>
+                        <span style="font-size: 1.6rem; color: var(--text-secondary);">MIT License • PRs bienvenues</span>
+                    </p>
+                </div>
+
+                <aside class="notes">
+                    C'est dispo sur GitHub. Open source, MIT license. Installation en 2 minutes.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 17: LE VRAI MESSAGE -->
+            <!-- ========================================== -->
+            <section>
+                <h2>📝 Le Vrai Message</h2>
+
+                <div class="highlight-box" style="margin: 3rem 0;">
+                    <h3 style="color: var(--accent-gold); font-size: 3rem; text-align: center; margin: 2rem 0;">
+                        "On peut faire des trucs sympas<br>
+                        avec un CPU et PostgreSQL"
+                    </h3>
+                </div>
+
+                <div class="card" style="border-left-color: var(--accent-green); margin: 2rem 0;">
+                    <h3 style="color: var(--accent-green); margin-top: 0;">✅ Pas besoin de :</h3>
+                    <ul style="font-size: 2rem; line-height: 2;">
+                        <li>GPU à 2000€</li>
+                        <li>Cloud à 300€/mois</li>
+                        <li>Stack complexe</li>
+                        <li>Équipe de 10 personnes</li>
+                    </ul>
+                </div>
+
+                <p style="font-size: 2.5rem; color: var(--accent-cyan); text-align: center; margin-top: 3rem;">
+                    💡 "Pour un usage modeste, ça suffit"
+                </p>
+
+                <p style="font-size: 1.8rem; color: var(--text-secondary); text-align: center; margin-top: 2rem;">
+                    L'idée c'était de démystifier et de partager
+                </p>
+
+                <aside class="notes">
+                    Le vrai message : on peut faire des trucs sympas avec un CPU et PostgreSQL. Pas besoin de moyens énormes.
+                </aside>
+            </section>
+
+            <!-- ========================================== -->
+            <!-- SLIDE 18: CONCLUSION / QUESTIONS -->
+            <!-- ========================================== -->
+            <section>
+                <h2>🎉 Merci !</h2>
+
+                <div style="text-align: center; margin: 3rem 0;">
+                    <img src="assets/images/logo_mnemolite.jpg" style="width: 200px; border-radius: 50%; box-shadow: 0 0 40px rgba(251, 191, 36, 0.3);">
+                </div>
+
+                <div class="highlight-box" style="margin: 2rem 0;">
+                    <h3 style="color: var(--accent-gold); text-align: center; margin: 0;">MnemoLite v2.0.0</h3>
+                    <p style="font-size: 2rem; text-align: center; margin: 1rem 0;">
+                        Un projet personnel pour explorer<br>
+                        les embeddings CPU et pgvector
+                    </p>
+                    <p style="font-size: 1.8rem; color: var(--accent-cyan); text-align: center;">
+                        Pas révolutionnaire, mais ça marche
+                    </p>
+                </div>
+
+                <div style="text-align: center; margin: 2rem 0;">
+                    <p style="font-size: 1.8rem; color: var(--text-secondary);">
+                        🐙 github.com/giak/MnemoLite<br>
+                        📚 MIT License • Documentation incluse<br>
+                        ⭐ Si ça vous a plu, une étoile fait plaisir
+                    </p>
+                </div>
+
+                <h1 style="margin-top: 3rem; color: var(--accent-green); font-size: 5rem; text-align: center;">
+                    ❓ Questions ?
+                </h1>
+
+                <p style="font-size: 1.6rem; color: var(--text-secondary); text-align: center; margin-top: 2rem;">
+                    (Rappel : c'est un projet d'1 semaine, soyez indulgents 😅)
+                </p>
+
+                <aside class="notes">
+                    Merci de votre attention. Questions bienvenues mais gardez les expectations raisonnables.
+                </aside>
+            </section>
+
+        </div>
+    </div>
+
+    <!-- Reveal.js Core -->
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/reveal.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/notes/notes.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/highlight/highlight.js"></script>
+
+    <!-- Initialize Reveal.js -->
+    <script>
+        Reveal.initialize({
+            // Controls
+            controls: true,
+            controlsLayout: 'bottom-right',
+
+            // Progress bar
+            progress: true,
+
+            // Slide number
+            slideNumber: 'c/t',
+
+            // Show speaker notes
+            showNotes: false,
+
+            // Transition
+            transition: 'slide',
+            transitionSpeed: 'default',
+            backgroundTransition: 'fade',
+
+            // Center slides
+            center: false,
+
+            // Size
+            width: 1920,
+            height: 1080,
+            margin: 0.04,
+
+            // Plugins
+            plugins: [ RevealNotes, RevealHighlight ]
+        });
+    </script>
+</body>
+</html>
