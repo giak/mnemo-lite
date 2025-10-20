@@ -163,7 +163,7 @@ class CascadeCache:
 
         # Serialize for Redis storage
         try:
-            serialized = [c.dict() for c in chunks]
+            serialized = [c.model_dump() for c in chunks]
             await self.l2.set(cache_key, serialized, ttl_seconds=l2_ttl)
 
             logger.debug(

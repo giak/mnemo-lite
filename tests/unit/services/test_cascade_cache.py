@@ -90,7 +90,7 @@ class TestCascadeCache:
         l1_cache.get.return_value = None
 
         # Mock L2 HIT (returns serialized chunks)
-        l2_cache.get = AsyncMock(return_value=[chunk.dict() for chunk in sample_chunks])
+        l2_cache.get = AsyncMock(return_value=[chunk.model_dump() for chunk in sample_chunks])
 
         # GET from cascade
         result = await cascade_cache.get_chunks(file_path, source_code)
@@ -293,7 +293,7 @@ class TestCascadeCache:
 
         # Mock L1 MISS, L2 HIT (3 times)
         l1_cache.get.return_value = None
-        l2_cache.get = AsyncMock(return_value=[chunk.dict() for chunk in sample_chunks])
+        l2_cache.get = AsyncMock(return_value=[chunk.model_dump() for chunk in sample_chunks])
 
         # Perform 3 L2→L1 promotions
         await cascade_cache.get_chunks(file_path, source_code)

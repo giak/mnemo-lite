@@ -5,7 +5,7 @@ Respecte le principe d'inversion des dépendances (DIP).
 """
 
 import os
-import logging
+import structlog
 from typing import Dict, Any, Optional, List
 from fastapi import Request, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -30,7 +30,7 @@ from services.notification_service import NotificationService
 from services.event_service import EventService
 from services.caches import CodeChunkCache, RedisCache, CascadeCache
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 # ============================================================================

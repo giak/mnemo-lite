@@ -104,6 +104,7 @@ services:
       - ./api:/app
       - ./workers:/app/workers
       - ./scripts:/app/scripts
+      - ./db/migrations:/app/db/migrations:ro
       - ./certs:/app/certs:ro
       - ./tests:/app/tests
       - ./logs:/app/logs
