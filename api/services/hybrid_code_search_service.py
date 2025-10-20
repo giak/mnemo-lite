@@ -6,6 +6,7 @@ Orchestrates a complete hybrid search pipeline combining:
 - Vector search (HNSW semantic similarity)
 - RRF fusion (reciprocal rank fusion)
 - Optional graph expansion (dependency traversal)
+- L2 Redis caching for performance (EPIC-10 Story 10.2)
 
 Designed for <50ms P95 on 10k chunks with parallel execution.
 """
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from services.lexical_search_service import LexicalSearchService, LexicalSearchResult
 from services.vector_search_service import VectorSearchService, VectorSearchResult
 from services.rrf_fusion_service import RRFFusionService, FusedResult
+from services.caches import RedisCache, cache_keys
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +133,7 @@ class HybridCodeSearchService:
         lexical_service: Optional[LexicalSearchService] = None,
         vector_service: Optional[VectorSearchService] = None,
         fusion_service: Optional[RRFFusionService] = None,
+        redis_cache: Optional[RedisCache] = None,
     ):
         """
         Initialize hybrid search service.
@@ -140,6 +143,7 @@ class HybridCodeSearchService:
             lexical_service: Optional LexicalSearchService (created if not provided)
             vector_service: Optional VectorSearchService (created if not provided)
             fusion_service: Optional RRFFusionService (created if not provided)
+            redis_cache: Optional RedisCache for L2 caching (EPIC-10 Story 10.2)
         """
         self.engine = engine
 
@@ -158,7 +162,11 @@ class HybridCodeSearchService:
             k=60,  # Industry standard
         )
 
-        logger.info("Hybrid Code Search Service initialized")
+        # L2 Redis cache (optional - graceful degradation)
+        self.redis_cache = redis_cache
+
+        logger.info("Hybrid Code Search Service initialized",
+                    redis_cache_enabled=redis_cache is not None)
 
     async def search(
         self,
@@ -208,6 +216,31 @@ class HybridCodeSearchService:
 
         # Convert filters to dict
         filters_dict = self._filters_to_dict(filters) if filters else None
+
+        # L2 CACHE LOOKUP (EPIC-10 Story 10.2)
+        if self.redis_cache:
+            repository = filters.repository if filters else None
+            cache_key = cache_keys.search_result_key(
+                query=query,
+                repository=repository,
+                limit=top_k
+            )
+            cached_response = await self.redis_cache.get(cache_key)
+
+            if cached_response:
+                logger.info(
+                    "L2 cache HIT for search",
+                    query=query[:50],
+                    repository=repository,
+                )
+                # Deserialize HybridSearchResponse
+                return self._deserialize_search_response(cached_response)
+
+            logger.debug(
+                "L2 cache MISS for search",
+                query=query[:50],
+                repository=repository,
+            )
 
         # Execute searches in parallel
         lexical_results = None
@@ -297,10 +330,30 @@ class HybridCodeSearchService:
             f"vector={len(vector_results) if vector_results else 0}"
         )
 
-        return HybridSearchResponse(
+        response = HybridSearchResponse(
             results=hybrid_results,
             metadata=metadata,
         )
+
+        # POPULATE L2 CACHE (EPIC-10 Story 10.2)
+        if self.redis_cache:
+            repository = filters.repository if filters else None
+            cache_key = cache_keys.search_result_key(
+                query=query,
+                repository=repository,
+                limit=top_k
+            )
+            serialized = self._serialize_search_response(response)
+            # Cache for 30 seconds (search results)
+            await self.redis_cache.set(cache_key, serialized, ttl_seconds=30)
+            logger.debug(
+                "L2 cache populated for search",
+                query=query[:50],
+                repository=repository,
+                ttl_seconds=30,
+            )
+
+        return response
 
     async def _timed_lexical_search(
         self,
@@ -512,3 +565,92 @@ class HybridCodeSearchService:
             lexical_weight=lexical_weight,
             vector_weight=vector_weight,
         )
+
+    def _serialize_search_response(self, response: HybridSearchResponse) -> dict:
+        """
+        Serialize HybridSearchResponse for Redis caching.
+
+        Converts dataclass objects to dict for JSON serialization.
+        """
+        return {
+            "results": [
+                {
+                    "chunk_id": r.chunk_id,
+                    "rrf_score": r.rrf_score,
+                    "rank": r.rank,
+                    "source_code": r.source_code,
+                    "name": r.name,
+                    "language": r.language,
+                    "chunk_type": r.chunk_type,
+                    "file_path": r.file_path,
+                    "metadata": r.metadata,
+                    "lexical_score": r.lexical_score,
+                    "vector_similarity": r.vector_similarity,
+                    "vector_distance": r.vector_distance,
+                    "contribution": r.contribution,
+                    "related_nodes": r.related_nodes,
+                }
+                for r in response.results
+            ],
+            "metadata": {
+                "total_results": response.metadata.total_results,
+                "lexical_count": response.metadata.lexical_count,
+                "vector_count": response.metadata.vector_count,
+                "unique_after_fusion": response.metadata.unique_after_fusion,
+                "lexical_enabled": response.metadata.lexical_enabled,
+                "vector_enabled": response.metadata.vector_enabled,
+                "graph_expansion_enabled": response.metadata.graph_expansion_enabled,
+                "lexical_weight": response.metadata.lexical_weight,
+                "vector_weight": response.metadata.vector_weight,
+                "execution_time_ms": response.metadata.execution_time_ms,
+                "lexical_time_ms": response.metadata.lexical_time_ms,
+                "vector_time_ms": response.metadata.vector_time_ms,
+                "fusion_time_ms": response.metadata.fusion_time_ms,
+                "graph_time_ms": response.metadata.graph_time_ms,
+            },
+        }
+
+    def _deserialize_search_response(self, data: dict) -> HybridSearchResponse:
+        """
+        Deserialize cached data back to HybridSearchResponse.
+
+        Reconstructs dataclass objects from dict.
+        """
+        results = [
+            HybridSearchResult(
+                chunk_id=r["chunk_id"],
+                rrf_score=r["rrf_score"],
+                rank=r["rank"],
+                source_code=r["source_code"],
+                name=r["name"],
+                language=r["language"],
+                chunk_type=r["chunk_type"],
+                file_path=r["file_path"],
+                metadata=r["metadata"],
+                lexical_score=r.get("lexical_score"),
+                vector_similarity=r.get("vector_similarity"),
+                vector_distance=r.get("vector_distance"),
+                contribution=r.get("contribution", {}),
+                related_nodes=r.get("related_nodes", []),
+            )
+            for r in data["results"]
+        ]
+
+        metadata = SearchMetadata(
+            total_results=data["metadata"]["total_results"],
+            lexical_count=data["metadata"]["lexical_count"],
+            vector_count=data["metadata"]["vector_count"],
+            unique_after_fusion=data["metadata"]["unique_after_fusion"],
+            lexical_enabled=data["metadata"]["lexical_enabled"],
+            vector_enabled=data["metadata"]["vector_enabled"],
+            graph_expansion_enabled=data["metadata"]["graph_expansion_enabled"],
+            lexical_weight=data["metadata"]["lexical_weight"],
+            vector_weight=data["metadata"]["vector_weight"],
+            execution_time_ms=data["metadata"]["execution_time_ms"],
+            lexical_time_ms=data["metadata"].get("lexical_time_ms"),
+            vector_time_ms=data["metadata"].get("vector_time_ms"),
+            fusion_time_ms=data["metadata"].get("fusion_time_ms"),
+            graph_time_ms=data["metadata"].get("graph_time_ms"),
+        )
+
+        return HybridSearchResponse(results=results, metadata=metadata)

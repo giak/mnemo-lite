@@ -49,6 +49,35 @@ services:
           - db
     logging: *default-logging
 
+  redis:
+    image: redis:7-alpine
+    container_name: mnemo-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      backend:
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 2500M
+
   api:
     build:
       context: .
@@ -60,12 +89,16 @@ services:
     environment:
       DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
       TEST_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/mnemolite_test"
+      REDIS_URL: "redis://redis:6379/0"
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v1.5}
       CODE_EMBEDDING_MODEL: ${CODE_EMBEDDING_MODEL:-jinaai/jina-embeddings-v2-base-code}
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
+      EMBEDDING_MODE: ${EMBEDDING_MODE:-real}
       ENVIRONMENT: ${ENVIRONMENT:-development}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - ./api:/app
@@ -123,6 +156,7 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
 
 networks:
   frontend:

@@ -1,9 +1,19 @@
 """
-L1 In-Memory Cache for MnemoLite v3.0.
+Multi-Layer Cache System for MnemoLite v3.0.
 
-Provides CodeChunkCache for hash-based chunk caching with LRU eviction.
+Provides:
+- L1 In-Memory Cache (CodeChunkCache) - LRU eviction with MD5 validation
+- L2 Redis Cache (RedisCache) - Shared cache with async operations
+- Cache key management utilities
 """
 
 from .code_chunk_cache import CodeChunkCache, CachedChunkEntry
+from .redis_cache import RedisCache
+from . import cache_keys
 
-__all__ = ["CodeChunkCache", "CachedChunkEntry"]
+__all__ = [
+    "CodeChunkCache",
+    "CachedChunkEntry",
+    "RedisCache",
+    "cache_keys",
+]

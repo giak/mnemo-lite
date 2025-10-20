@@ -66,4 +66,7 @@ tree-sitter>=0.25.0  # Base library for AST parsing (updated for language-pack c
 # Replaces individual packages: tree-sitter-python, tree-sitter-javascript, tree-sitter-typescript
 tree-sitter-language-pack>=0.4.0  # Pre-compiled language pack (Python, JS, TS, PHP, Go, etc.)
 
-radon>=6.0.1  # Code complexity analysis (Story 3) 
+radon>=6.0.1  # Code complexity analysis (Story 3)
+
+# EPIC-10 Story 10.2: L2 Redis Cache
+redis[hiredis]>=5.0.0  # Async Redis client with hiredis for performance 

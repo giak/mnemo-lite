@@ -126,6 +126,27 @@ async def lifespan(app: FastAPI):
         logger.info("Using mock embeddings, no model pre-loading needed")
         app.state.embedding_service = None
 
+    # 3. Initialize Redis L2 cache (EPIC-10 Story 10.2)
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    try:
+        from services.caches import RedisCache
+
+        logger.info("⏳ Connecting to Redis L2 cache...", redis_url=redis_url)
+
+        redis_cache = RedisCache(redis_url=redis_url)
+        await redis_cache.connect()
+
+        app.state.redis_cache = redis_cache
+        logger.info("✅ Redis L2 cache connected successfully")
+    except Exception as e:
+        logger.warning(
+            "Redis L2 cache connection failed - continuing with graceful degradation",
+            error=str(e),
+            redis_url=redis_url
+        )
+        # Graceful degradation: continue without L2 cache
+        app.state.redis_cache = None
+
     yield
 
     # Nettoyage à l'arrêt: Disposer le moteur
@@ -138,6 +159,16 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, "embedding_service") and app.state.embedding_service:
         del app.state.embedding_service
         logger.info("Embedding service cleaned up.")
+
+    # Cleanup Redis L2 cache (EPIC-10 Story 10.2)
+    if hasattr(app.state, "redis_cache") and app.state.redis_cache:
+        try:
+            await app.state.redis_cache.disconnect()
+            logger.info("Redis L2 cache disconnected.")
+        except Exception as e:
+            logger.warning("Error disconnecting Redis cache", error=str(e))
+        finally:
+            del app.state.redis_cache
 
 
 # Création de l'application

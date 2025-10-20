@@ -28,7 +28,7 @@ from services.memory_search_service import MemorySearchService
 from services.event_processor import EventProcessor
 from services.notification_service import NotificationService
 from services.event_service import EventService
-from services.caches import CodeChunkCache
+from services.caches import CodeChunkCache, RedisCache
 
 logger = logging.getLogger(__name__)
 
@@ -427,3 +427,54 @@ async def get_event_service(
         embedding_service=embedding_service,
         config=config
     )
+
+
+# Fonction pour injecter le cache L2 Redis (EPIC-10 Story 10.2)
+async def get_redis_cache(request: Request) -> RedisCache:
+    """
+    Récupère l'instance singleton du cache L2 Redis.
+
+    Le cache est initialisé une seule fois au démarrage et stocké dans app.state.
+    Il permet le partage de cache entre instances API via Redis.
+
+    Args:
+        request: La requête HTTP pour accéder à app.state
+
+    Returns:
+        Instance singleton du RedisCache
+
+    Note:
+        Configuration:
+        - Redis URL: configurable via REDIS_URL (default: redis://localhost:6379/0)
+        - Connection pooling: max 20 connections
+        - Graceful degradation: continue sans cache si Redis indisponible
+        - TTL par type: search=30s, graph=120s
+
+    Raises:
+        None - graceful degradation if Redis unavailable
+    """
+    # Check if cache already exists in app.state
+    if hasattr(request.app.state, "redis_cache"):
+        return request.app.state.redis_cache
+
+    # Get Redis URL from environment
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+    # Create RedisCache singleton
+    redis_cache = RedisCache(redis_url=redis_url)
+
+    # Note: Connection is established in main.py lifespan
+    # This allows proper async initialization and cleanup
+
+    # Store in app.state for singleton pattern
+    request.app.state.redis_cache = redis_cache
+
+    logger.info(
+        "L2 Redis Cache singleton created",
+        redis_url=redis_url,
+        connection_pool_max=20,
+        graceful_degradation=True
+    )
+
+    return redis_cache
+
