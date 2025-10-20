@@ -13,7 +13,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from db.repositories.code_chunk_repository import CodeChunkRepository
-from dependencies import get_db_engine
+from dependencies import get_db_engine, get_code_chunk_cache
+from services.caches import CodeChunkCache
 from services.code_chunking_service import CodeChunkingService
 from services.code_indexing_service import (
     CodeIndexingService,
@@ -188,8 +189,9 @@ class DeleteRepositoryResponse(BaseModel):
 
 async def get_indexing_service(
     engine: AsyncEngine = Depends(get_db_engine),
+    chunk_cache: CodeChunkCache = Depends(get_code_chunk_cache),
 ) -> CodeIndexingService:
-    """Get CodeIndexingService instance with all dependencies."""
+    """Get CodeIndexingService instance with all dependencies (including L1 cache)."""
     chunking_service = CodeChunkingService()
     metadata_service = MetadataExtractorService()
     embedding_service = DualEmbeddingService()
@@ -203,6 +205,7 @@ async def get_indexing_service(
         embedding_service=embedding_service,
         graph_service=graph_service,
         chunk_repository=chunk_repository,
+        chunk_cache=chunk_cache,  # Inject L1 cache (EPIC-10 Story 10.1)
     )
 
 
@@ -493,4 +496,44 @@ async def health_check(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Indexing service unhealthy. Please check logs for details.",
+        )
+
+
+@router.get(
+    "/cache/stats",
+    summary="Get L1 cache statistics",
+    description="""
+    Get statistics about the L1 in-memory cache for code chunks.
+
+    Returns:
+    - Cache type (L1_memory)
+    - Current size (MB) and maximum size (MB)
+    - Number of cached entries
+    - Hit/miss statistics
+    - Eviction count
+    - Hit rate percentage
+    - Cache utilization percentage
+
+    **EPIC-10 Story 10.1**: L1 In-Memory Cache with LRU eviction and MD5 validation.
+    """,
+)
+async def get_cache_stats(
+    cache: CodeChunkCache = Depends(get_code_chunk_cache),
+) -> Dict[str, Any]:
+    """
+    Get L1 cache statistics.
+
+    Args:
+        cache: CodeChunkCache instance (injected)
+
+    Returns:
+        Cache statistics dictionary
+    """
+    try:
+        return cache.stats()
+    except Exception as e:
+        logger.error(f"Failed to get cache stats: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve cache statistics.",
         )

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from db.repositories.code_chunk_repository import CodeChunkRepository
 from models.code_chunk_models import ChunkType, CodeChunk, CodeChunkCreate
+from services.caches.code_chunk_cache import CodeChunkCache
 from services.code_chunking_service import CodeChunkingService
 from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomain
 from services.graph_construction_service import GraphConstructionService
@@ -100,6 +101,7 @@ class CodeIndexingService:
         embedding_service: DualEmbeddingService,
         graph_service: GraphConstructionService,
         chunk_repository: CodeChunkRepository,
+        chunk_cache: Optional[CodeChunkCache] = None,
     ):
         """
         Initialize CodeIndexingService with all required dependencies.
@@ -111,6 +113,7 @@ class CodeIndexingService:
             embedding_service: Service for generating embeddings
             graph_service: Service for constructing call graphs
             chunk_repository: Repository for storing code chunks
+            chunk_cache: Optional L1 in-memory cache for code chunks
         """
         self.engine = engine
         self.chunking_service = chunking_service
@@ -118,9 +121,14 @@ class CodeIndexingService:
         self.embedding_service = embedding_service
         self.graph_service = graph_service
         self.chunk_repository = chunk_repository
+        self.chunk_cache = chunk_cache or CodeChunkCache(max_size_mb=100)
 
         self.logger = logging.getLogger(__name__)
-        self.logger.info("CodeIndexingService initialized")
+        self.logger.info(
+            "CodeIndexingService initialized",
+            cache_enabled=self.chunk_cache is not None,
+            cache_max_mb=self.chunk_cache.max_size_bytes / (1024 * 1024) if self.chunk_cache else 0
+        )
 
     async def index_repository(
         self,
@@ -256,6 +264,28 @@ class CodeIndexingService:
                     processing_time_ms=0,
                     error="Unable to detect language",
                 )
+
+            # L1 CACHE LOOKUP (before expensive chunking/embedding pipeline)
+            if self.chunk_cache:
+                cached_chunks = self.chunk_cache.get(file_input.path, file_input.content)
+                if cached_chunks:
+                    # Cache HIT: Skip entire pipeline and return cached result
+                    end_time = datetime.now()
+                    processing_time_ms = (end_time - start_time).total_seconds() * 1000
+
+                    self.logger.info(
+                        f"L1 cache HIT for {file_input.path} → {len(cached_chunks)} chunks "
+                        f"(skipped chunking/embedding/storage pipeline) in {processing_time_ms:.1f}ms"
+                    )
+
+                    return FileIndexingResult(
+                        file_path=file_input.path,
+                        success=True,
+                        chunks_created=len(cached_chunks),
+                        nodes_created=0,
+                        edges_created=0,
+                        processing_time_ms=processing_time_ms,
+                    )
 
             # Step 2: Chunk code via Tree-sitter
             chunks = await self.chunking_service.chunk_code(
@@ -415,6 +445,31 @@ class CodeIndexingService:
                         except Exception as chunk_error:
                             self.logger.error(f"Failed to store chunk: {chunk_error}")
                             chunks_skipped += 1
+
+            # POPULATE L1 CACHE (after successful storage)
+            if self.chunk_cache and chunks_created > 0:
+                try:
+                    # Serialize chunks for caching (store as list of dicts)
+                    serialized_chunks = []
+                    for chunk in chunks[:chunks_created]:  # Only cache successfully stored chunks
+                        serialized_chunks.append({
+                            "file_path": chunk.file_path,
+                            "language": language,
+                            "chunk_type": chunk.chunk_type.value if hasattr(chunk.chunk_type, 'value') else str(chunk.chunk_type),
+                            "name": chunk.name,
+                            "source_code": chunk.source_code,
+                            "start_line": chunk.start_line,
+                            "end_line": chunk.end_line,
+                            "metadata": chunk.metadata or {},
+                        })
+
+                    self.chunk_cache.put(file_input.path, file_input.content, serialized_chunks)
+                    self.logger.debug(
+                        f"L1 cache populated for {file_input.path} → {len(serialized_chunks)} chunks cached"
+                    )
+                except Exception as e:
+                    # Cache populate failure should not break the indexing pipeline
+                    self.logger.warning(f"Failed to populate L1 cache for {file_input.path}: {e}")
 
             # Calculate processing time
             end_time = datetime.now()

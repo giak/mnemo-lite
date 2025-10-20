@@ -28,6 +28,7 @@ from services.memory_search_service import MemorySearchService
 from services.event_processor import EventProcessor
 from services.notification_service import NotificationService
 from services.event_service import EventService
+from services.caches import CodeChunkCache
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +285,47 @@ async def get_cached_embedding_service(request: Request) -> EmbeddingServiceProt
 
     logger.info("Embedding service wrapped with cache")
     return cached_service
+
+
+# Fonction pour injecter le cache L1 de code chunks (EPIC-10 Story 10.1)
+async def get_code_chunk_cache(request: Request) -> CodeChunkCache:
+    """
+    Récupère l'instance singleton du cache L1 de code chunks.
+
+    Le cache est initialisé une seule fois au démarrage et stocké dans app.state.
+    Il utilise une stratégie LRU avec validation MD5 pour garantir la cohérence.
+
+    Args:
+        request: La requête HTTP pour accéder à app.state
+
+    Returns:
+        Instance singleton du CodeChunkCache
+
+    Note:
+        Configuration:
+        - max_size_mb: 100MB (configurable via L1_CACHE_SIZE_MB)
+        - Eviction policy: LRU (Least Recently Used)
+        - Validation: MD5 content hash (zero-trust)
+    """
+    # Check if cache already exists in app.state
+    if hasattr(request.app.state, "code_chunk_cache"):
+        return request.app.state.code_chunk_cache
+
+    # Create cache singleton
+    cache_size_mb = int(os.getenv("L1_CACHE_SIZE_MB", "100"))
+    code_chunk_cache = CodeChunkCache(max_size_mb=cache_size_mb)
+
+    # Store in app.state for singleton pattern
+    request.app.state.code_chunk_cache = code_chunk_cache
+
+    logger.info(
+        "L1 Code Chunk Cache initialized",
+        max_size_mb=cache_size_mb,
+        eviction_policy="LRU",
+        validation="MD5"
+    )
+
+    return code_chunk_cache
 
 
 # Fonction pour injecter le service de recherche de mémoires
