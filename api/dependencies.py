@@ -28,7 +28,7 @@ from services.memory_search_service import MemorySearchService
 from services.event_processor import EventProcessor
 from services.notification_service import NotificationService
 from services.event_service import EventService
-from services.caches import CodeChunkCache, RedisCache
+from services.caches import CodeChunkCache, RedisCache, CascadeCache
 
 logger = logging.getLogger(__name__)
 
@@ -478,3 +478,51 @@ async def get_redis_cache(request: Request) -> RedisCache:
 
     return redis_cache
 
+
+
+# Fonction pour injecter le cascade cache L1/L2 (EPIC-10 Story 10.3)
+async def get_cascade_cache(request: Request) -> CascadeCache:
+    """
+    Récupère l'instance singleton du cascade cache L1/L2.
+    
+    Le cascade cache coordonne L1 (in-memory) et L2 (Redis) avec promotion automatique:
+    - L1 hit → retourne immédiatement (< 0.01ms)
+    - L1 miss → check L2 → promote to L1 on hit (1-5ms)
+    - L1/L2 miss → query L3 (PostgreSQL) → populate both layers (100-200ms)
+    
+    Args:
+        request: La requête HTTP pour accéder à app.state
+    
+    Returns:
+        Instance singleton du CascadeCache
+    
+    Note:
+        Configuration:
+        - L1: In-memory LRU cache (100MB, MD5 validation)
+        - L2: Redis distributed cache (2GB, shared across instances)
+        - Strategy: Write-through (populate both on miss)
+        - Promotion: L2 hit → auto-promote to L1 (warm → hot migration)
+    """
+    # Check if cascade cache already exists in app.state
+    if hasattr(request.app.state, "cascade_cache"):
+        return request.app.state.cascade_cache
+    
+    # Get L1 and L2 caches (already initialized via their own dependency functions)
+    l1_cache = await get_code_chunk_cache(request)
+    l2_cache = await get_redis_cache(request)
+    
+    # Create CascadeCache that coordinates L1 and L2
+    cascade_cache = CascadeCache(l1_cache=l1_cache, l2_cache=l2_cache)
+    
+    # Store in app.state for singleton pattern
+    request.app.state.cascade_cache = cascade_cache
+    
+    logger.info(
+        "Cascade Cache (L1/L2) initialized",
+        l1_max_mb=l1_cache.max_size_bytes / (1024 * 1024),
+        l2_connected=l2_cache.client is not None,
+        strategy="L1 → L2 → L3 (PostgreSQL)",
+        promotion="automatic"
+    )
+    
+    return cascade_cache

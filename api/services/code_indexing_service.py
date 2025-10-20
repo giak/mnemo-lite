@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from db.repositories.code_chunk_repository import CodeChunkRepository
 from models.code_chunk_models import ChunkType, CodeChunk, CodeChunkCreate
-from services.caches.code_chunk_cache import CodeChunkCache
+from services.caches.cascade_cache import CascadeCache
 from services.code_chunking_service import CodeChunkingService
 from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomain
 from services.graph_construction_service import GraphConstructionService
@@ -101,7 +101,7 @@ class CodeIndexingService:
         embedding_service: DualEmbeddingService,
         graph_service: GraphConstructionService,
         chunk_repository: CodeChunkRepository,
-        chunk_cache: Optional[CodeChunkCache] = None,
+        chunk_cache: Optional[CascadeCache] = None,
     ):
         """
         Initialize CodeIndexingService with all required dependencies.
@@ -113,7 +113,7 @@ class CodeIndexingService:
             embedding_service: Service for generating embeddings
             graph_service: Service for constructing call graphs
             chunk_repository: Repository for storing code chunks
-            chunk_cache: Optional L1 in-memory cache for code chunks
+            chunk_cache: Optional L1/L2 cascade cache for code chunks (Story 10.3)
         """
         self.engine = engine
         self.chunking_service = chunking_service
@@ -121,13 +121,12 @@ class CodeIndexingService:
         self.embedding_service = embedding_service
         self.graph_service = graph_service
         self.chunk_repository = chunk_repository
-        self.chunk_cache = chunk_cache or CodeChunkCache(max_size_mb=100)
+        self.chunk_cache = chunk_cache  # CascadeCache from dependencies.py
 
         self.logger = logging.getLogger(__name__)
         self.logger.info(
-            "CodeIndexingService initialized",
-            cache_enabled=self.chunk_cache is not None,
-            cache_max_mb=self.chunk_cache.max_size_bytes / (1024 * 1024) if self.chunk_cache else 0
+            "CodeIndexingService initialized with L1/L2 Cascade Cache",
+            cache_enabled=self.chunk_cache is not None
         )
 
     async def index_repository(
@@ -233,6 +232,7 @@ class CodeIndexingService:
         Index a single file through the pipeline.
 
         Steps:
+        0. Invalidate cache (Story 10.4 - remove stale data from previous versions)
         1. Detect language
         2. Chunk code (via Tree-sitter)
         3. Extract metadata
@@ -249,6 +249,21 @@ class CodeIndexingService:
         start_time = datetime.now()
 
         try:
+            # Step 0: INVALIDATE CACHE (Story 10.4 - automatic cache invalidation)
+            # Clear any cached chunks for this file (all versions/hashes)
+            # This ensures stale data from previous file versions is removed
+            if self.chunk_cache:
+                try:
+                    await self.chunk_cache.invalidate(file_input.path)
+                    self.logger.debug(
+                        f"Cache invalidated for {file_input.path} (preparing for re-index)"
+                    )
+                except Exception as e:
+                    # Cache invalidation failure should not break indexing
+                    self.logger.warning(
+                        f"Failed to invalidate cache for {file_input.path}: {e}"
+                    )
+
             # Step 1: Language detection
             language = file_input.language or self._detect_language(
                 file_input.path
@@ -265,16 +280,16 @@ class CodeIndexingService:
                     error="Unable to detect language",
                 )
 
-            # L1 CACHE LOOKUP (before expensive chunking/embedding pipeline)
+            # L1/L2 CASCADE CACHE LOOKUP (before expensive chunking/embedding pipeline)
             if self.chunk_cache:
-                cached_chunks = self.chunk_cache.get(file_input.path, file_input.content)
+                cached_chunks = await self.chunk_cache.get_chunks(file_input.path, file_input.content)
                 if cached_chunks:
                     # Cache HIT: Skip entire pipeline and return cached result
                     end_time = datetime.now()
                     processing_time_ms = (end_time - start_time).total_seconds() * 1000
 
                     self.logger.info(
-                        f"L1 cache HIT for {file_input.path} → {len(cached_chunks)} chunks "
+                        f"L1/L2 cascade cache HIT for {file_input.path} → {len(cached_chunks)} chunks "
                         f"(skipped chunking/embedding/storage pipeline) in {processing_time_ms:.1f}ms"
                     )
 
@@ -463,13 +478,13 @@ class CodeIndexingService:
                             "metadata": chunk.metadata or {},
                         })
 
-                    self.chunk_cache.put(file_input.path, file_input.content, serialized_chunks)
+                    await self.chunk_cache.put_chunks(file_input.path, file_input.content, serialized_chunks)
                     self.logger.debug(
-                        f"L1 cache populated for {file_input.path} → {len(serialized_chunks)} chunks cached"
+                        f"L1/L2 cascade cache populated for {file_input.path} → {len(serialized_chunks)} chunks cached"
                     )
                 except Exception as e:
                     # Cache populate failure should not break the indexing pipeline
-                    self.logger.warning(f"Failed to populate L1 cache for {file_input.path}: {e}")
+                    self.logger.warning(f"Failed to populate L1/L2 cascade cache for {file_input.path}: {e}")
 
             # Calculate processing time
             end_time = datetime.now()
