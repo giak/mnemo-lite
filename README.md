@@ -53,8 +53,16 @@ MnemoLite uses a **clean, consolidated architecture** centered around PostgreSQL
     *   Full-featured web UI (HTMX 2.0) with SCADA design
     *   Uses **Repository Pattern** (EventRepository, CodeChunkRepository, GraphRepository)
     *   Implements dependency injection with protocol-based interfaces
+    *   **Triple-Layer Cache:** L1 (in-memory, 100MB) → L2 (Redis, 2GB) → L3 (PostgreSQL)
 
-2.  **PostgreSQL 18 - Single Source of Truth:**
+2.  **Redis 7 - Distributed Cache (NEW in v3.0):**
+    *   **L2 Cache Layer:** 2GB LRU cache for search results and graph queries
+    *   **Configuration:** 2GB maxmemory, allkeys-lru eviction, no persistence
+    *   **TTL Strategy:** Search (30s), Graph (120s), Code chunks (LRU-based)
+    *   **High Availability:** Graceful degradation if unavailable
+    *   **Monitoring:** Real-time metrics via `/v1/cache/stats` and dashboard
+
+3.  **PostgreSQL 18 - Single Source of Truth:**
     *   **Agent Memory:**
       *   `events` table - unified storage for all events
       *   JSONB + GIN index (`jsonb_path_ops`) for metadata
@@ -68,16 +76,17 @@ MnemoLite uses a **clean, consolidated architecture** centered around PostgreSQL
     *   **Infrastructure:**
       *   `pgmq` - task queue (optional for async operations)
 
-3.  **Worker (Optional):**
+4.  **Worker (Optional):**
     *   Handles async tasks from `pgmq`
     *   Batch embedding generation
     *   Background maintenance
 
-**Architecture Principles (v2.0.0):**
+**Architecture Principles (v3.0.0):**
 - ✅ **Repository Pattern** - Clean data access layer (Event, CodeChunk, Graph)
 - ✅ **Protocol-based DI** - Clean interfaces with dependency inversion
 - ✅ **CQRS-inspired** - Logical separation of commands and queries
 - ✅ **100% Async** - All database operations use `asyncio`
+- ✅ **Triple-Layer Cache** - L1 (100MB in-memory) + L2 (2GB Redis) + L3 (PostgreSQL)
 - ✅ **Dual-Purpose** - Agent memory + Code intelligence with separated tables
 - ✅ **Modular UI v4.0** - SCADA design, 16 CSS modules, 6 JS modules, HTMX 2.0
 
@@ -130,6 +139,25 @@ Benchmarks (local machine, ~50k events + 14 code chunks, MnemoLite v2.0.0) show 
 *   **Cache Statistics Endpoint:** `/v1/events/cache/stats` - Real-time monitoring
 *   **Deployment Automation:** 4 modes (test/apply/benchmark/rollback) with 10-second rollback
 
+**Triple-Layer Caching (EPIC-10 - NEW in v3.0):**
+*   **L1 Cache (In-Memory):** 100MB LRU cache for code chunks with MD5 validation (zero stale data)
+*   **L2 Cache (Redis):** 2GB distributed cache for search results + graph queries (30s-120s TTL)
+*   **L3 Cache (PostgreSQL):** Database as final cache layer with HNSW indexes
+*   **Cache Cascade:** L1 → L2 → L3 with automatic promotion (L2→L1 on repeated access)
+*   **Performance Impact:**
+    *   Re-indexing: **10× faster** with 90% cache hits (unchanged files skipped)
+    *   Search queries: **1.6× faster** (scales to 10× with larger datasets)
+    *   Graph traversal: Cached queries <1ms
+    *   Zero stale data: MD5 content hashing on every cache lookup
+*   **Cache Management:**
+    *   Admin API: `POST /v1/cache/flush` (scopes: all, repository, file, l1, l2)
+    *   Statistics: `GET /v1/cache/stats` (L1/L2/cascade metrics)
+    *   Dashboard: http://localhost:8001/ui/cache (real-time monitoring with Chart.js)
+    *   Graceful degradation: System continues if Redis unavailable
+*   **Benchmark Tools:**
+    *   `scripts/benchmarks/cache_benchmark.py` - Automated performance validation
+    *   `scripts/load_test_cache.sh` - Concurrent load testing (configurable requests)
+
 ## 🚀 Quick Start
 
 Get MnemoLite running locally in minutes.
@@ -137,7 +165,7 @@ Get MnemoLite running locally in minutes.
 **Prerequisites:**
 *   Docker & Docker Compose v2+
 *   Git
-*   **Minimum 4 GB RAM** for dual embeddings (TEXT + CODE)
+*   **Minimum 6 GB RAM** for dual embeddings (TEXT + CODE) + Redis cache (2GB)
 *   **~2 GB disk space** for optimized Docker image (down from 12 GB!)
 *   **No API keys required** – 100% local deployment
 
@@ -174,11 +202,11 @@ Get MnemoLite running locally in minutes.
     ```bash
     # Check all services are running
     docker compose ps
-    # Expected: mnemo-api (healthy), mnemo-postgres (healthy)
+    # Expected: mnemo-api (healthy), mnemo-postgres (healthy), mnemo-redis (healthy)
 
     # Test API health endpoint
     curl http://localhost:8001/health
-    # Expected: {"status":"healthy","services":{"postgres":{"status":"ok"}}}
+    # Expected: {"status":"healthy","services":{"postgres":{"status":"ok"},"redis":{"status":"ok"}}}
 
     # Check readiness
     curl http://localhost:8001/readiness

@@ -1,8 +1,8 @@
 # MnemoLite – Spécification API
 
-> 📅 **Dernière mise à jour**: 2025-10-17
-> 📝 **Version**: v2.0.0
-> ✅ **Statut**: À jour avec le code (Agent Memory + Code Intelligence endpoints)
+> 📅 **Dernière mise à jour**: 2025-10-20
+> 📝 **Version**: v3.0.0
+> ✅ **Statut**: À jour avec le code (Agent Memory + Code Intelligence + Triple-Layer Cache)
 
 > **Objectif (Ω)** : Définir un contrat clair, versionné, testable et documenté pour intégrer MnemoLite à Expanse et à tout client externe, basé sur REST/JSON et OpenAPI 3.1.
 
@@ -56,6 +56,14 @@
 | GET     | `/v1/code/stats`             | Statistiques repository (files, functions)    | none       |
 | DELETE  | `/v1/code/chunks/{chunk_id}` | Supprimer un chunk de code                    | none       |
 | GET     | `/v1/code/repositories`      | Lister les repositories indexés              | none       |
+
+### Cache Administration Endpoints (NEW in v3.0.0 - EPIC-10)
+| Méthode | Route                        | Fonction                                      | Auth       |
+|---------|------------------------------|-----------------------------------------------|------------|
+| GET     | `/v1/cache/stats`            | Statistiques triple-layer cache (L1/L2/L3)    | none       |
+| POST    | `/v1/cache/flush`            | Flush cache (scopes: all, repository, file, l1, l2) | none |
+| POST    | `/v1/cache/clear-all`        | DANGER: Clear all caches (L1 + L2)            | none       |
+| GET     | `/ui/cache`                  | Cache dashboard (real-time metrics, Chart.js) | none       |
 
 ### System Endpoints
 | Méthode | Route                        | Fonction                                      | Auth       |
