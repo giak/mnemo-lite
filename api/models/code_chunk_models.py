@@ -64,6 +64,7 @@ class CodeChunk(BaseModel):
     language: str = Field(..., description="Programming language (python, javascript, etc.)")
     chunk_type: ChunkType = Field(..., description="Type of code chunk")
     name: Optional[str] = Field(None, description="Name of function/class/method")
+    name_path: Optional[str] = Field(None, description="EPIC-11: Hierarchical qualified name (e.g., 'models.user.User.validate')")
     source_code: str = Field(..., description="Source code content")
     start_line: Optional[int] = Field(None, description="Start line number in file")
     end_line: Optional[int] = Field(None, description="End line number in file")
@@ -83,6 +84,7 @@ class CodeChunkBase(CodeChunk):
                 "language": "python",
                 "chunk_type": "function",
                 "name": "calculate_total",
+                "name_path": "utils.calculator.calculate_total",
                 "source_code": "def calculate_total(items):\n    return sum(item.price for item in items)",
                 "start_line": 10,
                 "end_line": 12,
@@ -112,6 +114,7 @@ class CodeChunkUpdate(BaseModel):
     """Model for updating a code chunk (partial updates)."""
 
     source_code: Optional[str] = None
+    name_path: Optional[str] = None  # EPIC-11: Support name_path updates
     metadata: Optional[dict[str, Any]] = None
     embedding_text: Optional[list[float]] = None
     embedding_code: Optional[list[float]] = None
@@ -137,6 +140,7 @@ class CodeChunkModel(CodeChunkBase):
                 "language": "python",
                 "chunk_type": "function",
                 "name": "calculate_total",
+                "name_path": "utils.calculator.calculate_total",
                 "source_code": "def calculate_total(items):\n    return sum(item.price for item in items)",
                 "start_line": 10,
                 "end_line": 12,

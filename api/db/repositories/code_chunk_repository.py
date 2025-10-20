@@ -33,6 +33,7 @@ code_chunks_table = Table(
     Column("language", Text, nullable=False),
     Column("chunk_type", Text, nullable=False),
     Column("name", Text),
+    Column("name_path", Text),  # EPIC-11: Hierarchical qualified name
     Column("source_code", Text, nullable=False),
     Column("start_line", Integer),
     Column("end_line", Integer),
@@ -54,12 +55,12 @@ class CodeChunkQueryBuilder:
         """Build INSERT query with JSONB casting."""
         query_str = text("""
             INSERT INTO code_chunks (
-                id, file_path, language, chunk_type, name, source_code,
+                id, file_path, language, chunk_type, name, name_path, source_code,
                 start_line, end_line, embedding_text, embedding_code, metadata,
                 indexed_at, last_modified, node_id, repository, commit_hash
             )
             VALUES (
-                :id, :file_path, :language, :chunk_type, :name, :source_code,
+                :id, :file_path, :language, :chunk_type, :name, :name_path, :source_code,
                 :start_line, :end_line, :embedding_text, :embedding_code, CAST(:metadata AS JSONB),
                 :indexed_at, :last_modified, :node_id, :repository, :commit_hash
             )
@@ -77,6 +78,7 @@ class CodeChunkQueryBuilder:
             "language": chunk_data.language,
             "chunk_type": chunk_data.chunk_type.value if hasattr(chunk_data.chunk_type, 'value') else chunk_data.chunk_type,
             "name": chunk_data.name,
+            "name_path": getattr(chunk_data, 'name_path', None),  # EPIC-11: Hierarchical qualified name
             "source_code": chunk_data.source_code,
             "start_line": chunk_data.start_line,
             "end_line": chunk_data.end_line,
@@ -126,6 +128,11 @@ class CodeChunkQueryBuilder:
             updates.append("last_modified = :last_modified")
             params["last_modified"] = update_data.last_modified
 
+        # EPIC-11: Support name_path updates
+        if update_data.name_path is not None:
+            updates.append("name_path = :name_path")
+            params["name_path"] = update_data.name_path
+
         if not updates:
             raise ValueError("No fields to update")
 
@@ -170,7 +177,7 @@ class CodeChunkQueryBuilder:
 
             # Create parameter names with index suffix to avoid conflicts
             value_part = f"""(
-                :id_{i}, :file_path_{i}, :language_{i}, :chunk_type_{i}, :name_{i}, :source_code_{i},
+                :id_{i}, :file_path_{i}, :language_{i}, :chunk_type_{i}, :name_{i}, :name_path_{i}, :source_code_{i},
                 :start_line_{i}, :end_line_{i}, :embedding_text_{i}, :embedding_code_{i},
                 CAST(:metadata_{i} AS JSONB), :indexed_at_{i}, :last_modified_{i},
                 :node_id_{i}, :repository_{i}, :commit_hash_{i}
@@ -183,6 +190,7 @@ class CodeChunkQueryBuilder:
                 f"language_{i}": chunk_data.language,
                 f"chunk_type_{i}": chunk_data.chunk_type.value if hasattr(chunk_data.chunk_type, 'value') else chunk_data.chunk_type,
                 f"name_{i}": chunk_data.name,
+                f"name_path_{i}": getattr(chunk_data, 'name_path', None),  # EPIC-11
                 f"source_code_{i}": chunk_data.source_code,
                 f"start_line_{i}": chunk_data.start_line,
                 f"end_line_{i}": chunk_data.end_line,
@@ -206,7 +214,7 @@ class CodeChunkQueryBuilder:
 
         query_str = text(f"""
             INSERT INTO code_chunks (
-                id, file_path, language, chunk_type, name, source_code,
+                id, file_path, language, chunk_type, name, name_path, source_code,
                 start_line, end_line, embedding_text, embedding_code, metadata,
                 indexed_at, last_modified, node_id, repository, commit_hash
             )

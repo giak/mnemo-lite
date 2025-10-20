@@ -224,3 +224,171 @@ async def test_update_no_fields(code_chunk_repo, sample_chunk_create):
 
     with pytest.raises(ValueError, match="No fields to update"):
         await code_chunk_repo.update(created.id, update_data)
+
+
+# ============================================================================
+# EPIC-11 Story 11.1: name_path Storage Tests (Fix #2)
+# ============================================================================
+
+
+@pytest.fixture
+def sample_chunk_with_name_path():
+    """Create sample CodeChunkCreate with name_path."""
+    return CodeChunkCreate(
+        file_path="api/models/user.py",
+        language="python",
+        chunk_type=ChunkType.METHOD,
+        name="validate",
+        name_path="models.user.User.validate",  # EPIC-11: Hierarchical name
+        source_code="def validate(self):\n    return self.email is not None",
+        start_line=20,
+        end_line=22,
+        embedding_text=[0.1] * 768,
+        embedding_code=[0.2] * 768,
+        metadata={"complexity": {"cyclomatic": 1}},
+        repository="my-project",
+        commit_hash="def456"
+    )
+
+
+# Test 11: Create chunk with name_path
+
+@pytest.mark.asyncio
+async def test_add_code_chunk_with_name_path(code_chunk_repo, sample_chunk_with_name_path):
+    """
+    FIX #2: Test creating code chunk with name_path field.
+
+    Verifies:
+    - name_path is stored in database
+    - name_path is retrieved correctly
+    - All other fields remain intact
+    """
+    chunk = await code_chunk_repo.add(sample_chunk_with_name_path)
+
+    # Verify name_path is stored
+    assert chunk.id is not None
+    assert chunk.name == "validate"
+    assert chunk.name_path == "models.user.User.validate"
+    assert chunk.file_path == "api/models/user.py"
+    assert chunk.chunk_type == ChunkType.METHOD
+
+
+# Test 12: Retrieve chunk with name_path
+
+@pytest.mark.asyncio
+async def test_get_chunk_with_name_path(code_chunk_repo, sample_chunk_with_name_path):
+    """
+    FIX #2: Test retrieving chunk with name_path from database.
+
+    Verifies round-trip storage: CREATE → GET → name_path preserved.
+    """
+    # Create
+    created = await code_chunk_repo.add(sample_chunk_with_name_path)
+
+    # Retrieve
+    retrieved = await code_chunk_repo.get_by_id(created.id)
+
+    assert retrieved is not None
+    assert retrieved.name_path == "models.user.User.validate"
+    assert retrieved.name == "validate"
+
+
+# Test 13: Update name_path
+
+@pytest.mark.asyncio
+async def test_update_name_path(code_chunk_repo, sample_chunk_with_name_path):
+    """
+    FIX #2: Test updating name_path field.
+
+    Scenario: Regenerating name_path after file refactoring.
+    """
+    # Create
+    created = await code_chunk_repo.add(sample_chunk_with_name_path)
+
+    # Update name_path (e.g., after refactoring file moved to different module)
+    update_data = CodeChunkUpdate(
+        name_path="refactored.models.user.User.validate"
+    )
+    updated = await code_chunk_repo.update(created.id, update_data)
+
+    assert updated is not None
+    assert updated.name_path == "refactored.models.user.User.validate"
+    # Other fields unchanged
+    assert updated.name == created.name
+    assert updated.file_path == created.file_path
+
+
+# Test 14: Create chunk without name_path (NULL support)
+
+@pytest.mark.asyncio
+async def test_add_chunk_without_name_path(code_chunk_repo, sample_chunk_create):
+    """
+    FIX #2: Test backward compatibility - chunks without name_path.
+
+    Old chunks or chunks from older parsers may not have name_path.
+    Should store as NULL without errors.
+    """
+    chunk = await code_chunk_repo.add(sample_chunk_create)
+
+    assert chunk.id is not None
+    assert chunk.name == "calculate_total"
+    # name_path should be None (NULL in DB)
+    assert chunk.name_path is None
+
+
+# Test 15: Multiple chunks with different name_paths
+
+@pytest.mark.asyncio
+async def test_multiple_chunks_with_different_name_paths(code_chunk_repo):
+    """
+    FIX #2: Test storing multiple chunks with different name_paths.
+
+    Scenario: Verify name_path disambiguation for identically named symbols.
+    Two "validate" functions with different qualified names.
+    """
+    # Create multiple chunks with different name_paths
+    chunk1 = CodeChunkCreate(
+        file_path="api/models/user.py",
+        language="python",
+        chunk_type=ChunkType.METHOD,
+        name="validate",
+        name_path="models.user.User.validate",
+        source_code="def validate(self): pass",
+        embedding_text=[0.1] * 768,
+        embedding_code=[0.2] * 768,
+        metadata={},
+        repository="my-project",
+    )
+
+    chunk2 = CodeChunkCreate(
+        file_path="api/utils/validator.py",
+        language="python",
+        chunk_type=ChunkType.FUNCTION,
+        name="validate",
+        name_path="utils.validator.validate",  # Different name_path, same name
+        source_code="def validate(data): pass",
+        embedding_text=[0.1] * 768,
+        embedding_code=[0.2] * 768,
+        metadata={},
+        repository="my-project",
+    )
+
+    created1 = await code_chunk_repo.add(chunk1)
+    created2 = await code_chunk_repo.add(chunk2)
+
+    # Verify both stored correctly
+    assert created1.name == "validate"
+    assert created1.name_path == "models.user.User.validate"
+
+    assert created2.name == "validate"
+    assert created2.name_path == "utils.validator.validate"
+
+    # Retrieve and verify name_paths are preserved
+    retrieved1 = await code_chunk_repo.get_by_id(created1.id)
+    retrieved2 = await code_chunk_repo.get_by_id(created2.id)
+
+    assert retrieved1.name_path == "models.user.User.validate"
+    assert retrieved2.name_path == "utils.validator.validate"
+
+    # Verify we can distinguish them by name_path
+    assert retrieved1.name_path != retrieved2.name_path
