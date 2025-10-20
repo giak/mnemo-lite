@@ -1,0 +1,744 @@
+{% extends "base.html" %}
+
+{% block title %}Cache Performance - MnemoLite{% endblock %}
+
+{% block extra_head %}
+<!-- Chart.js for metrics visualization -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+/* SCADA Industrial Cache Dashboard - Zero Rounded Corners */
+
+.cache-container {
+    padding: 20px;
+    min-height: calc(100vh - 180px);
+}
+
+/* Status Banner */
+.cache-status-banner {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-left: 4px solid #3fb950;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.cache-status-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.cache-status-indicator {
+    font-size: 32px;
+    line-height: 1;
+}
+
+.cache-status-text h1 {
+    margin: 0 0 4px 0;
+    font-size: 18px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.cache-status-text p {
+    margin: 0;
+    font-size: 12px;
+    color: #8b949e;
+    font-family: 'Courier New', monospace;
+}
+
+.cache-refresh-control {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.cache-refresh-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #8b949e;
+}
+
+.cache-refresh-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+}
+
+.cache-refresh-btn {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #58a6ff;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 0.08s ease;
+}
+
+.cache-refresh-btn:hover {
+    border-color: #58a6ff;
+}
+
+.cache-flush-btn {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #f85149;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 0.08s ease;
+}
+
+.cache-flush-btn:hover {
+    border-color: #f85149;
+}
+
+/* KPI Cards Grid */
+.cache-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.cache-kpi-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-top: 2px solid #21262d;
+    padding: 16px;
+    transition: border-top-color 0.08s ease;
+}
+
+.cache-kpi-card.excellent {
+    border-top-color: #3fb950;
+}
+
+.cache-kpi-card.good {
+    border-top-color: #58a6ff;
+}
+
+.cache-kpi-card.warning {
+    border-top-color: #d29922;
+}
+
+.cache-kpi-card.critical {
+    border-top-color: #f85149;
+}
+
+.cache-kpi-label {
+    font-size: 11px;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.cache-kpi-value {
+    font-size: 36px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    line-height: 1;
+    margin-bottom: 4px;
+}
+
+.cache-kpi-card.excellent .cache-kpi-value {
+    color: #3fb950;
+}
+
+.cache-kpi-card.good .cache-kpi-value {
+    color: #58a6ff;
+}
+
+.cache-kpi-card.warning .cache-kpi-value {
+    color: #d29922;
+}
+
+.cache-kpi-card.critical .cache-kpi-value {
+    color: #f85149;
+}
+
+.cache-kpi-unit {
+    font-size: 11px;
+    color: #6e7681;
+    font-family: 'Courier New', monospace;
+}
+
+.cache-kpi-detail {
+    font-size: 11px;
+    color: #8b949e;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #21262d;
+}
+
+/* Charts Grid */
+.cache-charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.cache-chart-panel {
+    background: #0d1117;
+    border: 1px solid #21262d;
+    padding: 0;
+}
+
+.cache-panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #21262d;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #c9d1d9;
+}
+
+.cache-panel-body {
+    padding: 16px;
+}
+
+.cache-chart-container {
+    position: relative;
+    height: 250px;
+}
+
+/* Layer Details */
+.cache-layer-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.cache-layer-card {
+    background: #0d1117;
+    border: 1px solid #21262d;
+    padding: 0;
+}
+
+.cache-layer-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #21262d;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cache-layer-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #c9d1d9;
+}
+
+.cache-layer-status {
+    font-size: 10px;
+    padding: 2px 6px;
+    border: 1px solid #21262d;
+    background: #0d1117;
+    font-family: 'Courier New', monospace;
+}
+
+.cache-layer-status.online {
+    color: #3fb950;
+    border-color: #3fb950;
+}
+
+.cache-layer-status.offline {
+    color: #f85149;
+    border-color: #f85149;
+}
+
+.cache-layer-body {
+    padding: 16px;
+}
+
+.cache-metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #21262d;
+}
+
+.cache-metric-row:last-child {
+    border-bottom: none;
+}
+
+.cache-metric-label {
+    font-size: 12px;
+    color: #8b949e;
+    font-family: 'Courier New', monospace;
+}
+
+.cache-metric-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: #c9d1d9;
+    font-family: 'Courier New', monospace;
+}
+
+/* Actions Panel */
+.cache-actions-panel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    padding: 16px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.cache-actions-panel .cache-action-label {
+    font-size: 12px;
+    color: #8b949e;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .cache-charts-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .cache-layer-details {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .cache-kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Loading Animation */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.loading {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cache-container">
+    <!-- Status Banner -->
+    <div class="cache-status-banner" id="cache-status-banner">
+        <div class="cache-status-info">
+            <div class="cache-status-indicator">💾</div>
+            <div class="cache-status-text">
+                <h1>CACHE PERFORMANCE MONITOR</h1>
+                <p id="cache-status-timestamp">Chargement...</p>
+            </div>
+        </div>
+        <div class="cache-refresh-control">
+            <label class="cache-refresh-toggle">
+                <input type="checkbox" id="auto-refresh" checked>
+                AUTO-REFRESH (5s)
+            </label>
+            <button class="cache-refresh-btn" onclick="refreshCacheMetrics()">🔄 ACTUALISER</button>
+            <button class="cache-flush-btn" onclick="confirmFlushCache()">🗑️ VIDER CACHE</button>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="cache-kpi-grid">
+        <div class="cache-kpi-card excellent" id="kpi-combined">
+            <div class="cache-kpi-label">🎯 Combined Hit Rate (L1+L2)</div>
+            <div class="cache-kpi-value loading" id="combined-hit-rate">--</div>
+            <div class="cache-kpi-unit">%</div>
+            <div class="cache-kpi-detail">
+                Effective cache hit rate across all layers
+            </div>
+        </div>
+
+        <div class="cache-kpi-card good" id="kpi-l1">
+            <div class="cache-kpi-label">⚡ L1 Memory Hit Rate</div>
+            <div class="cache-kpi-value loading" id="l1-hit-rate">--</div>
+            <div class="cache-kpi-unit">%</div>
+            <div class="cache-kpi-detail">
+                <span id="l1-size-info">-- MB / -- MB</span>
+            </div>
+        </div>
+
+        <div class="cache-kpi-card good" id="kpi-l2">
+            <div class="cache-kpi-label">🔥 L2 Redis Hit Rate</div>
+            <div class="cache-kpi-value loading" id="l2-hit-rate">--</div>
+            <div class="cache-kpi-unit">%</div>
+            <div class="cache-kpi-detail">
+                <span id="l2-memory-info">-- MB used</span>
+            </div>
+        </div>
+
+        <div class="cache-kpi-card" id="kpi-promotions">
+            <div class="cache-kpi-label">↗️ L2→L1 Promotions</div>
+            <div class="cache-kpi-value loading" id="l1-promotions">--</div>
+            <div class="cache-kpi-unit">promotions</div>
+            <div class="cache-kpi-detail">
+                Hot data promoted to faster layer
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="cache-charts-grid">
+        <!-- Hit Rate Comparison -->
+        <div class="cache-chart-panel">
+            <div class="cache-panel-header">📊 Hit Rate Comparison</div>
+            <div class="cache-panel-body">
+                <div class="cache-chart-container">
+                    <canvas id="hit-rate-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory Usage -->
+        <div class="cache-chart-panel">
+            <div class="cache-panel-header">💾 Memory Usage</div>
+            <div class="cache-panel-body">
+                <div class="cache-chart-container">
+                    <canvas id="memory-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Layer Details -->
+    <div class="cache-layer-details">
+        <!-- L1 Memory Cache -->
+        <div class="cache-layer-card">
+            <div class="cache-layer-header">
+                <span class="cache-layer-title">⚡ L1 Memory Cache</span>
+                <span class="cache-layer-status online">ONLINE</span>
+            </div>
+            <div class="cache-layer-body">
+                <div class="cache-metric-row">
+                    <span class="cache-metric-label">Entries</span>
+                    <span class="cache-metric-value" id="l1-entries">--</span>
+                </div>
+                <div class="cache-metric-row">
+                    <span class="cache-metric-label">Hits</span>
+                    <span class="cache-metric-value" id="l1-hits">--</span>
+                </div>
+                <div class="cache-metric-row">
+                    <span class="cache-metric-label">Misses</span>
+                    <span class="cache-metric-value" id="l1-misses">--</span>
+                </div>
+                <div class="cache-metric-row">
+                    <span class="cache-metric-label">Evictions</span>
+                    <span class="cache-metric-value" id="l1-evictions">--</span>
+                </div>
+                <div class="cache-metric-row">
+                    <span class="cache-metric-label">Size</span>
+                    <span class="cache-metric-value" id="l1-size">-- MB</span>
+                </div>
+                <div class="cache-metric-row">
+                    <span class="cache-metric-label">Utilization</span>
+                    <span class="cache-metric-value" id="l1-utilization">--%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- L2 Redis Cache -->
+        <div class="cache-layer-card">
+            <div class="cache-layer-header">
+                <span class="cache-layer-title">🔥 L2 Redis Cache</span>
+                <span class="cache-layer-status online" id="l2-status">ONLINE</span>
+            </div>
+            <div class="cache-layer-body">
+                <div class="cache-metric-row">
+                    <span class="cache-metric-label">Connected</span>
+                    <span class="cache-metric-value" id="l2-connected">--</span>
+                </div>
+                <div class="cache-metric-row">
+                    <span class="cache-metric-label">Hits</span>
+                    <span class="cache-metric-value" id="l2-hits">--</span>
+                </div>
+                <div class="cache-metric-row">
+                    <span class="cache-metric-label">Misses</span>
+                    <span class="cache-metric-value" id="l2-misses">--</span>
+                </div>
+                <div class="cache-metric-row">
+                    <span class="cache-metric-label">Errors</span>
+                    <span class="cache-metric-value" id="l2-errors">--</span>
+                </div>
+                <div class="cache-metric-row">
+                    <span class="cache-metric-label">Memory Used</span>
+                    <span class="cache-metric-value" id="l2-memory-used">-- MB</span>
+                </div>
+                <div class="cache-metric-row">
+                    <span class="cache-metric-label">Memory Peak</span>
+                    <span class="cache-metric-value" id="l2-memory-peak">-- MB</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions Panel -->
+    <div class="cache-actions-panel">
+        <span class="cache-action-label">⚡ Quick Actions:</span>
+        <button class="cache-flush-btn" onclick="confirmFlushCache()">Clear All Caches (L1 + L2)</button>
+        <button class="cache-refresh-btn" onclick="window.location.href='/ui/cache'">Reset Dashboard</button>
+    </div>
+</div>
+
+<script>
+// Global state
+let hitRateChart = null;
+let memoryChart = null;
+let autoRefreshInterval = null;
+
+// Initialize charts
+function initCharts() {
+    const hitRateCtx = document.getElementById('hit-rate-chart').getContext('2d');
+    hitRateChart = new Chart(hitRateCtx, {
+        type: 'bar',
+        data: {
+            labels: ['L1 Memory', 'L2 Redis', 'Combined'],
+            datasets: [{
+                label: 'Hit Rate (%)',
+                data: [0, 0, 0],
+                backgroundColor: [
+                    'rgba(88, 166, 255, 0.7)',
+                    'rgba(248, 81, 73, 0.7)',
+                    'rgba(63, 185, 80, 0.7)'
+                ],
+                borderColor: [
+                    'rgb(88, 166, 255)',
+                    'rgb(248, 81, 73)',
+                    'rgb(63, 185, 80)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    grid: { color: '#21262d' },
+                    ticks: { color: '#8b949e' }
+                },
+                x: {
+                    grid: { color: '#21262d' },
+                    ticks: { color: '#8b949e' }
+                }
+            }
+        }
+    });
+
+    const memoryCtx = document.getElementById('memory-chart').getContext('2d');
+    memoryChart = new Chart(memoryCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['L1 Used', 'L1 Free', 'L2 Used'],
+            datasets: [{
+                data: [0, 100, 0],
+                backgroundColor: [
+                    'rgba(88, 166, 255, 0.7)',
+                    'rgba(33, 38, 45, 0.5)',
+                    'rgba(248, 81, 73, 0.7)'
+                ],
+                borderColor: [
+                    'rgb(88, 166, 255)',
+                    'rgb(48, 54, 61)',
+                    'rgb(248, 81, 73)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: { color: '#8b949e' }
+                }
+            }
+        }
+    });
+}
+
+// Refresh cache metrics
+async function refreshCacheMetrics() {
+    try {
+        const response = await fetch('/v1/cache/stats');
+        const data = await response.json();
+
+        // Update timestamp
+        const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        document.getElementById('cache-status-timestamp').textContent = `Dernière mise à jour: ${now}`;
+
+        // Update KPIs
+        updateKPIs(data);
+
+        // Update charts
+        updateCharts(data);
+
+        // Update layer details
+        updateLayerDetails(data);
+
+    } catch (error) {
+        console.error('Failed to fetch cache metrics:', error);
+        document.getElementById('cache-status-timestamp').textContent = 'Erreur de connexion';
+    }
+}
+
+function updateKPIs(data) {
+    const combinedHitRate = data.cascade.combined_hit_rate_percent;
+    const l1HitRate = data.l1.hit_rate_percent;
+    const l2HitRate = data.l2.hit_rate_percent;
+
+    // Combined hit rate
+    document.getElementById('combined-hit-rate').textContent = combinedHitRate.toFixed(1);
+    document.getElementById('combined-hit-rate').classList.remove('loading');
+
+    const combinedCard = document.getElementById('kpi-combined');
+    combinedCard.className = 'cache-kpi-card';
+    if (combinedHitRate >= 90) combinedCard.classList.add('excellent');
+    else if (combinedHitRate >= 70) combinedCard.classList.add('good');
+    else if (combinedHitRate >= 50) combinedCard.classList.add('warning');
+    else combinedCard.classList.add('critical');
+
+    // L1 hit rate
+    document.getElementById('l1-hit-rate').textContent = l1HitRate.toFixed(1);
+    document.getElementById('l1-hit-rate').classList.remove('loading');
+    document.getElementById('l1-size-info').textContent =
+        `${data.l1.size_mb.toFixed(1)} MB / ${data.l1.max_size_mb.toFixed(0)} MB (${data.l1.utilization_percent.toFixed(0)}%)`;
+
+    // L2 hit rate
+    document.getElementById('l2-hit-rate').textContent = l2HitRate.toFixed(1);
+    document.getElementById('l2-hit-rate').classList.remove('loading');
+    document.getElementById('l2-memory-info').textContent = `${data.l2.memory_used_mb.toFixed(1)} MB used`;
+
+    // Promotions
+    document.getElementById('l1-promotions').textContent = data.cascade.l1_to_l2_promotions || 0;
+    document.getElementById('l1-promotions').classList.remove('loading');
+}
+
+function updateCharts(data) {
+    // Hit rate chart
+    hitRateChart.data.datasets[0].data = [
+        data.l1.hit_rate_percent,
+        data.l2.hit_rate_percent,
+        data.cascade.combined_hit_rate_percent
+    ];
+    hitRateChart.update();
+
+    // Memory chart
+    const l1Used = data.l1.size_mb;
+    const l1Free = data.l1.max_size_mb - data.l1.size_mb;
+    const l2Used = data.l2.memory_used_mb;
+
+    memoryChart.data.datasets[0].data = [l1Used, l1Free, l2Used];
+    memoryChart.update();
+}
+
+function updateLayerDetails(data) {
+    // L1 details
+    document.getElementById('l1-entries').textContent = data.l1.entries;
+    document.getElementById('l1-hits').textContent = data.l1.hits;
+    document.getElementById('l1-misses').textContent = data.l1.misses;
+    document.getElementById('l1-evictions').textContent = data.l1.evictions || 0;
+    document.getElementById('l1-size').textContent = data.l1.size_mb.toFixed(2);
+    document.getElementById('l1-utilization').textContent = data.l1.utilization_percent.toFixed(1) + '%';
+
+    // L2 details
+    const l2Status = document.getElementById('l2-status');
+    if (data.l2.connected) {
+        l2Status.textContent = 'ONLINE';
+        l2Status.className = 'cache-layer-status online';
+    } else {
+        l2Status.textContent = 'OFFLINE';
+        l2Status.className = 'cache-layer-status offline';
+    }
+
+    document.getElementById('l2-connected').textContent = data.l2.connected ? 'YES' : 'NO';
+    document.getElementById('l2-hits').textContent = data.l2.hits;
+    document.getElementById('l2-misses').textContent = data.l2.misses;
+    document.getElementById('l2-errors').textContent = data.l2.errors;
+    document.getElementById('l2-memory-used').textContent = data.l2.memory_used_mb.toFixed(2);
+    document.getElementById('l2-memory-peak').textContent = data.l2.memory_peak_mb.toFixed(2);
+}
+
+async function confirmFlushCache() {
+    if (!confirm('⚠️ ATTENTION: Vider tous les caches (L1 + L2)?\n\nToutes les requêtes suivantes iront directement vers PostgreSQL jusqu\'à ce que les caches se repeuplent.\n\nContinuer?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/v1/cache/clear-all', { method: 'POST' });
+        const result = await response.json();
+
+        if (response.ok) {
+            alert('✅ Tous les caches ont été vidés avec succès!\n\n' + result.message);
+            refreshCacheMetrics();
+        } else {
+            alert('❌ Erreur lors du vidage des caches:\n\n' + (result.detail || result.error));
+        }
+    } catch (error) {
+        alert('❌ Erreur de connexion:\n\n' + error.message);
+    }
+}
+
+// Auto-refresh management
+function setupAutoRefresh() {
+    const checkbox = document.getElementById('auto-refresh');
+
+    checkbox.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            startAutoRefresh();
+        } else {
+            stopAutoRefresh();
+        }
+    });
+
+    if (checkbox.checked) {
+        startAutoRefresh();
+    }
+}
+
+function startAutoRefresh() {
+    stopAutoRefresh(); // Clear any existing interval
+    autoRefreshInterval = setInterval(refreshCacheMetrics, 5000); // 5 seconds
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    initCharts();
+    refreshCacheMetrics();
+    setupAutoRefresh();
+});
+</script>
+{% endblock %}

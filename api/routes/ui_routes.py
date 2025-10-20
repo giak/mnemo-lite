@@ -369,6 +369,27 @@ async def monitoring_page(request: Request):
     )
 
 
+@router.get("/cache", response_class=HTMLResponse)
+async def cache_dashboard_page(request: Request):
+    """
+    Cache Performance Dashboard (EPIC-10 Story 10.5).
+
+    Shows real-time cache metrics for L1/L2 cascade:
+    - Combined hit rate (L1 + L2)
+    - Individual layer hit rates
+    - Memory usage (L1 size, L2 memory)
+    - L2→L1 promotions count
+    - Detailed layer statistics
+    - Real-time charts (hit rates, memory distribution)
+    - Manual cache flush actions
+    - Auto-refresh (5s)
+    """
+    return templates.TemplateResponse(
+        "cache_dashboard.html",
+        {"request": request}
+    )
+
+
 # ============================================================================
 # Code Intelligence UI Routes (EPIC-07)
 # ============================================================================

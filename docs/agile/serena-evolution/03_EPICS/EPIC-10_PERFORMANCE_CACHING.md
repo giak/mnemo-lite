@@ -1,9 +1,9 @@
 # EPIC-10: Performance & Caching Layer
 
-**Status**: 🚧 IN PROGRESS (Stories 10.1, 10.2, 10.3 & 10.4 Complete ✅)
+**Status**: 🚧 IN PROGRESS (Stories 10.1, 10.2, 10.3, 10.4 & 10.5 Complete ✅)
 **Priority**: P0 (Critical - Foundation for v3.0)
-**Epic Points**: 36 pts (26 pts completed ✅)
-**Progress**: 26/36 pts (72.2%)
+**Epic Points**: 36 pts (29 pts completed ✅)
+**Progress**: 29/36 pts (80.6%)
 **Timeline**: Weeks 1-3 (Phase 2)
 **Depends On**: ADR-001 (Triple-Layer Cache Strategy)
 **Related**: ADR-003 (Breaking Changes - content_hash)
@@ -1109,15 +1109,17 @@ curl -X POST http://localhost:8001/v1/cache/clear-all
 
 ---
 
-### **Story 10.5: Cache Metrics & Monitoring** (3 pts)
+### **Story 10.5: Cache Metrics & Monitoring** (3 pts) ✅ **COMPLETED**
 
+**Status**: ✅ COMPLETED (2025-10-20)
 **User Story**: As a DevOps engineer, I want cache metrics exposed so that I can monitor performance and tune parameters.
 
 **Acceptance Criteria**:
-- [ ] `/v1/cache/stats` endpoint with hit rates, sizes, latencies
-- [ ] Structured logging for cache events
-- [ ] Dashboard integration (templates/cache_dashboard.html)
-- [ ] Tests: Metrics accuracy
+- [x] `/v1/cache/stats` endpoint with hit rates, sizes, latencies ✅ (via Story 10.4)
+- [x] Structured logging for cache events ✅ (structlog throughout)
+- [x] Dashboard integration (templates/cache_dashboard.html) ✅ (650+ lines)
+- [x] CacheMetricsCollector for historical tracking ✅ (optional but implemented)
+- [x] Tests: 12/12 unit tests passing (100%) ✅
 
 **Implementation Details**:
 
