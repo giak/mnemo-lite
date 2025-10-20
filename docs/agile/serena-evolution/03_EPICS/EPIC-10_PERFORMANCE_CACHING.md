@@ -404,7 +404,7 @@ services:
       - redis-data:/data
     command: >
       redis-server
-      --maxmemory 10gb
+      --maxmemory 2gb
       --maxmemory-policy allkeys-lru
       --save ""
       --appendonly no
