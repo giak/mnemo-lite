@@ -1,7 +1,7 @@
 .cursor/
 .vscode/
-CLAUDE.md
-.claude/
+
+
 .idea/
 .DS_Store
 .env
