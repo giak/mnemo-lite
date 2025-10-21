@@ -1,12 +1,12 @@
 # EPIC-11: Symbol Enhancement (name_path)
 
-**Status**: 🚀 IN PROGRESS (Story 11.1 COMPLETE ✅ - 5/13 pts)
+**Status**: 🚀 IN PROGRESS (Stories 11.1-11.2 COMPLETE ✅ - 8/13 pts)
 **Priority**: P1 (High - Improves Search & Call Resolution)
-**Epic Points**: 13 pts (5 pts completed, 8 pts remaining)
+**Epic Points**: 13 pts (8 pts completed, 5 pts remaining)
 **Timeline**: Week 3 (Phase 2)
 **Depends On**: EPIC-10 (Cache layer must be ready)
 **Related**: ADR-003 (Breaking Changes - name_path approved)
-**Last Updated**: 2025-10-21 (Story 11.1 complete with 5 passing integration tests)
+**Last Updated**: 2025-10-21 (Story 11.2 complete with 8 passing integration tests)
 
 ---
 
@@ -360,16 +360,18 @@ def test_deep_nested_file():
 
 ---
 
-### **Story 11.2: Search by Qualified Name** (3 pts)
+### **Story 11.2: Search by Qualified Name** (3 pts) ✅ COMPLETE
 
+**Status**: ✅ **COMPLETE** (2025-10-21)
+**Completion Report**: [EPIC-11_STORY_11.2_COMPLETION_REPORT.md](EPIC-11_STORY_11.2_COMPLETION_REPORT.md)
 **User Story**: As a developer, I want to search by qualified names (e.g., "models.User") so that I can find the exact symbol I need.
 
-**Acceptance Criteria**:
-- [ ] Search supports qualified patterns: "models.User", "auth.routes.*"
-- [ ] Search results display name_path prominently
-- [ ] Fuzzy matching: "models.User" matches "api.models.user.User"
-- [ ] Fallback to simple name if no name_path match
-- [ ] Tests: Qualified search correctness
+**Acceptance Criteria** (5/5 COMPLETE):
+- [x] Search supports qualified patterns: "models.User", "auth.routes.*" ✅
+- [x] Search results display name_path prominently ✅ (in LexicalSearchResult, HybridSearchResultModel)
+- [x] Fuzzy matching: "models.User" matches "api.models.user.User" ✅ (pg_trgm trigram similarity)
+- [x] Fallback to simple name if no name_path match ✅ (tested in test_fallback_simple_name_if_no_qualified_match)
+- [x] Tests: Qualified search correctness ✅ (8 integration tests, 100% passing)
 
 **Implementation Details**:
 
