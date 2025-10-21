@@ -76,6 +76,13 @@ async def clean_db(test_engine: AsyncEngine) -> AsyncEngine:
     yield test_engine
 
 
+# Alias for compatibility with different test naming conventions
+@pytest_asyncio.fixture(scope="function")
+async def async_engine(clean_db: AsyncEngine) -> AsyncEngine:
+    """Alias for clean_db fixture."""
+    return clean_db
+
+
 # ============================================================================
 # REPOSITORY FIXTURES
 # ============================================================================
@@ -134,6 +141,84 @@ async def real_embedding_service():
 
     # Return adapter for compatibility
     return DualEmbeddingServiceAdapter(dual_service)
+
+
+@pytest_asyncio.fixture
+async def mock_chunking_service():
+    """Mock chunking service for testing."""
+    from unittest.mock import AsyncMock
+    from services.code_chunking_service import CodeChunkingService
+    from models.code_chunk_models import CodeChunk, ChunkType
+
+    service = AsyncMock(spec=CodeChunkingService)
+
+    async def mock_chunk_code(source_code, language, file_path, **kwargs):
+        # Return a simple mock chunk
+        return [
+            CodeChunk(
+                file_path=file_path,
+                language=language,
+                chunk_type=ChunkType.FUNCTION,
+                name="mock_function",
+                source_code=source_code[:100],
+                start_line=1,
+                end_line=10,
+                metadata={}
+            )
+        ]
+
+    service.chunk_code = mock_chunk_code
+    return service
+
+
+@pytest_asyncio.fixture
+async def mock_metadata_service():
+    """Mock metadata extraction service."""
+    from unittest.mock import AsyncMock
+    from services.metadata_extractor_service import MetadataExtractorService
+
+    service = AsyncMock(spec=MetadataExtractorService)
+
+    async def mock_extract(chunk, **kwargs):
+        return {
+            "complexity": {"cyclomatic": 1},
+            "calls": [],
+            "imports": []
+        }
+
+    service.extract_metadata = mock_extract
+    return service
+
+
+@pytest_asyncio.fixture
+async def mock_graph_service():
+    """Mock graph construction service."""
+    from unittest.mock import AsyncMock
+    from services.graph_construction_service import GraphConstructionService
+    from models.graph_models import GraphStats
+
+    service = AsyncMock(spec=GraphConstructionService)
+
+    async def mock_build_graph(repository, language="python"):
+        return GraphStats(
+            repository=repository,
+            total_nodes=0,
+            total_edges=0,
+            nodes_by_type={},
+            edges_by_type={},
+            construction_time_seconds=0.0,
+            resolution_accuracy=100.0
+        )
+
+    service.build_graph_for_repository = mock_build_graph
+    return service
+
+
+@pytest_asyncio.fixture
+async def test_chunk_repo(clean_db):
+    """Test chunk repository with clean database."""
+    from db.repositories.code_chunk_repository import CodeChunkRepository
+    return CodeChunkRepository(clean_db)
 
 
 # ============================================================================
