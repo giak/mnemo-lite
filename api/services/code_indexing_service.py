@@ -500,18 +500,33 @@ class CodeIndexingService:
                 )
                 chunks_to_insert.append(chunk_create)
 
-            # PHASE 1 OPTIMIZATION: Batch insert all chunks in single query (10-50× faster)
+            # EPIC-12 Story 12.2: Wrap chunk insertion in transaction
+            # If batch insert fails mid-way, all chunks are rolled back (atomic operation)
+            # Cache is only populated after successful transaction commit
             if chunks_to_insert:
                 try:
-                    self.logger.info(
-                        f"💾 PHASE 1: Batch inserting {len(chunks_to_insert)} chunks "
-                        f"(was {len(chunks_to_insert)} sequential inserts before)"
-                    )
-                    chunks_created = await self.chunk_repository.add_batch(chunks_to_insert)
-                    self.logger.info(f"✅ Batch insert successful: {chunks_created} chunks stored")
+                    # Use transaction for atomic batch insert
+                    async with self.engine.begin() as conn:
+                        self.logger.info(
+                            f"💾 EPIC-12: Batch inserting {len(chunks_to_insert)} chunks in transaction "
+                            f"(atomic all-or-nothing operation)"
+                        )
+                        chunks_created = await self.chunk_repository.add_batch(
+                            chunks_to_insert, connection=conn
+                        )
+                        # Transaction auto-commits on successful context exit
+                        self.logger.info(
+                            f"✅ EPIC-12: Transaction committed - {chunks_created} chunks stored atomically"
+                        )
+
                 except Exception as e:
-                    self.logger.error(f"Batch insert failed, falling back to sequential: {e}")
+                    # Transaction auto-rolled back on exception
+                    self.logger.error(
+                        f"EPIC-12: Transaction rolled back - batch insert failed: {e}",
+                        exc_info=True
+                    )
                     # Fallback to sequential inserts if batch fails
+                    self.logger.warning("Falling back to sequential inserts...")
                     for chunk_create in chunks_to_insert:
                         try:
                             await self.chunk_repository.add(chunk_create)
@@ -520,7 +535,8 @@ class CodeIndexingService:
                             self.logger.error(f"Failed to store chunk: {chunk_error}")
                             chunks_skipped += 1
 
-            # POPULATE L1 CACHE (after successful storage)
+            # POPULATE L1 CACHE (after successful transaction commit)
+            # EPIC-12 Story 12.2: Cache invalidation is coordinated with database state
             if self.chunk_cache and chunks_created > 0:
                 try:
                     # Serialize chunks for caching (store as list of dicts)

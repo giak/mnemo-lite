@@ -167,6 +167,55 @@ async def get_event_repository(
     return EventRepository(engine)
 
 
+# EPIC-12 Story 12.2: Dependency functions for graph repositories
+async def get_chunk_repository(
+    engine: AsyncEngine = Depends(get_db_engine),
+):
+    """
+    Récupère une instance du repository de code chunks.
+
+    Args:
+        engine: Le moteur de base de données
+
+    Returns:
+        Une instance du repository de code chunks
+    """
+    from db.repositories.code_chunk_repository import CodeChunkRepository
+    return CodeChunkRepository(engine)
+
+
+async def get_node_repository(
+    engine: AsyncEngine = Depends(get_db_engine),
+):
+    """
+    Récupère une instance du repository de graph nodes.
+
+    Args:
+        engine: Le moteur de base de données
+
+    Returns:
+        Une instance du repository de graph nodes
+    """
+    from db.repositories.node_repository import NodeRepository
+    return NodeRepository(engine)
+
+
+async def get_edge_repository(
+    engine: AsyncEngine = Depends(get_db_engine),
+):
+    """
+    Récupère une instance du repository de graph edges.
+
+    Args:
+        engine: Le moteur de base de données
+
+    Returns:
+        Une instance du repository de graph edges
+    """
+    from db.repositories.edge_repository import EdgeRepository
+    return EdgeRepository(engine)
+
+
 # Fonction pour injecter le service d'embedding
 async def get_embedding_service(request: Request) -> EmbeddingServiceProtocol:
     """

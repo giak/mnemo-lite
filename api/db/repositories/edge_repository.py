@@ -10,7 +10,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.engine import Result
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 from sqlalchemy.sql.elements import TextClause
 from sqlalchemy.sql import text
 
@@ -115,30 +115,56 @@ class EdgeRepository:
         self,
         query: TextClause,
         params: Dict[str, Any],
-        is_mutation: bool = False
+        is_mutation: bool = False,
+        connection: Optional[AsyncConnection] = None,
     ) -> Result:
-        """Execute query with connection and transaction management."""
-        async with self.engine.connect() as connection:
-            transaction = await connection.begin() if is_mutation else None
+        """
+        Execute query with connection and transaction management.
+
+        EPIC-12 Story 12.2: Added connection parameter for external transaction support.
+        """
+        if connection:
+            # Use provided connection (caller manages transaction)
             try:
-                self.logger.debug(f"Executing query: {str(query)}")
+                self.logger.debug(f"Executing query with external connection: {str(query)}")
                 self.logger.debug(f"With params: {params}")
                 result = await connection.execute(query, params)
-
-                if transaction:
-                    await transaction.commit()
                 return result
             except Exception as e:
-                if transaction:
-                    await transaction.rollback()
+                # Don't rollback - caller manages transaction
                 self.logger.error(f"Query execution failed: {e}", exc_info=True)
                 raise RepositoryError(f"Query execution failed: {e}") from e
+        else:
+            # Create own connection and transaction (backward compatible)
+            async with self.engine.connect() as conn:
+                transaction = await conn.begin() if is_mutation else None
+                try:
+                    self.logger.debug(f"Executing query: {str(query)}")
+                    self.logger.debug(f"With params: {params}")
+                    result = await conn.execute(query, params)
 
-    async def create(self, edge_data: EdgeCreate) -> EdgeModel:
-        """Create a new edge."""
+                    if transaction:
+                        await transaction.commit()
+                    return result
+                except Exception as e:
+                    if transaction:
+                        await transaction.rollback()
+                    self.logger.error(f"Query execution failed: {e}", exc_info=True)
+                    raise RepositoryError(f"Query execution failed: {e}") from e
+
+    async def create(
+        self,
+        edge_data: EdgeCreate,
+        connection: Optional[AsyncConnection] = None,
+    ) -> EdgeModel:
+        """
+        Create a new edge.
+
+        EPIC-12 Story 12.2: Added connection parameter for transaction support.
+        """
         query, params = self.query_builder.build_create_query(edge_data)
         try:
-            db_result = await self._execute_query(query, params, is_mutation=True)
+            db_result = await self._execute_query(query, params, is_mutation=True, connection=connection)
             row = db_result.mappings().first()
             if not row:
                 raise RepositoryError("Failed to create edge: No data returned.")
@@ -152,12 +178,15 @@ class EdgeRepository:
         source_node: uuid.UUID,
         target_node: uuid.UUID,
         relationship: str,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        connection: Optional[AsyncConnection] = None,
     ) -> EdgeModel:
         """
         Create edge representing code dependency.
 
         Convenience method for code graphs.
+
+        EPIC-12 Story 12.2: Added connection parameter for transaction support.
         """
         edge_data = EdgeCreate(
             source_node_id=source_node,
@@ -166,7 +195,7 @@ class EdgeRepository:
             properties=metadata if metadata else {}
         )
 
-        return await self.create(edge_data)
+        return await self.create(edge_data, connection=connection)
 
     async def get_by_id(self, edge_id: uuid.UUID) -> Optional[EdgeModel]:
         """Get edge by ID."""
@@ -209,12 +238,53 @@ class EdgeRepository:
             self.logger.error(f"Failed to get inbound edges for node {node_id}: {e}", exc_info=True)
             raise RepositoryError(f"Failed to get inbound edges for node {node_id}: {e}") from e
 
-    async def delete(self, edge_id: uuid.UUID) -> bool:
-        """Delete edge by ID."""
+    async def delete(
+        self,
+        edge_id: uuid.UUID,
+        connection: Optional[AsyncConnection] = None,
+    ) -> bool:
+        """
+        Delete edge by ID.
+
+        EPIC-12 Story 12.2: Added connection parameter for transaction support.
+        """
         query, params = self.query_builder.build_delete_query(edge_id)
         try:
-            db_result = await self._execute_query(query, params, is_mutation=True)
+            db_result = await self._execute_query(query, params, is_mutation=True, connection=connection)
             return db_result.rowcount > 0
         except Exception as e:
             self.logger.error(f"Failed to delete edge {edge_id}: {e}", exc_info=True)
             raise RepositoryError(f"Failed to delete edge {edge_id}: {e}") from e
+
+    async def delete_by_source_node(
+        self,
+        source_node_id: uuid.UUID,
+        connection: Optional[AsyncConnection] = None,
+    ) -> int:
+        """
+        Delete all edges originating from a node.
+
+        EPIC-12 Story 12.2: New bulk delete method for atomic multi-step operations.
+
+        Args:
+            source_node_id: Node ID to delete edges from
+            connection: Optional external connection for transaction support
+
+        Returns:
+            Number of deleted edges
+        """
+        query = text("""
+            DELETE FROM edges
+            WHERE source_node_id = :source_node_id
+        """)
+        params = {"source_node_id": str(source_node_id)}
+
+        try:
+            self.logger.info(f"Deleting all edges from node: {source_node_id}")
+            db_result = await self._execute_query(query, params, is_mutation=True, connection=connection)
+            rows_affected = db_result.rowcount
+            self.logger.info(f"Deleted {rows_affected} edges from node {source_node_id}")
+            return rows_affected
+        except Exception as e:
+            self.logger.error(f"Failed to delete edges from node {source_node_id}: {e}", exc_info=True)
+            raise RepositoryError(f"Failed to delete edges from node {source_node_id}: {e}") from e

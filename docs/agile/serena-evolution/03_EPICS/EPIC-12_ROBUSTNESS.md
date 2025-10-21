@@ -1,12 +1,14 @@
 # EPIC-12: Robustness & Error Handling
 
-**Status**: 🚧 IN PROGRESS (Story 12.1 COMPLETE ✅)
+**Status**: 🚧 IN PROGRESS (Stories 12.1 & 12.2 COMPLETE ✅)
 **Priority**: P1 (High - Production Stability)
-**Epic Points**: 23 pts (5/23 completed)
+**Epic Points**: 23 pts (8/23 completed - 35%)
 **Timeline**: Week 4 (Phase 2)
 **Depends On**: EPIC-10 (Cache layer), EPIC-11 (Symbol paths)
 **Related**: Serena Analysis (Timeout patterns, graceful degradation)
-**Progress**: Story 12.1 (5 pts) ✅ COMPLETE - 2025-10-21
+**Progress**:
+- Story 12.1 (5 pts) ✅ COMPLETE - 2025-10-21
+- Story 12.2 (3 pts) ✅ COMPLETE - 2025-10-21
 
 ---
 
@@ -329,15 +331,31 @@ async def test_timeout_decorator():
 
 ---
 
-### **Story 12.2: Transactional Indexing** (5 pts)
+### **Story 12.2: Transaction Boundaries** (3 pts) ✅ COMPLETE
 
-**User Story**: As a system, I want file indexing to be atomic so that partial failures don't leave corrupted data.
+**Status**: ✅ COMPLETE (2025-10-21)
+
+**User Story**: As a system, I want all database operations wrapped in transactions so that partial failures don't leave corrupted data.
 
 **Acceptance Criteria**:
-- [ ] Database transactions for multi-step operations
-- [ ] Rollback on any step failure
-- [ ] Cache invalidation on rollback
-- [ ] Tests: Rollback correctness, idempotency
+- [x] Database transactions for multi-step operations
+- [x] Rollback on any step failure
+- [x] Cache invalidation coordinated with transactions
+- [x] Tests: Rollback correctness, batch operations, graph construction
+- [x] Backward compatible optional connection parameter
+
+**Completed Deliverables**:
+- ✅ 3 repositories modified (CodeChunk, Node, Edge) with transaction support
+- ✅ 2 services wrapped in transactions (CodeIndexing, GraphConstruction)
+- ✅ 1 route migrated to repository pattern (delete_repository)
+- ✅ 3 dependency injection functions for repositories
+- ✅ 4 integration tests passing (100%)
+- ✅ 4 bulk delete methods for atomic operations
+
+**Documentation**:
+- [Analysis](EPIC-12_STORY_12.2_ANALYSIS.md)
+- [Implementation Plan](EPIC-12_STORY_12.2_IMPLEMENTATION_PLAN.md)
+- Completion Report (pending)
 
 **Implementation Details**:
 

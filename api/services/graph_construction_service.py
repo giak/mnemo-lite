@@ -114,47 +114,69 @@ class GraphConstructionService:
                 resolution_accuracy=None
             )
 
-        # Step 2: Create nodes for all functions/classes with timeout protection
-        # EPIC-12 Story 12.1: Prevent infinite hangs on large repositories
+        # EPIC-12 Story 12.2: Wrap graph construction in transaction
+        # If node creation or edge creation fails, entire graph is rolled back (atomic operation)
         try:
-            chunk_to_node = await with_timeout(
-                self._create_nodes_from_chunks(chunks),
-                timeout=get_timeout("graph_construction"),
-                operation_name="graph_node_creation",
-                context={"repository": repository, "chunk_count": len(chunks)},
-                raise_on_timeout=True
-            )
-            self.logger.info(f"Created {len(chunk_to_node)} nodes")
+            async with self.engine.begin() as conn:
+                self.logger.info(
+                    f"EPIC-12: Starting graph construction transaction for repository '{repository}'"
+                )
 
-        except TimeoutError as e:
+                # Step 2: Create nodes for all functions/classes with timeout protection
+                # EPIC-12 Story 12.1: Prevent infinite hangs on large repositories
+                try:
+                    chunk_to_node = await with_timeout(
+                        self._create_nodes_from_chunks(chunks, connection=conn),
+                        timeout=get_timeout("graph_construction"),
+                        operation_name="graph_node_creation",
+                        context={"repository": repository, "chunk_count": len(chunks)},
+                        raise_on_timeout=True
+                    )
+                    self.logger.info(f"Created {len(chunk_to_node)} nodes")
+
+                except TimeoutError as e:
+                    self.logger.error(
+                        f"Node creation timed out for repository '{repository}' after {get_timeout('graph_construction')}s",
+                        extra={"repository": repository, "chunk_count": len(chunks), "error": str(e)}
+                    )
+                    raise
+
+                # Step 3 & 4: Create call and import edges with timeout protection
+                # EPIC-12 Story 12.1: Prevent infinite hangs on complex graphs
+                try:
+                    call_edges = await with_timeout(
+                        self._create_all_call_edges(chunks, chunk_to_node, connection=conn),
+                        timeout=get_timeout("graph_construction"),
+                        operation_name="graph_call_edge_creation",
+                        context={"repository": repository, "node_count": len(chunk_to_node)},
+                        raise_on_timeout=True
+                    )
+                    import_edges = await with_timeout(
+                        self._create_all_import_edges(chunks, chunk_to_node, connection=conn),
+                        timeout=get_timeout("graph_construction"),
+                        operation_name="graph_import_edge_creation",
+                        context={"repository": repository, "node_count": len(chunk_to_node)},
+                        raise_on_timeout=True
+                    )
+
+                except TimeoutError as e:
+                    self.logger.error(
+                        f"Edge creation timed out for repository '{repository}' after {get_timeout('graph_construction')}s",
+                        extra={"repository": repository, "node_count": len(chunk_to_node), "error": str(e)}
+                    )
+                    raise
+
+                # Transaction auto-commits on successful context exit
+                self.logger.info(
+                    f"✅ EPIC-12: Graph construction transaction committed - "
+                    f"{len(chunk_to_node)} nodes and {len(call_edges) + len(import_edges)} edges stored atomically"
+                )
+
+        except Exception as e:
+            # Transaction auto-rolled back on exception
             self.logger.error(
-                f"Node creation timed out for repository '{repository}' after {get_timeout('graph_construction')}s",
-                extra={"repository": repository, "chunk_count": len(chunks), "error": str(e)}
-            )
-            raise
-
-        # Step 3 & 4: Create call and import edges with timeout protection
-        # EPIC-12 Story 12.1: Prevent infinite hangs on complex graphs
-        try:
-            call_edges = await with_timeout(
-                self._create_all_call_edges(chunks, chunk_to_node),
-                timeout=get_timeout("graph_construction"),
-                operation_name="graph_call_edge_creation",
-                context={"repository": repository, "node_count": len(chunk_to_node)},
-                raise_on_timeout=True
-            )
-            import_edges = await with_timeout(
-                self._create_all_import_edges(chunks, chunk_to_node),
-                timeout=get_timeout("graph_construction"),
-                operation_name="graph_import_edge_creation",
-                context={"repository": repository, "node_count": len(chunk_to_node)},
-                raise_on_timeout=True
-            )
-
-        except TimeoutError as e:
-            self.logger.error(
-                f"Edge creation timed out for repository '{repository}' after {get_timeout('graph_construction')}s",
-                extra={"repository": repository, "node_count": len(chunk_to_node), "error": str(e)}
+                f"EPIC-12: Graph construction transaction rolled back: {e}",
+                exc_info=True
             )
             raise
 
@@ -226,13 +248,15 @@ class GraphConstructionService:
 
     async def _create_nodes_from_chunks(
         self,
-        chunks: List[CodeChunkModel]
+        chunks: List[CodeChunkModel],
+        connection=None,
     ) -> Dict[uuid.UUID, NodeModel]:
         """
         Create node for each function/class chunk.
 
         Args:
             chunks: List of code chunks
+            connection: Optional external connection for transaction support (EPIC-12 Story 12.2)
 
         Returns:
             Mapping {chunk_id: node}
@@ -265,14 +289,15 @@ class GraphConstructionService:
                 "end_line": chunk.end_line,
             }
 
-            # Create node
+            # Create node (EPIC-12 Story 12.2: Pass connection for transaction support)
             try:
                 node = await self.node_repo.create_code_node(
                     node_type=node_type,
                     label=label,
                     chunk_id=chunk.id,
                     file_path=chunk.file_path,
-                    metadata=properties
+                    metadata=properties,
+                    connection=connection,
                 )
                 chunk_to_node[chunk.id] = node
                 self.logger.debug(f"Created node {node.node_id} for chunk {chunk.id} ({label})")
@@ -285,12 +310,18 @@ class GraphConstructionService:
     async def _create_all_call_edges(
         self,
         chunks: List[CodeChunkModel],
-        chunk_to_node: Dict[uuid.UUID, NodeModel]
+        chunk_to_node: Dict[uuid.UUID, NodeModel],
+        connection=None,
     ) -> List[EdgeModel]:
         """
         Create call edges for all chunks.
 
         For each chunk with metadata['calls'], resolve target and create edge.
+
+        Args:
+            chunks: List of code chunks
+            chunk_to_node: Mapping of chunk IDs to nodes
+            connection: Optional external connection for transaction support (EPIC-12 Story 12.2)
         """
         all_edges: List[EdgeModel] = []
 
@@ -307,8 +338,8 @@ class GraphConstructionService:
             if not calls:
                 continue
 
-            # Create edges for each call
-            edges = await self._create_call_edges(chunk, node, chunk_to_node, chunks)
+            # Create edges for each call (EPIC-12 Story 12.2: Pass connection)
+            edges = await self._create_call_edges(chunk, node, chunk_to_node, chunks, connection=connection)
             all_edges.extend(edges)
 
         return all_edges
@@ -318,7 +349,8 @@ class GraphConstructionService:
         chunk: CodeChunkModel,
         node: NodeModel,
         chunk_to_node: Dict[uuid.UUID, NodeModel],
-        all_chunks: List[CodeChunkModel]
+        all_chunks: List[CodeChunkModel],
+        connection=None,
     ) -> List[EdgeModel]:
         """
         Create call edges for a chunk.
@@ -327,6 +359,13 @@ class GraphConstructionService:
         1. Resolve target chunk
         2. Get target node_id
         3. Create edge (source_node=node, target_node=target, relationship='calls')
+
+        Args:
+            chunk: Source chunk
+            node: Source node
+            chunk_to_node: Mapping of chunk IDs to nodes
+            all_chunks: All chunks for resolution
+            connection: Optional external connection for transaction support (EPIC-12 Story 12.2)
         """
         edges: List[EdgeModel] = []
         calls = chunk.metadata.get("calls", []) if chunk.metadata else []
@@ -350,7 +389,7 @@ class GraphConstructionService:
                 self.logger.debug(f"No node found for target chunk {target_chunk_id}")
                 continue
 
-            # Create edge
+            # Create edge (EPIC-12 Story 12.2: Pass connection for transaction support)
             try:
                 edge = await self.edge_repo.create_dependency_edge(
                     source_node=node.node_id,
@@ -360,7 +399,8 @@ class GraphConstructionService:
                         "call_name": call_name,
                         "source_file": chunk.file_path,
                         "target_file": target_node.properties.get("file_path", ""),
-                    }
+                    },
+                    connection=connection,
                 )
                 edges.append(edge)
                 self.logger.debug(f"Created call edge: {node.label} -> {target_node.label}")
@@ -372,12 +412,18 @@ class GraphConstructionService:
     async def _create_all_import_edges(
         self,
         chunks: List[CodeChunkModel],
-        chunk_to_node: Dict[uuid.UUID, NodeModel]
+        chunk_to_node: Dict[uuid.UUID, NodeModel],
+        connection=None,
     ) -> List[EdgeModel]:
         """
         Create import edges for all chunks.
 
         For each chunk with metadata['imports'], create edge to imported module.
+
+        Args:
+            chunks: List of code chunks
+            chunk_to_node: Mapping of chunk IDs to nodes
+            connection: Optional external connection for transaction support (EPIC-12 Story 12.2)
         """
         all_edges: List[EdgeModel] = []
 
@@ -393,8 +439,8 @@ class GraphConstructionService:
             if not imports:
                 continue
 
-            # Create edges for each import
-            edges = await self._create_import_edges(chunk, node, chunk_to_node, chunks)
+            # Create edges for each import (EPIC-12 Story 12.2: Pass connection)
+            edges = await self._create_import_edges(chunk, node, chunk_to_node, chunks, connection=connection)
             all_edges.extend(edges)
 
         return all_edges
@@ -404,13 +450,21 @@ class GraphConstructionService:
         chunk: CodeChunkModel,
         node: NodeModel,
         chunk_to_node: Dict[uuid.UUID, NodeModel],
-        all_chunks: List[CodeChunkModel]
+        all_chunks: List[CodeChunkModel],
+        connection=None,
     ) -> List[EdgeModel]:
         """
         Create import edges for a chunk.
 
         Note: For MVP, we create "imports" edges between functions in the same repository.
         External imports (stdlib, packages) are skipped for Phase 1.
+
+        Args:
+            chunk: Source chunk
+            node: Source node
+            chunk_to_node: Mapping of chunk IDs to nodes
+            all_chunks: All chunks for resolution
+            connection: Optional external connection for transaction support (EPIC-12 Story 12.2)
         """
         edges: List[EdgeModel] = []
         imports = chunk.metadata.get("imports", []) if chunk.metadata else []

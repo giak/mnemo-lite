@@ -10,7 +10,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.engine import Result
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 from sqlalchemy.sql.elements import TextClause
 from sqlalchemy.sql import text
 
@@ -102,30 +102,56 @@ class NodeRepository:
         self,
         query: TextClause,
         params: Dict[str, Any],
-        is_mutation: bool = False
+        is_mutation: bool = False,
+        connection: Optional[AsyncConnection] = None,
     ) -> Result:
-        """Execute query with connection and transaction management."""
-        async with self.engine.connect() as connection:
-            transaction = await connection.begin() if is_mutation else None
+        """
+        Execute query with connection and transaction management.
+
+        EPIC-12 Story 12.2: Added connection parameter for external transaction support.
+        """
+        if connection:
+            # Use provided connection (caller manages transaction)
             try:
-                self.logger.debug(f"Executing query: {str(query)}")
+                self.logger.debug(f"Executing query with external connection: {str(query)}")
                 self.logger.debug(f"With params: {params}")
                 result = await connection.execute(query, params)
-
-                if transaction:
-                    await transaction.commit()
                 return result
             except Exception as e:
-                if transaction:
-                    await transaction.rollback()
+                # Don't rollback - caller manages transaction
                 self.logger.error(f"Query execution failed: {e}", exc_info=True)
                 raise RepositoryError(f"Query execution failed: {e}") from e
+        else:
+            # Create own connection and transaction (backward compatible)
+            async with self.engine.connect() as conn:
+                transaction = await conn.begin() if is_mutation else None
+                try:
+                    self.logger.debug(f"Executing query: {str(query)}")
+                    self.logger.debug(f"With params: {params}")
+                    result = await conn.execute(query, params)
 
-    async def create(self, node_data: NodeCreate) -> NodeModel:
-        """Create a new node."""
+                    if transaction:
+                        await transaction.commit()
+                    return result
+                except Exception as e:
+                    if transaction:
+                        await transaction.rollback()
+                    self.logger.error(f"Query execution failed: {e}", exc_info=True)
+                    raise RepositoryError(f"Query execution failed: {e}") from e
+
+    async def create(
+        self,
+        node_data: NodeCreate,
+        connection: Optional[AsyncConnection] = None,
+    ) -> NodeModel:
+        """
+        Create a new node.
+
+        EPIC-12 Story 12.2: Added connection parameter for transaction support.
+        """
         query, params = self.query_builder.build_create_query(node_data)
         try:
-            db_result = await self._execute_query(query, params, is_mutation=True)
+            db_result = await self._execute_query(query, params, is_mutation=True, connection=connection)
             row = db_result.mappings().first()
             if not row:
                 raise RepositoryError("Failed to create node: No data returned.")
@@ -140,12 +166,15 @@ class NodeRepository:
         label: str,
         chunk_id: uuid.UUID,
         file_path: str,
-        metadata: Dict[str, Any]
+        metadata: Dict[str, Any],
+        connection: Optional[AsyncConnection] = None,
     ) -> NodeModel:
         """
         Create node for code chunk.
 
         Convenience method that includes code-specific properties.
+
+        EPIC-12 Story 12.2: Added connection parameter for transaction support.
         """
         properties = {
             "chunk_id": str(chunk_id),
@@ -159,7 +188,7 @@ class NodeRepository:
             properties=properties
         )
 
-        return await self.create(node_data)
+        return await self.create(node_data, connection=connection)
 
     async def get_by_id(self, node_id: uuid.UUID) -> Optional[NodeModel]:
         """Get node by ID."""
@@ -198,12 +227,53 @@ class NodeRepository:
             self.logger.error(f"Failed to search nodes by label '{label}': {e}", exc_info=True)
             raise RepositoryError(f"Failed to search nodes by label '{label}': {e}") from e
 
-    async def delete(self, node_id: uuid.UUID) -> bool:
-        """Delete node by ID."""
+    async def delete(
+        self,
+        node_id: uuid.UUID,
+        connection: Optional[AsyncConnection] = None,
+    ) -> bool:
+        """
+        Delete node by ID.
+
+        EPIC-12 Story 12.2: Added connection parameter for transaction support.
+        """
         query, params = self.query_builder.build_delete_query(node_id)
         try:
-            db_result = await self._execute_query(query, params, is_mutation=True)
+            db_result = await self._execute_query(query, params, is_mutation=True, connection=connection)
             return db_result.rowcount > 0
         except Exception as e:
             self.logger.error(f"Failed to delete node {node_id}: {e}", exc_info=True)
             raise RepositoryError(f"Failed to delete node {node_id}: {e}") from e
+
+    async def delete_by_repository(
+        self,
+        repository: str,
+        connection: Optional[AsyncConnection] = None,
+    ) -> int:
+        """
+        Delete all nodes for a repository.
+
+        EPIC-12 Story 12.2: New bulk delete method for atomic multi-step operations.
+
+        Args:
+            repository: Repository name to delete nodes for
+            connection: Optional external connection for transaction support
+
+        Returns:
+            Number of deleted nodes
+        """
+        query = text("""
+            DELETE FROM nodes
+            WHERE properties->>'file_path' LIKE :repository_pattern
+        """)
+        params = {"repository_pattern": f"{repository}/%"}
+
+        try:
+            self.logger.info(f"Deleting all nodes for repository: {repository}")
+            db_result = await self._execute_query(query, params, is_mutation=True, connection=connection)
+            rows_affected = db_result.rowcount
+            self.logger.info(f"Deleted {rows_affected} nodes for repository {repository}")
+            return rows_affected
+        except Exception as e:
+            self.logger.error(f"Failed to delete nodes for repository {repository}: {e}", exc_info=True)
+            raise RepositoryError(f"Failed to delete nodes for repository {repository}: {e}") from e

@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from sqlalchemy import Column, Integer, MetaData, String, Table, TIMESTAMP, Text, UUID
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Result
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 from sqlalchemy.sql import delete, insert, select, text, update
 from sqlalchemy.sql.elements import TextClause
 from pgvector.sqlalchemy import Vector
@@ -340,29 +340,84 @@ class CodeChunkRepository:
         self.logger = logging.getLogger(__name__)
         self.logger.info("CodeChunkRepository initialized.")
 
-    async def _execute_query(self, query: TextClause, params: Dict[str, Any], is_mutation: bool = False) -> Result:
-        """Execute query with connection and transaction management."""
-        async with self.engine.connect() as connection:
-            transaction = await connection.begin() if is_mutation else None
+    async def _execute_query(
+        self,
+        query: TextClause,
+        params: Dict[str, Any],
+        is_mutation: bool = False,
+        connection: Optional[AsyncConnection] = None
+    ) -> Result:
+        """
+        Execute query with connection and transaction management.
+
+        EPIC-12 Story 12.2: Added connection parameter for external transaction support.
+
+        Args:
+            query: SQL query to execute
+            params: Query parameters
+            is_mutation: If True, wrap in transaction (when no external connection)
+            connection: Optional external connection (caller manages transaction)
+
+        Returns:
+            Query result
+
+        Raises:
+            RepositoryError: If query execution fails
+        """
+        if connection:
+            # Use provided connection (caller manages transaction)
             try:
-                self.logger.debug(f"Executing query: {str(query)}")
+                self.logger.debug(f"Executing query with external connection: {str(query)}")
                 self.logger.debug(f"With params: {params}")
                 result = await connection.execute(query, params)
-
-                if transaction:
-                    await transaction.commit()
                 return result
             except Exception as e:
-                if transaction:
-                    await transaction.rollback()
+                # Don't rollback - caller manages transaction
                 self.logger.error(f"Query execution failed: {e}", exc_info=True)
                 raise RepositoryError(f"Query execution failed: {e}") from e
+        else:
+            # Create own connection and transaction (backward compatible)
+            async with self.engine.connect() as conn:
+                transaction = await conn.begin() if is_mutation else None
+                try:
+                    self.logger.debug(f"Executing query: {str(query)}")
+                    self.logger.debug(f"With params: {params}")
+                    result = await conn.execute(query, params)
 
-    async def add(self, chunk_data: CodeChunkCreate) -> CodeChunkModel:
-        """Add a new code chunk."""
+                    if transaction:
+                        await transaction.commit()
+                    return result
+                except Exception as e:
+                    if transaction:
+                        await transaction.rollback()
+                    self.logger.error(f"Query execution failed: {e}", exc_info=True)
+                    raise RepositoryError(f"Query execution failed: {e}") from e
+
+    async def add(
+        self,
+        chunk_data: CodeChunkCreate,
+        connection: Optional[AsyncConnection] = None
+    ) -> CodeChunkModel:
+        """
+        Add a new code chunk.
+
+        EPIC-12 Story 12.2: Added connection parameter for transaction support.
+
+        Args:
+            chunk_data: Code chunk data to insert
+            connection: Optional external connection (for transaction support)
+
+        Returns:
+            Created CodeChunkModel
+
+        Raises:
+            RepositoryError: If insertion fails
+        """
         query, params = self.query_builder.build_add_query(chunk_data)
         try:
-            db_result = await self._execute_query(query, params, is_mutation=True)
+            db_result = await self._execute_query(
+                query, params, is_mutation=True, connection=connection
+            )
             row = db_result.mappings().first()
             if not row:
                 raise RepositoryError("Failed to add code chunk: No data returned.")
@@ -371,15 +426,22 @@ class CodeChunkRepository:
             self.logger.error(f"Failed to add code chunk: {e}", exc_info=True)
             raise RepositoryError(f"Failed to add code chunk: {e}") from e
 
-    async def add_batch(self, chunks_data: List[CodeChunkCreate]) -> int:
+    async def add_batch(
+        self,
+        chunks_data: List[CodeChunkCreate],
+        connection: Optional[AsyncConnection] = None
+    ) -> int:
         """
         Add multiple code chunks in a single batch INSERT.
 
         PHASE 1 OPTIMIZATION: Replaces sequential inserts (N queries) with bulk INSERT (1 query).
         This is 10-50× faster for large batches.
 
+        EPIC-12 Story 12.2: Added connection parameter for transaction support.
+
         Args:
             chunks_data: List of CodeChunkCreate objects to insert
+            connection: Optional external connection (for transaction support)
 
         Returns:
             Number of chunks successfully inserted
@@ -394,7 +456,9 @@ class CodeChunkRepository:
         query, params = self.query_builder.build_add_batch_query(chunks_data)
         try:
             self.logger.info(f"💾 Batch inserting {len(chunks_data)} chunks in single query")
-            db_result = await self._execute_query(query, params, is_mutation=True)
+            db_result = await self._execute_query(
+                query, params, is_mutation=True, connection=connection
+            )
             rows_affected = db_result.rowcount
             self.logger.info(f"✅ Batch insert complete: {rows_affected} chunks stored")
             return rows_affected
@@ -413,26 +477,109 @@ class CodeChunkRepository:
             self.logger.error(f"Failed to get code chunk {chunk_id}: {e}", exc_info=True)
             raise RepositoryError(f"Failed to get code chunk {chunk_id}: {e}") from e
 
-    async def update(self, chunk_id: uuid.UUID, update_data: CodeChunkUpdate) -> Optional[CodeChunkModel]:
-        """Update code chunk (partial updates)."""
+    async def update(
+        self,
+        chunk_id: uuid.UUID,
+        update_data: CodeChunkUpdate,
+        connection: Optional[AsyncConnection] = None,
+    ) -> Optional[CodeChunkModel]:
+        """
+        Update code chunk (partial updates).
+
+        EPIC-12 Story 12.2: Added connection parameter for transaction support.
+        """
         query, params = self.query_builder.build_update_query(chunk_id, update_data)
         try:
-            db_result = await self._execute_query(query, params, is_mutation=True)
+            db_result = await self._execute_query(query, params, is_mutation=True, connection=connection)
             row = db_result.mappings().first()
             return CodeChunkModel.from_db_record(row) if row else None
         except Exception as e:
             self.logger.error(f"Failed to update code chunk {chunk_id}: {e}", exc_info=True)
             raise RepositoryError(f"Failed to update code chunk {chunk_id}: {e}") from e
 
-    async def delete(self, chunk_id: uuid.UUID) -> bool:
-        """Delete code chunk by ID."""
+    async def delete(
+        self,
+        chunk_id: uuid.UUID,
+        connection: Optional[AsyncConnection] = None,
+    ) -> bool:
+        """
+        Delete code chunk by ID.
+
+        EPIC-12 Story 12.2: Added connection parameter for transaction support.
+        """
         query, params = self.query_builder.build_delete_query(chunk_id)
         try:
-            db_result = await self._execute_query(query, params, is_mutation=True)
+            db_result = await self._execute_query(query, params, is_mutation=True, connection=connection)
             return db_result.rowcount > 0
         except Exception as e:
             self.logger.error(f"Failed to delete code chunk {chunk_id}: {e}", exc_info=True)
             raise RepositoryError(f"Failed to delete code chunk {chunk_id}: {e}") from e
+
+    async def delete_by_repository(
+        self,
+        repository: str,
+        connection: Optional[AsyncConnection] = None,
+    ) -> int:
+        """
+        Delete all code chunks for a repository.
+
+        EPIC-12 Story 12.2: New bulk delete method for atomic multi-step operations.
+
+        Args:
+            repository: Repository name to delete chunks for
+            connection: Optional external connection for transaction support
+
+        Returns:
+            Number of deleted chunks
+        """
+        query = text("""
+            DELETE FROM code_chunks
+            WHERE repository = :repository
+        """)
+        params = {"repository": repository}
+
+        try:
+            self.logger.info(f"Deleting all chunks for repository: {repository}")
+            db_result = await self._execute_query(query, params, is_mutation=True, connection=connection)
+            rows_affected = db_result.rowcount
+            self.logger.info(f"Deleted {rows_affected} chunks for repository {repository}")
+            return rows_affected
+        except Exception as e:
+            self.logger.error(f"Failed to delete chunks for repository {repository}: {e}", exc_info=True)
+            raise RepositoryError(f"Failed to delete chunks for repository {repository}: {e}") from e
+
+    async def delete_by_file_path(
+        self,
+        file_path: str,
+        connection: Optional[AsyncConnection] = None,
+    ) -> int:
+        """
+        Delete all code chunks for a file.
+
+        EPIC-12 Story 12.2: New bulk delete method for atomic multi-step operations.
+
+        Args:
+            file_path: File path to delete chunks for
+            connection: Optional external connection for transaction support
+
+        Returns:
+            Number of deleted chunks
+        """
+        query = text("""
+            DELETE FROM code_chunks
+            WHERE file_path = :file_path
+        """)
+        params = {"file_path": file_path}
+
+        try:
+            self.logger.info(f"Deleting all chunks for file: {file_path}")
+            db_result = await self._execute_query(query, params, is_mutation=True, connection=connection)
+            rows_affected = db_result.rowcount
+            self.logger.info(f"Deleted {rows_affected} chunks for file {file_path}")
+            return rows_affected
+        except Exception as e:
+            self.logger.error(f"Failed to delete chunks for file {file_path}: {e}", exc_info=True)
+            raise RepositoryError(f"Failed to delete chunks for file {file_path}: {e}") from e
 
     async def search_vector(
         self,

@@ -13,7 +13,15 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from db.repositories.code_chunk_repository import CodeChunkRepository
-from dependencies import get_db_engine, get_code_chunk_cache
+from db.repositories.node_repository import NodeRepository  # EPIC-12 Story 12.2
+from db.repositories.edge_repository import EdgeRepository  # EPIC-12 Story 12.2
+from dependencies import (
+    get_db_engine,
+    get_code_chunk_cache,
+    get_chunk_repository,  # EPIC-12 Story 12.2
+    get_node_repository,   # EPIC-12 Story 12.2
+    get_edge_repository,   # EPIC-12 Story 12.2
+)
 from services.caches import CodeChunkCache
 from services.code_chunking_service import CodeChunkingService
 from services.code_indexing_service import (
@@ -392,59 +400,76 @@ async def list_repositories(
     - All orphaned edges (edges without source/target nodes)
 
     **Warning**: This operation is irreversible.
+
+    EPIC-12 Story 12.2: Atomic transaction ensures all-or-nothing deletion.
     """,
 )
 async def delete_repository(
     repository: str,
     engine: AsyncEngine = Depends(get_db_engine),
+    chunk_repo: CodeChunkRepository = Depends(get_chunk_repository),
+    node_repo: NodeRepository = Depends(get_node_repository),
+    edge_repo: EdgeRepository = Depends(get_edge_repository),
 ) -> DeleteRepositoryResponse:
     """
     Delete all indexed data for a repository.
 
+    EPIC-12 Story 12.2: Uses repository bulk delete methods with transaction support
+    for atomic all-or-nothing deletion with cache invalidation coordination.
+
     Args:
         repository: Repository name
         engine: Database engine (injected)
+        chunk_repo: Code chunk repository (injected)
+        node_repo: Node repository (injected)
+        edge_repo: Edge repository (injected)
 
     Returns:
         DeleteRepositoryResponse with deletion statistics
     """
     try:
-        # Delete code chunks
-        delete_chunks = text("""
-            DELETE FROM code_chunks
-            WHERE repository = :repository
-        """)
-
-        # Delete nodes (assuming nodes have repository in properties)
-        delete_nodes = text("""
-            DELETE FROM nodes
-            WHERE properties->>'repository' = :repository
-        """)
-
-        # Delete orphaned edges
-        delete_edges = text("""
-            DELETE FROM edges
-            WHERE NOT EXISTS (
-                SELECT 1 FROM nodes WHERE nodes.node_id = edges.source_node_id
-            )
-        """)
-
+        # EPIC-12 Story 12.2: Wrap all deletions in transaction
+        # If any deletion fails, entire operation is rolled back (atomic operation)
         async with engine.begin() as conn:
-            result1 = await conn.execute(
-                delete_chunks, {"repository": repository}
+            logger.info(
+                f"EPIC-12: Starting atomic repository deletion transaction for '{repository}'"
             )
-            result2 = await conn.execute(delete_nodes, {"repository": repository})
-            result3 = await conn.execute(delete_edges)
+
+            # Delete code chunks using repository method
+            deleted_chunks = await chunk_repo.delete_by_repository(repository, connection=conn)
+
+            # Delete nodes using repository method
+            deleted_nodes = await node_repo.delete_by_repository(repository, connection=conn)
+
+            # Delete orphaned edges (edges without source/target nodes)
+            delete_edges_query = text("""
+                DELETE FROM edges
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM nodes WHERE nodes.node_id = edges.source_node_id
+                )
+            """)
+            result3 = await conn.execute(delete_edges_query)
+            deleted_edges = result3.rowcount
+
+            # Transaction auto-commits on successful context exit
+            logger.info(
+                f"✅ EPIC-12: Repository deletion transaction committed - "
+                f"{deleted_chunks} chunks, {deleted_nodes} nodes, {deleted_edges} edges deleted atomically"
+            )
 
         return DeleteRepositoryResponse(
             repository=repository,
-            deleted_chunks=result1.rowcount,
-            deleted_nodes=result2.rowcount,
-            deleted_edges=result3.rowcount,
+            deleted_chunks=deleted_chunks,
+            deleted_nodes=deleted_nodes,
+            deleted_edges=deleted_edges,
         )
 
     except Exception as e:
-        logger.error(f"Delete repository failed: {e}", exc_info=True)
+        # Transaction auto-rolled back on exception
+        logger.error(
+            f"EPIC-12: Repository deletion transaction rolled back: {e}",
+            exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete repository. Please check logs for details.",
