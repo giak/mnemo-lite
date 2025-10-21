@@ -27,7 +27,41 @@
     {% for result in results %}
     <div class="code-card">
         <div class="code-header">
-            <div class="code-name">{{ result.name or 'Unnamed' }}</div>
+            <div class="code-name">
+                {# Story 11.3: 3-level fallback for qualified names #}
+                {% set name_path_clean = result.name_path|trim if result.name_path else None %}
+                {% set name_clean = result.name|trim if result.name else None %}
+
+                {% if name_path_clean %}
+                    {# Primary: Qualified name exists #}
+                    <span class="name-path"
+                          title="{{ name_path_clean }}"
+                          aria-label="Qualified name: {{ name_path_clean }}"
+                          tabindex="0"
+                          role="text">
+                        {{ name_path_clean }}
+                    </span>
+                    {% if name_path_clean != name_clean %}
+                        {# Show simple name only if different #}
+                        <span class="simple-name"
+                              aria-label="Simple name: {{ name_clean }}"
+                              role="text">
+                            ({{ name_clean }})
+                        </span>
+                    {% endif %}
+                {% elif name_clean %}
+                    {# Fallback: Simple name only #}
+                    <span class="name-simple"
+                          aria-label="Function name: {{ name_clean }}"
+                          tabindex="0"
+                          role="text">
+                        {{ name_clean }}
+                    </span>
+                {% else %}
+                    {# Final fallback: Unknown #}
+                    <span class="name-unknown">Unnamed</span>
+                {% endif %}
+            </div>
             <div class="code-score">
                 {% if result.rrf_score %}
                 RRF: {{ "%.3f"|format(result.rrf_score) }}
@@ -217,5 +251,47 @@
     font-size: var(--text-xs);
     color: var(--color-text-tertiary);
     font-family: 'SF Mono', Consolas, monospace;
+}
+
+/* Story 11.3: Qualified Name Display Styles */
+.name-path {
+    font-family: var(--font-mono);
+    font-size: var(--text-md);
+    color: var(--color-accent-blue);
+    font-weight: 600;
+    cursor: help;
+    word-break: break-word;  /* Handle long paths gracefully */
+}
+
+.name-path:focus {
+    outline: 2px solid var(--color-accent-blue);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+.simple-name {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    margin-left: var(--space-md);
+    font-style: italic;
+}
+
+.name-simple {
+    font-family: var(--font-mono);
+    font-size: var(--text-md);
+    color: var(--color-accent-cyan);
+    font-weight: 600;
+}
+
+.name-simple:focus {
+    outline: 2px solid var(--color-accent-cyan);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+.name-unknown {
+    font-size: var(--text-sm);
+    color: var(--color-text-dim);
+    font-style: italic;
 }
 </style>

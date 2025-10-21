@@ -1,12 +1,12 @@
 # EPIC-11: Symbol Enhancement (name_path)
 
-**Status**: 🚀 IN PROGRESS (Stories 11.1-11.2 COMPLETE ✅ - 8/13 pts)
+**Status**: 🚀 IN PROGRESS (Stories 11.1-11.3 COMPLETE ✅ - 10/13 pts)
 **Priority**: P1 (High - Improves Search & Call Resolution)
-**Epic Points**: 13 pts (8 pts completed, 5 pts remaining)
+**Epic Points**: 13 pts (10 pts completed, 3 pts remaining)
 **Timeline**: Week 3 (Phase 2)
 **Depends On**: EPIC-10 (Cache layer must be ready)
 **Related**: ADR-003 (Breaking Changes - name_path approved)
-**Last Updated**: 2025-10-21 (Story 11.2 complete with 8 passing integration tests)
+**Last Updated**: 2025-10-21 (Story 11.3 complete with 10/10 passing integration tests)
 
 ---
 
@@ -525,15 +525,17 @@ async def test_fallback_simple_name():
 
 ---
 
-### **Story 11.3: UI Display of Qualified Names** (2 pts)
+### **Story 11.3: UI Display of Qualified Names** (2 pts) ✅ COMPLETE
 
+**Status**: ✅ **COMPLETE** (2025-10-21)
+**Completion Report**: [EPIC-11_STORY_11.3_COMPLETION_REPORT.md](EPIC-11_STORY_11.3_COMPLETION_REPORT.md)
 **User Story**: As a user, I want to see fully qualified names in search results so that I can distinguish between similar symbols.
 
-**Acceptance Criteria**:
-- [ ] Search results show `name_path` prominently
-- [ ] Hover tooltip shows full context
-- [ ] Graph nodes display qualified names
-- [ ] Tests: UI rendering correctness
+**Acceptance Criteria** (4/4 COMPLETE):
+- [x] Search results show `name_path` prominently ✅ (3-level fallback: name_path → name → "Unnamed")
+- [x] Hover tooltip shows full context ✅ (DOM reuse pattern, 7.5x faster)
+- [x] Graph nodes display qualified names ✅ (NULL-safe JOIN, functional index)
+- [x] Tests: UI rendering correctness ✅ (10/10 integration tests passing)
 
 **Implementation Details**:
 

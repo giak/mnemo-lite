@@ -930,16 +930,23 @@ async def code_graph_data(
     from sqlalchemy import text
 
     try:
-        # Fetch nodes
+        # Fetch nodes with name_path from code_chunks (Story 11.3)
         nodes_query = text("""
             SELECT
-                node_id,
-                node_type,
-                label,
-                properties,
-                created_at
-            FROM nodes
-            ORDER BY created_at DESC
+                n.node_id,
+                n.node_type,
+                n.label,
+                n.properties,
+                n.created_at,
+                c.name_path
+            FROM nodes n
+            LEFT JOIN code_chunks c ON
+                CASE
+                    WHEN n.properties->>'chunk_id' IS NOT NULL
+                    THEN (n.properties->>'chunk_id')::uuid
+                    ELSE NULL
+                END = c.id
+            ORDER BY n.created_at DESC
             LIMIT :limit
         """)
 
@@ -960,7 +967,8 @@ async def code_graph_data(
                     "node_type": row[1],
                     "type": row[1],  # Alias for compatibility
                     "props": row[3] or {},
-                    "created_at": row[4].isoformat() if row[4] else None
+                    "created_at": row[4].isoformat() if row[4] else None,
+                    "name_path": row[5]  # Story 11.3: Qualified name from code_chunks
                 }
             })
 

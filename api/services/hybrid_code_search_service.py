@@ -45,14 +45,16 @@ class HybridSearchResult:
     rrf_score: float
     rank: int  # Final rank (1-indexed)
 
-    # Source code and metadata
+    # Source code and metadata (required fields first)
     source_code: str
     name: str
-    name_path: Optional[str] = None  # EPIC-11 Story 11.2: Hierarchical qualified name
     language: str
     chunk_type: str
     file_path: str
     metadata: Dict[str, Any]
+
+    # Optional fields with defaults
+    name_path: Optional[str] = None  # EPIC-11 Story 11.2: Hierarchical qualified name
 
     # Search scores breakdown
     lexical_score: Optional[float] = None
@@ -166,8 +168,7 @@ class HybridCodeSearchService:
         # L2 Redis cache (optional - graceful degradation)
         self.redis_cache = redis_cache
 
-        logger.info("Hybrid Code Search Service initialized",
-                    redis_cache_enabled=redis_cache is not None)
+        logger.info(f"Hybrid Code Search Service initialized (Redis cache: {'enabled' if redis_cache is not None else 'disabled'})")
 
     async def search(
         self,
