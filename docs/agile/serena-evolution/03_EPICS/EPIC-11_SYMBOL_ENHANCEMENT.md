@@ -1,12 +1,12 @@
 # EPIC-11: Symbol Enhancement (name_path)
 
-**Status**: 🚀 IN PROGRESS (Stories 11.1-11.3 COMPLETE ✅ - 10/13 pts)
+**Status**: ✅ **COMPLETE** (All Stories 11.1-11.4 COMPLETE ✅ - 13/13 pts)
 **Priority**: P1 (High - Improves Search & Call Resolution)
-**Epic Points**: 13 pts (10 pts completed, 3 pts remaining)
+**Epic Points**: 13 pts (13 pts completed, 0 pts remaining)
 **Timeline**: Week 3 (Phase 2)
 **Depends On**: EPIC-10 (Cache layer must be ready)
 **Related**: ADR-003 (Breaking Changes - name_path approved)
-**Last Updated**: 2025-10-21 (Story 11.3 complete with 10/10 passing integration tests)
+**Last Updated**: 2025-10-21 (EPIC-11 COMPLETE - All 1,302 chunks migrated with name_path)
 
 ---
 
@@ -610,15 +610,18 @@ MODIFY: static/js/components/code_graph.js (+5 lines)
 
 ---
 
-### **Story 11.4: Migration Script for Existing Data** (3 pts)
+### **Story 11.4: Migration Script for Existing Data** (3 pts) ✅ COMPLETE
 
+**Status**: ✅ **COMPLETE** (2025-10-21)
+**Completion Report**: [EPIC-11_STORY_11.4_COMPLETION_REPORT.md](EPIC-11_STORY_11.4_COMPLETION_REPORT.md)
+**Analysis Document**: [EPIC-11_STORY_11.4_ANALYSIS.md](EPIC-11_STORY_11.4_ANALYSIS.md)
 **User Story**: As a database admin, I want to backfill name_path for existing chunks so that v2.0 data works in v3.0.
 
-**Acceptance Criteria**:
-- [ ] Migration script computes name_path for all existing chunks
-- [ ] Script handles missing repository root gracefully
-- [ ] Script validates 100% chunks have name_path after migration
-- [ ] Tests: Migration correctness
+**Acceptance Criteria** (4/4 COMPLETE):
+- [x] Migration script computes name_path for all existing chunks ✅ (1,302/1,302 chunks)
+- [x] Script handles missing repository root gracefully ✅ (fallback to `/unknown`)
+- [x] Script validates 100% chunks have name_path after migration ✅ (100.00% coverage)
+- [x] Tests: Migration correctness ✅ (8 integration tests created)
 
 **Implementation Details**:
 
