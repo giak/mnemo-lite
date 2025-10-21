@@ -1,3 +1,7 @@
+---
+name: document-lifecycle
+description: Document lifecycle management (TEMP/DRAFT/RESEARCH/DECISION/ARCHIVE). Use for organizing docs, managing ADRs, preventing doc chaos.
+---
 # Document Lifecycle Management Skill
 
 **Version**: 1.0

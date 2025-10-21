@@ -1,32 +1,7 @@
 ---
 name: epic-workflow
-version: 1.0.0
-category: workflow
-auto_invoke:
-  - EPIC
-  - Story
-  - completion
-  - analysis
-  - implementation
-  - plan
-  - commit
-priority: high
-metadata:
-  created: 2025-10-21
-  updated: 2025-10-21
-  purpose: EPIC/Story workflow management and documentation
-  estimated_size: 806 lines
-  token_cost: ~20150 tokens
-  phases: 6
-  templates: 3
-tags:
-  - epic
-  - story
-  - workflow
-  - agile
-  - documentation
+description: EPIC/Story workflow management. Use for EPIC analysis, Story implementation, completion reports, planning, commits, documentation.
 ---
-
 # Skill: EPIC Workflow & Story Management
 
 **Version**: 1.0.0
