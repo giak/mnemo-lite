@@ -468,7 +468,7 @@ class HybridCodeSearchService:
             if isinstance(original, VectorSearchResult):
                 source_code = original.source_code
                 name = original.name
-                name_path = None  # VectorSearchResult doesn't have name_path yet
+                name_path = original.name_path  # EPIC-11 Story 11.2: Now VectorSearchResult has name_path
                 language = original.language
                 chunk_type = original.chunk_type
                 file_path = original.file_path
@@ -632,6 +632,7 @@ class HybridCodeSearchService:
                 chunk_type=r["chunk_type"],
                 file_path=r["file_path"],
                 metadata=r["metadata"],
+                name_path=r.get("name_path"),  # EPIC-11 Story 11.2: Preserve name_path from cache
                 lexical_score=r.get("lexical_score"),
                 vector_similarity=r.get("vector_similarity"),
                 vector_distance=r.get("vector_distance"),

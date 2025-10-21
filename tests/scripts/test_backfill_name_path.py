@@ -16,6 +16,14 @@ import os
 from scripts.backfill_name_path import backfill_name_path, validate_migration
 
 
+def get_test_database_url() -> str:
+    """Get TEST_DATABASE_URL with +asyncpg removed for asyncpg compatibility."""
+    database_url = os.getenv("TEST_DATABASE_URL")
+    if "+asyncpg" in database_url:
+        database_url = database_url.replace("+asyncpg", "")
+    return database_url
+
+
 class TestBackfillNamePath:
     """Test suite for backfill_name_path migration script."""
 
@@ -25,7 +33,7 @@ class TestBackfillNamePath:
         Story 11.4 Edge Case #1: Chunks with empty names.
         Expected: Generate fallback name using chunk_type + id
         """
-        database_url = os.getenv("TEST_DATABASE_URL")
+        database_url = get_test_database_url()
         conn = await asyncpg.connect(database_url)
 
         try:
@@ -40,7 +48,7 @@ class TestBackfillNamePath:
             """, chunk_id)
 
             # Run backfill
-            stats = await backfill_name_path(dry_run=False)
+            stats = await backfill_name_path(dry_run=False, database_url=database_url)
 
             # Verify name_path generated with fallback
             result = await conn.fetchrow("""
@@ -64,7 +72,7 @@ class TestBackfillNamePath:
         Story 11.4: Verify methods get correct parent context.
         Expected: method name_path includes parent class
         """
-        database_url = os.getenv("TEST_DATABASE_URL")
+        database_url = get_test_database_url()
         conn = await asyncpg.connect(database_url)
 
         try:
@@ -83,7 +91,7 @@ class TestBackfillNamePath:
             """, class_id, method_id)
 
             # Run backfill
-            stats = await backfill_name_path(dry_run=False)
+            stats = await backfill_name_path(dry_run=False, database_url=database_url)
 
             # Verify method has parent context
             method_result = await conn.fetchrow("""
@@ -115,7 +123,7 @@ class TestBackfillNamePath:
         Story 11.4: Running twice should not duplicate or change existing data.
         Expected: Same result after re-running
         """
-        database_url = os.getenv("TEST_DATABASE_URL")
+        database_url = get_test_database_url()
         conn = await asyncpg.connect(database_url)
 
         try:
@@ -158,7 +166,7 @@ class TestBackfillNamePath:
         Story 11.4 Edge Case #2: fallback_fixed chunks (JSON, config files).
         Expected: Generate simple path for non-code files
         """
-        database_url = os.getenv("TEST_DATABASE_URL")
+        database_url = get_test_database_url()
         conn = await asyncpg.connect(database_url)
 
         try:
@@ -173,7 +181,7 @@ class TestBackfillNamePath:
             """, chunk_id)
 
             # Run backfill
-            stats = await backfill_name_path(dry_run=False)
+            stats = await backfill_name_path(dry_run=False, database_url=database_url)
 
             # Verify name_path generated (simple path for config)
             result = await conn.fetchrow("""
@@ -197,7 +205,7 @@ class TestBackfillNamePath:
         Story 11.4: Dry run should not modify database.
         Expected: No changes when dry_run=True
         """
-        database_url = os.getenv("TEST_DATABASE_URL")
+        database_url = get_test_database_url()
         conn = await asyncpg.connect(database_url)
 
         try:
@@ -212,7 +220,7 @@ class TestBackfillNamePath:
             """, chunk_id)
 
             # Run dry-run
-            stats = await backfill_name_path(dry_run=True)
+            stats = await backfill_name_path(dry_run=True, database_url=database_url)
 
             # Verify name_path is still NULL
             result = await conn.fetchrow("""
@@ -233,7 +241,7 @@ class TestBackfillNamePath:
         Story 11.4: Script should return accurate statistics.
         Expected: Stats match actual database state
         """
-        database_url = os.getenv("TEST_DATABASE_URL")
+        database_url = get_test_database_url()
         conn = await asyncpg.connect(database_url)
 
         try:
@@ -250,7 +258,7 @@ class TestBackfillNamePath:
                 """, chunk_id, f"func_{i}")
 
             # Run backfill
-            stats = await backfill_name_path(dry_run=False)
+            stats = await backfill_name_path(dry_run=False, database_url=database_url)
 
             # Verify statistics
             assert stats["total_chunks"] >= 3
@@ -270,7 +278,7 @@ class TestBackfillNamePath:
         Story 11.4: Verify TypeScript chunks handled correctly.
         Expected: Language-specific path generation for TypeScript
         """
-        database_url = os.getenv("TEST_DATABASE_URL")
+        database_url = get_test_database_url()
         conn = await asyncpg.connect(database_url)
 
         try:
@@ -285,7 +293,7 @@ class TestBackfillNamePath:
             """, chunk_id)
 
             # Run backfill
-            stats = await backfill_name_path(dry_run=False)
+            stats = await backfill_name_path(dry_run=False, database_url=database_url)
 
             # Verify TypeScript path generated
             result = await conn.fetchrow("""
@@ -312,22 +320,29 @@ class TestValidateMigration:
         """
         Story 11.4: Validation should pass when all chunks have name_path.
         """
-        database_url = os.getenv("TEST_DATABASE_URL")
+        database_url = get_test_database_url()
         conn = await asyncpg.connect(database_url)
 
         try:
-            # Ensure all test chunks have name_path
+            # Insert test chunks with name_path
             await conn.execute("""
-                UPDATE code_chunks
-                SET name_path = COALESCE(name_path, name || '.default')
-                WHERE name_path IS NULL
-            """)
+                INSERT INTO code_chunks (
+                    id, file_path, language, chunk_type, name, name_path, source_code,
+                    start_line, end_line, metadata
+                ) VALUES
+                ($1, 'test.py', 'python', 'function', 'test_func', 'module.test_func',
+                 'def test_func():\n    pass', 1, 2, '{}'),
+                ($2, 'test.py', 'python', 'class', 'TestClass', 'module.TestClass',
+                 'class TestClass:\n    pass', 4, 5, '{}')
+            """, uuid.uuid4(), uuid.uuid4())
 
             # Run validation
-            result = await validate_migration()
+            result = await validate_migration(database_url=database_url)
 
             # Should pass
             assert result is True
 
         finally:
+            # Cleanup
+            await conn.execute("DELETE FROM code_chunks WHERE file_path = 'test.py'")
             await conn.close()

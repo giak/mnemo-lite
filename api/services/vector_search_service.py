@@ -28,6 +28,7 @@ class VectorSearchResult:
     metadata: Dict[str, Any]
     rank: int  # 1-indexed rank in results
     embedding_domain: str  # "TEXT" or "CODE"
+    name_path: Optional[str] = None  # EPIC-11 Story 11.2: Hierarchical qualified name
 
 
 class VectorSearchService:
@@ -142,6 +143,7 @@ class VectorSearchService:
                 (1 - ({embedding_column} <=> '{embedding_str}'::vector) / 2) as similarity,
                 source_code,
                 name,
+                name_path,
                 language,
                 chunk_type,
                 file_path,
@@ -162,8 +164,9 @@ class VectorSearchService:
             # Convert to VectorSearchResult objects
             results = []
             for rank, row in enumerate(rows, start=1):
+                # EPIC-11 Bug #5 Fix: Use aliased column names from SELECT
                 results.append(VectorSearchResult(
-                    chunk_id=row.chunk_id,
+                    chunk_id=str(row.chunk_id),  # Aliased as chunk_id in SELECT
                     distance=float(row.distance),
                     similarity=float(row.similarity),
                     source_code=row.source_code,
@@ -174,6 +177,7 @@ class VectorSearchService:
                     metadata=row.metadata or {},
                     rank=rank,
                     embedding_domain=embedding_domain,
+                    name_path=row.name_path,  # EPIC-11 Story 11.2
                 ))
 
             logger.info(

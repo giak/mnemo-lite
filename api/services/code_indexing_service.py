@@ -287,7 +287,7 @@ class CodeIndexingService:
 
             # L1/L2 CASCADE CACHE LOOKUP (before expensive chunking/embedding pipeline)
             if self.chunk_cache:
-                cached_chunks = await self.chunk_cache.get_chunks(file_input.path, file_input.content)
+                cached_chunks = self.chunk_cache.get(file_input.path, file_input.content)
                 if cached_chunks:
                     # Cache HIT: Skip entire pipeline and return cached result
                     end_time = datetime.now()

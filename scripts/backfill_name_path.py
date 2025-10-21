@@ -44,7 +44,7 @@ class ChunkRecord:
         self.language = record["language"]
 
 
-async def backfill_name_path(dry_run: bool = False) -> Dict[str, Any]:
+async def backfill_name_path(dry_run: bool = False, database_url: str = None) -> Dict[str, Any]:
     """
     Backfill name_path for existing code_chunks.
 
@@ -57,18 +57,20 @@ async def backfill_name_path(dry_run: bool = False) -> Dict[str, Any]:
 
     Args:
         dry_run: If True, show what would be updated without committing
+        database_url: Optional database URL (defaults to DATABASE_URL env var)
 
     Returns:
         Dict with migration statistics
 
     Raises:
-        ValueError: If DATABASE_URL not set
+        ValueError: If DATABASE_URL not set and not provided
         Exception: If migration validation fails
     """
 
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
-        raise ValueError("DATABASE_URL environment variable not set")
+    if database_url is None:
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            raise ValueError("DATABASE_URL environment variable not set")
 
     # Convert SQLAlchemy URL to asyncpg format
     # postgresql+asyncpg://... → postgresql://...
@@ -274,7 +276,7 @@ async def backfill_name_path(dry_run: bool = False) -> Dict[str, Any]:
         await conn.close()
 
 
-async def validate_migration() -> bool:
+async def validate_migration(database_url: str = None) -> bool:
     """
     Validate that migration was successful.
 
@@ -283,11 +285,15 @@ async def validate_migration() -> bool:
     2. Name paths follow expected pattern (contains dots)
     3. Methods have parent context (contain parent class name)
 
+    Args:
+        database_url: Optional database URL (defaults to DATABASE_URL env var)
+
     Returns:
         True if validation passes, False otherwise
     """
 
-    database_url = os.getenv("DATABASE_URL")
+    if database_url is None:
+        database_url = os.getenv("DATABASE_URL")
 
     # Convert SQLAlchemy URL to asyncpg format
     if "+asyncpg" in database_url:

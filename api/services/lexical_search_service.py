@@ -187,9 +187,10 @@ class LexicalSearchService:
             # Convert to LexicalSearchResult objects
             results = []
             for rank, row in enumerate(rows, start=1):
+                # EPIC-11 Bug #5 Fix: Use aliased column names from SELECT
                 results.append(LexicalSearchResult(
-                    chunk_id=row.chunk_id,
-                    similarity_score=row.similarity_score,
+                    chunk_id=str(row.chunk_id),  # Aliased as chunk_id in SELECT
+                    similarity_score=row.similarity_score,  # Aliased as similarity_score in SELECT
                     source_code=row.source_code,
                     name=row.name,
                     name_path=row.name_path,  # EPIC-11 Story 11.2

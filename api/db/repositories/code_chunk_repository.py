@@ -51,6 +51,10 @@ code_chunks_table = Table(
 class CodeChunkQueryBuilder:
     """Builds SQL queries for CodeChunkRepository using SQLAlchemy Core."""
 
+    # EPIC-11 Bug #5 Fix: Explicit column list for SELECT queries
+    # This ensures SQLAlchemy can properly map columns when using aliases
+    COLUMNS = "id, file_path, language, chunk_type, name, name_path, source_code, start_line, end_line, embedding_text, embedding_code, metadata, indexed_at, last_modified, node_id, repository, commit_hash"
+
     def build_add_query(self, chunk_data: CodeChunkCreate) -> Tuple[TextClause, Dict[str, Any]]:
         """Build INSERT query with JSONB casting."""
         query_str = text("""
@@ -96,7 +100,7 @@ class CodeChunkQueryBuilder:
 
     def build_get_by_id_query(self, chunk_id: uuid.UUID) -> Tuple[TextClause, Dict[str, Any]]:
         """Build SELECT by ID query."""
-        query_str = text("SELECT * FROM code_chunks WHERE id = :chunk_id")
+        query_str = text(f"SELECT {self.COLUMNS} FROM code_chunks WHERE id = :chunk_id")
         params = {"chunk_id": str(chunk_id)}
         return query_str, params
 
@@ -272,8 +276,9 @@ class CodeChunkQueryBuilder:
             where_clause = "WHERE " + " AND ".join(conditions)
 
         query_str = text(f"""
-            SELECT *,
-                   1 - ({embedding_col} <=> '{embedding_str}'::vector) AS similarity
+            SELECT {self.COLUMNS},
+                   1 - ({embedding_col} <=> '{embedding_str}'::vector) AS similarity,
+                   {embedding_col} <=> '{embedding_str}'::vector AS distance
             FROM code_chunks
             {where_clause}
             ORDER BY {embedding_col} <=> '{embedding_str}'::vector
@@ -313,7 +318,7 @@ class CodeChunkQueryBuilder:
         where_clause = "WHERE " + " AND ".join(conditions)
 
         query_str = text(f"""
-            SELECT *,
+            SELECT {self.COLUMNS},
                    similarity(source_code, :query) AS score
             FROM code_chunks
             {where_clause}
