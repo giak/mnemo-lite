@@ -3,6 +3,8 @@ Code chunking service for EPIC-06 Phase 1 Story 1.
 
 Implements AST-based semantic chunking using tree-sitter for multiple languages.
 Inspired by cAST paper (2024) - split-then-merge algorithm for optimal chunk quality.
+
+EPIC-12 Story 12.1: Added timeout protection to prevent infinite hangs.
 """
 
 import asyncio
@@ -17,6 +19,8 @@ from tree_sitter import Node, Tree
 from tree_sitter_language_pack import get_language, get_parser
 
 from api.models.code_chunk_models import ChunkType, CodeChunk, CodeUnit
+from utils.timeout import with_timeout, TimeoutError
+from config.timeouts import get_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -213,12 +217,21 @@ class CodeChunkingService:
             return await self._fallback_fixed_chunking(source_code, file_path, language, max_chunk_size)
 
         try:
-            # Parse in thread pool (CPU-bound operation)
+            # Parse in thread pool (CPU-bound operation) with timeout protection
+            # EPIC-12 Story 12.1: Prevent infinite hangs on pathological input
             loop = asyncio.get_event_loop()
-            tree = await loop.run_in_executor(
+            parse_coro = loop.run_in_executor(
                 self._executor,
                 parser.parse,
                 source_code
+            )
+
+            tree = await with_timeout(
+                parse_coro,
+                timeout=get_timeout("tree_sitter_parse"),
+                operation_name="tree_sitter_parse",
+                context={"file_path": file_path, "language": language},
+                raise_on_timeout=True
             )
 
             # Extract code units
@@ -236,6 +249,15 @@ class CodeChunkingService:
 
             logger.info(f"Chunked {file_path}: {len(chunks)} chunks via AST")
             return chunks
+
+        except TimeoutError as e:
+            # EPIC-12 Story 12.1: Handle timeout gracefully
+            logger.error(
+                f"Tree-sitter parsing timed out for {file_path} after {get_timeout('tree_sitter_parse')}s",
+                extra={"file_path": file_path, "language": language, "error": str(e)}
+            )
+            logger.info(f"Falling back to fixed chunking for {file_path} after timeout")
+            return await self._fallback_fixed_chunking(source_code, file_path, language, max_chunk_size)
 
         except Exception as e:
             logger.error(f"AST chunking failed for {file_path}: {e}", exc_info=True)

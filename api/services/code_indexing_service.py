@@ -3,6 +3,8 @@ CodeIndexingService for EPIC-06 Phase 4 Story 6.
 
 Orchestrates the complete code indexing pipeline, coordinating all building blocks
 from previous stories to provide end-to-end code ingestion.
+
+EPIC-12 Story 12.1: Added timeout protection for file indexing operations.
 """
 
 import asyncio
@@ -22,6 +24,8 @@ from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomai
 from services.graph_construction_service import GraphConstructionService
 from services.metadata_extractor_service import MetadataExtractorService
 from services.symbol_path_service import SymbolPathService  # EPIC-11
+from utils.timeout import with_timeout, TimeoutError
+from config.timeouts import get_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +167,19 @@ class CodeIndexingService:
 
         for file_input in files:
             try:
-                result = await self._index_file(file_input, options)
+                # EPIC-12 Story 12.1: Wrap file indexing with timeout protection
+                # Prevents infinite hangs on pathological files
+                result = await with_timeout(
+                    self._index_file(file_input, options),
+                    timeout=get_timeout("index_file"),
+                    operation_name="index_file",
+                    context={
+                        "file_path": file_input.path,
+                        "repository": options.repository,
+                        "language": file_input.language
+                    },
+                    raise_on_timeout=True
+                )
                 file_results.append(result)
 
                 if result.success:
@@ -172,6 +188,16 @@ class CodeIndexingService:
                 else:
                     failed_files += 1
                     errors.append({"file": result.file_path, "error": result.error})
+
+            except TimeoutError as e:
+                # File indexing timed out - treat as failure
+                failed_files += 1
+                error_msg = f"File indexing timed out after {get_timeout('index_file')}s"
+                errors.append({"file": file_input.path, "error": error_msg})
+                self.logger.error(
+                    f"Timeout indexing {file_input.path} after {get_timeout('index_file')}s",
+                    extra={"file_path": file_input.path, "error": str(e)}
+                )
 
             except Exception as e:
                 failed_files += 1

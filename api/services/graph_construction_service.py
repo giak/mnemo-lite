@@ -2,6 +2,8 @@
 GraphConstructionService for EPIC-06 Phase 2 Story 4.
 
 Constructs code dependency graphs from code chunks metadata.
+
+EPIC-12 Story 12.1: Added timeout protection for graph construction.
 """
 
 import logging
@@ -17,6 +19,8 @@ from db.repositories.edge_repository import EdgeRepository
 from db.repositories.code_chunk_repository import CodeChunkRepository
 from models.code_chunk_models import CodeChunkModel
 from models.graph_models import GraphStats, NodeModel, EdgeModel
+from utils.timeout import with_timeout, TimeoutError
+from config.timeouts import get_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -110,13 +114,49 @@ class GraphConstructionService:
                 resolution_accuracy=None
             )
 
-        # Step 2: Create nodes for all functions/classes
-        chunk_to_node = await self._create_nodes_from_chunks(chunks)
-        self.logger.info(f"Created {len(chunk_to_node)} nodes")
+        # Step 2: Create nodes for all functions/classes with timeout protection
+        # EPIC-12 Story 12.1: Prevent infinite hangs on large repositories
+        try:
+            chunk_to_node = await with_timeout(
+                self._create_nodes_from_chunks(chunks),
+                timeout=get_timeout("graph_construction"),
+                operation_name="graph_node_creation",
+                context={"repository": repository, "chunk_count": len(chunks)},
+                raise_on_timeout=True
+            )
+            self.logger.info(f"Created {len(chunk_to_node)} nodes")
 
-        # Step 3 & 4: Create call and import edges
-        call_edges = await self._create_all_call_edges(chunks, chunk_to_node)
-        import_edges = await self._create_all_import_edges(chunks, chunk_to_node)
+        except TimeoutError as e:
+            self.logger.error(
+                f"Node creation timed out for repository '{repository}' after {get_timeout('graph_construction')}s",
+                extra={"repository": repository, "chunk_count": len(chunks), "error": str(e)}
+            )
+            raise
+
+        # Step 3 & 4: Create call and import edges with timeout protection
+        # EPIC-12 Story 12.1: Prevent infinite hangs on complex graphs
+        try:
+            call_edges = await with_timeout(
+                self._create_all_call_edges(chunks, chunk_to_node),
+                timeout=get_timeout("graph_construction"),
+                operation_name="graph_call_edge_creation",
+                context={"repository": repository, "node_count": len(chunk_to_node)},
+                raise_on_timeout=True
+            )
+            import_edges = await with_timeout(
+                self._create_all_import_edges(chunks, chunk_to_node),
+                timeout=get_timeout("graph_construction"),
+                operation_name="graph_import_edge_creation",
+                context={"repository": repository, "node_count": len(chunk_to_node)},
+                raise_on_timeout=True
+            )
+
+        except TimeoutError as e:
+            self.logger.error(
+                f"Edge creation timed out for repository '{repository}' after {get_timeout('graph_construction')}s",
+                extra={"repository": repository, "node_count": len(chunk_to_node), "error": str(e)}
+            )
+            raise
 
         total_edges = len(call_edges) + len(import_edges)
         self.logger.info(f"Created {len(call_edges)} call edges and {len(import_edges)} import edges")

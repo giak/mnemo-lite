@@ -3,6 +3,8 @@ GraphTraversalService for EPIC-06 Phase 2 Story 4.
 
 Traverses code dependency graphs using recursive CTEs.
 Includes L2 Redis caching for performance (EPIC-10 Story 10.2).
+
+EPIC-12 Story 12.1: Added timeout protection for graph traversal.
 """
 
 import logging
@@ -16,6 +18,8 @@ import structlog
 from db.repositories.node_repository import NodeRepository
 from models.graph_models import GraphTraversal, NodeModel
 from services.caches import RedisCache, cache_keys
+from utils.timeout import with_timeout, TimeoutError
+from config.timeouts import get_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -131,13 +135,37 @@ class GraphTraversalService:
                 relationship=relationship,
             )
 
-        # Build and execute recursive CTE query
-        discovered_node_ids = await self._execute_recursive_traversal(
-            start_node_id=start_node_id,
-            direction=direction,
-            relationship=relationship,
-            max_depth=max_depth
-        )
+        # Build and execute recursive CTE query with timeout protection
+        # EPIC-12 Story 12.1: Prevent infinite hangs on complex graphs
+        try:
+            discovered_node_ids = await with_timeout(
+                self._execute_recursive_traversal(
+                    start_node_id=start_node_id,
+                    direction=direction,
+                    relationship=relationship,
+                    max_depth=max_depth
+                ),
+                timeout=get_timeout("graph_traversal"),
+                operation_name="graph_recursive_traversal",
+                context={
+                    "start_node": str(start_node_id)[:12],
+                    "direction": direction,
+                    "max_depth": max_depth
+                },
+                raise_on_timeout=True
+            )
+
+        except TimeoutError as e:
+            self.logger.error(
+                f"Graph traversal timed out after {get_timeout('graph_traversal')}s",
+                extra={
+                    "start_node": str(start_node_id),
+                    "direction": direction,
+                    "max_depth": max_depth,
+                    "error": str(e)
+                }
+            )
+            raise
 
         # Fetch full node details for discovered nodes
         nodes = await self._fetch_nodes_by_ids(discovered_node_ids)
@@ -404,19 +432,46 @@ class GraphTraversalService:
             LIMIT 1  -- Return shortest path
         """
 
-        # Execute query
-        async with self.engine.connect() as connection:
-            params = {
-                "source_node_id": str(source_node_id),
-                "target_node_id": str(target_node_id),
-                "max_depth": max_depth
-            }
-            if relationship:
-                params["relationship"] = relationship
+        # Execute query with timeout protection
+        # EPIC-12 Story 12.1: Prevent infinite hangs on path finding
+        async def _execute_path_query():
+            async with self.engine.connect() as connection:
+                params = {
+                    "source_node_id": str(source_node_id),
+                    "target_node_id": str(target_node_id),
+                    "max_depth": max_depth
+                }
+                if relationship:
+                    params["relationship"] = relationship
 
-            self.logger.debug(f"Executing path search with params: {params}")
-            result = await connection.execute(text(cte_query), params)
-            row = result.fetchone()
+                self.logger.debug(f"Executing path search with params: {params}")
+                result = await connection.execute(text(cte_query), params)
+                return result.fetchone()
+
+        try:
+            row = await with_timeout(
+                _execute_path_query(),
+                timeout=get_timeout("graph_traversal"),
+                operation_name="graph_path_finding",
+                context={
+                    "source": str(source_node_id)[:12],
+                    "target": str(target_node_id)[:12],
+                    "max_depth": max_depth
+                },
+                raise_on_timeout=True
+            )
+
+        except TimeoutError as e:
+            self.logger.error(
+                f"Path finding timed out after {get_timeout('graph_traversal')}s",
+                extra={
+                    "source_node": str(source_node_id),
+                    "target_node": str(target_node_id),
+                    "max_depth": max_depth,
+                    "error": str(e)
+                }
+            )
+            raise
 
         if not row:
             self.logger.info(f"No path found between {source_node_id} and {target_node_id}")

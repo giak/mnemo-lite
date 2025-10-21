@@ -11,6 +11,8 @@ Features:
 - RAM monitoring via psutil
 - Double-checked locking (thread-safe)
 - Backward compatible via generate_embedding_legacy()
+
+EPIC-12 Story 12.1: Added timeout protection for embedding generation.
 """
 
 import os
@@ -22,6 +24,9 @@ from enum import Enum
 from sentence_transformers import SentenceTransformer
 import psutil
 import numpy as np
+
+from utils.timeout import with_timeout, TimeoutError
+from config.timeouts import get_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -354,28 +359,62 @@ class DualEmbeddingService:
         result = {}
 
         if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
-            # Generate text embedding
+            # Generate text embedding with timeout protection
+            # EPIC-12 Story 12.1: Prevent infinite hangs on large/pathological inputs
             await self._ensure_text_model()
 
             loop = asyncio.get_running_loop()
-            text_emb = await loop.run_in_executor(
+            encode_coro = loop.run_in_executor(
                 None,
                 self._text_model.encode,
                 text
             )
-            result['text'] = text_emb.tolist()
+
+            try:
+                text_emb = await with_timeout(
+                    encode_coro,
+                    timeout=get_timeout("embedding_generation_single"),
+                    operation_name="embedding_generation_text_single",
+                    context={"domain": "text", "text_length": len(text)},
+                    raise_on_timeout=True
+                )
+                result['text'] = text_emb.tolist()
+
+            except TimeoutError as e:
+                logger.error(
+                    f"Text embedding generation timed out after {get_timeout('embedding_generation_single')}s",
+                    extra={"text_length": len(text), "error": str(e)}
+                )
+                raise
 
         if domain in (EmbeddingDomain.CODE, EmbeddingDomain.HYBRID):
-            # Generate code embedding
+            # Generate code embedding with timeout protection
+            # EPIC-12 Story 12.1: Prevent infinite hangs on large/pathological inputs
             await self._ensure_code_model()
 
             loop = asyncio.get_running_loop()
-            code_emb = await loop.run_in_executor(
+            encode_coro = loop.run_in_executor(
                 None,
                 self._code_model.encode,
                 text
             )
-            result['code'] = code_emb.tolist()
+
+            try:
+                code_emb = await with_timeout(
+                    encode_coro,
+                    timeout=get_timeout("embedding_generation_single"),
+                    operation_name="embedding_generation_code_single",
+                    context={"domain": "code", "text_length": len(text)},
+                    raise_on_timeout=True
+                )
+                result['code'] = code_emb.tolist()
+
+            except TimeoutError as e:
+                logger.error(
+                    f"Code embedding generation timed out after {get_timeout('embedding_generation_single')}s",
+                    extra={"text_length": len(text), "error": str(e)}
+                )
+                raise
 
         return result
 
@@ -425,11 +464,12 @@ class DualEmbeddingService:
         results = [None] * len(texts)
 
         if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
-            # Batch encode with TEXT model
+            # Batch encode with TEXT model with timeout protection
+            # EPIC-12 Story 12.1: Prevent infinite hangs on large batches
             await self._ensure_text_model()
 
             loop = asyncio.get_running_loop()
-            text_embeddings = await loop.run_in_executor(
+            encode_coro = loop.run_in_executor(
                 None,
                 lambda: self._text_model.encode(
                     valid_texts,
@@ -438,6 +478,22 @@ class DualEmbeddingService:
                 )
             )
 
+            try:
+                text_embeddings = await with_timeout(
+                    encode_coro,
+                    timeout=get_timeout("embedding_generation_batch"),
+                    operation_name="embedding_generation_text_batch",
+                    context={"domain": "text", "batch_size": len(valid_texts)},
+                    raise_on_timeout=True
+                )
+
+            except TimeoutError as e:
+                logger.error(
+                    f"Text batch embedding generation timed out after {get_timeout('embedding_generation_batch')}s",
+                    extra={"batch_size": len(valid_texts), "error": str(e)}
+                )
+                raise
+
             # Distribute results back to original positions
             for i, valid_idx in enumerate(valid_indices):
                 if results[valid_idx] is None:
@@ -445,11 +501,12 @@ class DualEmbeddingService:
                 results[valid_idx]['text'] = text_embeddings[i].tolist()
 
         if domain in (EmbeddingDomain.CODE, EmbeddingDomain.HYBRID):
-            # Batch encode with CODE model
+            # Batch encode with CODE model with timeout protection
+            # EPIC-12 Story 12.1: Prevent infinite hangs on large batches
             await self._ensure_code_model()
 
             loop = asyncio.get_running_loop()
-            code_embeddings = await loop.run_in_executor(
+            encode_coro = loop.run_in_executor(
                 None,
                 lambda: self._code_model.encode(
                     valid_texts,
@@ -457,6 +514,22 @@ class DualEmbeddingService:
                     convert_to_numpy=True
                 )
             )
+
+            try:
+                code_embeddings = await with_timeout(
+                    encode_coro,
+                    timeout=get_timeout("embedding_generation_batch"),
+                    operation_name="embedding_generation_code_batch",
+                    context={"domain": "code", "batch_size": len(valid_texts)},
+                    raise_on_timeout=True
+                )
+
+            except TimeoutError as e:
+                logger.error(
+                    f"Code batch embedding generation timed out after {get_timeout('embedding_generation_batch')}s",
+                    extra={"batch_size": len(valid_texts), "error": str(e)}
+                )
+                raise
 
             # Distribute results back to original positions
             for i, valid_idx in enumerate(valid_indices):
