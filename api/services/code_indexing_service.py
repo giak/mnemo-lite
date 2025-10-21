@@ -21,6 +21,7 @@ from services.code_chunking_service import CodeChunkingService
 from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomain
 from services.graph_construction_service import GraphConstructionService
 from services.metadata_extractor_service import MetadataExtractorService
+from services.symbol_path_service import SymbolPathService  # EPIC-11
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class IndexingOptions:
     generate_embeddings: bool = True
     build_graph: bool = True
     repository: str = "default"
+    repository_root: str = "/app"  # EPIC-11: Absolute path for name_path generation
     commit_hash: Optional[str] = None
 
 
@@ -102,6 +104,7 @@ class CodeIndexingService:
         graph_service: GraphConstructionService,
         chunk_repository: CodeChunkRepository,
         chunk_cache: Optional[CascadeCache] = None,
+        symbol_path_service: Optional[SymbolPathService] = None,  # EPIC-11
     ):
         """
         Initialize CodeIndexingService with all required dependencies.
@@ -114,6 +117,7 @@ class CodeIndexingService:
             graph_service: Service for constructing call graphs
             chunk_repository: Repository for storing code chunks
             chunk_cache: Optional L1/L2 cascade cache for code chunks (Story 10.3)
+            symbol_path_service: Optional service for generating hierarchical name_path (EPIC-11)
         """
         self.engine = engine
         self.chunking_service = chunking_service
@@ -122,11 +126,12 @@ class CodeIndexingService:
         self.graph_service = graph_service
         self.chunk_repository = chunk_repository
         self.chunk_cache = chunk_cache  # CascadeCache from dependencies.py
+        self.symbol_path_service = symbol_path_service or SymbolPathService()  # EPIC-11
 
         self.logger = logging.getLogger(__name__)
         self.logger.info(
-            "CodeIndexingService initialized with L1/L2 Cascade Cache",
-            cache_enabled=self.chunk_cache is not None
+            f"CodeIndexingService initialized with L1/L2 Cascade Cache and SymbolPathService "
+            f"(cache_enabled={self.chunk_cache is not None})"
         )
 
     async def index_repository(
@@ -307,7 +312,6 @@ class CodeIndexingService:
                 source_code=file_input.content,
                 language=language,
                 file_path=file_input.path,
-                extract_metadata=options.extract_metadata,
             )
 
             if not chunks:
@@ -408,6 +412,34 @@ class CodeIndexingService:
             chunks_created = 0
             chunks_skipped = 0
 
+            # EPIC-11 Story 11.1: Generate name_path for all chunks
+            # This must happen AFTER chunking but BEFORE creating CodeChunkCreate objects
+            chunk_name_paths = {}  # Map: chunk_index → name_path
+
+            self.logger.info(f"🔍 EPIC-11: Generating name_path for {len(chunks)} chunks")
+
+            for i, chunk in enumerate(chunks):
+                # Extract parent context (for methods in classes)
+                parent_context = self.symbol_path_service.extract_parent_context(chunk, chunks)
+
+                # Generate hierarchical name_path
+                name_path = self.symbol_path_service.generate_name_path(
+                    chunk_name=chunk.name or "unknown",
+                    file_path=file_input.path,
+                    repository_root=options.repository_root,
+                    parent_context=parent_context,
+                    language=language
+                )
+
+                chunk_name_paths[i] = name_path
+
+                self.logger.debug(
+                    f"Generated name_path for chunk {i} ({chunk.name}): {name_path} "
+                    f"(parent_context: {parent_context})"
+                )
+
+            self.logger.info(f"✅ EPIC-11: name_path generation complete for {len(chunk_name_paths)} chunks")
+
             # Prepare all chunks for batch insert
             chunks_to_insert = []
 
@@ -430,6 +462,7 @@ class CodeIndexingService:
                     language=language,
                     chunk_type=chunk.chunk_type,
                     name=chunk.name,
+                    name_path=chunk_name_paths.get(i),  # EPIC-11: Hierarchical qualified name
                     source_code=chunk.source_code,
                     start_line=chunk.start_line,
                     end_line=chunk.end_line,
@@ -466,12 +499,13 @@ class CodeIndexingService:
                 try:
                     # Serialize chunks for caching (store as list of dicts)
                     serialized_chunks = []
-                    for chunk in chunks[:chunks_created]:  # Only cache successfully stored chunks
+                    for i, chunk in enumerate(chunks[:chunks_created]):  # Only cache successfully stored chunks
                         serialized_chunks.append({
                             "file_path": chunk.file_path,
                             "language": language,
                             "chunk_type": chunk.chunk_type.value if hasattr(chunk.chunk_type, 'value') else str(chunk.chunk_type),
                             "name": chunk.name,
+                            "name_path": chunk_name_paths.get(i),  # EPIC-11: Include name_path in cache
                             "source_code": chunk.source_code,
                             "start_line": chunk.start_line,
                             "end_line": chunk.end_line,

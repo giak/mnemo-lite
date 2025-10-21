@@ -24,6 +24,7 @@ from services.code_indexing_service import (
 from services.dual_embedding_service import DualEmbeddingService
 from services.graph_construction_service import GraphConstructionService
 from services.metadata_extractor_service import MetadataExtractorService
+from services.symbol_path_service import SymbolPathService  # EPIC-11
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ class IndexRequest(BaseModel):
     """Request to index files."""
 
     repository: str = Field(..., description="Repository name/identifier")
+    repository_root: str = Field("/app", description="EPIC-11: Absolute path to repository root for name_path generation")
     files: List[FileInputModel] = Field(..., description="List of files to index")
     commit_hash: Optional[str] = Field(
         None, description="Git commit hash (optional)"
@@ -197,6 +199,7 @@ async def get_indexing_service(
     embedding_service = DualEmbeddingService()
     graph_service = GraphConstructionService(engine)
     chunk_repository = CodeChunkRepository(engine)
+    symbol_path_service = SymbolPathService()  # EPIC-11 Story 11.1
 
     return CodeIndexingService(
         engine=engine,
@@ -206,6 +209,7 @@ async def get_indexing_service(
         graph_service=graph_service,
         chunk_repository=chunk_repository,
         chunk_cache=chunk_cache,  # Inject L1 cache (EPIC-10 Story 10.1)
+        symbol_path_service=symbol_path_service,  # EPIC-11: Hierarchical name_path generation
     )
 
 
@@ -278,6 +282,7 @@ async def index_files(
             generate_embeddings=request.generate_embeddings,
             build_graph=request.build_graph,
             repository=request.repository,
+            repository_root=request.repository_root,  # EPIC-11: Pass repository root for name_path
             commit_hash=request.commit_hash,
         )
 
