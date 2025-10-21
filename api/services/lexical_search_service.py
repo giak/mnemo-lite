@@ -27,6 +27,7 @@ class LexicalSearchResult:
     file_path: str
     metadata: Dict[str, Any]
     rank: int  # 1-indexed rank in results
+    name_path: Optional[str] = None  # EPIC-11 Story 11.2: Hierarchical qualified name (must be last)
 
 
 class LexicalSearchService:
@@ -67,12 +68,13 @@ class LexicalSearchService:
         limit: int = 100,
         search_in_name: bool = True,
         search_in_source: bool = True,
+        search_in_name_path: bool = False,  # EPIC-11 Story 11.2: Search qualified names
     ) -> List[LexicalSearchResult]:
         """
         Search code chunks using pg_trgm similarity.
 
         Args:
-            query: Search query (keywords)
+            query: Search query (keywords or qualified names like 'models.User')
             filters: Optional filters:
                 - language: str (e.g., "python")
                 - chunk_type: str (e.g., "function")
@@ -81,20 +83,29 @@ class LexicalSearchService:
             limit: Maximum number of results (default: 100)
             search_in_name: Search in name column (default: True)
             search_in_source: Search in source_code column (default: True)
+            search_in_name_path: Search in name_path column (default: False).
+                                 Auto-enabled if query contains dots.
+                                 EPIC-11 Story 11.2: Enables qualified name search.
 
         Returns:
             List of LexicalSearchResult ordered by similarity DESC
 
         Raises:
-            ValueError: If query is empty or both search fields disabled
+            ValueError: If query is empty or all search fields disabled
         """
         if not query or not query.strip():
             raise ValueError("Query cannot be empty")
 
-        if not search_in_name and not search_in_source:
-            raise ValueError("At least one search field must be enabled")
-
         query = query.strip()
+
+        # EPIC-11 Story 11.2: Auto-detection of qualified queries
+        # If query contains dots (e.g., "models.User"), auto-enable name_path search
+        if "." in query and not search_in_name_path:
+            search_in_name_path = True
+            logger.debug(f"Auto-detected qualified query: '{query}' → enabled name_path search")
+
+        if not search_in_name and not search_in_source and not search_in_name_path:
+            raise ValueError("At least one search field must be enabled")
 
         # Build WHERE clauses
         where_clauses = []
@@ -106,6 +117,8 @@ class LexicalSearchService:
             similarity_conditions.append("name % :query")
         if search_in_source:
             similarity_conditions.append("source_code % :query")
+        if search_in_name_path:  # EPIC-11 Story 11.2
+            similarity_conditions.append("name_path % :query")
 
         if similarity_conditions:
             where_clauses.append(f"({' OR '.join(similarity_conditions)})")
@@ -130,13 +143,15 @@ class LexicalSearchService:
 
         where_clause = " AND ".join(where_clauses)
 
-        # Calculate similarity scores (max of name and source)
-        # Use GREATEST to combine scores from both fields
+        # Calculate similarity scores (max of name, source, and name_path)
+        # Use GREATEST to combine scores from all enabled fields
         similarity_expr_parts = []
         if search_in_name:
             similarity_expr_parts.append("similarity(name, :query)")
         if search_in_source:
             similarity_expr_parts.append("similarity(source_code, :query)")
+        if search_in_name_path:  # EPIC-11 Story 11.2
+            similarity_expr_parts.append("similarity(name_path, :query)")
 
         if len(similarity_expr_parts) > 1:
             similarity_expr = f"GREATEST({', '.join(similarity_expr_parts)})"
@@ -150,6 +165,7 @@ class LexicalSearchService:
                 {similarity_expr} as similarity_score,
                 source_code,
                 name,
+                name_path,
                 language,
                 chunk_type,
                 file_path,
@@ -176,6 +192,7 @@ class LexicalSearchService:
                     similarity_score=row.similarity_score,
                     source_code=row.source_code,
                     name=row.name,
+                    name_path=row.name_path,  # EPIC-11 Story 11.2
                     language=row.language,
                     chunk_type=row.chunk_type,
                     file_path=row.file_path,

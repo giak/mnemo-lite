@@ -48,6 +48,7 @@ class HybridSearchResult:
     # Source code and metadata
     source_code: str
     name: str
+    name_path: Optional[str] = None  # EPIC-11 Story 11.2: Hierarchical qualified name
     language: str
     chunk_type: str
     file_path: str
@@ -466,6 +467,7 @@ class HybridCodeSearchService:
             if isinstance(original, VectorSearchResult):
                 source_code = original.source_code
                 name = original.name
+                name_path = None  # VectorSearchResult doesn't have name_path yet
                 language = original.language
                 chunk_type = original.chunk_type
                 file_path = original.file_path
@@ -473,6 +475,7 @@ class HybridCodeSearchService:
             else:  # LexicalSearchResult
                 source_code = original.source_code
                 name = original.name
+                name_path = original.name_path  # EPIC-11 Story 11.2
                 language = original.language
                 chunk_type = original.chunk_type
                 file_path = original.file_path
@@ -484,6 +487,7 @@ class HybridCodeSearchService:
                 rank=fused.rank,
                 source_code=source_code,
                 name=name,
+                name_path=name_path,  # EPIC-11 Story 11.2
                 language=language,
                 chunk_type=chunk_type,
                 file_path=file_path,

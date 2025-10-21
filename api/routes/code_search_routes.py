@@ -38,7 +38,13 @@ class SearchFiltersModel(BaseModel):
 
 class HybridSearchRequest(BaseModel):
     """Request for hybrid code search."""
-    query: str = Field(..., min_length=1, max_length=1000, description="Search query (keywords)")
+    query: str = Field(
+        ...,
+        min_length=1,
+        max_length=1000,
+        description="Search query. Supports keywords and qualified names (e.g., 'models.User', 'auth.routes.*'). "
+                    "Qualified names (containing dots) trigger automatic name_path search for precise symbol matching."
+    )
 
     embedding_text: Optional[List[float]] = Field(
         None,
@@ -81,6 +87,7 @@ class HybridSearchResultModel(BaseModel):
 
     source_code: str
     name: str
+    name_path: Optional[str] = None  # EPIC-11 Story 11.2: Hierarchical qualified name
     language: str
     chunk_type: str
     file_path: str
