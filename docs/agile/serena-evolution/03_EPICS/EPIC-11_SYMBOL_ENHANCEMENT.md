@@ -1,11 +1,12 @@
 # EPIC-11: Symbol Enhancement (name_path)
 
-**Status**: 📝 READY FOR IMPLEMENTATION
+**Status**: 🚧 IN PROGRESS (Story 11.1 Foundation Complete)
 **Priority**: P1 (High - Improves Search & Call Resolution)
-**Epic Points**: 13 pts
+**Epic Points**: 13 pts (0 pts completed - HIGH priority fixes preventive)
 **Timeline**: Week 3 (Phase 2)
 **Depends On**: EPIC-10 (Cache layer must be ready)
 **Related**: ADR-003 (Breaking Changes - name_path approved)
+**Last Updated**: 2025-10-20 (v3→v4 migration applied, 3 critical fixes implemented)
 
 ---
 
@@ -93,15 +94,25 @@ INSERT INTO code_chunks (name, name_path, file_path) VALUES
 
 ### **Story 11.1: name_path Generation Logic** (5 pts)
 
+**Status**: 🚧 FOUNDATION COMPLETE - 3 HIGH Priority Fixes Applied (2025-10-20)
 **User Story**: As a code indexer, I want to generate hierarchical name_path from file structure so that symbols have unique qualified names.
 
 **Acceptance Criteria**:
-- [ ] `name_path` computed during chunking
-- [ ] Format: `{module}.{submodule}.{class}.{function}`
-- [ ] Nested classes handled: `api.models.user.User.validate`
-- [ ] Module path derived from file path (relative to repository root)
-- [ ] Stored in `code_chunks.name_path` column
-- [ ] Tests: Correct name_path for all chunk types
+- [ ] `name_path` computed during chunking (BLOCKED: pending integration)
+- [x] Format: `{module}.{submodule}.{class}.{function}` ✅
+- [x] Nested classes handled: `api.models.user.User.validate` ✅ (with reverse=True fix)
+- [x] Module path derived from file path (relative to repository root) ✅
+- [x] Stored in `code_chunks.name_path` column ✅ (migration v3→v4 applied)
+- [x] Tests: Correct name_path for all chunk types ✅ (25 tests passing)
+
+**Foundation Completed** (not counted toward 5 pts):
+- ✅ SymbolPathService implemented (227 lines, 20 tests)
+- ✅ Database migration v3→v4 (name_path + 2 indexes)
+- ✅ Repository updates (INSERT/UPDATE queries)
+- ✅ Models updated (CodeChunk, CodeChunkUpdate)
+- ✅ Fix #1: Parent context ordering (reverse=True)
+- ✅ Fix #2: Repository integration (missing from spec)
+- ✅ Fix #3: Strict containment checks (< and >)
 
 **Implementation Details**:
 
