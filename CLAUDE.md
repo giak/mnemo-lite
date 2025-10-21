@@ -1,88 +1,79 @@
 # CLAUDE.md - MnemoLite Cognitive Engine
 
-**DSL:** §=section ◊=concept →=flow ⊕=compose ∧=AND !=critical @=loc |=OR {}=set :=def +=add ←=emph
+**DSL:** §=section ◊=concept →=flow ⊕=compose ∧=AND !=critical @=ref |=OR :=def
 
-v2.4.0 | 2025-10-21 | EPIC-06 (74pts) + EPIC-07 (41pts) + EPIC-08 (24pts) COMPLETE | EPIC-10 (35pts) In Progress | EPIC-11 (13pts) COMPLETE ✅ | EPIC-12 (13/23pts) COMPLETE ✅
+v3.0.0 | 2025-10-21 | Cognitive Engine (HOW) + Skills Ecosystem (WHAT) | Token-Optimized Architecture
 
 ## §IDENTITY
 
-MnemoLite: PG18.cognitive.memory ⊕ pgvector ⊕ pg_partman ⊕ pgmq ⊕ Redis ⊕ CODE.INTEL
-Stack: FastAPI ⊕ SQLAlchemy.async ⊕ asyncpg ⊕ Redis ⊕ sentence-transformers ⊕ tree-sitter ⊕ HTMX ⊕ Cytoscape.js
-Arch: PG18.only ∧ CQRS ∧ DIP.protocols ∧ async.first ∧ EXTEND>REBUILD ∧ L1+L2+L3.cache
+MnemoLite: PostgreSQL-based cognitive memory system with code intelligence
+→ Full stack details: skill:mnemolite-architecture
 
 ## §PRINCIPLES
 
 ◊Core: technical.objectivity ∧ factual ∧ challenge.assumptions → absolute.truth | ¬sycophancy
-◊Meta: EXTEND>REBUILD ∧ Test.First ∧ Minimal.Change ∧ Protocol.Based.DI
+◊Dev: EXTEND>REBUILD ∧ Test.First ∧ Minimal.Change ∧ Progressive.Disclosure
+◊Arch: async.first ∧ Protocol.Based.DI ∧ CQRS.inspired ∧ L1+L2+L3.cache
+◊AI: Skills.Contextual → Invoke skills for knowledge | CLAUDE.md = HOW, Skills = WHAT
 
 ## §COGNITIVE.WORKFLOWS
 
-◊Task.Classification:
-  EPIC|Story → skill:epic-workflow + context.skill
-  Bug|Debug → skill:mnemolite-gotchas + skill:mnemolite-testing
-  Architecture → skill:mnemolite-architecture + skill:document-lifecycle
-  Database → skill:mnemolite-database
-  UI → skill:mnemolite-ui
-  Code.Intel → skill:mnemolite-code-intel
-  Document.Management → skill:document-lifecycle
-
-◊Decision.Framework:
-  New.Feature → Test.First → Implement → Document → Commit
+◊Decision.Frameworks:
+  New.Feature → Test.First → Implement.Minimal → Document → Commit
   Bug.Fix → Reproduce → Root.Cause → Fix → Regression.Test → Document
-  Refactor → Benchmark → Implement → Verify → Rollback.If.Slower
-  Architecture → Research(TEMP→DRAFT→RESEARCH) → Decide(DECISION) → Archive
+  Refactor → Benchmark.Before → Implement → Verify.Performance → Rollback.If.Slower
+  Architecture → Research(TEMP→RESEARCH) → Decide(DECISION) → Archive → skill:document-lifecycle
 
-◊Skill.Auto.Invocation:
-  Mention{"EPIC","Story","completion","commit"} → epic-workflow
-  Mention{"error","fail","debug","gotcha","slow"} → mnemolite-gotchas
-  Mention{"test","pytest","fixture","mock"} → mnemolite-testing
-  Mention{"database","schema","migration","PostgreSQL"} → mnemolite-database
-  Mention{"architecture","DIP","protocol","CQRS"} → mnemolite-architecture
-  Mention{"chunking","embedding","search","graph"} → mnemolite-code-intel
-  Mention{"UI","HTMX","template","Cytoscape"} → mnemolite-ui
-  Mention{"document","ADR","archive","TEMP","DECISION"} → document-lifecycle
-
-## §DEV.OPS
-
-◊Essential: make.{up, down, restart, test} + TEST_DATABASE_URL.ALWAYS + EMBEDDING_MODE=mock
-◊Details → skill:mnemolite-gotchas
-
-## §STRUCTURE.SUMMARY
-
-api/{routes, services, repositories, models, utils, config} → PG18
-! Full structure → skill:mnemolite-architecture (future)
+◊Skill.Routing.Strategy:
+  Implementation.Details | Project.Facts | Stack.Versions → skill:[domain-skill]
+  Common.Pitfalls | Debugging | Critical.Gotchas → skill:mnemolite-gotchas
+  EPIC.Management | Story.Workflow | Commits → skill:epic-workflow
+  Architecture.Patterns | File.Structure | Design.Patterns → skill:mnemolite-architecture
+  Document.Management | ADR.Lifecycle → skill:document-lifecycle
 
 ## §CRITICAL.RULES
 
-! TEST_DATABASE_URL.ALWAYS: Separate test DB required (skill:mnemolite-gotchas/CRITICAL-01)
-! Async.All.DB: ALL database operations MUST be async/await (skill:mnemolite-gotchas/CRITICAL-02)
-! Protocol.Required: New repos/services MUST implement Protocol (skill:mnemolite-gotchas/CRITICAL-03)
-! EXTEND>REBUILD: Copy existing → adapt (10x faster) | Never rebuild from scratch
-! Skills.Contextual: Invoke skills for detailed knowledge | CLAUDE.md = HOW TO THINK, Skills = WHAT TO KNOW
+! TEST_DATABASE_URL: Separate test DB ALWAYS required | Violate = pollute dev DB → skill:mnemolite-gotchas/CRITICAL-01
+! Async.Everything: ALL DB operations MUST be async/await | Violate = RuntimeWarning → skill:mnemolite-gotchas/CRITICAL-02
+! EXTEND>REBUILD: Copy existing pattern, adapt (10x faster) | Never rebuild from scratch
+! Protocol.DI: New repos/services MUST implement Protocol interface → skill:mnemolite-architecture
+! Skills.First: Query skills for details before assumptions | Skills = knowledge base, auto-invoke on keywords
 
-## §SKILLS.AVAILABLE
+→ Full critical rules catalog (31 gotchas): skill:mnemolite-gotchas
 
-**Core Workflow**:
-- **epic-workflow**: EPIC/Story management (analysis, implementation, completion reports, commit patterns)
-- **document-lifecycle**: Doc management (TEMP→DRAFT→RESEARCH→DECISION→ARCHIVE lifecycle)
+## §SKILLS.ECOSYSTEM
 
-**Domain Knowledge**:
-- **mnemolite-gotchas**: ✅ Common pitfalls, debugging, troubleshooting (31 gotchas cataloged)
-- **mnemolite-testing**: [Future] pytest patterns, fixtures, mocks, coverage
-- **mnemolite-database**: [Future] PG18 patterns, migrations, HNSW, JSONB, partitioning
-- **mnemolite-architecture**: [Future] DIP, CQRS, layering, protocols, cache architecture
-- **mnemolite-code-intel**: [Future] Chunking, embedding, search, graph, symbol paths
-- **mnemolite-ui**: [Future] HTMX, SCADA theme, Cytoscape, templates
+◊Philosophy: Progressive.Disclosure → Load knowledge on-demand (60-80% token savings measured)
 
-## §QUICK.REF
+◊Core.Skills:
+  epic-workflow, document-lifecycle, mnemolite-gotchas, mnemolite-architecture
+  [future: mnemolite-testing, mnemolite-database, mnemolite-code-intel, mnemolite-ui]
 
-◊API: http://localhost:8001 | /docs | /health
-◊EPICs: docs/agile/serena-evolution/03_EPICS/ → skill:epic-workflow
-◊Gotchas: 31 cataloged → skill:mnemolite-gotchas
-◊Tests: make api-test + TEST_DATABASE_URL + EMBEDDING_MODE=mock
+◊Auto.Discovery: Skills have YAML frontmatter (name + description with keywords) → Claude auto-invokes when keywords match
+
+◊Structure: .claude/skills/skill-name/SKILL.md (UPPERCASE required) → Official Claude Code spec
 
 ## §META
 
-Philosophy: Cognitive.Engine (this file) + Skill.Ecosystem (contextual KB)
-Update.Rule: This file = HOW TO THINK (meta-rules, workflows) | Skills = WHAT TO KNOW (facts, patterns, gotchas)
-Next.Skills: mnemolite-testing, mnemolite-database, mnemolite-architecture (create as needed)
+Philosophy: This file = Cognitive Engine (HOW TO THINK) | Skills = Knowledge Base (WHAT TO KNOW)
+
+Update.Rules:
+  Add.Here: Universal principles, decision frameworks, top 3-5 critical rules only
+  Add.To.Skills: Facts, patterns, gotchas, implementation details, domain knowledge
+  Test: If fact/pattern changes frequently → Skill | If principle stable → CLAUDE.md
+
+Architecture.Proven:
+  Skills.Auto.Invoke: ✅ Validated in production (session vierge tested)
+  Progressive.Disclosure: ✅ 60-80% token savings measured
+  Token.Cost: ~30-50 tokens per skill at startup (metadata only)
+
+Evolution.Strategy:
+  Create.Skill.When: Domain knowledge reaches ~500+ lines critical mass
+  Review.Quarterly: Realign CLAUDE.md + skills, extract new principles if patterns repeat 3+
+  Hierarchical.CLAUDE.md: Deferred (no proven need, skills pattern works well)
+
+Next.Skills.Candidates:
+  mnemolite-testing (pytest, fixtures, mocks, coverage strategies)
+  mnemolite-database (PG18 specifics, HNSW tuning, JSONB patterns, partitioning)
+  mnemolite-code-intel (chunking, embeddings, search, graph construction)
+  mnemolite-ui (HTMX patterns, SCADA theme, Cytoscape, templates)
