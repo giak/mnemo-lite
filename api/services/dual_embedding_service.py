@@ -13,6 +13,7 @@ Features:
 - Backward compatible via generate_embedding_legacy()
 
 EPIC-12 Story 12.1: Added timeout protection for embedding generation.
+EPIC-12 Story 12.3: Added circuit breaker to prevent fail-forever behavior.
 """
 
 import os
@@ -27,6 +28,9 @@ import numpy as np
 
 from utils.timeout import with_timeout, TimeoutError
 from config.timeouts import get_timeout
+from utils.circuit_breaker import CircuitBreaker
+from config.circuit_breakers import EMBEDDING_CIRCUIT_CONFIG
+from utils.circuit_breaker_registry import register_circuit_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -123,9 +127,16 @@ class DualEmbeddingService:
         self._text_lock = asyncio.Lock()
         self._code_lock = asyncio.Lock()
 
-        # Load attempt tracking
-        self._text_load_attempted = False
-        self._code_load_attempted = False
+        # EPIC-12 Story 12.3: Circuit breaker (removes fail-forever behavior)
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=EMBEDDING_CIRCUIT_CONFIG.failure_threshold,
+            recovery_timeout=EMBEDDING_CIRCUIT_CONFIG.recovery_timeout,
+            half_open_max_calls=EMBEDDING_CIRCUIT_CONFIG.half_open_max_calls,
+            name="embedding_service"
+        )
+
+        # Register for health monitoring
+        register_circuit_breaker(self.circuit_breaker)
 
         logger.info(
             "DualEmbeddingService initialized",
@@ -195,24 +206,26 @@ class DualEmbeddingService:
         """
         Load text model if not already loaded (thread-safe with double-checked locking).
 
+        EPIC-12 Story 12.3: Protected with circuit breaker (no more fail-forever).
+
         Raises:
-            RuntimeError: If model loading failed previously or fails now
+            RuntimeError: If model loading failed or circuit breaker is OPEN
         """
         # First check (no lock)
         if self._text_model is not None:
             return
 
+        # EPIC-12 Story 12.3: Check circuit breaker
+        if not self.circuit_breaker.can_execute():
+            raise RuntimeError(
+                f"Embedding service circuit breaker is {self.circuit_breaker.state.value}. "
+                f"Model loading temporarily unavailable (will retry after {EMBEDDING_CIRCUIT_CONFIG.recovery_timeout}s)."
+            )
+
         async with self._text_lock:
             # Double-checked locking
             if self._text_model is not None:
                 return
-
-            if self._text_load_attempted:
-                raise RuntimeError(
-                    "Text model loading failed previously. Restart service."
-                )
-
-            self._text_load_attempted = True
 
             try:
                 loop = asyncio.get_running_loop()
@@ -221,8 +234,21 @@ class DualEmbeddingService:
                     self._load_text_model_sync
                 )
 
+                # EPIC-12 Story 12.3: Record success
+                self.circuit_breaker.record_success()
+
             except Exception as e:
-                logger.error(f"❌ Failed to load TEXT model: {e}", exc_info=True)
+                # EPIC-12 Story 12.3: Record failure
+                self.circuit_breaker.record_failure()
+
+                logger.error(
+                    f"❌ Failed to load TEXT model: {e}",
+                    extra={
+                        "circuit_state": self.circuit_breaker.state.value,
+                        "failure_count": self.circuit_breaker._failure_count
+                    },
+                    exc_info=True
+                )
                 self._text_model = None
                 raise RuntimeError(f"Failed to load TEXT model: {e}") from e
 
@@ -230,24 +256,26 @@ class DualEmbeddingService:
         """
         Load code model if not already loaded (thread-safe with double-checked locking).
 
+        EPIC-12 Story 12.3: Protected with circuit breaker for automatic recovery.
+
         Raises:
-            RuntimeError: If model loading failed previously or fails now
+            RuntimeError: If model loading fails or circuit breaker is OPEN
         """
         # First check (no lock)
         if self._code_model is not None:
             return
 
+        # EPIC-12 Story 12.3: Check circuit breaker before attempting load
+        if not self.circuit_breaker.can_execute():
+            raise RuntimeError(
+                f"Embedding service circuit breaker is {self.circuit_breaker.state.value}. "
+                f"Model loading temporarily unavailable (will retry after {EMBEDDING_CIRCUIT_CONFIG.recovery_timeout}s)."
+            )
+
         async with self._code_lock:
             # Double-checked locking
             if self._code_model is not None:
                 return
-
-            if self._code_load_attempted:
-                raise RuntimeError(
-                    "Code model loading failed previously. Restart service."
-                )
-
-            self._code_load_attempted = True
 
             try:
                 # Check RAM before loading CODE model
@@ -268,8 +296,18 @@ class DualEmbeddingService:
                     self._load_code_model_sync
                 )
 
+                # EPIC-12 Story 12.3: Record successful load
+                self.circuit_breaker.record_success()
+
             except Exception as e:
-                logger.error(f"❌ Failed to load CODE model: {e}", exc_info=True)
+                # EPIC-12 Story 12.3: Record failure
+                self.circuit_breaker.record_failure()
+
+                logger.error(
+                    f"❌ Failed to load CODE model: {e}",
+                    exc_info=True,
+                    extra={"circuit_state": self.circuit_breaker.state.value}
+                )
                 self._code_model = None
                 raise RuntimeError(f"Failed to load CODE model: {e}") from e
 
