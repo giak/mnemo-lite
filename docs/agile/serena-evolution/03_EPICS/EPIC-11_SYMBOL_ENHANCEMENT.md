@@ -1,12 +1,12 @@
 # EPIC-11: Symbol Enhancement (name_path)
 
-**Status**: 🚧 IN PROGRESS (Story 11.1 Foundation Complete)
+**Status**: 🚀 IN PROGRESS (Story 11.1 COMPLETE ✅ - 5/13 pts)
 **Priority**: P1 (High - Improves Search & Call Resolution)
-**Epic Points**: 13 pts (0 pts completed - HIGH priority fixes preventive)
+**Epic Points**: 13 pts (5 pts completed, 8 pts remaining)
 **Timeline**: Week 3 (Phase 2)
 **Depends On**: EPIC-10 (Cache layer must be ready)
 **Related**: ADR-003 (Breaking Changes - name_path approved)
-**Last Updated**: 2025-10-20 (v3→v4 migration applied, 3 critical fixes implemented)
+**Last Updated**: 2025-10-21 (Story 11.1 complete with 5 passing integration tests)
 
 ---
 
@@ -92,18 +92,19 @@ INSERT INTO code_chunks (name, name_path, file_path) VALUES
 
 ## 📝 Stories Breakdown
 
-### **Story 11.1: name_path Generation Logic** (5 pts)
+### **Story 11.1: name_path Generation Logic** (5 pts) ✅ COMPLETE
 
-**Status**: 🚧 FOUNDATION COMPLETE - 3 HIGH Priority Fixes Applied (2025-10-20)
+**Status**: ✅ **COMPLETE** (2025-10-21)
+**Completion Report**: [EPIC-11_STORY_11.1_COMPLETION_REPORT.md](EPIC-11_STORY_11.1_COMPLETION_REPORT.md)
 **User Story**: As a code indexer, I want to generate hierarchical name_path from file structure so that symbols have unique qualified names.
 
-**Acceptance Criteria**:
-- [ ] `name_path` computed during chunking (BLOCKED: pending integration)
+**Acceptance Criteria** (6/6 COMPLETE):
+- [x] `name_path` computed during chunking ✅ (integrated into CodeIndexingService)
 - [x] Format: `{module}.{submodule}.{class}.{function}` ✅
 - [x] Nested classes handled: `api.models.user.User.validate` ✅ (with reverse=True fix)
 - [x] Module path derived from file path (relative to repository root) ✅
 - [x] Stored in `code_chunks.name_path` column ✅ (migration v3→v4 applied)
-- [x] Tests: Correct name_path for all chunk types ✅ (25 tests passing)
+- [x] Integration tests: 5 tests passing (100% success) ✅
 
 **Foundation Completed** (not counted toward 5 pts):
 - ✅ SymbolPathService implemented (227 lines, 20 tests)
