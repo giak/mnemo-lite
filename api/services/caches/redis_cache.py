@@ -3,6 +3,8 @@ L2 Redis Cache for MnemoLite v3.0 (EPIC-10 Story 10.2).
 
 Async Redis client with connection pooling, graceful degradation,
 and comprehensive metrics tracking.
+
+EPIC-12 Story 12.3: Added circuit breaker for fault tolerance.
 """
 
 from typing import Any, Optional
@@ -14,6 +16,10 @@ try:
     import redis.asyncio as redis
 except ImportError:
     redis = None  # Graceful degradation if redis not installed
+
+from utils.circuit_breaker import CircuitBreaker
+from config.circuit_breakers import REDIS_CIRCUIT_CONFIG
+from utils.circuit_breaker_registry import register_circuit_breaker
 
 logger = structlog.get_logger()
 
@@ -43,6 +49,17 @@ class RedisCache:
         self.hits = 0
         self.misses = 0
         self.errors = 0
+
+        # EPIC-12 Story 12.3: Initialize circuit breaker
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=REDIS_CIRCUIT_CONFIG.failure_threshold,
+            recovery_timeout=REDIS_CIRCUIT_CONFIG.recovery_timeout,
+            half_open_max_calls=REDIS_CIRCUIT_CONFIG.half_open_max_calls,
+            name="redis_cache"
+        )
+
+        # Register for health monitoring
+        register_circuit_breaker(self.circuit_breaker)
 
     async def connect(self):
         """
@@ -78,12 +95,23 @@ class RedisCache:
         """
         Get value from cache.
 
+        EPIC-12 Story 12.3: Protected with circuit breaker.
+
         Args:
             key: Cache key
 
         Returns:
             Deserialized value if found, None otherwise
         """
+        # EPIC-12 Story 12.3: Check circuit breaker
+        if not self.circuit_breaker.can_execute():
+            logger.debug(
+                "redis_circuit_open",
+                circuit_state=self.circuit_breaker.state.value,
+                message="Circuit breaker OPEN, skipping Redis"
+            )
+            return None
+
         if not self.client:
             return None
 
@@ -91,6 +119,7 @@ class RedisCache:
             value = await self.client.get(key)
             if value:
                 self.hits += 1
+                self.circuit_breaker.record_success()  # EPIC-12 Story 12.3
                 logger.debug("L2 cache HIT", key=key[:50])
                 return json.loads(value)
             else:
@@ -99,12 +128,20 @@ class RedisCache:
                 return None
         except Exception as e:
             self.errors += 1
-            logger.warning("Redis GET error - fallback to L3", key=key[:50], error=str(e))
+            self.circuit_breaker.record_failure()  # EPIC-12 Story 12.3
+            logger.warning(
+                "Redis GET error - fallback to L3",
+                key=key[:50],
+                error=str(e),
+                circuit_state=self.circuit_breaker.state.value
+            )
             return None
 
     async def set(self, key: str, value: Any, ttl_seconds: int = 300) -> bool:
         """
         Set value in cache with TTL.
+
+        EPIC-12 Story 12.3: Protected with circuit breaker.
 
         Args:
             key: Cache key
@@ -114,6 +151,15 @@ class RedisCache:
         Returns:
             True if set successfully, False otherwise
         """
+        # EPIC-12 Story 12.3: Check circuit breaker
+        if not self.circuit_breaker.can_execute():
+            logger.debug(
+                "redis_circuit_open",
+                circuit_state=self.circuit_breaker.state.value,
+                message="Circuit breaker OPEN, skipping Redis"
+            )
+            return False
+
         if not self.client:
             return False
 
@@ -124,16 +170,25 @@ class RedisCache:
                 timedelta(seconds=ttl_seconds),
                 serialized,
             )
+            self.circuit_breaker.record_success()  # EPIC-12 Story 12.3
             logger.debug("L2 cache SET", key=key[:50], ttl=ttl_seconds)
             return True
         except Exception as e:
             self.errors += 1
-            logger.warning("Redis SET error", key=key[:50], error=str(e))
+            self.circuit_breaker.record_failure()  # EPIC-12 Story 12.3
+            logger.warning(
+                "Redis SET error",
+                key=key[:50],
+                error=str(e),
+                circuit_state=self.circuit_breaker.state.value
+            )
             return False
 
     async def delete(self, key: str) -> bool:
         """
         Delete key from cache.
+
+        EPIC-12 Story 12.3: Protected with circuit breaker.
 
         Args:
             key: Cache key
@@ -141,16 +196,32 @@ class RedisCache:
         Returns:
             True if deleted, False otherwise
         """
+        # EPIC-12 Story 12.3: Check circuit breaker
+        if not self.circuit_breaker.can_execute():
+            logger.debug(
+                "redis_circuit_open",
+                circuit_state=self.circuit_breaker.state.value,
+                message="Circuit breaker OPEN, skipping Redis"
+            )
+            return False
+
         if not self.client:
             return False
 
         try:
             await self.client.delete(key)
+            self.circuit_breaker.record_success()  # EPIC-12 Story 12.3
             logger.debug("L2 cache DELETE", key=key[:50])
             return True
         except Exception as e:
             self.errors += 1
-            logger.warning("Redis DELETE error", key=key[:50], error=str(e))
+            self.circuit_breaker.record_failure()  # EPIC-12 Story 12.3
+            logger.warning(
+                "Redis DELETE error",
+                key=key[:50],
+                error=str(e),
+                circuit_state=self.circuit_breaker.state.value
+            )
             return False
 
     async def flush_pattern(self, pattern: str) -> int:

@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 
+# EPIC-12 Story 12.3: Import circuit breaker registry
+from utils.circuit_breaker_registry import get_circuit_breaker_metrics
+
 # Métriques Prometheus
 api_requests_total = Counter(
     "api_requests_total",
@@ -114,6 +117,20 @@ async def health_check(db_engine: AsyncEngine = Depends(get_db_engine)):
         endpoint="/health", method="GET", status=str(http_status_code)
     ).inc()
 
+    # EPIC-12 Story 12.3: Get circuit breaker metrics
+    circuit_breakers = get_circuit_breaker_metrics()
+
+    # Check if any critical circuit is OPEN
+    critical_circuits_open = [
+        name for name, metrics in circuit_breakers.items()
+        if metrics["state"] == "open" and name in ["embedding_service"]  # Critical services
+    ]
+
+    # Degrade health if critical circuits are open
+    if critical_circuits_open and is_healthy:
+        is_healthy = False
+        http_status_code = 503
+
     response_content = {
         "status": "healthy" if is_healthy else "degraded",
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -123,6 +140,8 @@ async def health_check(db_engine: AsyncEngine = Depends(get_db_engine)):
             "postgres": pg_status,
             # Section chromadb supprimée
         },
+        "circuit_breakers": circuit_breakers,  # EPIC-12 Story 12.3
+        "critical_circuits_open": critical_circuits_open,  # EPIC-12 Story 12.3
     }
 
     return JSONResponse(status_code=http_status_code, content=response_content)
