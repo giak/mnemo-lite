@@ -44,6 +44,7 @@ RUN sed -i 's|http://deb.debian.org/debian|http://ftp.fr.debian.org/debian|g' /e
     apt-get update && \
     apt-get install -y --no-install-recommends \
         curl \
+        libatomic1 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

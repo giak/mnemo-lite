@@ -69,4 +69,7 @@ tree-sitter-language-pack>=0.4.0  # Pre-compiled language pack (Python, JS, TS, 
 radon>=6.0.1  # Code complexity analysis (Story 3)
 
 # EPIC-10 Story 10.2: L2 Redis Cache
-redis[hiredis]>=5.0.0  # Async Redis client with hiredis for performance 
+redis[hiredis]>=5.0.0  # Async Redis client with hiredis for performance
+
+# EPIC-13 Story 13.1: LSP Integration
+pyright>=1.1.350  # Pyright LSP server for type analysis 
