@@ -482,13 +482,15 @@ class GraphConstructionService:
         all_chunks: List[CodeChunkModel]
     ) -> Optional[uuid.UUID]:
         """
-        Resolve call target to chunk_id.
+        Resolve call target to chunk_id with LSP-enhanced resolution.
 
-        Strategy:
-        1. Check if built-in → return None (skip)
-        2. Check local file → return chunk_id
-        3. Check imports → resolve import → return chunk_id
-        4. Not found → return None (log warning)
+        EPIC-13 Story 13.5: Enhanced call resolution using name_path (EPIC-11).
+
+        Strategy (priority order):
+        1. Skip built-ins → return None
+        2. name_path exact match (EPIC-11) → highest accuracy
+        3. Local file match (same file_path) → medium accuracy
+        4. Import-based match → fallback
 
         Args:
             call_name: Name of function being called
@@ -502,12 +504,51 @@ class GraphConstructionService:
         if is_builtin(call_name):
             return None
 
-        # 2. Check local file (same file_path)
+        # EPIC-13 Story 13.5: Strategy 2 - name_path exact match (highest priority)
+        # Use hierarchical qualified names from EPIC-11 for precise resolution
+        # Examples: "models.user.User.validate", "api.services.user_service.get_user"
+        name_path_candidates = []
+        for chunk in all_chunks:
+            if chunk.name_path:
+                # Match if name_path ends with ".call_name" or equals "call_name"
+                if chunk.name_path == call_name or chunk.name_path.endswith(f".{call_name}"):
+                    name_path_candidates.append(chunk)
+
+        # If exactly one match, use it (high confidence)
+        if len(name_path_candidates) == 1:
+            self.logger.debug(
+                f"EPIC-13: Resolved call '{call_name}' via name_path: {name_path_candidates[0].name_path}"
+            )
+            return name_path_candidates[0].id
+
+        # If multiple matches, try to disambiguate using file proximity
+        if len(name_path_candidates) > 1:
+            # Prefer targets in the same file
+            same_file_candidates = [
+                c for c in name_path_candidates if c.file_path == current_chunk.file_path
+            ]
+            if len(same_file_candidates) == 1:
+                self.logger.debug(
+                    f"EPIC-13: Disambiguated call '{call_name}' using file proximity: "
+                    f"{same_file_candidates[0].name_path}"
+                )
+                return same_file_candidates[0].id
+
+            # Otherwise, return first candidate (alphabetically by name_path for determinism)
+            sorted_candidates = sorted(name_path_candidates, key=lambda c: c.name_path or "")
+            self.logger.debug(
+                f"EPIC-13: Multiple name_path matches for '{call_name}', "
+                f"using first: {sorted_candidates[0].name_path}"
+            )
+            return sorted_candidates[0].id
+
+        # 3. Check local file (same file_path) - fallback to tree-sitter heuristic
         for chunk in all_chunks:
             if chunk.file_path == current_chunk.file_path and chunk.name == call_name:
+                self.logger.debug(f"Resolved call '{call_name}' via local file match")
                 return chunk.id
 
-        # 3. Check imports (simplified for MVP)
+        # 4. Check imports (simplified for MVP) - final fallback
         # Extract imported names from metadata
         imports = current_chunk.metadata.get("imports", []) if current_chunk.metadata else []
 
@@ -518,7 +559,8 @@ class GraphConstructionService:
                 # Search for chunk with this name
                 for chunk in all_chunks:
                     if chunk.name == call_name:
+                        self.logger.debug(f"Resolved call '{call_name}' via imports")
                         return chunk.id
 
-        # 4. Not found
+        # 5. Not found
         return None
