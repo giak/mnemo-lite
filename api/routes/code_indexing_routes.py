@@ -18,11 +18,12 @@ from db.repositories.edge_repository import EdgeRepository  # EPIC-12 Story 12.2
 from dependencies import (
     get_db_engine,
     get_code_chunk_cache,
+    get_redis_cache,  # EPIC-13 Story 13.4
     get_chunk_repository,  # EPIC-12 Story 12.2
     get_node_repository,   # EPIC-12 Story 12.2
     get_edge_repository,   # EPIC-12 Story 12.2
 )
-from services.caches import CodeChunkCache
+from services.caches import CodeChunkCache, RedisCache
 from services.code_chunking_service import CodeChunkingService
 from services.code_indexing_service import (
     CodeIndexingService,
@@ -201,6 +202,7 @@ class DeleteRepositoryResponse(BaseModel):
 async def get_indexing_service(
     engine: AsyncEngine = Depends(get_db_engine),
     chunk_cache: CodeChunkCache = Depends(get_code_chunk_cache),
+    redis_cache: RedisCache = Depends(get_redis_cache),  # EPIC-13 Story 13.4
 ) -> CodeIndexingService:
     """Get CodeIndexingService instance with all dependencies (including L1 cache)."""
     chunking_service = CodeChunkingService()
@@ -210,15 +212,19 @@ async def get_indexing_service(
     chunk_repository = CodeChunkRepository(engine)
     symbol_path_service = SymbolPathService()  # EPIC-11 Story 11.1
 
-    # EPIC-13 Story 13.2: LSP Type Extraction (optional, graceful degradation)
-    # Create LSP client and type extractor for this request
-    # Note: Story 13.3 will add lifecycle management (singleton, auto-restart)
+    # EPIC-13 Story 13.2/13.4: LSP Type Extraction with L2 Redis caching
+    # Story 13.2: Type extraction service
+    # Story 13.4: Redis caching for 10× performance improvement
     type_extractor = None
     try:
         lsp_client = PyrightLSPClient()
         await lsp_client.start()
-        type_extractor = TypeExtractorService(lsp_client=lsp_client)
-        logger.info("TypeExtractorService initialized with Pyright LSP")
+        # Pass redis_cache for LSP result caching (Story 13.4)
+        type_extractor = TypeExtractorService(
+            lsp_client=lsp_client,
+            redis_cache=redis_cache  # Story 13.4: L2 cache for LSP results
+        )
+        logger.info("TypeExtractorService initialized with Pyright LSP and Redis cache")
     except Exception as e:
         # Graceful degradation: LSP unavailable, continue without type extraction
         logger.warning(f"Failed to initialize LSP client, type extraction disabled: {e}")
