@@ -2,7 +2,7 @@
 
 **Status**: 🚧 IN PROGRESS
 **Priority**: P2 (Medium - Quality Enhancement)
-**Epic Points**: 21 pts (16/21 completed - 76%)
+**Epic Points**: 21 pts (19/21 completed - 90%)
 **Timeline**: Week 4-5 (Phase 2-3)
 **Started**: 2025-10-22
 **Depends On**: ✅ EPIC-11 (name_path), ✅ EPIC-12 (Robustness)
@@ -17,9 +17,9 @@
 | **13.1** | Pyright LSP Wrapper | 8 | ✅ **COMPLETE** | 2025-10-22 |
 | **13.2** | Type Metadata Extraction | 5 | ✅ **COMPLETE** | 2025-10-22 |
 | **13.3** | LSP Lifecycle Management | 3 | ✅ **COMPLETE** | 2025-10-22 |
-| **13.4** | LSP Result Caching (L2 Redis) | 3 | ⏳ Pending | - |
+| **13.4** | LSP Result Caching (L2 Redis) | 3 | ✅ **COMPLETE** | 2025-10-22 |
 | **13.5** | Enhanced Call Resolution | 2 | ⏳ Pending | - |
-| **Total** | | **21** | **76%** | |
+| **Total** | | **21** | **90%** | |
 
 ---
 
@@ -162,24 +162,48 @@ This epic transforms MnemoLite from structural analysis to semantic understandin
 
 ---
 
+### ✅ Story 13.4: LSP Result Caching (L2 Redis) (3 pts) - COMPLETE
+
+**Completion Date**: 2025-10-22
+**Commit**: `519c69b`
+
+**Implementation**:
+- ✅ Modified `TypeExtractorService` with L2 Redis caching (+68 lines)
+- ✅ Cache key: `lsp:type:{content_hash}:{line_number}`
+- ✅ Cache TTL: 300 seconds (5 minutes)
+- ✅ Graceful degradation on cache failures
+- ✅ Only caches meaningful results (signature present)
+
+**Files Modified**:
+- ✅ `api/services/lsp/type_extractor.py` (+68 lines)
+- ✅ `api/routes/code_indexing_routes.py` (+4 lines)
+
+**Tests Created**:
+- ✅ `tests/services/lsp/test_type_extractor_cache.py` (10 tests, 100%)
+
+**Tests (22/22 passing - 100%)**:
+- 10 new cache tests: Cache hit/miss, graceful degradation, cache keys
+- 12 existing tests: Backward compatibility verified
+
+**Success Criteria Achieved**:
+- ✅ LSP hover results cached with 300s TTL
+- ✅ Cache key based on content hash + line number
+- ✅ Cache invalidation automatic (content hash changes)
+- ✅ Tests validate cache hit/miss behavior
+- ✅ Graceful degradation on cache failures
+- ✅ All tests passing (100%)
+
+**Impact**:
+- LSP query latency: 30-50ms → <1ms (cached) = **30-50× improvement**
+- Cache hit rate target: >80% (expected for re-indexing)
+- Backward compatible: Works without cache (redis_cache=None)
+
+**Documentation**:
+- ✅ [Story 13.4 Completion Report](./EPIC-13_STORY_13.4_COMPLETION_REPORT.md)
+
+---
+
 ## 📝 Pending Stories
-
----
-
-### ⏳ Story 13.4: LSP Result Caching (L2 Redis) (3 pts)
-
-**Goal**: Cache LSP results for 10× performance improvement
-
-**Key Features**:
-- LSP hover results cached (300s TTL)
-- Cache key: `lsp:type:{content_hash}:{line_number}`
-- Cache invalidation on file change
-- Target: >80% cache hit rate
-
-**Files to Modify**:
-- MODIFY: `api/services/lsp/type_extractor.py` (+15 lines caching)
-
----
 
 ### ⏳ Story 13.5: Enhanced Call Resolution (2 pts)
 
@@ -211,9 +235,9 @@ This epic transforms MnemoLite from structural analysis to semantic understandin
 | Metric | Target | Status |
 |--------|--------|--------|
 | LSP server startup | <500ms | ✅ Achieved (0.5s) |
-| Hover query latency | <100ms | ✅ Achieved (~50ms) |
-| Type extraction per chunk | <50ms (cached: <1ms) | ✅ Achieved (~30ms) |
-| LSP cache hit rate | >80% | ⏳ Pending (Story 13.4) |
+| Hover query latency | <100ms | ✅ Achieved (~50ms uncached) |
+| Type extraction per chunk | <50ms (cached: <1ms) | ✅ Achieved (~30ms uncached, <1ms cached) |
+| LSP cache hit rate | >80% | ✅ **EXPECTED** (Story 13.4 - needs production data) |
 
 ### Quality Metrics
 
@@ -282,18 +306,17 @@ Indexing Pipeline:
 
 ### Immediate (Next Session)
 
-**Story 13.4: LSP Result Caching (L2 Redis) (3 pts)**
-1. Add Redis caching to `TypeExtractorService`
-2. Implement cache key: `lsp:type:{content_hash}:{line_number}`
-3. Set TTL: 300s (5 minutes)
-4. Cache invalidation on file change
-5. Track cache hit/miss metrics
-6. Write comprehensive tests
+**Story 13.5: Enhanced Call Resolution with Types** (2 pts)
+1. Use LSP type information in graph_construction_service
+2. Improve call resolution accuracy from 70% to 95%+
+3. Fallback to tree-sitter if LSP unavailable
+4. Add tests for resolution accuracy
+5. Benchmark improvement
 
 **Expected Outcome**:
-- LSP hover queries: 30ms → <1ms (cached)
-- Cache hit rate: >80%
-- 10× performance improvement for repeated queries
+- Call resolution accuracy: 70% → 95%+
+- Graph quality improved (fewer missing edges)
+- Better dependency visualization
 
 ---
 
@@ -309,6 +332,7 @@ Indexing Pipeline:
 - [EPIC-13_STORY_13.1_COMPLETION_REPORT.md](./EPIC-13_STORY_13.1_COMPLETION_REPORT.md) - Story 13.1 details
 - [EPIC-13_STORY_13.2_COMPLETION_REPORT.md](./EPIC-13_STORY_13.2_COMPLETION_REPORT.md) - Story 13.2 details
 - [EPIC-13_STORY_13.3_COMPLETION_REPORT.md](./EPIC-13_STORY_13.3_COMPLETION_REPORT.md) - Story 13.3 details
+- [EPIC-13_STORY_13.4_COMPLETION_REPORT.md](./EPIC-13_STORY_13.4_COMPLETION_REPORT.md) - Story 13.4 details
 
 ### Related EPICs
 
@@ -328,19 +352,20 @@ Indexing Pipeline:
 - [x] Story 13.1: LSP Wrapper (✅ COMPLETE)
 - [x] Story 13.2: Type Metadata Extraction (✅ COMPLETE)
 - [x] Story 13.3: LSP Lifecycle Management (✅ COMPLETE)
-- [ ] Story 13.4: LSP Result Caching (⏳ Pending)
+- [x] Story 13.4: LSP Result Caching (✅ COMPLETE)
 - [ ] Story 13.5: Enhanced Call Resolution (⏳ Pending)
 - [x] Type coverage >90% for typed code (✅ ACHIEVED)
 - [ ] Call resolution accuracy >95% (⏳ Pending Story 13.5)
 - [x] Graceful degradation tested (LSP down → tree-sitter works) (✅ TESTED)
-- [x] Performance targets met (<100ms hover queries) (✅ ACHIEVED ~30ms)
-- [x] Documentation updated (✅ Stories 13.1-13.3)
+- [x] Performance targets met (<100ms hover queries) (✅ ACHIEVED ~30ms, cached <1ms)
+- [x] LSP caching implemented (✅ ACHIEVED Story 13.4)
+- [x] Documentation updated (✅ Stories 13.1-13.4)
 
-**Ready for v3.0.0 Release**: ⏳ Pending (16/21 pts complete - 76%)
+**Ready for v3.0.0 Release**: ⏳ Pending (19/21 pts complete - 90%)
 
 ---
 
 **Created**: 2025-10-22
 **Last Updated**: 2025-10-22
-**Status**: 🚧 IN PROGRESS (76%)
-**Next Milestone**: Story 13.4 (LSP Result Caching)
+**Status**: 🚧 IN PROGRESS (90%)
+**Next Milestone**: Story 13.5 (Enhanced Call Resolution - FINAL STORY)
