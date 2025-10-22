@@ -8,6 +8,10 @@ Ce dossier contient **deux catégories** de documents :
 - **EPIC-06**: Code Intelligence (Backend) - ✅ **100% COMPLET** (74 pts, Oct 2025)
 - **EPIC-07**: Code Intelligence UI (Frontend) - ✅ **100% COMPLET** (41 pts, Oct 2025)
 - **EPIC-08**: Performance Optimization & Testing - ✅ **100% COMPLET** (24 pts, Oct 2025)
+- **EPIC-10**: Performance & Caching (L1/L2) - ✅ **100% COMPLET** (36 pts, Oct 2025)
+- **EPIC-11**: Symbol Path Enhancement - ✅ **100% COMPLET** (13 pts, Oct 2025)
+- **EPIC-12**: Robustness & Error Handling - ✅ **100% COMPLET** (23 pts, Oct 2025)
+- **EPIC-13**: LSP Integration (Analysis Only) - 🚧 **90% EN COURS** (19/21 pts, Oct 2025)
 
 ### 🟡 **Archive Historique (Q1-Q2 2025)**
 - EPIC-01 à EPIC-05 : Phase initiale du développement
@@ -69,6 +73,33 @@ Les documents **d'archive historique** (EPIC-01 à EPIC-05) peuvent contenir des
 - **Infrastructure** : CI/CD (GitHub Actions), E2E (Playwright), Load (Locust)
 - **Livrables** : Memory cache, pool optimization, deployment automation, testing suite
 
+#### Serena Evolution (EPIC-10 à EPIC-13) - Oct 2025
+
+**EPIC-10: Performance & Caching (L1/L2)** - ✅ 100% COMPLET
+- **Documentation** : `serena-evolution/03_EPICS/EPIC-10_PERFORMANCE_CACHING.md`
+- **Résumé** : 36/36 pts, 6 stories (10.1: L1 Cache, 10.2: L2 Redis, 10.3-10.6: Cascade, Invalidation, Metrics, Migration)
+- **Gains** : 100× faster re-indexing (cached), >90% cache hit rate, Triple-layer cache (L1/L2/L3)
+- **Infrastructure** : Redis L2 cache, MD5 content hashing, Graceful degradation
+
+**EPIC-11: Symbol Path Enhancement** - ✅ 100% COMPLET
+- **Documentation** : `serena-evolution/03_EPICS/EPIC-11_SYMBOL_ENHANCEMENT.md`
+- **Résumé** : 13/13 pts, 4 stories (11.1-11.4: Generation, Search, UI, Migration)
+- **Gains** : Hierarchical name paths (e.g., `models.user.User.validate`), >95% unique paths, 100% chunks have name_path
+- **Livrables** : SymbolPathService, qualified name search, UI display, migration script
+
+**EPIC-12: Robustness & Error Handling** - ✅ 100% COMPLET
+- **Documentation** : `serena-evolution/03_EPICS/EPIC-12_ROBUSTNESS.md`
+- **Résumé** : 23/23 pts, 5 stories (12.1-12.5: Timeouts, Transactional, Degradation, Error Tracking, Retry)
+- **Gains** : Zero infinite hangs, Zero data corruption, 99% uptime with degradation, 100% errors logged
+- **Infrastructure** : Circuit breakers, timeout utilities, transactional indexing, error tracking
+
+**EPIC-13: LSP Integration (Analysis Only)** - 🚧 90% EN COURS
+- **Documentation** : `serena-evolution/03_EPICS/EPIC-13_LSP_INTEGRATION.md`, `EPIC-13_README.md`
+- **Résumé** : 19/21 pts, 5 stories (13.1-13.4 COMPLETE: LSP Wrapper, Type Extraction, Lifecycle, Caching)
+- **Gains** : 90%+ type coverage, LSP queries <1ms (cached), >99% LSP uptime, 30-50× faster (cached)
+- **En cours** : Story 13.5 (Enhanced Call Resolution - 2 pts restants)
+- **Infrastructure** : Pyright LSP client, TypeExtractorService, LSPLifecycleManager, L2 Redis cache for LSP results
+
 ### 🟡 Archive Historique (Q1-Q2 2025)
 
 #### Epics Historiques
@@ -113,15 +144,32 @@ Ces documents restent utiles pour :
 | **Mars-Mai 2025** | Phase Initiale | EPIC-01 à EPIC-05 (Archives) |
 | **Octobre 2025** | Code Intelligence | EPIC-06 (Backend, 10 jours) + EPIC-07 (UI, 2 jours) |
 | **Octobre 2025** | Performance & Testing | EPIC-08 (Optimization, 1 jour) |
+| **Octobre 2025** | Serena Evolution | EPIC-10 (Caching) + EPIC-11 (Symbols) + EPIC-12 (Robustness) + EPIC-13 (LSP) |
 
-**Version actuelle du projet** : v2.0.0 (Octobre 2025)
+**Version actuelle du projet** : v2.3.0 → v3.0.0 (en cours - Octobre 2025)
 
 **Progrès Total** :
 - ✅ EPIC-01 à EPIC-05 : Complétés (Q1-Q2 2025)
 - ✅ EPIC-06 : 74/74 pts (Oct 2025)
 - ✅ EPIC-07 : 41/41 pts (Oct 2025)
 - ✅ EPIC-08 : 24/24 pts (Oct 2025)
+- ✅ EPIC-10 : 36/36 pts (Oct 2025) - Serena Evolution
+- ✅ EPIC-11 : 13/13 pts (Oct 2025) - Serena Evolution
+- ✅ EPIC-12 : 23/23 pts (Oct 2025) - Serena Evolution
+- 🚧 EPIC-13 : 19/21 pts (Oct 2025) - Serena Evolution - **90% COMPLETE**
+
+## 🌟 Serena Evolution (v3.0)
+
+La phase **Serena Evolution** (EPIC-10 à EPIC-13) transforme MnemoLite en plateforme de code intelligence ultra-performante et ultra-robuste :
+
+**Objectifs v3.0** :
+- ✅ Performance : 100× plus rapide (cache L1/L2)
+- ✅ Robustness : 0 crash, graceful degradation partout
+- 🚧 Precision : Type information complète via LSP (90% complete)
+- ✅ Scalability : Gérer 100k+ fichiers sans ralentir
+
+**Documentation complète** : `serena-evolution/00_CONTROL/CONTROL_MISSION_CONTROL.md`
 
 ---
 
-_Dernière mise à jour de cette documentation : 2025-10-17_
+_Dernière mise à jour de cette documentation : 2025-10-22_
