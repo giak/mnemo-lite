@@ -1,20 +1,19 @@
-# CLAUDE.md - MnemoLite Cognitive Engine
+# CLAUDE.md - MnemoLite (Compressed DSL)
 
-**DSL:** §=section ◊=concept →=flow ⊕=compose ∧=AND !=critical @=ref |=OR :=def
+**DSL:** §=section ◊=concept →=flow ⊕=compose ∧=AND !=critical @=loc |=OR {}=set :=def +=add ←=emph
 
-v3.0.0 | 2025-10-21 | Cognitive Engine (HOW) + Skills Ecosystem (WHAT) | Token-Optimized Architecture
+v4.0.0 | 2025-10-22 | Pure Cognitive Engine DSL | -75% size reduction
 
 ## §IDENTITY
 
-MnemoLite: PostgreSQL-based cognitive memory system with code intelligence
-→ Full stack details: skill:mnemolite-architecture
+MnemoLite: PG18.cognitive.memory ⊕ CODE.INTEL → skill:mnemolite-architecture
 
 ## §PRINCIPLES
 
 ◊Core: technical.objectivity ∧ factual ∧ challenge.assumptions → absolute.truth | ¬sycophancy
 ◊Dev: EXTEND>REBUILD ∧ Test.First ∧ Minimal.Change ∧ Progressive.Disclosure
 ◊Arch: async.first ∧ Protocol.Based.DI ∧ CQRS.inspired ∧ L1+L2+L3.cache
-◊AI: Skills.Contextual → Invoke skills for knowledge | CLAUDE.md = HOW, Skills = WHAT
+◊AI: Skills.Contextual → Invoke.on.keywords | CLAUDE.md=HOW | Skills=WHAT
 
 ## §COGNITIVE.WORKFLOWS
 
@@ -24,56 +23,32 @@ MnemoLite: PostgreSQL-based cognitive memory system with code intelligence
   Refactor → Benchmark.Before → Implement → Verify.Performance → Rollback.If.Slower
   Architecture → Research(TEMP→RESEARCH) → Decide(DECISION) → Archive → skill:document-lifecycle
 
-◊Skill.Routing.Strategy:
-  Implementation.Details | Project.Facts | Stack.Versions → skill:[domain-skill]
-  Common.Pitfalls | Debugging | Critical.Gotchas → skill:mnemolite-gotchas
-  EPIC.Management | Story.Workflow | Commits → skill:epic-workflow
-  Architecture.Patterns | File.Structure | Design.Patterns → skill:mnemolite-architecture
-  Document.Management | ADR.Lifecycle → skill:document-lifecycle
+## §CRITICAL.HEURISTICS
 
-## §CRITICAL.RULES
+! EXTEND>REBUILD → copy.existing → adapt → 10x.faster | ¬rebuild.from.scratch
+! Skills.First → query.skills → assume.less → progressive.disclosure
+! Test.First → write.test → implement → validate → commit | TEST_DATABASE_URL.required
+! Measure.Before.Optimize → baseline → change → measure → decide(keep|revert)
+! Validate.Before.Commit → backup → test → session.vierge → sanity.check → commit|revert
+! Pre.Test.Gate: TEST_DATABASE_URL ∧ EMBEDDING_MODE=mock ∵ avoid{dev.DB.pollution, 2min.model.loading}
 
-! TEST_DATABASE_URL: Separate test DB ALWAYS required | Violate = pollute dev DB → skill:mnemolite-gotchas/CRITICAL-01
-! Async.Everything: ALL DB operations MUST be async/await | Violate = RuntimeWarning → skill:mnemolite-gotchas/CRITICAL-02
-! EXTEND>REBUILD: Copy existing pattern, adapt (10x faster) | Never rebuild from scratch
-! Protocol.DI: New repos/services MUST implement Protocol interface → skill:mnemolite-architecture
-! Skills.First: Query skills for details before assumptions | Skills = knowledge base, auto-invoke on keywords
-
-→ Full critical rules catalog (31 gotchas): skill:mnemolite-gotchas
-
-## §SKILLS.ECOSYSTEM
-
-◊Philosophy: Progressive.Disclosure → Load knowledge on-demand (60-80% token savings measured)
-
-◊Core.Skills:
-  epic-workflow, document-lifecycle, mnemolite-gotchas, mnemolite-architecture
-  [future: mnemolite-testing, mnemolite-database, mnemolite-code-intel, mnemolite-ui]
-
-◊Auto.Discovery: Skills have YAML frontmatter (name + description with keywords) → Claude auto-invokes when keywords match
-
-◊Structure: .claude/skills/skill-name/SKILL.md (UPPERCASE required) → Official Claude Code spec
+→ Full.catalog: skill:mnemolite-gotchas (31) | skill:claude-md-evolution (frameworks)
 
 ## §META
 
-Philosophy: This file = Cognitive Engine (HOW TO THINK) | Skills = Knowledge Base (WHAT TO KNOW)
+◊Philosophy: CLAUDE.md=HOW.to.think (cognitive.engine.DSL) | Skills=WHAT.to.know (knowledge.base)
 
-Update.Rules:
-  Add.Here: Universal principles, decision frameworks, top 3-5 critical rules only
-  Add.To.Skills: Facts, patterns, gotchas, implementation details, domain knowledge
-  Test: If fact/pattern changes frequently → Skill | If principle stable → CLAUDE.md
+◊Update.Rule:
+  CLAUDE.md ← Universal ∧ stable ∧ cognitive ∧ cross-cutting ∧ compressible.1line.DSL
+  Skills ← Project.specific | domain.specific | evolving | detailed | >1line.DSL
 
-Architecture.Proven:
-  Skills.Auto.Invoke: ✅ Validated in production (session vierge tested)
-  Progressive.Disclosure: ✅ 60-80% token savings measured
-  Token.Cost: ~30-50 tokens per skill at startup (metadata only)
+◊Evolution:
+  Bottom.up: Skills.emerge@500+.lines
+  Top.down: Principles.extracted@3x.repeat
+  Horizontal: Patterns.adopted.filtered → skill:claude-md-evolution@5.criteria
 
-Evolution.Strategy:
-  Create.Skill.When: Domain knowledge reaches ~500+ lines critical mass
-  Review.Quarterly: Realign CLAUDE.md + skills, extract new principles if patterns repeat 3+
-  Hierarchical.CLAUDE.md: Deferred (no proven need, skills pattern works well)
+◊Maintenance → skill:claude-md-evolution (HOW.vs.WHAT.Test | Version.Bump | Validation)
 
-Next.Skills.Candidates:
-  mnemolite-testing (pytest, fixtures, mocks, coverage strategies)
-  mnemolite-database (PG18 specifics, HNSW tuning, JSONB patterns, partitioning)
-  mnemolite-code-intel (chunking, embeddings, search, graph construction)
-  mnemolite-ui (HTMX patterns, SCADA theme, Cytoscape, templates)
+---
+
+v4.0.0 | 2025-10-22 | Pure.DSL.Cognitive.Engine | -75%.size | Changelog→git.log | Backup→CLAUDE_v3.2.0_BACKUP.md
