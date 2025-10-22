@@ -31,6 +31,7 @@ from services.code_indexing_service import (
 )
 from services.dual_embedding_service import DualEmbeddingService
 from services.graph_construction_service import GraphConstructionService
+from services.lsp import PyrightLSPClient, TypeExtractorService  # EPIC-13 Story 13.2
 from services.metadata_extractor_service import MetadataExtractorService
 from services.symbol_path_service import SymbolPathService  # EPIC-11
 
@@ -209,6 +210,20 @@ async def get_indexing_service(
     chunk_repository = CodeChunkRepository(engine)
     symbol_path_service = SymbolPathService()  # EPIC-11 Story 11.1
 
+    # EPIC-13 Story 13.2: LSP Type Extraction (optional, graceful degradation)
+    # Create LSP client and type extractor for this request
+    # Note: Story 13.3 will add lifecycle management (singleton, auto-restart)
+    type_extractor = None
+    try:
+        lsp_client = PyrightLSPClient()
+        await lsp_client.start()
+        type_extractor = TypeExtractorService(lsp_client=lsp_client)
+        logger.info("TypeExtractorService initialized with Pyright LSP")
+    except Exception as e:
+        # Graceful degradation: LSP unavailable, continue without type extraction
+        logger.warning(f"Failed to initialize LSP client, type extraction disabled: {e}")
+        type_extractor = None
+
     return CodeIndexingService(
         engine=engine,
         chunking_service=chunking_service,
@@ -218,6 +233,7 @@ async def get_indexing_service(
         chunk_repository=chunk_repository,
         chunk_cache=chunk_cache,  # Inject L1 cache (EPIC-10 Story 10.1)
         symbol_path_service=symbol_path_service,  # EPIC-11: Hierarchical name_path generation
+        type_extractor=type_extractor,  # EPIC-13 Story 13.2: Optional LSP type extraction
     )
 
 

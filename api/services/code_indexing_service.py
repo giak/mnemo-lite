@@ -22,6 +22,7 @@ from services.caches.cascade_cache import CascadeCache
 from services.code_chunking_service import CodeChunkingService
 from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomain
 from services.graph_construction_service import GraphConstructionService
+from services.lsp.type_extractor import TypeExtractorService  # EPIC-13 Story 13.2
 from services.metadata_extractor_service import MetadataExtractorService
 from services.symbol_path_service import SymbolPathService  # EPIC-11
 from utils.timeout import with_timeout, TimeoutError
@@ -109,6 +110,7 @@ class CodeIndexingService:
         chunk_repository: CodeChunkRepository,
         chunk_cache: Optional[CascadeCache] = None,
         symbol_path_service: Optional[SymbolPathService] = None,  # EPIC-11
+        type_extractor: Optional[TypeExtractorService] = None,  # EPIC-13 Story 13.2
     ):
         """
         Initialize CodeIndexingService with all required dependencies.
@@ -122,6 +124,7 @@ class CodeIndexingService:
             chunk_repository: Repository for storing code chunks
             chunk_cache: Optional L1/L2 cascade cache for code chunks (Story 10.3)
             symbol_path_service: Optional service for generating hierarchical name_path (EPIC-11)
+            type_extractor: Optional service for extracting type info via LSP (EPIC-13 Story 13.2)
         """
         self.engine = engine
         self.chunking_service = chunking_service
@@ -131,11 +134,13 @@ class CodeIndexingService:
         self.chunk_repository = chunk_repository
         self.chunk_cache = chunk_cache  # CascadeCache from dependencies.py
         self.symbol_path_service = symbol_path_service or SymbolPathService()  # EPIC-11
+        self.type_extractor = type_extractor  # EPIC-13: Optional LSP type extraction
 
         self.logger = logging.getLogger(__name__)
         self.logger.info(
-            f"CodeIndexingService initialized with L1/L2 Cascade Cache and SymbolPathService "
-            f"(cache_enabled={self.chunk_cache is not None})"
+            f"CodeIndexingService initialized with L1/L2 Cascade Cache, SymbolPathService, "
+            f"and TypeExtractorService (cache={self.chunk_cache is not None}, "
+            f"lsp={self.type_extractor is not None})"
         )
 
     async def index_repository(
@@ -362,6 +367,55 @@ class CodeIndexingService:
 
             # Step 3: Metadata extraction (already done by chunking_service if enabled)
             # Metadata is in chunk.metadata
+
+            # Step 3.5: LSP Type Extraction (EPIC-13 Story 13.2)
+            # Extract type information from Pyright LSP and merge with tree-sitter metadata
+            if self.type_extractor and language == "python":
+                self.logger.debug(
+                    f"Extracting LSP type metadata for {len(chunks)} chunks in {file_input.path}"
+                )
+
+                for chunk in chunks:
+                    try:
+                        # EPIC-12 Story 12.1: Timeout protection for LSP queries
+                        type_metadata = await with_timeout(
+                            self.type_extractor.extract_type_metadata(
+                                file_path=file_input.path,
+                                source_code=file_input.content,
+                                chunk=chunk
+                            ),
+                            timeout=3.0,  # 3s per chunk (conservative)
+                            operation_name="lsp_type_extraction",
+                            context={
+                                "chunk_name": chunk.name,
+                                "file_path": file_input.path
+                            },
+                            raise_on_timeout=False  # Graceful degradation on timeout
+                        )
+
+                        # Merge LSP metadata with existing tree-sitter metadata
+                        if type_metadata and any(type_metadata.values()):
+                            # Only merge if we got actual type info
+                            chunk.metadata.update(type_metadata)
+
+                            self.logger.debug(
+                                f"LSP type metadata merged for {chunk.name}: "
+                                f"return_type={type_metadata.get('return_type')}"
+                            )
+
+                    except TimeoutError:
+                        # Timeout extracting types - skip this chunk (graceful degradation)
+                        self.logger.warning(
+                            f"LSP type extraction timed out for {chunk.name} in {file_input.path}"
+                        )
+                        continue
+
+                    except Exception as e:
+                        # Unexpected error - skip this chunk (never crash indexing)
+                        self.logger.warning(
+                            f"LSP type extraction failed for {chunk.name}: {e}"
+                        )
+                        continue
 
             # Step 4: Generate embeddings (if enabled) - USE BATCH PROCESSING
             # PHASE 1 OPTIMIZATION: Generate TEXT OR CODE (not both) based on chunk characteristics
