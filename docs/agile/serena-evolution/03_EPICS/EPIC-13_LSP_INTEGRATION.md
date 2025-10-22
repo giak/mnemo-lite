@@ -1,10 +1,11 @@
 # EPIC-13: LSP Integration (Analysis Only)
 
-**Status**: 📝 READY FOR IMPLEMENTATION
+**Status**: 🚧 IN PROGRESS (8/21 pts - 38%)
 **Priority**: P2 (Medium - Quality Enhancement)
-**Epic Points**: 21 pts
+**Epic Points**: 21 pts (8 complete, 13 remaining)
 **Timeline**: Week 4-5 (Phase 2-3)
-**Depends On**: EPIC-11 (name_path), EPIC-12 (Robustness - timeouts, degradation)
+**Started**: 2025-10-22
+**Depends On**: ✅ EPIC-11 (name_path), ✅ EPIC-12 (Robustness - timeouts, degradation)
 **Related**: ADR-002 (LSP Analysis Only - NO editing)
 
 ---
@@ -98,17 +99,40 @@ Indexing Pipeline:
 
 ## 📝 Stories Breakdown
 
-### **Story 13.1: Pyright LSP Server Wrapper** (8 pts)
+### **Story 13.1: Pyright LSP Server Wrapper** (8 pts) - ✅ COMPLETE
+
+**Status**: ✅ COMPLETE
+**Completion Date**: 2025-10-22
+**Commit**: `4af120f`
 
 **User Story**: As a code indexer, I want to query Pyright for type information so that I can extract semantic metadata.
 
 **Acceptance Criteria**:
-- [ ] Pyright server spawned as subprocess (JSON-RPC over stdio)
-- [ ] Server lifecycle management (start, restart on crash, shutdown)
-- [ ] Query methods: `hover`, `definition`, `documentSymbol`
-- [ ] Timeout enforcement (3s per query)
-- [ ] Graceful degradation if server crashes
-- [ ] Tests: Server startup, query execution, crash recovery
+- [x] Pyright server spawned as subprocess (JSON-RPC over stdio) ✅
+- [x] Server lifecycle management (start, restart on crash, shutdown) ✅
+- [x] Query methods: `hover`, `definition`, `documentSymbol` ✅
+- [x] Timeout enforcement (3s per query) ✅
+- [x] Graceful degradation if server crashes ✅
+- [x] Tests: Server startup, query execution, crash recovery ✅
+
+**Implementation Summary**:
+- ✅ `PyrightLSPClient`: Full JSON-RPC 2.0 client (542 lines)
+- ✅ Async subprocess management with timeout handling
+- ✅ Background response reader task with buffer management
+- ✅ Graceful shutdown with fallback kill()
+- ✅ 10/10 tests passing (8 unit + 2 integration)
+- ✅ Performance targets met: Startup <500ms, Hover <100ms
+
+**Files**:
+- NEW: `api/services/lsp/lsp_client.py` (542 lines)
+- NEW: `api/services/lsp/lsp_errors.py` (32 lines)
+- NEW: `api/services/lsp/__init__.py` (26 lines)
+- NEW: `tests/services/lsp/test_lsp_client.py` (342 lines)
+- MODIFIED: `api/requirements.txt` (+pyright>=1.1.350)
+- MODIFIED: `api/Dockerfile` (+libatomic1)
+
+**Documentation**:
+- [Story 13.1 Completion Report](./EPIC-13_STORY_13.1_COMPLETION_REPORT.md)
 
 **Implementation Details**:
 
@@ -538,7 +562,10 @@ async def test_server_crash_recovery():
 
 ---
 
-### **Story 13.2: Type Metadata Extraction Service** (5 pts)
+### **Story 13.2: Type Metadata Extraction Service** (5 pts) - ⏳ NEXT
+
+**Status**: ⏳ NEXT (Depends on Story 13.1 ✅)
+**Priority**: High (blocks Stories 13.4 and 13.5)
 
 **User Story**: As a code indexer, I want to extract type information from LSP and merge it with tree-sitter metadata so that chunks have rich type data.
 
@@ -1141,18 +1168,27 @@ async def benchmark_call_resolution_accuracy():
 
 **Epic is complete when**:
 - [ ] All 5 stories completed and tested
+  - [x] Story 13.1: LSP Wrapper (✅ COMPLETE - 2025-10-22)
+  - [ ] Story 13.2: Type Metadata Extraction (⏳ NEXT)
+  - [ ] Story 13.3: LSP Lifecycle Management (⏳ Pending)
+  - [ ] Story 13.4: LSP Result Caching (⏳ Pending)
+  - [ ] Story 13.5: Enhanced Call Resolution (⏳ Pending)
 - [ ] LSP server auto-restart functional
 - [ ] Type coverage >90% for typed code
 - [ ] Call resolution accuracy >95%
 - [ ] Graceful degradation tested (LSP down → tree-sitter works)
-- [ ] Performance targets met (<100ms hover queries)
+- [x] Performance targets met (<100ms hover queries) ✅ Story 13.1
 - [ ] Documentation updated
 
-**Ready for v3.0.0 Release**: ✅
+**Progress**: 8/21 pts (38%)
+
+**Ready for v3.0.0 Release**: ⏳ In Progress
 
 ---
 
 **Created**: 2025-10-19
+**Started**: 2025-10-22
+**Last Updated**: 2025-10-22
 **Author**: Architecture Team
 **Reviewed**: Pending
 **Approved**: Pending
