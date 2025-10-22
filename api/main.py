@@ -147,6 +147,38 @@ async def lifespan(app: FastAPI):
         # Graceful degradation: continue without L2 cache
         app.state.redis_cache = None
 
+    # 4. Initialize Error Tracking and Alert Service (EPIC-12 Story 12.4)
+    try:
+        from db.repositories.error_repository import ErrorRepository
+        from services.error_tracking_service import ErrorTrackingService
+        from services.alert_service import AlertService
+
+        logger.info("⏳ Initializing error tracking system...")
+
+        # Create error repository and tracking service
+        error_repository = ErrorRepository(app.state.db_engine)
+        error_tracking_service = ErrorTrackingService(error_repository)
+
+        # Create and start alert service
+        alert_service = AlertService(
+            error_tracking_service=error_tracking_service,
+            check_interval=300  # 5 minutes
+        )
+        await alert_service.start()
+
+        # Store in app.state for access in routes
+        app.state.error_tracking_service = error_tracking_service
+        app.state.alert_service = alert_service
+
+        logger.info("✅ Error tracking and alert service started successfully")
+    except Exception as e:
+        logger.warning(
+            "Error tracking system initialization failed - continuing without error tracking",
+            error=str(e)
+        )
+        app.state.error_tracking_service = None
+        app.state.alert_service = None
+
     yield
 
     # Nettoyage à l'arrêt: Disposer le moteur
@@ -169,6 +201,18 @@ async def lifespan(app: FastAPI):
             logger.warning("Error disconnecting Redis cache", error=str(e))
         finally:
             del app.state.redis_cache
+
+    # Cleanup Alert Service (EPIC-12 Story 12.4)
+    if hasattr(app.state, "alert_service") and app.state.alert_service:
+        try:
+            await app.state.alert_service.stop()
+            logger.info("Alert service stopped.")
+        except Exception as e:
+            logger.warning("Error stopping alert service", error=str(e))
+        finally:
+            del app.state.alert_service
+            if hasattr(app.state, "error_tracking_service"):
+                del app.state.error_tracking_service
 
 
 # Création de l'application

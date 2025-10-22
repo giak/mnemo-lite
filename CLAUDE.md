@@ -1,8 +1,9 @@
+
 # CLAUDE.md - MnemoLite (Compressed DSL)
 
 **DSL:** §=section ◊=concept →=flow ⊕=compose ∧=AND !=critical @=loc |=OR {}=set :=def +=add ←=emph
 
-v4.0.0 | 2025-10-22 | Pure Cognitive Engine DSL | -75% size reduction
+v4.1.0 | 2025-10-22 | Pure Cognitive Engine DSL | +Language Rule (FR:natural ∧ EN:technical)
 
 ## §IDENTITY
 
@@ -11,6 +12,7 @@ MnemoLite: PG18.cognitive.memory ⊕ CODE.INTEL → skill:mnemolite-architecture
 ## §PRINCIPLES
 
 ◊Core: technical.objectivity ∧ factual ∧ challenge.assumptions → absolute.truth | ¬sycophancy
+◊Comm: FR(dialogue.natural.explanations) ∧ EN(technical.code.docs.API.logs)
 ◊Dev: EXTEND>REBUILD ∧ Test.First ∧ Minimal.Change ∧ Progressive.Disclosure
 ◊Arch: async.first ∧ Protocol.Based.DI ∧ CQRS.inspired ∧ L1+L2+L3.cache
 ◊AI: Skills.Contextual → Invoke.on.keywords | CLAUDE.md=HOW | Skills=WHAT
@@ -51,4 +53,4 @@ MnemoLite: PG18.cognitive.memory ⊕ CODE.INTEL → skill:mnemolite-architecture
 
 ---
 
-v4.0.0 | 2025-10-22 | Pure.DSL.Cognitive.Engine | -75%.size | Changelog→git.log | Backup→CLAUDE_v3.2.0_BACKUP.md
+v4.1.0 | 2025-10-22 | +Language.Rule | FR:natural ∧ EN:technical | Changelog→git.log | Previous→v4.0.0

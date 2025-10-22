@@ -575,3 +575,39 @@ async def get_cascade_cache(request: Request) -> CascadeCache:
     )
     
     return cascade_cache
+
+
+# ============================================================================
+# EPIC-12 Story 12.4: Error Tracking Dependencies
+# ============================================================================
+
+async def get_error_repository(
+    engine: AsyncEngine = Depends(get_db_engine),
+):
+    """
+    Récupère une instance du repository d'erreurs.
+
+    Args:
+        engine: Le moteur de base de données
+
+    Returns:
+        Une instance du repository d'erreurs
+    """
+    from db.repositories.error_repository import ErrorRepository
+    return ErrorRepository(engine)
+
+
+async def get_error_tracking_service(
+    error_repository = Depends(get_error_repository),
+):
+    """
+    Récupère une instance du service de suivi d'erreurs.
+
+    Args:
+        error_repository: Le repository d'erreurs
+
+    Returns:
+        Une instance du service de suivi d'erreurs
+    """
+    from services.error_tracking_service import ErrorTrackingService
+    return ErrorTrackingService(error_repository)

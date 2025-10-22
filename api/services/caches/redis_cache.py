@@ -20,8 +20,33 @@ except ImportError:
 from utils.circuit_breaker import CircuitBreaker
 from config.circuit_breakers import REDIS_CIRCUIT_CONFIG
 from utils.circuit_breaker_registry import register_circuit_breaker
+from utils.retry import with_retry, RetryConfig
 
 logger = structlog.get_logger()
+
+# EPIC-12 Story 12.5: Retry configuration for Redis operations
+REDIS_RETRY_CONFIG = RetryConfig(
+    max_attempts=3,
+    base_delay=0.5,
+    max_delay=5.0,
+    jitter=True,
+    retryable_exceptions=(
+        ConnectionError,
+        TimeoutError,
+    )
+)
+
+# Add redis.exceptions if available
+try:
+    import redis.exceptions
+    REDIS_RETRY_CONFIG.retryable_exceptions = (
+        ConnectionError,
+        TimeoutError,
+        redis.exceptions.ConnectionError,
+        redis.exceptions.TimeoutError,
+    )
+except (ImportError, AttributeError):
+    pass
 
 
 class RedisCache:
@@ -91,11 +116,21 @@ class RedisCache:
             await self.client.aclose()
             logger.info("Redis L2 cache disconnected")
 
+    @with_retry(REDIS_RETRY_CONFIG)  # EPIC-12 Story 12.5: Add retry logic
+    async def _get_with_retry(self, key: str) -> Optional[str]:
+        """
+        Internal get with retry logic.
+
+        EPIC-12 Story 12.5: This method will retry on transient failures.
+        """
+        return await self.client.get(key)
+
     async def get(self, key: str) -> Optional[Any]:
         """
         Get value from cache.
 
         EPIC-12 Story 12.3: Protected with circuit breaker.
+        EPIC-12 Story 12.5: With retry logic for transient failures.
 
         Args:
             key: Cache key
@@ -116,7 +151,7 @@ class RedisCache:
             return None
 
         try:
-            value = await self.client.get(key)
+            value = await self._get_with_retry(key)  # EPIC-12 Story 12.5: Use retry
             if value:
                 self.hits += 1
                 self.circuit_breaker.record_success()  # EPIC-12 Story 12.3
@@ -137,11 +172,26 @@ class RedisCache:
             )
             return None
 
+    @with_retry(REDIS_RETRY_CONFIG)  # EPIC-12 Story 12.5: Add retry logic
+    async def _set_with_retry(self, key: str, serialized: str, ttl_seconds: int) -> bool:
+        """
+        Internal set with retry logic.
+
+        EPIC-12 Story 12.5: This method will retry on transient failures.
+        """
+        await self.client.setex(
+            key,
+            timedelta(seconds=ttl_seconds),
+            serialized,
+        )
+        return True
+
     async def set(self, key: str, value: Any, ttl_seconds: int = 300) -> bool:
         """
         Set value in cache with TTL.
 
         EPIC-12 Story 12.3: Protected with circuit breaker.
+        EPIC-12 Story 12.5: With retry logic for transient failures.
 
         Args:
             key: Cache key
@@ -165,11 +215,7 @@ class RedisCache:
 
         try:
             serialized = json.dumps(value)
-            await self.client.setex(
-                key,
-                timedelta(seconds=ttl_seconds),
-                serialized,
-            )
+            await self._set_with_retry(key, serialized, ttl_seconds)  # EPIC-12 Story 12.5
             self.circuit_breaker.record_success()  # EPIC-12 Story 12.3
             logger.debug("L2 cache SET", key=key[:50], ttl=ttl_seconds)
             return True
