@@ -1,8 +1,8 @@
 # EPIC-13: LSP Integration (Analysis Only)
 
-**Status**: 🚧 IN PROGRESS (13/21 pts - 62%)
+**Status**: 🚧 IN PROGRESS (16/21 pts - 76%)
 **Priority**: P2 (Medium - Quality Enhancement)
-**Epic Points**: 21 pts (13 complete, 8 remaining)
+**Epic Points**: 21 pts (16 complete, 5 remaining)
 **Timeline**: Week 4-5 (Phase 2-3)
 **Started**: 2025-10-22
 **Depends On**: ✅ EPIC-11 (name_path), ✅ EPIC-12 (Robustness - timeouts, degradation)
@@ -818,17 +818,43 @@ async def test_graceful_degradation_lsp_failure():
 
 ---
 
-### **Story 13.3: LSP Lifecycle Management** (3 pts)
+### **Story 13.3: LSP Lifecycle Management** (3 pts) - ✅ COMPLETE
+
+**Status**: ✅ COMPLETE
+**Completion Date**: 2025-10-22
+**Commit**: `f71face`
 
 **User Story**: As a system, I want LSP server to auto-restart on crashes so that transient failures don't break indexing permanently.
 
 **Acceptance Criteria**:
-- [ ] Auto-restart on crash (max 3 attempts)
-- [ ] Health check endpoint
-- [ ] Manual restart endpoint
-- [ ] Tests: Crash recovery
+- [x] Auto-restart on crash (max 3 attempts) ✅
+- [x] Health check endpoint ✅
+- [x] Manual restart endpoint ✅
+- [x] Tests: Crash recovery ✅
 
-**Implementation Details**:
+**Implementation Summary**:
+- ✅ `LSPLifecycleManager`: Auto-restart with exponential backoff (318 lines)
+- ✅ Exponential backoff: 2^attempt seconds (2s, 4s, 8s)
+- ✅ Max 3 restart attempts with configurable threshold
+- ✅ Health check: 4 states (healthy, crashed, not_started, starting)
+- ✅ Manual restart capability with restart_count tracking
+- ✅ Graceful shutdown with proper cleanup
+- ✅ REST API endpoints: GET /v1/lsp/health, POST /v1/lsp/restart
+- ✅ Application lifecycle integration (main.py startup/shutdown)
+- ✅ 18/18 tests passing (100% coverage)
+
+**Files**:
+- NEW: `api/services/lsp/lsp_lifecycle_manager.py` (318 lines)
+- NEW: `api/routes/lsp_routes.py` (200 lines)
+- NEW: `tests/services/lsp/test_lsp_lifecycle.py` (343 lines)
+- MODIFIED: `api/services/lsp/__init__.py` (+2 lines)
+- MODIFIED: `api/dependencies.py` (+27 lines)
+- MODIFIED: `api/main.py` (+41 lines startup/shutdown + router)
+
+**Documentation**:
+- [Story 13.3 Completion Report](./EPIC-13_STORY_13.3_COMPLETION_REPORT.md)
+
+**Original Implementation Details**:
 
 ```python
 # NEW: api/services/lsp/lsp_lifecycle_manager.py

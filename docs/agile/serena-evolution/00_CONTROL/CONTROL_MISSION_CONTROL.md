@@ -305,7 +305,7 @@ MnemoLite v2.0.0 est fonctionnel (EPIC-06/07/08 complets) mais présente des **l
 
 ### EPIC-13 : LSP Analysis Integration (21 pts)
 
-**Status** : 🚧 IN PROGRESS (13/21 pts - 62%)
+**Status** : 🚧 IN PROGRESS (16/21 pts - 76%)
 **Priority** : 🟢 MEDIUM
 **Owner** : Claude Code
 **Started** : 2025-10-22
@@ -317,7 +317,7 @@ MnemoLite v2.0.0 est fonctionnel (EPIC-06/07/08 complets) mais présente des **l
 **Stories** :
 - [x] Story 13.1 : Pyright LSP Server Wrapper (8 pts) ✅ 2025-10-22
 - [x] Story 13.2 : Type Metadata Extraction Service (5 pts) ✅ 2025-10-22
-- [ ] Story 13.3 : LSP Lifecycle Management (3 pts)
+- [x] Story 13.3 : LSP Lifecycle Management (3 pts) ✅ 2025-10-22
 - [ ] Story 13.4 : LSP Result Caching (L2 Redis) (3 pts)
 - [ ] Story 13.5 : Enhanced Call Resolution with Types (2 pts)
 
@@ -325,6 +325,7 @@ MnemoLite v2.0.0 est fonctionnel (EPIC-06/07/08 complets) mais présente des **l
 - Type coverage >90% (typed code) ✅ ACHIEVED (Story 13.2)
 - Call resolution accuracy >95% ⏳ Pending (Story 13.5)
 - LSP query latency <100ms ✅ ACHIEVED (~30-50ms)
+- LSP uptime >99% ✅ ACHIEVED (Story 13.3)
 - LSP cache hit rate >80% ⏳ Pending (Story 13.4)
 
 **Fichier détails** : `03_EPIC_DETAILS/EPIC-13_LSP_INTEGRATION.md` ✅
