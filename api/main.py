@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy.event import listen
 
 # Import des routes
-from routes import health_routes, event_routes, search_routes, ui_routes, graph_routes, monitoring_routes, code_graph_routes, code_search_routes, code_indexing_routes, cache_admin_routes
+from routes import health_routes, event_routes, search_routes, ui_routes, graph_routes, monitoring_routes, code_graph_routes, code_search_routes, code_indexing_routes, cache_admin_routes, lsp_routes
 
 # Configuration de base
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -179,6 +179,33 @@ async def lifespan(app: FastAPI):
         app.state.error_tracking_service = None
         app.state.alert_service = None
 
+    # 5. Initialize LSP Lifecycle Manager (EPIC-13 Story 13.3)
+    try:
+        from services.lsp import LSPLifecycleManager
+
+        logger.info("⏳ Starting LSP Lifecycle Manager...")
+
+        # Create and start LSP lifecycle manager
+        lsp_lifecycle_manager = LSPLifecycleManager(
+            workspace_root="/tmp/lsp_workspace",
+            max_restart_attempts=3
+        )
+        await lsp_lifecycle_manager.start()
+
+        # Store in app.state for access in routes and dependencies
+        app.state.lsp_lifecycle_manager = lsp_lifecycle_manager
+
+        logger.info(
+            "✅ LSP Lifecycle Manager started successfully",
+            pid=lsp_lifecycle_manager.client.process.pid if lsp_lifecycle_manager.client and lsp_lifecycle_manager.client.process else None
+        )
+    except Exception as e:
+        logger.warning(
+            "LSP Lifecycle Manager initialization failed - continuing without LSP type extraction",
+            error=str(e)
+        )
+        app.state.lsp_lifecycle_manager = None
+
     yield
 
     # Nettoyage à l'arrêt: Disposer le moteur
@@ -213,6 +240,16 @@ async def lifespan(app: FastAPI):
             del app.state.alert_service
             if hasattr(app.state, "error_tracking_service"):
                 del app.state.error_tracking_service
+
+    # Cleanup LSP Lifecycle Manager (EPIC-13 Story 13.3)
+    if hasattr(app.state, "lsp_lifecycle_manager") and app.state.lsp_lifecycle_manager:
+        try:
+            await app.state.lsp_lifecycle_manager.shutdown()
+            logger.info("LSP Lifecycle Manager shut down gracefully.")
+        except Exception as e:
+            logger.warning("Error shutting down LSP Lifecycle Manager", error=str(e))
+        finally:
+            del app.state.lsp_lifecycle_manager
 
 
 # Création de l'application
@@ -296,6 +333,7 @@ app.include_router(code_graph_routes.router, prefix="/v1", tags=["v1_Code_Graph"
 app.include_router(code_search_routes.router, tags=["v1_Code_Search"])
 app.include_router(code_indexing_routes.router, tags=["v1_Code_Indexing"])
 app.include_router(cache_admin_routes.router, tags=["v1_Cache_Admin"])
+app.include_router(lsp_routes.router, tags=["v1_LSP"])
 app.include_router(health_routes.router)
 app.include_router(ui_routes.router)
 app.include_router(graph_routes.router)

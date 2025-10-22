@@ -611,3 +611,33 @@ async def get_error_tracking_service(
     """
     from services.error_tracking_service import ErrorTrackingService
     return ErrorTrackingService(error_repository)
+
+
+# ============================================================================
+# EPIC-13 Story 13.3: LSP Lifecycle Management
+# ============================================================================
+
+def get_lsp_lifecycle_manager():
+    """
+    Récupère l'instance singleton du LSP Lifecycle Manager depuis l'état de l'application.
+
+    Le lifecycle manager est initialisé au démarrage dans main.py lifespan
+    et stocké dans app.state pour permettre un accès global.
+
+    Returns:
+        LSPLifecycleManager | None: Instance du lifecycle manager si disponible
+
+    Note:
+        Cette fonction ne prend pas de Request en paramètre car elle est appelée
+        depuis main.py lifespan (avant que l'app ne soit complètement initialisée).
+        Elle accède directement à app.state.lsp_lifecycle_manager.
+    """
+    # Import here to avoid circular dependency
+    from main import app
+
+    lsp_manager = getattr(app.state, "lsp_lifecycle_manager", None)
+
+    if lsp_manager is None:
+        logger.warning("LSP lifecycle manager not initialized")
+
+    return lsp_manager
