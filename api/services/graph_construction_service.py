@@ -76,13 +76,13 @@ class GraphConstructionService:
     async def build_graph_for_repository(
         self,
         repository: str,
-        language: str = "python"
+        languages: Optional[List[str]] = None
     ) -> GraphStats:
         """
-        Build complete graph for a repository.
+        Build complete graph for a repository (multi-language support).
 
         Steps:
-        1. Get all chunks for repository
+        1. Get all chunks for repository (across all languages)
         2. Create nodes for all functions/classes
         3. Resolve calls and imports
         4. Create edges
@@ -90,17 +90,29 @@ class GraphConstructionService:
 
         Args:
             repository: Repository name (e.g., "MnemoLite")
-            language: Programming language (default: "python")
+            languages: List of languages to include (default: auto-detect all)
 
         Returns:
             GraphStats with construction metrics
+
+        EPIC-15 Story 15.3: Multi-language graph construction
         """
         start_time = time.time()
-        self.logger.info(f"Building graph for repository '{repository}', language '{language}'")
 
-        # Step 1: Get all chunks for repository
-        chunks = await self._get_chunks_for_repository(repository, language)
-        self.logger.info(f"Found {len(chunks)} chunks for repository '{repository}'")
+        # Auto-detect languages if not specified
+        if languages is None:
+            languages = await self._detect_languages_in_repository(repository)
+
+        self.logger.info(f"Building graph for repository '{repository}', languages: {languages}")
+
+        # Step 1: Get all chunks for ALL languages
+        all_chunks = []
+        for language in languages:
+            chunks = await self._get_chunks_for_repository(repository, language)
+            all_chunks.extend(chunks)
+
+        self.logger.info(f"Found {len(all_chunks)} chunks for repository '{repository}' across {len(languages)} languages")
+        chunks = all_chunks  # Use aggregated chunks for rest of processing
 
         if not chunks:
             self.logger.warning(f"No chunks found for repository '{repository}'. Returning empty stats.")
@@ -221,13 +233,49 @@ class GraphConstructionService:
 
         return stats
 
+    async def _detect_languages_in_repository(
+        self,
+        repository: str
+    ) -> List[str]:
+        """
+        Detect which languages exist in a repository.
+
+        Returns:
+            List of unique language names found in chunks
+
+        EPIC-15 Story 15.3: Auto-detect languages for multi-language repos
+        """
+        query_str = """
+            SELECT DISTINCT language
+            FROM code_chunks
+            WHERE repository = :repository
+            ORDER BY language
+        """
+
+        async with self.engine.connect() as connection:
+            from sqlalchemy.sql import text
+            result = await connection.execute(
+                text(query_str),
+                {"repository": repository}
+            )
+            rows = result.fetchall()
+
+        languages = [row[0] for row in rows if row[0]]
+
+        if not languages:
+            self.logger.warning(f"No languages found for repository '{repository}'")
+            return []
+
+        self.logger.info(f"Detected languages for repository '{repository}': {languages}")
+        return languages
+
     async def _get_chunks_for_repository(
         self,
         repository: str,
         language: str
     ) -> List[CodeChunkModel]:
         """
-        Get all code chunks for repository.
+        Get all code chunks for repository and specific language.
 
         For now, uses a simple query. In future, could add caching.
         """

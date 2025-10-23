@@ -159,6 +159,145 @@ class PythonParser(LanguageParser):
         )
 
 
+class TypeScriptParser(LanguageParser):
+    """
+    TypeScript/TSX AST parser using tree-sitter.
+
+    Handles:
+    - Function declarations (function)
+    - Class declarations (class)
+    - Method definitions (methods in classes)
+    - Interface declarations (TypeScript)
+    - Arrow functions (const x = () => {})
+    - Async functions
+
+    EPIC-15 Story 15.1: TypeScript support (8 pts)
+    """
+
+    def __init__(self):
+        super().__init__("typescript")
+
+    def get_function_nodes(self, tree: Tree) -> list[Node]:
+        """Extract function declarations + arrow functions."""
+        import tree_sitter
+
+        query = tree_sitter.Query(
+            self.tree_sitter_language,
+            """
+            (function_declaration) @function
+            (lexical_declaration
+              (variable_declarator
+                value: (arrow_function) @arrow_function))
+            """
+        )
+        cursor = tree_sitter.QueryCursor(query)
+        matches = cursor.matches(tree.root_node)
+
+        nodes = []
+        for _, captures_dict in matches:
+            nodes.extend(captures_dict.get('function', []))
+            nodes.extend(captures_dict.get('arrow_function', []))
+        return nodes
+
+    def get_class_nodes(self, tree: Tree) -> list[Node]:
+        """Extract class declarations."""
+        import tree_sitter
+
+        query = tree_sitter.Query(
+            self.tree_sitter_language,
+            """
+            (class_declaration) @class
+            """
+        )
+        cursor = tree_sitter.QueryCursor(query)
+        matches = cursor.matches(tree.root_node)
+
+        nodes = []
+        for _, captures_dict in matches:
+            nodes.extend(captures_dict.get('class', []))
+        return nodes
+
+    def get_interface_nodes(self, tree: Tree) -> list[Node]:
+        """Extract interface declarations (TypeScript-specific)."""
+        import tree_sitter
+
+        query = tree_sitter.Query(
+            self.tree_sitter_language,
+            """
+            (interface_declaration) @interface
+            """
+        )
+        cursor = tree_sitter.QueryCursor(query)
+        matches = cursor.matches(tree.root_node)
+
+        nodes = []
+        for _, captures_dict in matches:
+            nodes.extend(captures_dict.get('interface', []))
+        return nodes
+
+    def get_method_nodes(self, node: Node) -> list[Node]:
+        """Extract method definitions from class body."""
+        methods = []
+        for child in node.children:
+            if child.type == "class_body":
+                for subchild in child.children:
+                    if subchild.type == "method_definition":
+                        methods.append(subchild)
+        return methods
+
+    def node_to_code_unit(self, node: Node, source_code: str) -> CodeUnit:
+        """
+        Convert TypeScript tree-sitter node to CodeUnit.
+
+        Handles:
+        - type_identifier (class names, interface names)
+        - identifier (function/method names)
+        - Async functions (async keyword)
+        """
+        # Get name from identifier/type_identifier
+        name = None
+        for child in node.children:
+            if child.type in ["identifier", "type_identifier"]:
+                name = source_code[child.start_byte:child.end_byte]
+                break
+
+        if not name:
+            name = f"anonymous_{node.type}"
+
+        # Extract source code for this node
+        node_source = source_code[node.start_byte:node.end_byte]
+
+        return CodeUnit(
+            node_type=node.type,
+            name=name,
+            source_code=node_source,
+            start_line=node.start_point[0] + 1,
+            end_line=node.end_point[0] + 1,
+            size=len(node_source),
+            children=[]
+        )
+
+
+class JavaScriptParser(TypeScriptParser):
+    """
+    JavaScript/JSX parser (inherits from TypeScript).
+
+    JavaScript is a subset of TypeScript syntax,
+    so we can reuse the TypeScript parser.
+
+    The only difference is the tree-sitter language name:
+    - TypeScript uses "typescript" grammar (includes interfaces, types)
+    - JavaScript uses "javascript" grammar (no type syntax)
+
+    EPIC-15 Story 15.2: JavaScript support (3 pts)
+    """
+
+    def __init__(self):
+        # Call LanguageParser.__init__ directly to override language name
+        LanguageParser.__init__(self, "javascript")
+        # Do NOT call super().__init__() - would set language to "typescript"
+
+
 class CodeChunkingService:
     """
     Service for semantic code chunking via AST parsing.
@@ -180,10 +319,12 @@ class CodeChunkingService:
         self._parse_cache: dict[str, Tree] = {}  # Cache parsed trees
 
         # Initialize parsers (lazy loading)
+        # EPIC-15: Multi-language support (Python, TypeScript, JavaScript)
         self._supported_languages = {
             "python": PythonParser,
-            # "javascript": JavaScriptParser,  # TODO: Phase 1.5
-            # "typescript": TypeScriptParser,  # TODO: Phase 1.5
+            "javascript": JavaScriptParser,
+            "typescript": TypeScriptParser,
+            "tsx": TypeScriptParser,  # TSX uses TypeScript parser
         }
 
         logger.info(f"CodeChunkingService initialized with {len(self._supported_languages)} language parsers")
@@ -308,6 +449,14 @@ class CodeChunkingService:
                 unit.children.append(method_unit)
             code_units.append(unit)
 
+        # Get all interfaces (TypeScript-specific)
+        # EPIC-15 Story 15.1: Support TypeScript interfaces
+        if hasattr(parser, 'get_interface_nodes'):
+            interface_nodes = parser.get_interface_nodes(tree)
+            for node in interface_nodes:
+                unit = parser.node_to_code_unit(node, source_code)
+                code_units.append(unit)
+
         return code_units
 
     async def _split_and_merge(
@@ -378,10 +527,17 @@ class CodeChunkingService:
     def _unit_to_chunk(self, unit: CodeUnit, file_path: str, language: str) -> CodeChunk:
         """Convert CodeUnit to CodeChunk model."""
         # Determine chunk type from node type
+        # EPIC-15: Added TypeScript/JavaScript node types
         chunk_type_map = {
+            # Python
             "function_definition": ChunkType.FUNCTION,
             "class_definition": ChunkType.CLASS,
             "method_definition": ChunkType.METHOD,
+            # TypeScript/JavaScript
+            "function_declaration": ChunkType.FUNCTION,
+            "arrow_function": ChunkType.FUNCTION,
+            "class_declaration": ChunkType.CLASS,
+            "interface_declaration": ChunkType.INTERFACE,
         }
         chunk_type = chunk_type_map.get(unit.node_type, ChunkType.FUNCTION)
 
