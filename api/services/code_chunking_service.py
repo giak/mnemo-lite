@@ -81,23 +81,41 @@ class PythonParser(LanguageParser):
 
     def get_function_nodes(self, tree: Tree) -> list[Node]:
         """Extract all function definition nodes (top-level and nested)."""
-        query = self.tree_sitter_language.query(
+        import tree_sitter
+
+        query = tree_sitter.Query(
+            self.tree_sitter_language,
             """
             (function_definition) @function
             """
         )
-        captures = query.captures(tree.root_node)
-        return [node for node, _ in captures]
+        cursor = tree_sitter.QueryCursor(query)
+        matches = cursor.matches(tree.root_node)
+
+        # Extract nodes from matches: [(pattern_idx, {'capture_name': [nodes]}), ...]
+        nodes = []
+        for _, captures_dict in matches:
+            nodes.extend(captures_dict.get('function', []))
+        return nodes
 
     def get_class_nodes(self, tree: Tree) -> list[Node]:
         """Extract all class definition nodes."""
-        query = self.tree_sitter_language.query(
+        import tree_sitter
+
+        query = tree_sitter.Query(
+            self.tree_sitter_language,
             """
             (class_definition) @class
             """
         )
-        captures = query.captures(tree.root_node)
-        return [node for node, _ in captures]
+        cursor = tree_sitter.QueryCursor(query)
+        matches = cursor.matches(tree.root_node)
+
+        # Extract nodes from matches
+        nodes = []
+        for _, captures_dict in matches:
+            nodes.extend(captures_dict.get('class', []))
+        return nodes
 
     def get_method_nodes(self, node: Node) -> list[Node]:
         """Extract method definitions from a class node."""
