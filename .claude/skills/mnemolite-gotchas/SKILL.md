@@ -81,15 +81,16 @@ Use this skill when:
 
 ---
 
-### 🟢 Code Intelligence Gotchas (5 gotchas)
+### 🟢 Code Intelligence Gotchas (6 gotchas)
 
-**Summary**: Code chunking, graph construction, symbol resolution, indexing patterns
+**Summary**: Code chunking, graph construction, symbol resolution, indexing patterns, LSP integration
 
 1. **CODE-01**: Embedding Domain Selection - Use HYBRID domain for code chunks (TEXT+CODE embeddings)
 2. **CODE-02**: Code Chunk Embedding Storage Pattern - Create dict with embeddings BEFORE CodeChunkCreate
 3. **CODE-03**: GraphService Method Naming - `build_graph_for_repository()` NOT `build_repository_graph()`
 4. **CODE-04**: Symbol Resolution Scope - Local (same file) → Imports (tracked) → Best effort
 5. **CODE-05**: Graph Builtin Filtering - Python builtins MUST be filtered to avoid graph pollution
+6. **CODE-06**: TypeScript LSP Workspace Creation - Create workspace directory BEFORE starting LSP client
 
 **Details**: See Code Intelligence Domain section below
 
@@ -791,6 +792,40 @@ def resolve_symbol(name: str):
         return None  # Skip builtins
     # ... resolve other symbols
 ```
+
+---
+
+### CODE-06: TypeScript LSP Workspace Creation
+
+**Rule**: Create LSP workspace directory BEFORE starting TypeScript LSP client
+
+**Why**: TypeScript Language Server requires workspace directory to exist during initialization
+
+**Error Symptom**:
+```
+LSPInitializationError: Initialization failed:
+{'code': -32603, 'message': "Request initialize failed with message:
+ENOENT: no such file or directory, stat '/tmp/ts_lsp_workspace'"}
+```
+
+**How to Fix**:
+```python
+# ❌ WRONG - No workspace directory creation
+typescript_lsp = TypeScriptLSPClient(workspace_root="/tmp/ts_lsp_workspace")
+await typescript_lsp.start()  # Fails: directory doesn't exist
+
+# ✅ CORRECT - Create directory first
+from pathlib import Path
+
+ts_workspace_root = "/tmp/ts_lsp_workspace"
+Path(ts_workspace_root).mkdir(parents=True, exist_ok=True)  # Create directory
+typescript_lsp = TypeScriptLSPClient(workspace_root=ts_workspace_root)
+await typescript_lsp.start()  # Success
+```
+
+**Impact**:
+- Without fix: TypeScript LSP fails to start, graceful degradation to heuristic extraction
+- With fix: TypeScript LSP starts successfully, 95%+ type accuracy
 
 ---
 

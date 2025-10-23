@@ -34,7 +34,7 @@ MnemoLite: PG18.cognitive.memory ⊕ CODE.INTEL → skill:mnemolite-architecture
 ! Validate.Before.Commit → backup → test → session.vierge → sanity.check → commit|revert
 ! Pre.Test.Gate: TEST_DATABASE_URL ∧ EMBEDDING_MODE=mock ∵ avoid{dev.DB.pollution, 2min.model.loading}
 
-→ Full.catalog: skill:mnemolite-gotchas (31) | skill:claude-md-evolution (frameworks)
+→ Full.catalog: skill:mnemolite-gotchas (36) | skill:claude-md-evolution (frameworks)
 
 ## §META
 

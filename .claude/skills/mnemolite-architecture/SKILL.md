@@ -80,6 +80,14 @@ Use this skill when:
 - **jinaai/jina-embeddings-v2-base-code** (code embeddings, 768D)
 - **tree-sitter** (AST parsing for code chunking)
 
+**Language Servers** (EPIC-13, EPIC-16):
+- **pyright** (Python LSP - type extraction, hover, symbols)
+- **typescript-language-server** (TypeScript/JavaScript LSP - type extraction)
+- **Node.js** 20+ + npm (required for TypeScript LSP)
+- Hybrid approach: tree-sitter (chunking) + LSP (type intelligence) + embeddings (semantic search)
+- Graceful degradation: LSP → heuristic fallback if unavailable
+- Type accuracy: 70% (heuristic) → 95%+ (LSP-powered)
+
 **Utilities**:
 - **structlog** (structured logging)
 - **pydantic** 2.0+ (data validation)
