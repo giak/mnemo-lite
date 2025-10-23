@@ -128,6 +128,16 @@ class VectorSearchService:
                 where_clauses.append("file_path LIKE :file_path")
                 params["file_path"] = f"%{filters['file_path']}%"
 
+            # EPIC-14 Story 14.4: LSP type-aware filters
+            if "return_type" in filters:
+                where_clauses.append("metadata->>'return_type' ILIKE :return_type")
+                params["return_type"] = f"%{filters['return_type']}%"
+
+            if "param_type" in filters:
+                # Check if any parameter type matches
+                where_clauses.append("EXISTS (SELECT 1 FROM jsonb_each_text(metadata->'param_types') WHERE value ILIKE :param_type)")
+                params["param_type"] = f"%{filters['param_type']}%"
+
         where_clause = " AND ".join(where_clauses) if where_clauses else "TRUE"
 
         # SET command (executed separately)

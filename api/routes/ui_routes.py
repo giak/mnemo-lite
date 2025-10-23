@@ -599,6 +599,148 @@ async def code_dashboard_data(engine = Depends(get_db_engine)):
         }
 
 
+@router.get("/lsp/stats")
+async def lsp_stats(engine = Depends(get_db_engine)):
+    """
+    LSP Health Statistics endpoint (EPIC-14 Story 14.3).
+
+    Returns real-time LSP server health metrics for dashboard widget:
+    - LSP server uptime (simulated from indexed_at timestamps)
+    - Query count (total chunks with LSP metadata)
+    - Cache hit rate (from Redis L2 cache stats)
+    - Type coverage (percentage of chunks with return_type)
+
+    Used by lsp_monitor.js for Chart.js visualization.
+    """
+    from sqlalchemy import text
+    import redis
+    import os
+
+    try:
+        # ========== Type Coverage & Query Count ==========
+        # Count chunks with LSP metadata (return_type, signature, or param_types)
+        lsp_metadata_query = text("""
+            SELECT
+                COUNT(*) FILTER (WHERE metadata->>'return_type' IS NOT NULL) as chunks_with_return_type,
+                COUNT(*) FILTER (WHERE metadata->>'signature' IS NOT NULL) as chunks_with_signature,
+                COUNT(*) FILTER (WHERE metadata->>'param_types' IS NOT NULL) as chunks_with_params,
+                COUNT(*) as total_chunks,
+                MIN(indexed_at) as first_indexed,
+                MAX(indexed_at) as last_indexed
+            FROM code_chunks
+            WHERE chunk_type IN ('function', 'method', 'class')
+        """)
+
+        async with engine.connect() as conn:
+            result = await conn.execute(lsp_metadata_query)
+            row = result.fetchone()
+
+        chunks_with_return_type = row[0] or 0
+        chunks_with_signature = row[1] or 0
+        chunks_with_params = row[2] or 0
+        total_chunks = row[3] or 0
+        first_indexed = row[4]
+        last_indexed = row[5]
+
+        # Calculate type coverage percentage
+        type_coverage = round((chunks_with_return_type / total_chunks * 100), 2) if total_chunks > 0 else 0
+
+        # Calculate uptime (time since first indexing)
+        uptime_seconds = 0
+        uptime_display = "Not running"
+        if first_indexed and last_indexed:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            uptime_delta = now - first_indexed
+            uptime_seconds = int(uptime_delta.total_seconds())
+
+            # Format uptime as human-readable
+            days = uptime_seconds // 86400
+            hours = (uptime_seconds % 86400) // 3600
+            minutes = (uptime_seconds % 3600) // 60
+
+            if days > 0:
+                uptime_display = f"{days}d {hours}h"
+            elif hours > 0:
+                uptime_display = f"{hours}h {minutes}m"
+            else:
+                uptime_display = f"{minutes}m"
+
+        # ========== Cache Hit Rate (from Redis L2) ==========
+        cache_hit_rate = 0.0
+        cache_hits = 0
+        cache_misses = 0
+
+        try:
+            redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+            redis_client = redis.from_url(redis_url, decode_responses=True)
+
+            # Get cache stats from Redis (EPIC-10 pattern)
+            cache_hits = int(redis_client.get("cache:stats:hits") or 0)
+            cache_misses = int(redis_client.get("cache:stats:misses") or 0)
+
+            total_requests = cache_hits + cache_misses
+            if total_requests > 0:
+                cache_hit_rate = round((cache_hits / total_requests * 100), 2)
+
+            redis_client.close()
+        except Exception as redis_error:
+            logger.warning(f"Failed to get Redis cache stats: {redis_error}")
+            # Graceful degradation - continue with cache_hit_rate = 0
+
+        # ========== LSP Server Status ==========
+        # Determine status based on recent activity
+        lsp_status = "running"
+        if total_chunks == 0:
+            lsp_status = "idle"
+        elif last_indexed:
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone.utc)
+            time_since_last = now - last_indexed
+            if time_since_last > timedelta(hours=24):
+                lsp_status = "idle"
+
+        return {
+            "status": lsp_status,
+            "uptime": {
+                "seconds": uptime_seconds,
+                "display": uptime_display
+            },
+            "query_count": {
+                "total_chunks": total_chunks,
+                "with_return_type": chunks_with_return_type,
+                "with_signature": chunks_with_signature,
+                "with_params": chunks_with_params
+            },
+            "cache": {
+                "hit_rate": cache_hit_rate,
+                "hits": cache_hits,
+                "misses": cache_misses
+            },
+            "type_coverage": {
+                "percentage": type_coverage,
+                "chunks_with_types": chunks_with_return_type,
+                "total_chunks": total_chunks
+            },
+            "timestamps": {
+                "first_indexed": first_indexed.isoformat() if first_indexed else None,
+                "last_indexed": last_indexed.isoformat() if last_indexed else None
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get LSP stats: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e),
+            "uptime": {"seconds": 0, "display": "Error"},
+            "query_count": {"total_chunks": 0, "with_return_type": 0, "with_signature": 0, "with_params": 0},
+            "cache": {"hit_rate": 0.0, "hits": 0, "misses": 0},
+            "type_coverage": {"percentage": 0.0, "chunks_with_types": 0, "total_chunks": 0},
+            "timestamps": {"first_indexed": None, "last_indexed": None}
+        }
+
+
 @router.get("/code/repos", response_class=HTMLResponse)
 async def code_repositories(request: Request):
     """
@@ -776,6 +918,144 @@ async def code_search_page(request: Request):
     )
 
 
+@router.get("/code/suggest")
+async def code_suggest(
+    q: str = Query(..., description="Autocomplete query"),
+    field: str = Query("all", description="Field to suggest: all, name, return_type, param_type"),
+    limit: int = Query(10, ge=1, le=50, description="Number of suggestions"),
+    engine = Depends(get_db_engine)
+):
+    """
+    Autocomplete suggestions endpoint (EPIC-14 Story 14.4).
+
+    Returns intelligent autocomplete suggestions for:
+    - Function names (fuzzy match)
+    - Return types (from LSP metadata)
+    - Parameter types (from LSP metadata)
+
+    Used by autocomplete.js for type-aware filters.
+    """
+    from sqlalchemy import text
+
+    try:
+        suggestions = []
+
+        # Fuzzy match function names
+        if field in ("all", "name"):
+            name_query = text("""
+                SELECT DISTINCT name, LENGTH(name) as name_length
+                FROM code_chunks
+                WHERE name ILIKE :pattern
+                  AND chunk_type IN ('function', 'method', 'class')
+                ORDER BY name_length, name
+                LIMIT :limit
+            """)
+
+            async with engine.connect() as conn:
+                result = await conn.execute(name_query, {
+                    "pattern": f"%{q}%",
+                    "limit": limit
+                })
+                rows = result.fetchall()
+
+            for row in rows:
+                suggestions.append({
+                    "value": row[0],  # name
+                    "label": row[0],  # name
+                    "type": "name",
+                    "category": "Function/Class Name"
+                })
+
+        # Return type suggestions
+        if field in ("all", "return_type"):
+            return_type_query = text("""
+                SELECT DISTINCT metadata->>'return_type' as return_type,
+                       COUNT(*) as count
+                FROM code_chunks
+                WHERE metadata->>'return_type' IS NOT NULL
+                  AND metadata->>'return_type' != ''
+                  AND metadata->>'return_type' ILIKE :pattern
+                GROUP BY return_type
+                ORDER BY count DESC, return_type
+                LIMIT :limit
+            """)
+
+            async with engine.connect() as conn:
+                result = await conn.execute(return_type_query, {
+                    "pattern": f"%{q}%",
+                    "limit": limit
+                })
+                rows = result.fetchall()
+
+            for row in rows:
+                return_type = row[0]
+                count = row[1]
+                suggestions.append({
+                    "value": return_type,
+                    "label": f"{return_type} ({count} functions)",
+                    "type": "return_type",
+                    "category": "Return Type",
+                    "count": count
+                })
+
+        # Parameter type suggestions
+        if field in ("all", "param_type"):
+            # Extract param types from metadata->param_types JSONB
+            param_type_query = text("""
+                SELECT DISTINCT param_type, COUNT(*) as count
+                FROM (
+                    SELECT jsonb_object_keys(metadata->'param_types') as param_name,
+                           metadata->'param_types'->>jsonb_object_keys(metadata->'param_types') as param_type
+                    FROM code_chunks
+                    WHERE metadata->'param_types' IS NOT NULL
+                ) sub
+                WHERE param_type ILIKE :pattern
+                GROUP BY param_type
+                ORDER BY count DESC, param_type
+                LIMIT :limit
+            """)
+
+            async with engine.connect() as conn:
+                result = await conn.execute(param_type_query, {
+                    "pattern": f"%{q}%",
+                    "limit": limit
+                })
+                rows = result.fetchall()
+
+            for row in rows:
+                param_type = row[0]
+                count = row[1]
+                suggestions.append({
+                    "value": param_type,
+                    "label": f"{param_type} ({count} parameters)",
+                    "type": "param_type",
+                    "category": "Parameter Type",
+                    "count": count
+                })
+
+        # Sort by relevance (exact match first, then prefix match, then count)
+        suggestions.sort(key=lambda x: (
+            0 if x["value"].lower() == q.lower() else 1,
+            0 if x["value"].lower().startswith(q.lower()) else 1,
+            -x.get("count", 0)
+        ))
+
+        return {
+            "query": q,
+            "suggestions": suggestions[:limit],
+            "total": len(suggestions)
+        }
+
+    except Exception as e:
+        logger.error(f"Autocomplete error: {e}", exc_info=True)
+        return {
+            "query": q,
+            "suggestions": [],
+            "total": 0,
+            "error": str(e)
+        }
+
+
 @router.get("/code/search/results", response_class=HTMLResponse)
 async def code_search_results(
     request: Request,
@@ -784,6 +1064,8 @@ async def code_search_results(
     repository: Optional[str] = Query(None, description="Filter by repository"),
     language: Optional[str] = Query(None, description="Filter by language"),
     chunk_type: Optional[str] = Query(None, description="Filter by chunk type"),
+    return_type: Optional[str] = Query(None, description="Filter by return type (EPIC-14)"),
+    param_type: Optional[str] = Query(None, description="Filter by parameter type (EPIC-14)"),
     limit: int = Query(20, ge=1, le=100, description="Number of results"),
     engine = Depends(get_db_engine),
     embedding_svc = Depends(get_embedding_service)
@@ -822,6 +1104,10 @@ async def code_search_results(
             filters_dict["language"] = language
         if chunk_type:
             filters_dict["chunk_type"] = chunk_type
+        if return_type:  # EPIC-14 Story 14.4
+            filters_dict["return_type"] = return_type
+        if param_type:  # EPIC-14 Story 14.4
+            filters_dict["param_type"] = param_type
 
         filters = SearchFilters(**filters_dict) if filters_dict else None
 

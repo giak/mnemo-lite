@@ -100,6 +100,26 @@
                 </select>
             </div>
 
+            <!-- EPIC-14 Story 14.4: Return Type Filter (with autocomplete) -->
+            <div class="filter-group">
+                <label class="filter-label" for="filter-return-type">Return Type</label>
+                <input type="text"
+                       name="return_type"
+                       id="filter-return-type"
+                       class="filter-input autocomplete-input"
+                       placeholder="e.g., str, User, List[int]">
+            </div>
+
+            <!-- EPIC-14 Story 14.4: Parameter Type Filter (with autocomplete) -->
+            <div class="filter-group">
+                <label class="filter-label" for="filter-param-type">Param Type</label>
+                <input type="text"
+                       name="param_type"
+                       id="filter-param-type"
+                       class="filter-input autocomplete-input"
+                       placeholder="e.g., int, str, Dict">
+            </div>
+
             <!-- Limit Filter -->
             <div class="filter-group">
                 <label class="filter-label" for="filter-limit">Results</label>
@@ -155,6 +175,8 @@ function clearCodeFilters() {
     document.getElementById('filter-repository').value = '';
     document.getElementById('filter-language').value = '';
     document.getElementById('filter-chunk-type').value = '';
+    document.getElementById('filter-return-type').value = '';  // EPIC-14 Story 14.4
+    document.getElementById('filter-param-type').value = '';   // EPIC-14 Story 14.4
     document.getElementById('filter-limit').value = '20';
 
     // Clear results
@@ -181,6 +203,52 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     } catch (error) {
         console.error('Failed to load repositories:', error);
+    }
+});
+</script>
+
+<!-- EPIC-14: HTML Utilities for XSS Prevention -->
+<script src="/static/js/utils/html_utils.js"></script>
+
+<!-- EPIC-14 Story 14.1: Enhanced Search Results JavaScript -->
+<script src="/static/js/components/search_results.js"></script>
+
+<!-- EPIC-14 Story 14.4: Autocomplete JavaScript -->
+<script src="/static/js/components/autocomplete.js"></script>
+
+<!-- EPIC-14 Story 14.4: Initialize Autocomplete for Type Filters -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize autocomplete for return_type filter
+    const returnTypeInput = document.getElementById('filter-return-type');
+    if (returnTypeInput) {
+        new Autocomplete(returnTypeInput, {
+            field: 'return_type',
+            placeholder: 'e.g., str, User, List[int]',
+            minChars: 1,
+            debounceDelay: 300,
+            onSelect: (suggestion) => {
+                console.log('[Autocomplete] Return type selected:', suggestion.value);
+                // Trigger HTMX search
+                document.getElementById('filters-form').dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+    }
+
+    // Initialize autocomplete for param_type filter
+    const paramTypeInput = document.getElementById('filter-param-type');
+    if (paramTypeInput) {
+        new Autocomplete(paramTypeInput, {
+            field: 'param_type',
+            placeholder: 'e.g., int, str, Dict',
+            minChars: 1,
+            debounceDelay: 300,
+            onSelect: (suggestion) => {
+                console.log('[Autocomplete] Param type selected:', suggestion.value);
+                // Trigger HTMX search
+                document.getElementById('filters-form').dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
     }
 });
 </script>
@@ -309,6 +377,30 @@ document.addEventListener('DOMContentLoaded', async function() {
     color: var(--color-text-tertiary);
     text-transform: uppercase;
     letter-spacing: 0.3px;
+}
+
+/* EPIC-14 Story 14.4: Autocomplete Input Styles */
+.filter-input.autocomplete-input {
+    width: 100%;
+    padding: var(--space-md);
+    font-size: var(--text-sm);
+    font-family: var(--font-mono);
+    color: var(--color-text-primary);
+    background: var(--color-bg-input);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    transition: all var(--transition);
+}
+
+.filter-input.autocomplete-input:focus {
+    outline: none;
+    border-color: var(--color-accent-blue);
+    background: var(--color-bg-elevated);
+}
+
+.filter-input.autocomplete-input::placeholder {
+    color: var(--color-text-dim);
+    font-style: italic;
 }
 </style>
 {% endblock %}

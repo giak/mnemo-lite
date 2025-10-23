@@ -391,6 +391,9 @@
         </div>
     </div>
 
+    <!-- LSP Health Widget (EPIC-14 Story 14.3) -->
+    {% include "partials/lsp_health_widget.html" %}
+
     <!-- Charts Grid -->
     <div class="charts-grid">
         <!-- Language Distribution -->
@@ -775,4 +778,7 @@ function showError(message) {
     }
 }
 </script>
+
+<!-- LSP Health Monitor (EPIC-14 Story 14.3) -->
+<script src="{{ url_for('static', path='/js/components/lsp_monitor.js') }}"></script>
 {% endblock %}

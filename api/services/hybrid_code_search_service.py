@@ -32,6 +32,8 @@ class SearchFilters:
     chunk_type: Optional[str] = None
     repository: Optional[str] = None
     file_path: Optional[str] = None
+    return_type: Optional[str] = None  # EPIC-14 Story 14.4: Filter by LSP return type
+    param_type: Optional[str] = None   # EPIC-14 Story 14.4: Filter by LSP parameter type
 
 
 @dataclass
