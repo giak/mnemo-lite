@@ -509,23 +509,30 @@
         background: #4a90e2;
     }
 
-    /* Hover Tooltip - SCADA Style */
+    /* ============================================================
+       EPIC-14 Story 14.2: Enhanced Graph Tooltips with LSP Metadata
+       ============================================================ */
+
+    /* Hover Tooltip - SCADA Style with LSP Metadata */
     .node-tooltip {
         position: absolute;
         background: rgba(22, 27, 34, 0.98);
         border: 1px solid #4a90e2;
-        padding: 10px;
+        padding: 12px;
         pointer-events: none;
         z-index: 10000;
-        max-width: 220px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+        max-width: 280px; /* Increased for LSP metadata */
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
+        transition: opacity 0.1s ease-out; /* Fade animation */
+        opacity: 0;
     }
 
     .tooltip-title {
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 700;
         color: #20e3b2;
         margin-bottom: 6px;
+        font-family: 'SF Mono', Consolas, monospace;
     }
 
     .tooltip-type {
@@ -541,14 +548,337 @@
         font-size: 10px;
         color: #8b949e;
         margin-top: 4px;
-        margin-bottom: 4px;
+        margin-bottom: 6px;
         font-style: italic;
     }
 
-    .tooltip-content {
+    /* LSP Metadata Divider */
+    .tooltip-divider {
+        height: 1px;
+        background: #30363d;
+        margin: 8px 0;
+    }
+
+    /* LSP Section */
+    .tooltip-lsp-section {
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
         font-size: 11px;
+    }
+
+    .tooltip-lsp-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: #6e7681;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+
+    /* Type Badges in Tooltips - Color-Coded */
+    .tooltip-type-badge {
+        padding: 2px 6px;
+        font-size: 10px;
+        font-weight: 600;
+        font-family: 'SF Mono', Consolas, monospace;
+        border: 1px solid;
+        white-space: nowrap;
+    }
+
+    /* Blue: Primitive types */
+    .tooltip-type-badge.type-primitive {
+        background: rgba(74, 144, 226, 0.15);
+        border-color: rgba(74, 144, 226, 0.4);
+        color: #4a90e2;
+    }
+
+    /* Purple: Complex types */
+    .tooltip-type-badge.type-complex {
+        background: rgba(156, 39, 176, 0.15);
+        border-color: rgba(156, 39, 176, 0.4);
+        color: #9c27b0;
+    }
+
+    /* Orange: Collections */
+    .tooltip-type-badge.type-collection {
+        background: rgba(255, 152, 0, 0.15);
+        border-color: rgba(255, 152, 0, 0.4);
+        color: #ff9800;
+    }
+
+    /* Cyan: Optional types */
+    .tooltip-type-badge.type-optional {
+        background: rgba(32, 227, 178, 0.15);
+        border-color: rgba(32, 227, 178, 0.4);
+        color: #20e3b2;
+    }
+
+    /* Gray: Unknown */
+    .tooltip-type-badge.type-unknown {
+        background: rgba(139, 148, 158, 0.15);
+        border-color: rgba(139, 148, 158, 0.4);
         color: #8b949e;
-        line-height: 1.3;
+    }
+
+    /* Signature Display */
+    .tooltip-signature {
+        font-family: 'SF Mono', Consolas, monospace;
+        font-size: 10px;
+        color: #c9d1d9;
+        background: rgba(13, 17, 23, 0.8);
+        padding: 4px 6px;
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        border-left: 2px solid #4a90e2;
+    }
+
+    /* Param count section */
+    .tooltip-params {
+        font-style: italic;
+    }
+
+    /* Footer */
+    .tooltip-footer {
+        font-size: 9px;
+        color: #6e7681;
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px solid #30363d;
+        text-align: center;
+        opacity: 0.7;
+    }
+
+    /* ============================================================
+       EPIC-14 Story 14.5: Graph Legend & Visual Enhancements
+       ============================================================ */
+
+    /* Legend Content */
+    .legend-content {
+        margin-top: 8px;
+        transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1); /* Spring animation */
+    }
+
+    .legend-content.collapsed {
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+    }
+
+    .legend-group {
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #21262d;
+    }
+
+    .legend-group:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+    }
+
+    .legend-group-title {
+        font-size: 9px;
+        font-weight: 700;
+        color: #6e7681;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+
+    .legend-label {
+        font-size: 11px;
+        color: #c9d1d9;
+    }
+
+    /* Node Samples */
+    .legend-node-sample {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2px solid;
+        flex-shrink: 0;
+    }
+
+    .legend-node-sample.node-function {
+        background: rgba(102, 126, 234, 0.2);
+        border-color: #667eea;
+    }
+
+    .legend-node-sample.node-class {
+        background: rgba(245, 87, 108, 0.2);
+        border-color: #f5576c;
+    }
+
+    .legend-node-sample.node-method {
+        background: rgba(0, 242, 254, 0.2);
+        border-color: #00f2fe;
+    }
+
+    /* Type Badges in Legend */
+    .legend-type-badge {
+        display: inline-block;
+        padding: 2px 6px;
+        font-size: 9px;
+        font-weight: 600;
+        border-radius: 3px;
+        border: 1px solid;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        flex-shrink: 0;
+    }
+
+    .legend-type-badge.type-primitive {
+        background: rgba(74, 144, 226, 0.15);
+        border-color: rgba(74, 144, 226, 0.3);
+        color: #4a90e2;
+    }
+
+    .legend-type-badge.type-complex {
+        background: rgba(156, 39, 176, 0.15);
+        border-color: rgba(156, 39, 176, 0.3);
+        color: #9c27b0;
+    }
+
+    .legend-type-badge.type-collection {
+        background: rgba(255, 152, 0, 0.15);
+        border-color: rgba(255, 152, 0, 0.3);
+        color: #ff9800;
+    }
+
+    .legend-type-badge.type-optional {
+        background: rgba(32, 227, 178, 0.15);
+        border-color: rgba(32, 227, 178, 0.3);
+        color: #20e3b2;
+    }
+
+    .legend-type-badge.type-none {
+        background: rgba(139, 148, 158, 0.15);
+        border-color: rgba(139, 148, 158, 0.3);
+        color: #8b949e;
+    }
+
+    /* Edge Samples */
+    .legend-edge-sample {
+        width: 30px;
+        height: 2px;
+        flex-shrink: 0;
+    }
+
+    .legend-edge-sample.edge-calls {
+        background: linear-gradient(to right, #4a90e2 0%, transparent 100%);
+    }
+
+    .legend-edge-sample.edge-imports {
+        background: linear-gradient(to right, #6e7681 0%, transparent 100%);
+        border-top: 1px dashed #6e7681;
+        height: 0;
+    }
+
+    /* Legend Toggle Icon */
+    #legend-toggle-icon {
+        display: inline-block;
+        transition: transform 0.3s ease;
+    }
+
+    #legend-toggle-icon.collapsed {
+        transform: rotate(-90deg);
+    }
+
+    /* ============================================================
+       EPIC-14 Story 14.5: Micro-Animations
+       ============================================================ */
+
+    /* Badge Hover Pulse (<300ms) */
+    .node-badge:hover,
+    .tooltip-type-badge:hover,
+    .legend-type-badge:hover {
+        animation: badge-pulse 0.25s ease-out;
+    }
+
+    @keyframes badge-pulse {
+        0% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.08);
+        }
+        100% {
+            transform: scale(1);
+        }
+    }
+
+    /* Card Expand Spring Animation (Story 14.1 integration) */
+    .code-card {
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); /* Spring easing */
+    }
+
+    .code-card:hover {
+        transform: translateY(-2px);
+    }
+
+    /* Copy Button Success Flash */
+    @keyframes copy-success {
+        0% {
+            background: rgba(32, 227, 178, 0.2);
+            border-color: #20e3b2;
+            color: #20e3b2;
+        }
+        50% {
+            background: rgba(32, 227, 178, 0.4);
+            transform: scale(1.05);
+        }
+        100% {
+            background: rgba(32, 227, 178, 0.2);
+            border-color: #20e3b2;
+            color: #20e3b2;
+        }
+    }
+
+    .copy-btn.success {
+        animation: copy-success 0.6s ease-out;
+    }
+
+    /* Smooth transitions for all interactive elements */
+    .layout-btn,
+    .filter-item,
+    .kpi-card,
+    .sidebar-section {
+        transition: all 0.2s ease;
+    }
+
+    /* Hover effects with micro-animations */
+    .layout-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
+    }
+
+    .layout-btn:active {
+        transform: translateY(0);
+    }
+
+    /* Smooth fade-in for tooltips */
+    .node-tooltip {
+        animation: tooltip-fade-in 0.15s ease-out;
+    }
+
+    @keyframes tooltip-fade-in {
+        from {
+            opacity: 0;
+            transform: translateY(-5px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 </style>
 {% endblock %}
@@ -649,6 +979,69 @@
                     </button>
                 </div>
             </div>
+
+            <!-- EPIC-14 Story 14.5: Graph Legend -->
+            <div class="sidebar-section" id="legend-section">
+                <div class="sidebar-section-title" style="cursor: pointer;" onclick="toggleLegend()">
+                    <span id="legend-toggle-icon">▼</span> Graph Legend
+                </div>
+                <div class="legend-content" id="legend-content">
+                    <!-- Node Type Colors -->
+                    <div class="legend-group">
+                        <div class="legend-group-title">Node Types</div>
+                        <div class="legend-item">
+                            <span class="legend-node-sample node-function"></span>
+                            <span class="legend-label">Function</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-node-sample node-class"></span>
+                            <span class="legend-label">Class</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-node-sample node-method"></span>
+                            <span class="legend-label">Method</span>
+                        </div>
+                    </div>
+
+                    <!-- Return Type Categories (Story 14.1/14.2 color coding) -->
+                    <div class="legend-group">
+                        <div class="legend-group-title">Return Type Indicators</div>
+                        <div class="legend-item">
+                            <span class="legend-type-badge type-primitive"></span>
+                            <span class="legend-label">Primitive (str, int)</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-type-badge type-complex"></span>
+                            <span class="legend-label">Complex (User, Class)</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-type-badge type-collection"></span>
+                            <span class="legend-label">Collection (List, Dict)</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-type-badge type-optional"></span>
+                            <span class="legend-label">Optional</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-type-badge type-none"></span>
+                            <span class="legend-label">None (void)</span>
+                        </div>
+                    </div>
+
+                    <!-- Edge Types -->
+                    <div class="legend-group">
+                        <div class="legend-group-title">Edge Types</div>
+                        <div class="legend-item">
+                            <span class="legend-edge-sample edge-calls"></span>
+                            <span class="legend-label">Function Calls</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-edge-sample edge-imports"></span>
+                            <span class="legend-label">Imports</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Canvas -->
@@ -700,6 +1093,8 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<!-- EPIC-14: HTML Utilities for XSS Prevention -->
+<script src="/static/js/utils/html_utils.js"></script>
 <!-- Code Graph Component JavaScript -->
 <script src="/static/js/components/code_graph.js"></script>
 {% endblock %}
