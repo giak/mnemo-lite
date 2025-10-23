@@ -33,6 +33,7 @@ from services.code_indexing_service import (
 from services.dual_embedding_service import DualEmbeddingService
 from services.graph_construction_service import GraphConstructionService
 from services.lsp import PyrightLSPClient, TypeExtractorService  # EPIC-13 Story 13.2
+from services.lsp.typescript_lsp_client import TypeScriptLSPClient  # EPIC-16 Story 16.3
 from services.metadata_extractor_service import MetadataExtractorService
 from services.symbol_path_service import SymbolPathService  # EPIC-11
 
@@ -212,19 +213,40 @@ async def get_indexing_service(
     chunk_repository = CodeChunkRepository(engine)
     symbol_path_service = SymbolPathService()  # EPIC-11 Story 11.1
 
-    # EPIC-13 Story 13.2/13.4: LSP Type Extraction with L2 Redis caching
-    # Story 13.2: Type extraction service
+    # EPIC-13 Story 13.2/13.4 + EPIC-16 Story 16.3: LSP Type Extraction with L2 Redis caching
+    # Story 13.2: Python type extraction service (Pyright LSP)
     # Story 13.4: Redis caching for 10× performance improvement
+    # Story 16.3: TypeScript/JavaScript type extraction (TypeScript LSP)
     type_extractor = None
     try:
+        # Initialize Python LSP (Pyright)
         lsp_client = PyrightLSPClient()
         await lsp_client.start()
-        # Pass redis_cache for LSP result caching (Story 13.4)
+
+        # Initialize TypeScript LSP (EPIC-16 Story 16.3)
+        typescript_lsp_client = None
+        try:
+            # Create workspace directory if it doesn't exist
+            from pathlib import Path
+            ts_workspace_root = "/tmp/lsp_workspace"
+            Path(ts_workspace_root).mkdir(parents=True, exist_ok=True)
+
+            typescript_lsp_client = TypeScriptLSPClient(workspace_root=ts_workspace_root)
+            await typescript_lsp_client.start()
+            logger.info("TypeScript LSP client initialized successfully")
+        except Exception as ts_error:
+            logger.warning(f"TypeScript LSP initialization failed (graceful degradation): {ts_error}")
+            typescript_lsp_client = None
+
+        # Create TypeExtractorService with both LSP clients and Redis cache
         type_extractor = TypeExtractorService(
-            lsp_client=lsp_client,
+            lsp_client=lsp_client,  # Python LSP (Pyright)
+            typescript_lsp_client=typescript_lsp_client,  # TypeScript LSP (EPIC-16)
             redis_cache=redis_cache  # Story 13.4: L2 cache for LSP results
         )
-        logger.info("TypeExtractorService initialized with Pyright LSP and Redis cache")
+
+        lsp_status = "Pyright + TypeScript LSP" if typescript_lsp_client else "Pyright only"
+        logger.info(f"TypeExtractorService initialized with {lsp_status} and Redis cache")
     except Exception as e:
         # Graceful degradation: LSP unavailable, continue without type extraction
         logger.warning(f"Failed to initialize LSP client, type extraction disabled: {e}")

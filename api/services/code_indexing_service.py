@@ -368,9 +368,10 @@ class CodeIndexingService:
             # Step 3: Metadata extraction (already done by chunking_service if enabled)
             # Metadata is in chunk.metadata
 
-            # Step 3.5: LSP Type Extraction (EPIC-13 Story 13.2)
-            # Extract type information from Pyright LSP and merge with tree-sitter metadata
-            if self.type_extractor and language == "python":
+            # Step 3.5: LSP Type Extraction (EPIC-13 Story 13.2 + EPIC-16 Story 16.3)
+            # Extract type information from LSP (Pyright for Python, TypeScript LSP for TS/JS)
+            # and merge with tree-sitter metadata
+            if self.type_extractor and language in ("python", "typescript", "javascript"):
                 self.logger.debug(
                     f"Extracting LSP type metadata for {len(chunks)} chunks in {file_input.path}"
                 )
