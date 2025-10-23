@@ -1,4 +1,4 @@
-# EPIC-18 Stories 18.2-18.5: Implementation & Validation - Completion Report
+# EPIC-19 Stories 18.2-18.5: Implementation & Validation - Completion Report
 
 **Stories**: Singleton Implementation (18.2), .d.ts Filter (18.3), Stderr Drain (18.4), Validation (18.5)
 **Story Points**: 5 pts (2 + 1 + 1 + 1)
@@ -7,8 +7,8 @@
 **Completion Date**: 2025-10-23
 **Developer**: Claude Code + User
 **Commits**:
-- TBD: feat(EPIC-18): Implement Singleton LSP Pattern + Supporting Fixes
-- TBD: docs(EPIC-18): Add completion reports and documentation
+- TBD: feat(EPIC-19): Implement Singleton LSP Pattern + Supporting Fixes
+- TBD: docs(EPIC-19): Add completion reports and documentation
 
 ---
 
@@ -18,21 +18,21 @@ Stories 18.2-18.5 successfully implemented the **Singleton LSP Pattern** along w
 
 ###  Deliverables Overview
 
-✅ **Story 18.2**: Singleton LSP Pattern (2 pts)
+✅ **Story 19.2**: Singleton LSP Pattern (2 pts)
 - Global singleton LSP clients with thread-safety
 - Auto-recovery mechanism (is_alive() checks)
 - Lazy initialization
 
-✅ **Story 18.3**: Large .d.ts Files Filter (1 pt)
+✅ **Story 19.3**: Large .d.ts Files Filter (1 pt)
 - Skip declaration files > 5000 lines
 - Prevents LSP timeouts on library definitions
 
-✅ **Story 18.4**: Stderr Drain Prevention (1 pt)
+✅ **Story 19.4**: Stderr Drain Prevention (1 pt)
 - Background stderr drain tasks
 - Use communicate() instead of wait()
 - Prevents PIPE buffer deadlock
 
-✅ **Story 18.5**: Validation & Testing (1 pt)
+✅ **Story 19.5**: Validation & Testing (1 pt)
 - 30-file stress test (100% success)
 - Process count verification (2 singletons)
 - API stability confirmation
@@ -49,7 +49,7 @@ Stories 18.2-18.5 successfully implemented the **Singleton LSP Pattern** along w
 
 ---
 
-## Story 18.2: Singleton LSP Pattern Implementation (2 pts) ✅
+## Story 19.2: Singleton LSP Pattern Implementation (2 pts) ✅
 
 ### Objectives
 
@@ -71,7 +71,7 @@ from pathlib import Path  # For workspace directory creation
 
 **Lines 51-54: Global singleton variables**
 ```python
-# EPIC-18 Story 18.2: Global singleton LSP clients (reused across all requests)
+# EPIC-19 Story 19.2: Global singleton LSP clients (reused across all requests)
 _global_pyright_lsp: Optional[PyrightLSPClient] = None
 _global_typescript_lsp: Optional[TypeScriptLSPClient] = None
 _lsp_lock = asyncio.Lock()  # Thread-safe initialization
@@ -84,7 +84,7 @@ async def get_or_create_global_lsp():
     """
     Get or create singleton LSP clients (reused across all requests).
 
-    EPIC-18 Critical Fix: Previously, new LSP processes were created
+    EPIC-19 Critical Fix: Previously, new LSP processes were created
     for EVERY request, leading to process leak (20+ processes after 10 requests).
     This singleton pattern ensures only 2 LSP processes total (Pyright + TypeScript),
     preventing resource exhaustion and API crashes.
@@ -148,7 +148,7 @@ async def get_indexing_service(
     symbol_path_service = SymbolPathService()
 
     # Get or create SINGLETON LSP clients (reused across all requests)
-    # EPIC-18 Story 18.2: This prevents creating 2 new processes per request,
+    # EPIC-19 Story 19.2: This prevents creating 2 new processes per request,
     # which caused process leak and API crashes after ~10 requests
     lsp_client, typescript_lsp_client = await get_or_create_global_lsp()
 
@@ -229,7 +229,7 @@ root       456  /usr/local/bin/typescript-language-server --stdio
 
 ---
 
-## Story 18.3: Large .d.ts Files Filter (1 pt) ✅
+## Story 19.3: Large .d.ts Files Filter (1 pt) ✅
 
 ### Objectives
 
@@ -242,7 +242,7 @@ root       456  /usr/local/bin/typescript-language-server --stdio
 #### File: `api/services/code_indexing_service.py` (Lines 319-341)
 
 ```python
-# EPIC-18 Story 18.3: Skip large TypeScript declaration files
+# EPIC-19 Story 19.3: Skip large TypeScript declaration files
 # These are library definition files (DOM API, TypeScript types), not user code
 # Indexing them causes LSP timeouts and provides minimal value
 if file_input.path.endswith('.d.ts'):
@@ -254,7 +254,7 @@ if file_input.path.endswith('.d.ts'):
 
         self.logger.info(
             f"⏭️ Skipping large .d.ts file ({line_count:,} lines): {file_input.path} "
-            f"(EPIC-18: exceeds 5,000 line threshold to prevent LSP timeout)"
+            f"(EPIC-19: exceeds 5,000 line threshold to prevent LSP timeout)"
         )
 
         return FileIndexingResult(
@@ -299,7 +299,7 @@ if file_input.path.endswith('.d.ts'):
 # [Hangs indefinitely]
 
 # After filter: Skips immediately
-⏭️ Skipping large .d.ts file (25,000 lines): lib.dom.d.ts (EPIC-18: exceeds 5,000 line threshold)
+⏭️ Skipping large .d.ts file (25,000 lines): lib.dom.d.ts (EPIC-19: exceeds 5,000 line threshold)
 ✅ Skipped in 0.1ms
 ```
 
@@ -310,7 +310,7 @@ if file_input.path.endswith('.d.ts'):
 
 ---
 
-## Story 18.4: Stderr Drain Prevention (1 pt) ✅
+## Story 19.4: Stderr Drain Prevention (1 pt) ✅
 
 ### Objectives
 
@@ -328,26 +328,26 @@ if file_input.path.endswith('.d.ts'):
 
 **File**: `typescript_lsp_client.py` (Line 74)
 ```python
-self._stderr_task: Optional[asyncio.Task] = None  # EPIC-18: Prevent PIPE deadlock
+self._stderr_task: Optional[asyncio.Task] = None  # EPIC-19: Prevent PIPE deadlock
 ```
 
 **File**: `lsp_client.py` (Line 71)
 ```python
-self._stderr_task: Optional[asyncio.Task] = None  # EPIC-18: Prevent PIPE deadlock
+self._stderr_task: Optional[asyncio.Task] = None  # EPIC-19: Prevent PIPE deadlock
 ```
 
 #### Change 2: Start stderr drain task
 
 **File**: `typescript_lsp_client.py` (Line 104)
 ```python
-# EPIC-18: Start stderr drain task to prevent PIPE deadlock
+# EPIC-19: Start stderr drain task to prevent PIPE deadlock
 self._stderr_task = asyncio.create_task(self._drain_stderr())
 logger.debug("TypeScript LSP stderr drain task started")
 ```
 
 **File**: `lsp_client.py` (Lines 100-101)
 ```python
-# EPIC-18: Start stderr drain task to prevent PIPE deadlock
+# EPIC-19: Start stderr drain task to prevent PIPE deadlock
 self._stderr_task = asyncio.create_task(self._drain_stderr())
 ```
 
@@ -359,7 +359,7 @@ async def _drain_stderr(self):
     """
     Drain stderr to prevent PIPE buffer deadlock.
 
-    EPIC-18 Critical Fix: TypeScript LSP writes logs to stderr. If we don't
+    EPIC-19 Critical Fix: TypeScript LSP writes logs to stderr. If we don't
     actively read stderr, the OS pipe buffer (4KB-64KB) fills up, causing
     the LSP process to block on write, leading to deadlock.
 
@@ -397,7 +397,7 @@ async def _drain_stderr(self):
 
 **File**: `typescript_lsp_client.py` (Lines 653-656)
 ```python
-# EPIC-18 Critical Fix: Use communicate() instead of wait() to prevent deadlock
+# EPIC-19 Critical Fix: Use communicate() instead of wait() to prevent deadlock
 # communicate() automatically drains stdout/stderr, preventing PIPE buffer overflow
 await asyncio.wait_for(self.process.communicate(), timeout=5.0)
 ```
@@ -408,7 +408,7 @@ await asyncio.wait_for(self.process.communicate(), timeout=5.0)
 
 **File**: `typescript_lsp_client.py` (Lines 679-685)
 ```python
-# EPIC-18: Cancel stderr drain task
+# EPIC-19: Cancel stderr drain task
 if self._stderr_task and not self._stderr_task.done():
     self._stderr_task.cancel()
     try:
@@ -465,7 +465,7 @@ ResourceWarning: subprocess 123 is still running
 
 ---
 
-## Story 18.5: Validation & Testing (1 pt) ✅
+## Story 19.5: Validation & Testing (1 pt) ✅
 
 ### Objectives
 
@@ -558,7 +558,7 @@ $ docker exec mnemo-api ps aux | grep -c pyright
 
 ## Acceptance Criteria (All Stories) ✅
 
-### Story 18.2: Singleton Pattern (2 pts)
+### Story 19.2: Singleton Pattern (2 pts)
 
 - [x] **AC1**: Singleton LSP clients created once per application lifecycle ✅
   - Validation: Logs show "Creating global" appears 1× only
@@ -576,7 +576,7 @@ $ docker exec mnemo-api ps aux | grep -c pyright
   - Validation: 30+ files indexed, process count = 2
   - Evidence: Before 16+, After 2
 
-### Story 18.3: .d.ts Filter (1 pt)
+### Story 19.3: .d.ts Filter (1 pt)
 
 - [x] **AC1**: Skip .d.ts files > 5000 lines ✅
   - Validation: lib.dom.d.ts (25k lines) skipped
@@ -590,7 +590,7 @@ $ docker exec mnemo-api ps aux | grep -c pyright
   - Validation: Skipped files don't block pipeline
   - Evidence: 30/30 files processed (some skipped, not failed)
 
-### Story 18.4: Stderr Drain (1 pt)
+### Story 19.4: Stderr Drain (1 pt)
 
 - [x] **AC1**: Background stderr drain task running ✅
   - Validation: Task started on LSP initialization
@@ -604,7 +604,7 @@ $ docker exec mnemo-api ps aux | grep -c pyright
   - Validation: Task cancelled in shutdown()
   - Evidence: "stderr drain task cancelled" in logs
 
-### Story 18.5: Validation (1 pt)
+### Story 19.5: Validation (1 pt)
 
 - [x] **AC1**: 30+ files indexed successfully (100% success) ✅
   - Validation: Test script `/tmp/test_realistic_typescript.py`
@@ -683,10 +683,10 @@ curl http://localhost:8001/health  # Should be {"status": "healthy"}
 ## Documentation Updates
 
 - [x] CLAUDE.md (to be updated in final commit) ✅
-- [x] EPIC-18_README.md ✅
-- [x] EPIC-18_TYPESCRIPT_LSP_STABILITY.md ✅
-- [x] EPIC-18_STORY_18.1_COMPLETION_REPORT.md ✅
-- [x] EPIC-18_STORY_18.2_TO_18.5_COMPLETION_REPORT.md (this document) ✅
+- [x] EPIC-19_README.md ✅
+- [x] EPIC-19_TYPESCRIPT_LSP_STABILITY.md ✅
+- [x] EPIC-19_STORY_19.1_COMPLETION_REPORT.md ✅
+- [x] EPIC-19_STORY_19.2_TO_18.5_COMPLETION_REPORT.md (this document) ✅
 - [x] Code comments (inline documentation) ✅
 
 ---
@@ -755,9 +755,9 @@ curl http://localhost:8001/health  # Should be {"status": "healthy"}
 
 ## Related Documents
 
-- EPIC-18_README.md (Epic overview)
-- EPIC-18_TYPESCRIPT_LSP_STABILITY.md (Main documentation)
-- EPIC-18_STORY_18.1_COMPLETION_REPORT.md (Investigation & Analysis)
+- EPIC-19_README.md (Epic overview)
+- EPIC-19_TYPESCRIPT_LSP_STABILITY.md (Main documentation)
+- EPIC-19_STORY_19.1_COMPLETION_REPORT.md (Investigation & Analysis)
 - `/tmp/EPIC16_COMPLETION_REPORT.md` (Complete investigation report)
 - `/tmp/singleton_test_results.log` (Validation test logs)
 

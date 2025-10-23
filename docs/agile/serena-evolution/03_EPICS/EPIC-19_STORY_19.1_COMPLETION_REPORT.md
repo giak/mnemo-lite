@@ -1,4 +1,4 @@
-# EPIC-18 Story 18.1: Problem Investigation & Root Cause Analysis - Completion Report
+# EPIC-19 Story 19.1: Problem Investigation & Root Cause Analysis - Completion Report
 
 **Story**: Problem Investigation & Root Cause Analysis
 **Story Points**: 3 pts
@@ -14,7 +14,7 @@
 
 ## Executive Summary
 
-Story 18.1 successfully identified the **root cause of TypeScript LSP crashes** through systematic investigation, testing multiple hypotheses, and rigorous log analysis. The investigation revealed a **critical process leak** where new LSP subprocesses were created for every API request but never closed, leading to resource exhaustion and crashes after ~10 files indexed.
+Story 19.1 successfully identified the **root cause of TypeScript LSP crashes** through systematic investigation, testing multiple hypotheses, and rigorous log analysis. The investigation revealed a **critical process leak** where new LSP subprocesses were created for every API request but never closed, leading to resource exhaustion and crashes after ~10 files indexed.
 
 ### Problem Context
 
@@ -327,7 +327,7 @@ docker logs mnemo-api | grep "Pyright LSP server started pid=" | awk '{print $NF
 
 **Deliverable**: Implementation plan in root cause document
 
-**Result**: Ready for implementation (Story 18.2)
+**Result**: Ready for implementation (Story 19.2)
 
 ---
 
@@ -356,7 +356,7 @@ This story focused on **investigation and root cause identification** only. No c
 - Implementation stories make code changes
 - Separation allows for review/approval before coding
 
-**Implementation**: Covered in Story 18.2 (Singleton Pattern Implementation)
+**Implementation**: Covered in Story 19.2 (Singleton Pattern Implementation)
 
 ---
 
@@ -430,9 +430,9 @@ docker exec mnemo-api ls /proc/$(docker exec mnemo-api pgrep pyright | head -1)/
 
 ## Documentation Updates
 
-- [x] EPIC-18_README.md (to be updated in Story 18.4)
-- [x] EPIC-18_TYPESCRIPT_LSP_STABILITY.md (main doc) ✅
-- [x] EPIC-18_STORY_18.1_COMPLETION_REPORT.md (this document) ✅
+- [x] EPIC-19_README.md (to be updated in Story 19.4)
+- [x] EPIC-19_TYPESCRIPT_LSP_STABILITY.md (main doc) ✅
+- [x] EPIC-19_STORY_19.1_COMPLETION_REPORT.md (this document) ✅
 - [x] Analysis reports created (/tmp/) ✅
 - [ ] CLAUDE.md (to be updated after implementation)
 
@@ -501,9 +501,9 @@ docker exec mnemo-api ls /proc/$(docker exec mnemo-api pgrep pyright | head -1)/
 
 ## Related Documents
 
-- EPIC-18_README.md (Epic overview)
-- EPIC-18_TYPESCRIPT_LSP_STABILITY.md (Main documentation)
-- EPIC-18_STORY_18.2_COMPLETION_REPORT.md (Implementation - Singleton Pattern)
+- EPIC-19_README.md (Epic overview)
+- EPIC-19_TYPESCRIPT_LSP_STABILITY.md (Main documentation)
+- EPIC-19_STORY_19.2_COMPLETION_REPORT.md (Implementation - Singleton Pattern)
 - `/tmp/ULTRATHINK_LSP_STABILITY.md` (Web research & analysis)
 - `/tmp/EPIC16_ROOT_CAUSE_FOUND.md` (Root cause identification)
 - `/tmp/EPIC16_COMPLETION_REPORT.md` (Complete investigation report)
@@ -512,7 +512,7 @@ docker exec mnemo-api ls /proc/$(docker exec mnemo-api pgrep pyright | head -1)/
 
 ## Next Steps
 
-**Story 18.2**: Singleton LSP Pattern Implementation (2 pts)
+**Story 19.2**: Singleton LSP Pattern Implementation (2 pts)
 - Implement global singleton LSP clients
 - Add thread-safety with asyncio.Lock
 - Add auto-recovery with is_alive() checks

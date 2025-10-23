@@ -1,4 +1,4 @@
-# EPIC-18: Recommandations Pragmatiques - KISS, DRY, YAGNI
+# EPIC-19: Recommandations Pragmatiques - KISS, DRY, YAGNI
 
 **Date**: 2025-10-23
 **Auteur**: Claude Code
@@ -10,7 +10,7 @@
 
 ### Problèmes RÉELS Identifiés
 
-1. ✅ **EPIC-18 Fix Validé** - `EMBEDDING_MODE=mock` fonctionne (80x plus rapide)
+1. ✅ **EPIC-19 Fix Validé** - `EMBEDDING_MODE=mock` fonctionne (80x plus rapide)
 2. ✅ **Recherche Lexicale Fonctionne** - BM25 trouve des résultats (RRF score: 0.016)
 3. ✅ **Modèles ML Chargent** - 30-40s startup OK pour production (pas critique)
 4. ✅ **Embeddings Génèrent** - 10-20ms par query (acceptable)
@@ -503,7 +503,7 @@ error_rate_percent=0.1
 
 ### Résumé en 3 Points
 
-1. **EPIC-18 Fix FONCTIONNE** ✅
+1. **EPIC-19 Fix FONCTIONNE** ✅
    - Mock mode: 80x plus rapide
    - Real mode: fonctionne correctement
    - Tests passent

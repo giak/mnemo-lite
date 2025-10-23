@@ -1,14 +1,14 @@
-# EPIC-18: Gotchas and Lessons Learned
+# EPIC-19: Gotchas and Lessons Learned
 
 **Date**: 2025-10-23
 **Status**: Documented
-**Related**: EPIC-18 Stories 18.1-18.5 (TypeScript LSP Stability)
+**Related**: EPIC-19 Stories 18.1-18.5 (TypeScript LSP Stability)
 
 ---
 
 ## 🎯 Purpose
 
-Document critical gotchas discovered during EPIC-18 implementation to prevent future issues and maintain knowledge for the team.
+Document critical gotchas discovered during EPIC-19 implementation to prevent future issues and maintain knowledge for the team.
 
 ---
 
@@ -68,7 +68,7 @@ async def get_or_create_global_lsp():
 **Files Modified**:
 - `api/routes/code_indexing_routes.py` (lines 51-97)
 
-**Reference**: Story 18.1, 18.2, 18.3 in EPIC-18_STORY_18.2_TO_18.5_COMPLETION_REPORT.md
+**Reference**: Story 19.1, 18.2, 18.3 in EPIC-19_STORY_19.2_TO_18.5_COMPLETION_REPORT.md
 
 ---
 
@@ -147,7 +147,7 @@ class DualEmbeddingService:
 **Files Modified**:
 - `api/services/dual_embedding_service.py` (lines 111-164, 230-232, 285-287, 339-364, 378-381, 458-464, 571-590)
 
-**Reference**: Discovered during Story 18.5 stress testing
+**Reference**: Discovered during Story 19.5 stress testing
 
 ---
 
@@ -226,7 +226,7 @@ class TypeScriptLSPClient:
 - `api/services/lsp/typescript_lsp_client.py` (lines 74, 104, 596-632, 653-656, 679-685)
 - `api/services/lsp/lsp_client.py` (similar changes for Pyright)
 
-**Reference**: Story 18.4 (preventive fix)
+**Reference**: Story 19.4 (preventive fix)
 
 ---
 
@@ -259,7 +259,7 @@ FastAPI's `Depends()` creates a **new instance** for each request unless you exp
 
 Any service that loads ML models MUST check `EMBEDDING_MODE`:
 - Legacy `EmbeddingService` (sentence-transformers) ✅ Supports mock
-- New `DualEmbeddingService` (TEXT+CODE) ❌ Didn't support mock (FIXED in EPIC-18)
+- New `DualEmbeddingService` (TEXT+CODE) ❌ Didn't support mock (FIXED in EPIC-19)
 
 **Testing impact**: Without mock mode, tests become 80x slower and consume 2.5GB RAM.
 
@@ -289,7 +289,7 @@ When using `asyncio.subprocess` with PIPE:
 
 ### 4. **Progressive Validation is Essential for Complex Changes**
 
-EPIC-18 validation strategy that uncovered issues:
+EPIC-19 validation strategy that uncovered issues:
 1. ✅ Manual testing (30 files) - Found LSP singleton working
 2. ✅ Integration tests (Story 11.3) - Passed 10/10
 3. ✅ Stress test (100 files) - **UNCOVERED DualEmbedding mock issue**
@@ -316,12 +316,12 @@ mock_emb = rng.random(dimension)
 
 ## 🔗 References
 
-- **EPIC-18 README**: `docs/agile/EPIC-18_README.md`
-- **Technical Deep-Dive**: `docs/agile/serena-evolution/03_EPICS/EPIC-18_TYPESCRIPT_LSP_STABILITY.md`
+- **EPIC-19 README**: `docs/agile/EPIC-19_README.md`
+- **Technical Deep-Dive**: `docs/agile/serena-evolution/03_EPICS/EPIC-19_TYPESCRIPT_LSP_STABILITY.md`
 - **Story Reports**:
-  - `docs/agile/serena-evolution/03_EPICS/EPIC-18_STORY_18.1_COMPLETION_REPORT.md`
-  - `docs/agile/serena-evolution/03_EPICS/EPIC-18_STORY_18.2_TO_18.5_COMPLETION_REPORT.md`
-- **Commit**: `3891d5b` - "feat(EPIC-18): Fix LSP process leak + Add EMBEDDING_MODE=mock support"
+  - `docs/agile/serena-evolution/03_EPICS/EPIC-19_STORY_19.1_COMPLETION_REPORT.md`
+  - `docs/agile/serena-evolution/03_EPICS/EPIC-19_STORY_19.2_TO_18.5_COMPLETION_REPORT.md`
+- **Commit**: `3891d5b` - "feat(EPIC-19): Fix LSP process leak + Add EMBEDDING_MODE=mock support"
 
 ---
 
@@ -342,5 +342,5 @@ These gotchas should eventually be integrated into:
 ---
 
 **Document Version**: 1.0.0
-**Author**: Claude Code (EPIC-18 Completion)
+**Author**: Claude Code (EPIC-19 Completion)
 **Date**: 2025-10-23

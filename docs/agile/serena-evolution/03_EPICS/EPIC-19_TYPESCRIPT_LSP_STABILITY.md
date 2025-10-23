@@ -1,4 +1,4 @@
-# EPIC-18: TypeScript LSP Stability & Process Management
+# EPIC-19: TypeScript LSP Stability & Process Management
 
 **Version**: 1.0.0
 **Date Created**: 2025-10-23
@@ -11,7 +11,7 @@
 
 ## Executive Summary
 
-EPIC-18 addresses a **critical production-blocking issue** where TypeScript LSP process leaks caused systematic API crashes after indexing only 10 files, rendering the TypeScript integration completely unusable.
+EPIC-19 addresses a **critical production-blocking issue** where TypeScript LSP process leaks caused systematic API crashes after indexing only 10 files, rendering the TypeScript integration completely unusable.
 
 ### Problem Statement
 
@@ -54,7 +54,7 @@ After implementing TypeScript LSP integration (EPIC-16), production testing reve
 
 ## Stories Overview
 
-### Story 18.1: Problem Investigation & Root Cause Analysis (3 pts) ✅
+### Story 19.1: Problem Investigation & Root Cause Analysis (3 pts) ✅
 
 **Status**: ✅ COMPLETE
 **Completion Date**: 2025-10-23
@@ -97,7 +97,7 @@ After implementing TypeScript LSP integration (EPIC-16), production testing reve
 
 ---
 
-### Story 18.2: Singleton LSP Pattern Implementation (2 pts) ✅
+### Story 19.2: Singleton LSP Pattern Implementation (2 pts) ✅
 
 **Status**: ✅ COMPLETE
 **Completion Date**: 2025-10-23
@@ -124,7 +124,7 @@ async def get_or_create_global_lsp():
     """
     Get or create singleton LSP clients (reused across all requests).
 
-    EPIC-18 Critical Fix: Previously, new LSP processes were created
+    EPIC-19 Critical Fix: Previously, new LSP processes were created
     for EVERY request, leading to process leak (20+ processes after 10 requests).
     This singleton pattern ensures only 2 LSP processes total (Pyright + TypeScript),
     preventing resource exhaustion and API crashes.
@@ -189,7 +189,7 @@ docker logs mnemo-api | grep "Creating global"
 
 ---
 
-### Story 18.3: Large .d.ts Files Filter (1 pt) ✅
+### Story 19.3: Large .d.ts Files Filter (1 pt) ✅
 
 **Status**: ✅ COMPLETE
 **Completion Date**: 2025-10-23
@@ -204,7 +204,7 @@ docker logs mnemo-api | grep "Creating global"
 **File**: `api/services/code_indexing_service.py` (Lines 319-341)
 
 ```python
-# EPIC-18 Story 18.3: Skip large TypeScript declaration files
+# EPIC-19 Story 19.3: Skip large TypeScript declaration files
 if file_input.path.endswith('.d.ts'):
     line_count = file_input.content.count('\n') + 1
     if line_count > 5000:
@@ -213,7 +213,7 @@ if file_input.path.endswith('.d.ts'):
 
         self.logger.info(
             f"⏭️ Skipping large .d.ts file ({line_count:,} lines): {file_input.path} "
-            f"(EPIC-18: exceeds 5,000 line threshold to prevent LSP timeout)"
+            f"(EPIC-19: exceeds 5,000 line threshold to prevent LSP timeout)"
         )
 
         return FileIndexingResult(
@@ -245,7 +245,7 @@ if file_input.path.endswith('.d.ts'):
 
 ---
 
-### Story 18.4: Stderr Drain Prevention (1 pt) ✅
+### Story 19.4: Stderr Drain Prevention (1 pt) ✅
 
 **Status**: ✅ COMPLETE
 **Completion Date**: 2025-10-23
@@ -273,7 +273,7 @@ While not the root cause of our crashes, this is a **preventive fix** to avoid f
 
 ```python
 # Change 1: Add stderr task attribute (Line 74)
-self._stderr_task: Optional[asyncio.Task] = None  # EPIC-18: Prevent PIPE deadlock
+self._stderr_task: Optional[asyncio.Task] = None  # EPIC-19: Prevent PIPE deadlock
 
 # Change 2: Start stderr drain task in start() (Line 104)
 self._stderr_task = asyncio.create_task(self._drain_stderr())
@@ -283,7 +283,7 @@ async def _drain_stderr(self):
     """
     Drain stderr to prevent PIPE buffer deadlock.
 
-    EPIC-18 Critical Fix: TypeScript LSP writes logs to stderr. If we don't
+    EPIC-19 Critical Fix: TypeScript LSP writes logs to stderr. If we don't
     actively read stderr, the OS pipe buffer (4KB-64KB) fills up, causing
     the LSP process to block on write, leading to deadlock.
     """
@@ -306,7 +306,7 @@ async def _drain_stderr(self):
         logger.warning("Error draining TypeScript LSP stderr", error=str(e))
 
 # Change 4: Use communicate() instead of wait() (Lines 653-656)
-# EPIC-18 Fix: communicate() automatically drains stdout/stderr
+# EPIC-19 Fix: communicate() automatically drains stdout/stderr
 await asyncio.wait_for(self.process.communicate(), timeout=5.0)
 
 # Change 5: Cancel stderr task in shutdown() (Lines 679-685)
@@ -337,7 +337,7 @@ docker logs mnemo-api | grep "stderr drain"
 
 ---
 
-### Story 18.5: Validation & Testing (1 pt) ✅
+### Story 19.5: Validation & Testing (1 pt) ✅
 
 **Status**: ✅ COMPLETE
 **Completion Date**: 2025-10-23
@@ -658,10 +658,10 @@ async def lifespan(app: FastAPI):
 
 ### Documentation
 
-6. **`docs/agile/EPIC-18_README.md`** (557 lines)
-7. **`docs/agile/serena-evolution/03_EPICS/EPIC-18_TYPESCRIPT_LSP_STABILITY.md`** (This document)
-8. **`docs/agile/serena-evolution/03_EPICS/EPIC-18_STORY_18.1_COMPLETION_REPORT.md`**
-9. **`docs/agile/serena-evolution/03_EPICS/EPIC-18_STORY_18.2_COMPLETION_REPORT.md`**
+6. **`docs/agile/EPIC-19_README.md`** (557 lines)
+7. **`docs/agile/serena-evolution/03_EPICS/EPIC-19_TYPESCRIPT_LSP_STABILITY.md`** (This document)
+8. **`docs/agile/serena-evolution/03_EPICS/EPIC-19_STORY_19.1_COMPLETION_REPORT.md`**
+9. **`docs/agile/serena-evolution/03_EPICS/EPIC-19_STORY_19.2_COMPLETION_REPORT.md`**
 
 ### Analysis Reports (Temporary)
 
@@ -741,7 +741,7 @@ async def lifespan(app: FastAPI):
 
 ## Conclusion
 
-EPIC-18 successfully resolved a **critical production-blocking issue** through systematic investigation, proper root cause analysis, and implementation of industry-standard patterns. The TypeScript LSP integration is now **production-ready** with:
+EPIC-19 successfully resolved a **critical production-blocking issue** through systematic investigation, proper root cause analysis, and implementation of industry-standard patterns. The TypeScript LSP integration is now **production-ready** with:
 
 - ✅ **100% success rate** on realistic workloads
 - ✅ **Zero crashes** under stress testing

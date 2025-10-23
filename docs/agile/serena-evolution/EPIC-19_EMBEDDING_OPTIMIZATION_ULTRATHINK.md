@@ -1,4 +1,4 @@
-# EPIC-18: Embedding Optimization - ULTRATHINK Deep Dive
+# EPIC-19: Embedding Optimization - ULTRATHINK Deep Dive
 
 **Date**: 2025-10-23
 **Auteur**: Claude Code

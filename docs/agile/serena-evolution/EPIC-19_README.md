@@ -1,4 +1,4 @@
-# EPIC-18: TypeScript LSP Stability & Process Management
+# EPIC-19: TypeScript LSP Stability & Process Management
 
 **Version**: 1.0.0
 **Date**: 2025-10-23
@@ -10,14 +10,14 @@
 ## 📚 Documentation Structure
 
 ```
-EPIC-18/
+EPIC-19/
 ├─ docs/agile/
-│  └─ EPIC-18_README.md                        ← VOUS ÊTES ICI (point d'entrée) ⚡
+│  └─ EPIC-19_README.md                        ← VOUS ÊTES ICI (point d'entrée) ⚡
 │
 └─ docs/agile/serena-evolution/03_EPICS/
-   ├─ EPIC-18_TYPESCRIPT_LSP_STABILITY.md      (Main documentation - detailed)
-   ├─ EPIC-18_STORY_18.1_COMPLETION_REPORT.md  (Investigation & Root Cause)
-   └─ EPIC-18_STORY_18.2_TO_18.5_COMPLETION_REPORT.md  (Implementation & Validation)
+   ├─ EPIC-19_TYPESCRIPT_LSP_STABILITY.md      (Main documentation - detailed)
+   ├─ EPIC-19_STORY_19.1_COMPLETION_REPORT.md  (Investigation & Root Cause)
+   └─ EPIC-19_STORY_19.2_TO_18.5_COMPLETION_REPORT.md  (Implementation & Validation)
 ```
 
 ---
@@ -30,13 +30,13 @@ EPIC-18/
 → Lisez **Section Executive Summary** ci-dessous
 
 #### ...Voir l'investigation complète
-→ Lisez **[EPIC-18_STORY_18.1_COMPLETION_REPORT.md](serena-evolution/03_EPICS/EPIC-18_STORY_18.1_COMPLETION_REPORT.md)** (hypothèses testées, root cause analysis)
+→ Lisez **[EPIC-19_STORY_19.1_COMPLETION_REPORT.md](serena-evolution/03_EPICS/EPIC-19_STORY_19.1_COMPLETION_REPORT.md)** (hypothèses testées, root cause analysis)
 
 #### ...Comprendre l'implémentation
-→ Lisez **[EPIC-18_STORY_18.2_TO_18.5_COMPLETION_REPORT.md](serena-evolution/03_EPICS/EPIC-18_STORY_18.2_TO_18.5_COMPLETION_REPORT.md)** (Singleton + validation)
+→ Lisez **[EPIC-19_STORY_19.2_TO_18.5_COMPLETION_REPORT.md](serena-evolution/03_EPICS/EPIC-19_STORY_19.2_TO_18.5_COMPLETION_REPORT.md)** (Singleton + validation)
 
 #### ...Documentation technique complète
-→ Lisez **[EPIC-18_TYPESCRIPT_LSP_STABILITY.md](serena-evolution/03_EPICS/EPIC-18_TYPESCRIPT_LSP_STABILITY.md)** (main documentation)
+→ Lisez **[EPIC-19_TYPESCRIPT_LSP_STABILITY.md](serena-evolution/03_EPICS/EPIC-19_TYPESCRIPT_LSP_STABILITY.md)** (main documentation)
 
 #### ...Reproduire les tests
 → Lisez **Section Validation & Testing** ci-dessous (scripts de test)
@@ -104,7 +104,7 @@ Résoudre un problème critique de stabilité du TypeScript LSP qui causait des 
 
 ## 📊 Stories Overview
 
-### Story 18.1: Problem Investigation & Root Cause Analysis (3 pts)
+### Story 19.1: Problem Investigation & Root Cause Analysis (3 pts)
 
 **Objectif**: Identifier la vraie cause du crash après 10 fichiers
 
@@ -128,7 +128,7 @@ Résoudre un problème critique de stabilité du TypeScript LSP qui causait des 
 
 ---
 
-### Story 18.2: Singleton LSP Pattern Implementation (2 pts)
+### Story 19.2: Singleton LSP Pattern Implementation (2 pts)
 
 **Objectif**: Implémenter pattern Singleton thread-safe pour LSP clients
 
@@ -165,7 +165,7 @@ async def get_or_create_global_lsp():
 
 ---
 
-### Story 18.3: Large .d.ts Files Filter (1 pt)
+### Story 19.3: Large .d.ts Files Filter (1 pt)
 
 **Objectif**: Skip gros fichiers TypeScript declaration pour éviter timeouts
 
@@ -192,7 +192,7 @@ if file_input.path.endswith('.d.ts'):
 
 ---
 
-### Story 18.4: Stderr Drain Prevention (Preventive) (1 pt)
+### Story 19.4: Stderr Drain Prevention (Preventive) (1 pt)
 
 **Objectif**: Prévenir deadlock PIPE stderr (tech debt reduction)
 
@@ -211,7 +211,7 @@ if file_input.path.endswith('.d.ts'):
 
 ---
 
-### Story 18.5: Validation & Testing (1 pt)
+### Story 19.5: Validation & Testing (1 pt)
 
 **Objectif**: Valider stabilité avec tests volume
 
@@ -553,10 +553,10 @@ grep "pid=" logs | awk '{print $NF}'  # Liste tous PIDs créés
 
 ## 🔗 Related Documentation
 
-### EPIC-18 Documentation
-- **[EPIC-18_TYPESCRIPT_LSP_STABILITY.md](serena-evolution/03_EPICS/EPIC-18_TYPESCRIPT_LSP_STABILITY.md)** - Main technical documentation
-- **[EPIC-18_STORY_18.1_COMPLETION_REPORT.md](serena-evolution/03_EPICS/EPIC-18_STORY_18.1_COMPLETION_REPORT.md)** - Investigation & Root Cause Analysis
-- **[EPIC-18_STORY_18.2_TO_18.5_COMPLETION_REPORT.md](serena-evolution/03_EPICS/EPIC-18_STORY_18.2_TO_18.5_COMPLETION_REPORT.md)** - Implementation & Validation
+### EPIC-19 Documentation
+- **[EPIC-19_TYPESCRIPT_LSP_STABILITY.md](serena-evolution/03_EPICS/EPIC-19_TYPESCRIPT_LSP_STABILITY.md)** - Main technical documentation
+- **[EPIC-19_STORY_19.1_COMPLETION_REPORT.md](serena-evolution/03_EPICS/EPIC-19_STORY_19.1_COMPLETION_REPORT.md)** - Investigation & Root Cause Analysis
+- **[EPIC-19_STORY_19.2_TO_18.5_COMPLETION_REPORT.md](serena-evolution/03_EPICS/EPIC-19_STORY_19.2_TO_18.5_COMPLETION_REPORT.md)** - Implementation & Validation
 
 ### Related EPICs
 - **EPIC-16**: TypeScript LSP Integration (base feature)

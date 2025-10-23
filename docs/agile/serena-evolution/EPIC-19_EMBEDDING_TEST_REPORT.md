@@ -1,8 +1,8 @@
-# EPIC-18: Rapport de Test - Embeddings Sémantiques Réels
+# EPIC-19: Rapport de Test - Embeddings Sémantiques Réels
 
 **Date**: 2025-10-23
 **Auteur**: Claude Code
-**Contexte**: Suite à EPIC-18 - Fix DualEmbeddingService EMBEDDING_MODE=mock
+**Contexte**: Suite à EPIC-19 - Fix DualEmbeddingService EMBEDDING_MODE=mock
 **Durée**: ~2h de tests
 **Status**: ✅ VALIDÉ avec limitations documentées
 
@@ -23,9 +23,9 @@
 
 ## 🎯 Contexte et Objectifs
 
-### Contexte EPIC-18
+### Contexte EPIC-19
 
-EPIC-18 a résolu un bug critique où `DualEmbeddingService` chargeait toujours les modèles ML (2.5GB) même en mode `EMBEDDING_MODE=mock`, causant des timeouts de 30s+ dans les tests.
+EPIC-19 a résolu un bug critique où `DualEmbeddingService` chargeait toujours les modèles ML (2.5GB) même en mode `EMBEDDING_MODE=mock`, causant des timeouts de 30s+ dans les tests.
 
 **Fix appliqué**:
 - Support complet de `EMBEDDING_MODE=mock`
@@ -779,18 +779,18 @@ Script de test complet démontrant:
 | **Génération query embeddings** | ✅ RÉUSSI | Embedding 768D généré en 10-20ms |
 | **Recherche sémantique complète** | ⚠️ PARTIEL | Timeout avec embeddings JSON (>30s) |
 
-### Validation EPIC-18 Fix
+### Validation EPIC-19 Fix
 
-Le fix EPIC-18 est **validé avec succès**:
+Le fix EPIC-19 est **validé avec succès**:
 
-| Critère | Avant EPIC-18 | Après EPIC-18 |
+| Critère | Avant EPIC-19 | Après EPIC-19 |
 |---------|---------------|---------------|
 | **Mock mode startup** | 30s+ (charge modèles) | ~0ms (skip modèles) |
 | **Tests speed** | Timeout (>30s) | 80x plus rapide |
 | **Mock embeddings** | ❌ Aucun (fail) | ✅ Hash-based (déterministe) |
 | **Real mode** | ✅ Fonctionne | ✅ Fonctionne (inchangé) |
 
-✅ **EPIC-18 Fix confirmé fonctionnel et stable.**
+✅ **EPIC-19 Fix confirmé fonctionnel et stable.**
 
 ---
 
@@ -850,7 +850,7 @@ Ce rapport, combiné aux 3 documents créés, fournit une **documentation compl�
 4. **Résultats** obtenus (métriques, limitations, recommandations)
 5. **Prochaines étapes** (court, moyen, long terme)
 
-✅ **EPIC-18 Embedding Test: VALIDÉ avec succès et documentation complète.**
+✅ **EPIC-19 Embedding Test: VALIDÉ avec succès et documentation complète.**
 
 ---
 
