@@ -8,11 +8,13 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class NodeModel(BaseModel):
     """Node in code dependency graph."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     node_id: uuid.UUID
     node_type: str  # "function", "class", "method", "module"
@@ -31,9 +33,6 @@ class NodeModel(BaseModel):
             created_at=record["created_at"],
         )
 
-    class Config:
-        from_attributes = True
-
 
 class NodeCreate(BaseModel):
     """Data for creating a new node."""
@@ -45,6 +44,8 @@ class NodeCreate(BaseModel):
 
 class EdgeModel(BaseModel):
     """Edge representing code dependency."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     edge_id: uuid.UUID
     source_node_id: uuid.UUID
@@ -65,9 +66,6 @@ class EdgeModel(BaseModel):
             created_at=record["created_at"],
         )
 
-    class Config:
-        from_attributes = True
-
 
 class EdgeCreate(BaseModel):
     """Data for creating a new edge."""
@@ -81,6 +79,8 @@ class EdgeCreate(BaseModel):
 class GraphTraversal(BaseModel):
     """Result of graph traversal query."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     start_node: uuid.UUID
     direction: str  # "outbound" | "inbound"
     relationship: str
@@ -88,12 +88,11 @@ class GraphTraversal(BaseModel):
     nodes: list[NodeModel] = Field(default_factory=list)
     total_nodes: int = 0
 
-    class Config:
-        from_attributes = True
-
 
 class GraphStats(BaseModel):
     """Statistics about graph construction."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     repository: str
     total_nodes: int = 0
@@ -102,6 +101,3 @@ class GraphStats(BaseModel):
     edges_by_type: Dict[str, int] = Field(default_factory=dict)
     construction_time_seconds: float = 0.0
     resolution_accuracy: Optional[float] = None  # Percentage of calls resolved
-
-    class Config:
-        from_attributes = True
