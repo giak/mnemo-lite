@@ -108,6 +108,10 @@ class DualEmbeddingService:
             device: PyTorch device ('cpu', 'cuda', 'mps')
             cache_size: Not used (kept for backward compat)
         """
+        # EPIC-18 Fix: Check EMBEDDING_MODE to support mock mode
+        self._embedding_mode = os.getenv("EMBEDDING_MODE", "real").lower()
+        self._mock_mode = (self._embedding_mode == "mock")
+
         self.text_model_name = text_model_name or os.getenv(
             "EMBEDDING_MODEL",
             "nomic-ai/nomic-embed-text-v1.5"
@@ -119,7 +123,7 @@ class DualEmbeddingService:
         self.dimension = dimension
         self.device = device
 
-        # Models (lazy loaded)
+        # Models (lazy loaded, EXCEPT in mock mode)
         self._text_model: Optional[SentenceTransformer] = None
         self._code_model: Optional[SentenceTransformer] = None
 
@@ -138,15 +142,26 @@ class DualEmbeddingService:
         # Register for health monitoring
         register_circuit_breaker(self.circuit_breaker)
 
-        logger.info(
-            "DualEmbeddingService initialized",
-            extra={
-                "text_model": self.text_model_name,
-                "code_model": self.code_model_name,
-                "dimension": dimension,
-                "device": device
-            }
-        )
+        if self._mock_mode:
+            logger.warning(
+                "🔶 DUAL EMBEDDING SERVICE: MOCK MODE (development/testing) 🔶",
+                extra={
+                    "embedding_mode": "mock",
+                    "text_model": "MOCK",
+                    "code_model": "MOCK",
+                    "dimension": dimension
+                }
+            )
+        else:
+            logger.info(
+                "DualEmbeddingService initialized",
+                extra={
+                    "text_model": self.text_model_name,
+                    "code_model": self.code_model_name,
+                    "dimension": dimension,
+                    "device": device
+                }
+            )
 
     def _load_text_model_sync(self) -> SentenceTransformer:
         """
@@ -207,10 +222,15 @@ class DualEmbeddingService:
         Load text model if not already loaded (thread-safe with double-checked locking).
 
         EPIC-12 Story 12.3: Protected with circuit breaker (no more fail-forever).
+        EPIC-18 Fix: Skip model loading in mock mode.
 
         Raises:
             RuntimeError: If model loading failed or circuit breaker is OPEN
         """
+        # EPIC-18 Fix: Skip model loading in mock mode
+        if self._mock_mode:
+            return
+
         # First check (no lock)
         if self._text_model is not None:
             return
@@ -257,10 +277,15 @@ class DualEmbeddingService:
         Load code model if not already loaded (thread-safe with double-checked locking).
 
         EPIC-12 Story 12.3: Protected with circuit breaker for automatic recovery.
+        EPIC-18 Fix: Skip model loading in mock mode.
 
         Raises:
             RuntimeError: If model loading fails or circuit breaker is OPEN
         """
+        # EPIC-18 Fix: Skip model loading in mock mode
+        if self._mock_mode:
+            return
+
         # First check (no lock)
         if self._code_model is not None:
             return
@@ -311,6 +336,33 @@ class DualEmbeddingService:
                 self._code_model = None
                 raise RuntimeError(f"Failed to load CODE model: {e}") from e
 
+    def _generate_mock_embedding(self, text: str) -> List[float]:
+        """
+        Generate mock embedding (deterministic based on text hash).
+
+        EPIC-18 Fix: Mock embeddings for EMBEDDING_MODE=mock.
+
+        Args:
+            text: Input text
+
+        Returns:
+            Mock embedding vector (768D, deterministic)
+        """
+        # Use hash of text for deterministic mock embeddings
+        import hashlib
+        text_hash = int(hashlib.md5(text.encode()).hexdigest(), 16)
+
+        # Use hash as seed for reproducible random vector
+        rng = np.random.default_rng(text_hash % (2**32))
+        mock_emb = rng.random(self.dimension).astype(np.float32)
+
+        # Normalize to unit vector (like real embeddings)
+        norm = np.linalg.norm(mock_emb)
+        if norm > 0:
+            mock_emb = mock_emb / norm
+
+        return mock_emb.tolist()
+
     async def preload_models(self):
         """
         Pre-load both TEXT and CODE models at startup.
@@ -318,9 +370,16 @@ class DualEmbeddingService:
         This method should be called during application startup to avoid
         lazy loading delays on first upload request.
 
+        EPIC-18 Fix: Skip pre-loading in mock mode.
+
         Raises:
             RuntimeError: If either model fails to load
         """
+        # EPIC-18 Fix: Skip pre-loading in mock mode
+        if self._mock_mode:
+            logger.info("⏭️ Skipping model pre-loading (MOCK MODE)")
+            return
+
         logger.info("🚀 Pre-loading both embedding models...")
 
         try:
@@ -395,6 +454,14 @@ class DualEmbeddingService:
             return result
 
         result = {}
+
+        # EPIC-18 Fix: Use mock embeddings in mock mode
+        if self._mock_mode:
+            if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
+                result['text'] = self._generate_mock_embedding(text + "_text")
+            if domain in (EmbeddingDomain.CODE, EmbeddingDomain.HYBRID):
+                result['code'] = self._generate_mock_embedding(text + "_code")
+            return result
 
         if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
             # Generate text embedding with timeout protection
@@ -500,6 +567,27 @@ class DualEmbeddingService:
 
         # Generate embeddings for all valid texts at once
         results = [None] * len(texts)
+
+        # EPIC-18 Fix: Use mock embeddings in mock mode
+        if self._mock_mode:
+            for i, text in enumerate(texts):
+                if text and text.strip():
+                    result = {}
+                    if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
+                        result['text'] = self._generate_mock_embedding(text + "_text")
+                    if domain in (EmbeddingDomain.CODE, EmbeddingDomain.HYBRID):
+                        result['code'] = self._generate_mock_embedding(text + "_code")
+                    results[i] = result
+                else:
+                    # Empty text - use zero vector
+                    zero_vector = [0.0] * self.dimension
+                    result = {}
+                    if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
+                        result['text'] = zero_vector.copy()
+                    if domain in (EmbeddingDomain.CODE, EmbeddingDomain.HYBRID):
+                        result['code'] = zero_vector.copy()
+                    results[i] = result
+            return results
 
         if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
             # Batch encode with TEXT model with timeout protection

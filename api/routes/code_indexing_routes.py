@@ -4,7 +4,9 @@ Code Indexing API Routes (v1) for EPIC-06 Phase 4 Story 6.
 Provides endpoints for indexing code repositories into MnemoLite.
 """
 
+import asyncio
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -40,6 +42,59 @@ from services.symbol_path_service import SymbolPathService  # EPIC-11
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/code/index", tags=["code-indexing"])
+
+
+# ============================================================================
+# EPIC-16 Story 16.4: Global Singleton LSP Clients
+# ============================================================================
+
+# Global singleton LSP clients (reused across all requests to prevent process leak)
+_global_pyright_lsp: Optional[PyrightLSPClient] = None
+_global_typescript_lsp: Optional[TypeScriptLSPClient] = None
+_lsp_lock = asyncio.Lock()
+
+
+async def get_or_create_global_lsp():
+    """
+    Get or create singleton LSP clients (reused across all requests).
+
+    EPIC-16 Story 16.4 Critical Fix: Previously, new LSP processes were created
+    for EVERY request, leading to process leak (20+ processes after 10 requests).
+    This singleton pattern ensures only 2 LSP processes total (Pyright + TypeScript),
+    preventing resource exhaustion and API crashes.
+
+    Returns:
+        Tuple[PyrightLSPClient, Optional[TypeScriptLSPClient]]: Singleton LSP clients
+
+    Thread-safe: Uses asyncio.Lock to prevent race conditions during initialization.
+    """
+    global _global_pyright_lsp, _global_typescript_lsp
+
+    async with _lsp_lock:
+        # Initialize Pyright LSP (singleton)
+        if _global_pyright_lsp is None or not _global_pyright_lsp.is_alive():
+            logger.info("🔧 Creating global Pyright LSP client (singleton)")
+            _global_pyright_lsp = PyrightLSPClient()
+            await _global_pyright_lsp.start()
+            logger.info("✅ Global Pyright LSP client initialized")
+
+        # Initialize TypeScript LSP (singleton)
+        if _global_typescript_lsp is None or not _global_typescript_lsp.is_alive():
+            try:
+                logger.info("🔧 Creating global TypeScript LSP client (singleton)")
+                ts_workspace_root = "/tmp/lsp_workspace"
+                Path(ts_workspace_root).mkdir(parents=True, exist_ok=True)
+
+                _global_typescript_lsp = TypeScriptLSPClient(workspace_root=ts_workspace_root)
+                await _global_typescript_lsp.start()
+                logger.info("✅ Global TypeScript LSP client initialized")
+            except Exception as ts_error:
+                logger.warning(
+                    f"TypeScript LSP initialization failed (graceful degradation): {ts_error}"
+                )
+                _global_typescript_lsp = None
+
+    return _global_pyright_lsp, _global_typescript_lsp
 
 
 # ============================================================================
@@ -213,40 +268,27 @@ async def get_indexing_service(
     chunk_repository = CodeChunkRepository(engine)
     symbol_path_service = SymbolPathService()  # EPIC-11 Story 11.1
 
-    # EPIC-13 Story 13.2/13.4 + EPIC-16 Story 16.3: LSP Type Extraction with L2 Redis caching
+    # EPIC-16 Story 16.4: LSP Type Extraction with SINGLETON pattern (prevents process leak)
     # Story 13.2: Python type extraction service (Pyright LSP)
     # Story 13.4: Redis caching for 10× performance improvement
     # Story 16.3: TypeScript/JavaScript type extraction (TypeScript LSP)
+    # Story 16.4: Singleton LSP clients to prevent process leak
     type_extractor = None
     try:
-        # Initialize Python LSP (Pyright)
-        lsp_client = PyrightLSPClient()
-        await lsp_client.start()
+        # Get or create SINGLETON LSP clients (reused across all requests)
+        # EPIC-16 Story 16.4: This prevents creating 2 new processes per request,
+        # which caused process leak and API crashes after ~10 requests
+        lsp_client, typescript_lsp_client = await get_or_create_global_lsp()
 
-        # Initialize TypeScript LSP (EPIC-16 Story 16.3)
-        typescript_lsp_client = None
-        try:
-            # Create workspace directory if it doesn't exist
-            from pathlib import Path
-            ts_workspace_root = "/tmp/lsp_workspace"
-            Path(ts_workspace_root).mkdir(parents=True, exist_ok=True)
-
-            typescript_lsp_client = TypeScriptLSPClient(workspace_root=ts_workspace_root)
-            await typescript_lsp_client.start()
-            logger.info("TypeScript LSP client initialized successfully")
-        except Exception as ts_error:
-            logger.warning(f"TypeScript LSP initialization failed (graceful degradation): {ts_error}")
-            typescript_lsp_client = None
-
-        # Create TypeExtractorService with both LSP clients and Redis cache
+        # Create TypeExtractorService with SINGLETON LSP clients and Redis cache
         type_extractor = TypeExtractorService(
-            lsp_client=lsp_client,  # Python LSP (Pyright)
-            typescript_lsp_client=typescript_lsp_client,  # TypeScript LSP (EPIC-16)
+            lsp_client=lsp_client,  # SINGLETON Python LSP (Pyright)
+            typescript_lsp_client=typescript_lsp_client,  # SINGLETON TypeScript LSP (EPIC-16)
             redis_cache=redis_cache  # Story 13.4: L2 cache for LSP results
         )
 
         lsp_status = "Pyright + TypeScript LSP" if typescript_lsp_client else "Pyright only"
-        logger.info(f"TypeExtractorService initialized with {lsp_status} and Redis cache")
+        logger.debug(f"TypeExtractorService using singleton LSP clients: {lsp_status}")
     except Exception as e:
         # Graceful degradation: LSP unavailable, continue without type extraction
         logger.warning(f"Failed to initialize LSP client, type extraction disabled: {e}")

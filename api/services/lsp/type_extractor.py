@@ -522,9 +522,12 @@ class TypeExtractorService:
 
         try:
             # Calculate character position by finding symbol name in source line
+            # NOTE: chunk.start_line is 1-indexed (human-readable) but LSP and arrays expect 0-indexed
             lines = source_code.split("\n")
-            if chunk.start_line < len(lines):
-                line_text = lines[chunk.start_line]
+            lsp_line = chunk.start_line - 1  # Convert to 0-indexed for LSP
+
+            if lsp_line < len(lines):
+                line_text = lines[lsp_line]  # Use 0-indexed for array access
 
                 # Find position of symbol name in line
                 char_position = 4  # Default fallback
@@ -532,8 +535,23 @@ class TypeExtractorService:
                     name_index = line_text.find(chunk.name)
                     if name_index != -1:
                         char_position = name_index
+
+                self.logger.debug(
+                    "TypeScript LSP hover preparation",
+                    chunk_name=chunk.name,
+                    line_1indexed=chunk.start_line,
+                    line_0indexed=lsp_line,
+                    line_text=line_text[:80],
+                    char_position=char_position
+                )
             else:
                 char_position = 4  # Fallback
+                self.logger.warning(
+                    "TypeScript LSP: chunk.start_line out of bounds",
+                    chunk_name=chunk.name,
+                    start_line=chunk.start_line,
+                    total_lines=len(lines)
+                )
 
             # Map language to LSP language ID
             language_id_map = {
@@ -545,10 +563,18 @@ class TypeExtractorService:
             language_id = language_id_map.get(language, "typescript")
 
             # Query TypeScript LSP
+            self.logger.debug(
+                "Calling TypeScript LSP hover",
+                chunk_name=chunk.name,
+                file_path=file_path,
+                language_id=language_id,
+                lsp_line_0indexed=lsp_line
+            )
+
             hover_text = await self.typescript_lsp.hover(
                 file_path=file_path,
                 source_code=source_code,
-                line=chunk.start_line,
+                line=lsp_line,  # Use 0-indexed for LSP
                 character=char_position,
                 language_id=language_id
             )

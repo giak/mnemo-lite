@@ -316,6 +316,30 @@ class CodeIndexingService:
                     error="Unable to detect language",
                 )
 
+            # EPIC-16 Story 16.4: Skip large TypeScript declaration files
+            # Large .d.ts files (lib.dom.d.ts ~25k lines) cause LSP timeouts
+            # These are library definition files, not user code
+            if file_input.path.endswith('.d.ts'):
+                line_count = file_input.content.count('\n') + 1
+                if line_count > 5000:
+                    end_time = datetime.now()
+                    processing_time_ms = (end_time - start_time).total_seconds() * 1000
+
+                    self.logger.info(
+                        f"⏭️ Skipping large .d.ts file ({line_count:,} lines): {file_input.path} "
+                        f"(EPIC-16: exceeds 5,000 line threshold to prevent LSP timeout)"
+                    )
+
+                    return FileIndexingResult(
+                        file_path=file_input.path,
+                        success=False,
+                        chunks_created=0,
+                        nodes_created=0,
+                        edges_created=0,
+                        processing_time_ms=processing_time_ms,
+                        error=f"Skipped: Large TypeScript declaration file ({line_count:,} lines > 5,000 threshold)",
+                    )
+
             # L1/L2 CASCADE CACHE LOOKUP (before expensive chunking/embedding pipeline)
             if self.chunk_cache:
                 cached_chunks = self.chunk_cache.get(file_input.path, file_input.content)

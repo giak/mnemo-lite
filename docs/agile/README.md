@@ -115,6 +115,21 @@ Les documents **d'archive historique** (EPIC-01 à EPIC-05) peuvent contenir des
 - **Gains** : 100% LSP metadata exposure, <300ms search (1000+ results), <10ms tooltips, WCAG 2.1 AA compliant, 10× fewer API calls
 - **Livrables** : Card-based search results, color-coded type badges, smart autocomplete, copy-to-clipboard, LSP health dashboard, html_utils.js (XSS prevention)
 
+**EPIC-18: TypeScript LSP Stability & Process Management** - ✅ 100% COMPLET (8/8 pts) - **CRITICAL PRODUCTION FIX** ✅
+- **Documentation** : `EPIC-18_README.md`, `serena-evolution/03_EPICS/EPIC-18_TYPESCRIPT_LSP_STABILITY.md`
+- **Résumé** : 8/8 pts (100% COMPLETE), 5 stories (all COMPLETE)
+  - Story 18.1: Problem Investigation & Root Cause Analysis (**3 pts**) ✅ - systematic hypothesis testing, log analysis, process leak identification
+  - Story 18.2: Singleton LSP Pattern Implementation (**2 pts**) ✅ - thread-safe singleton, auto-recovery, lazy initialization
+  - Story 18.3: Large .d.ts Files Filter (**1 pt**) ✅ - skip declaration files > 5000 lines
+  - Story 18.4: Stderr Drain Prevention (**1 pt**) ✅ - PIPE deadlock prevention, asyncio best practices
+  - Story 18.5: Validation & Testing (**1 pt**) ✅ - 30-file stress test, 100% success rate
+- **Root Cause**: FastAPI Depends() created new LSP processes per request, never closed → 16+ processes after 10 requests → crash
+- **Solution**: Singleton LSP Pattern with asyncio.Lock, lazy init, auto-recovery (is_alive())
+- **Impact**: 26.7% → 100% success rate (+274%), 16+ → 2 processes (-87.5%), Zero crashes
+- **Production Status**: ✅ READY - TypeScript LSP integration now production-stable
+- **Gains**: 100% file indexing success, constant resource usage, auto-recovery on LSP crash
+- **Livrables**: Global singleton LSP clients, .d.ts filter, stderr drain tasks, comprehensive validation suite
+
 ### 🟡 Archive Historique (Q1-Q2 2025)
 
 #### Epics Historiques
@@ -159,7 +174,7 @@ Ces documents restent utiles pour :
 | **Mars-Mai 2025** | Phase Initiale | EPIC-01 à EPIC-05 (Archives) |
 | **Octobre 2025** | Code Intelligence | EPIC-06 (Backend, 10 jours) + EPIC-07 (UI, 2 jours) |
 | **Octobre 2025** | Performance & Testing | EPIC-08 (Optimization, 1 jour) |
-| **Octobre 2025** | Serena Evolution | EPIC-10 (Caching) + EPIC-11 (Symbols) + EPIC-12 (Robustness) + EPIC-13 (LSP Backend) + EPIC-14 (LSP UI) |
+| **Octobre 2025** | Serena Evolution | EPIC-10 (Caching) + EPIC-11 (Symbols) + EPIC-12 (Robustness) + EPIC-13 (LSP Backend) + EPIC-14 (LSP UI) + EPIC-18 (LSP Stability) |
 
 **Version actuelle du projet** : v2.3.0 → v3.0.0 (en cours - Octobre 2025)
 
@@ -173,20 +188,22 @@ Ces documents restent utiles pour :
 - ✅ EPIC-12 : 23/23 pts (Oct 2025) - Serena Evolution
 - ✅ EPIC-13 : 21/21 pts (Oct 2025) - Serena Evolution - **100% COMPLETE (Backend)**
 - ✅ EPIC-14 : 25/25 pts (Oct 2025) - Serena Evolution - **100% COMPLETE (UI/UX) + CRITICAL FIXES** ✅
+- ✅ EPIC-18 : 8/8 pts (Oct 2025) - Serena Evolution - **100% COMPLETE (LSP Stability) + CRITICAL PRODUCTION FIX** ✅
 
 ## 🌟 Serena Evolution (v3.0)
 
-La phase **Serena Evolution** (EPIC-10 à EPIC-14) transforme MnemoLite en plateforme de code intelligence ultra-performante et ultra-robuste :
+La phase **Serena Evolution** (EPIC-10 à EPIC-18) transforme MnemoLite en plateforme de code intelligence ultra-performante et ultra-robuste :
 
 **Objectifs v3.0** :
 - ✅ Performance : 100× plus rapide (cache L1/L2) - EPIC-10 ✅
 - ✅ Robustness : 0 crash, graceful degradation partout - EPIC-12 ✅
 - ✅ Precision : Type information complète via LSP + call resolution 95%+ - EPIC-13 ✅ (backend)
-- 🚧 UI/UX : Exposer LSP metadata dans l'interface - EPIC-14 🚧 (en cours)
+- ✅ UI/UX : Exposer LSP metadata dans l'interface - EPIC-14 ✅
+- ✅ Production Stability : LSP process management + TypeScript support - EPIC-18 ✅
 - ✅ Scalability : Gérer 100k+ fichiers sans ralentir - EPIC-10/11/12 ✅
 
 **Documentation complète** : `serena-evolution/00_CONTROL/CONTROL_MISSION_CONTROL.md`
 
 ---
 
-_Dernière mise à jour de cette documentation : 2025-10-22_
+_Dernière mise à jour de cette documentation : 2025-10-23 (EPIC-18 ajouté)_

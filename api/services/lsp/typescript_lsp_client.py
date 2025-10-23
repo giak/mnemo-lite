@@ -71,6 +71,7 @@ class TypeScriptLSPClient:
         self.pending_requests: Dict[str, asyncio.Future] = {}
         self.initialized = False
         self._reader_task: Optional[asyncio.Task] = None
+        self._stderr_task: Optional[asyncio.Task] = None  # EPIC-16: Prevent PIPE deadlock
 
     async def start(self):
         """
@@ -98,6 +99,9 @@ class TypeScriptLSPClient:
 
             # Start response reader task
             self._reader_task = asyncio.create_task(self._read_responses())
+
+            # EPIC-16: Start stderr drain task to prevent PIPE deadlock
+            self._stderr_task = asyncio.create_task(self._drain_stderr())
 
             # Initialize server
             await self._initialize()
@@ -192,19 +196,49 @@ class TypeScriptLSPClient:
                 "position": {"line": line, "character": character}
             }
 
+            logger.debug(
+                "TypeScript LSP hover request",
+                file_path=file_path,
+                line=line,
+                character=character,
+                language_id=language_id
+            )
+
             response = await self._send_request(
                 "textDocument/hover",
                 params,
                 timeout=3.0
             )
 
-            if response.error or not response.result:
+            logger.debug(
+                "TypeScript LSP hover response",
+                has_error=bool(response.error),
+                has_result=bool(response.result),
+                result_keys=list(response.result.keys()) if response.result else None
+            )
+
+            if response.error:
+                logger.warning(
+                    "TypeScript LSP hover returned error",
+                    error=response.error
+                )
+                return None
+
+            if not response.result:
+                logger.debug("TypeScript LSP hover: no result")
                 return None
 
             # Extract hover text
             hover_content = response.result.get("contents")
 
+            logger.debug(
+                "TypeScript LSP hover contents",
+                has_contents=bool(hover_content),
+                contents_type=type(hover_content).__name__ if hover_content else None
+            )
+
             if not hover_content:
+                logger.debug("TypeScript LSP hover: no contents in result")
                 return None
 
             # Parse hover content (can be string, dict, or list)
@@ -559,6 +593,44 @@ class TypeScriptLSPClient:
             "textDocument": {"uri": f"file://{file_path}"}
         })
 
+    async def _drain_stderr(self):
+        """
+        Drain stderr to prevent PIPE buffer deadlock.
+
+        EPIC-16 Critical Fix: TypeScript LSP writes logs to stderr. If we don't
+        actively read stderr, the OS pipe buffer (4KB-64KB) fills up, causing
+        the LSP process to block on write, leading to deadlock.
+
+        This method runs as a background task, continuously reading and logging
+        stderr output to keep the pipe drained.
+
+        Reference: https://docs.python.org/3/library/asyncio-subprocess.html
+        "This will deadlock when using stdout=PIPE or stderr=PIPE and the child
+        process generates enough output to block waiting for the OS pipe buffer."
+        """
+        if not self.process or not self.process.stderr:
+            return
+
+        try:
+            while True:
+                # Read stderr in chunks to prevent blocking
+                chunk = await self.process.stderr.read(1024)
+
+                if not chunk:
+                    logger.debug("TypeScript LSP stderr closed")
+                    break
+
+                # Log stderr for debugging (decode with error handling)
+                stderr_text = chunk.decode('utf-8', errors='ignore').strip()
+                if stderr_text:
+                    logger.debug("TypeScript LSP stderr", message=stderr_text[:200])
+
+        except asyncio.CancelledError:
+            logger.debug("TypeScript LSP stderr drain task cancelled")
+            raise
+        except Exception as e:
+            logger.warning("Error draining TypeScript LSP stderr", error=str(e))
+
     async def shutdown(self):
         """
         Shutdown TypeScript LSP server gracefully.
@@ -578,8 +650,10 @@ class TypeScriptLSPClient:
             # Send exit notification
             await self._send_notification("exit", {})
 
-            # Wait for process to exit
-            await asyncio.wait_for(self.process.wait(), timeout=5.0)
+            # EPIC-16 Critical Fix: Use communicate() instead of wait() to prevent deadlock
+            # communicate() automatically drains stdout/stderr buffers, preventing PIPE deadlock
+            # Reference: https://docs.python.org/3/library/asyncio-subprocess.html
+            await asyncio.wait_for(self.process.communicate(), timeout=5.0)
 
             logger.info("TypeScript LSP server shut down gracefully")
 
@@ -599,6 +673,14 @@ class TypeScriptLSPClient:
                 self._reader_task.cancel()
                 try:
                     await self._reader_task
+                except asyncio.CancelledError:
+                    pass
+
+            # EPIC-16: Cancel stderr drain task
+            if self._stderr_task and not self._stderr_task.done():
+                self._stderr_task.cancel()
+                try:
+                    await self._stderr_task
                 except asyncio.CancelledError:
                     pass
 
