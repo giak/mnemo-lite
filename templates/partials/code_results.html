@@ -21,12 +21,22 @@
     {% if metadata and metadata.execution_time_ms %}
     <span class="time-badge">{{ "%.1f"|format(metadata.execution_time_ms) }} ms</span>
     {% endif %}
+    <span class="keyboard-hint">💡 j/k to navigate, Enter to expand, c to copy</span>
 </div>
 
-<div class="code-list">
+<div class="code-list" id="code-results-container" role="feed" aria-label="Search results" aria-live="polite">
     {% for result in results %}
-    <div class="code-card">
-        <div class="code-header">
+    {% set card_id = "code-card-" ~ loop.index0 %}
+    {% set body_id = "code-body-" ~ loop.index0 %}
+    <article class="code-card"
+             id="{{ card_id }}"
+             role="article"
+             aria-labelledby="{{ card_id }}-header"
+             tabindex="0"
+             data-index="{{ loop.index0 }}">
+
+        {# Card Header - Always Visible #}
+        <div class="code-header" id="{{ card_id }}-header">
             <div class="code-name">
                 {# Story 11.3: 3-level fallback for qualified names #}
                 {% set name_path_clean = result.name_path|trim if result.name_path else None %}
@@ -36,25 +46,20 @@
                     {# Primary: Qualified name exists #}
                     <span class="name-path"
                           title="{{ name_path_clean }}"
-                          aria-label="Qualified name: {{ name_path_clean }}"
-                          tabindex="0"
-                          role="text">
+                          aria-label="Qualified name: {{ name_path_clean }}">
                         {{ name_path_clean }}
                     </span>
                     {% if name_path_clean != name_clean %}
                         {# Show simple name only if different #}
                         <span class="simple-name"
-                              aria-label="Simple name: {{ name_clean }}"
-                              role="text">
+                              aria-label="Simple name: {{ name_clean }}">
                             ({{ name_clean }})
                         </span>
                     {% endif %}
                 {% elif name_clean %}
                     {# Fallback: Simple name only #}
                     <span class="name-simple"
-                          aria-label="Function name: {{ name_clean }}"
-                          tabindex="0"
-                          role="text">
+                          aria-label="Function name: {{ name_clean }}">
                         {{ name_clean }}
                     </span>
                 {% else %}
@@ -62,51 +67,141 @@
                     <span class="name-unknown">Unnamed</span>
                 {% endif %}
             </div>
-            <div class="code-score">
-                {% if result.rrf_score %}
-                RRF: {{ "%.3f"|format(result.rrf_score) }}
-                {% elif result.similarity_score %}
-                SIM: {{ "%.3f"|format(result.similarity_score) }}
-                {% elif result.similarity %}
-                SIM: {{ "%.3f"|format(result.similarity) }}
-                {% elif result.lexical_score %}
-                LEX: {{ "%.3f"|format(result.lexical_score) }}
+
+            {# EPIC-14: Type Badge (Color-coded) #}
+            {% if result.metadata and result.metadata.return_type %}
+                {% set return_type = result.metadata.return_type %}
+                {% set badge_class = "type-badge" %}
+
+                {# Color coding based on type complexity #}
+                {% if return_type in ['int', 'str', 'float', 'bool', 'None'] %}
+                    {% set badge_class = badge_class ~ " type-primitive" %}
+                {% elif return_type.startswith('List[') or return_type.startswith('Dict[') or return_type.startswith('Set[') %}
+                    {% set badge_class = badge_class ~ " type-collection" %}
+                {% elif return_type.startswith('Optional[') %}
+                    {% set badge_class = badge_class ~ " type-optional" %}
                 {% else %}
-                RANK: {{ result.rank }}
+                    {% set badge_class = badge_class ~ " type-complex" %}
+                {% endif %}
+
+                <span class="{{ badge_class }}"
+                      aria-label="Return type: {{ return_type }}"
+                      title="Return type: {{ return_type }}">
+                    → {{ return_type }}
+                </span>
+            {% endif %}
+
+            {# Expand/Collapse Button #}
+            <button class="expand-btn"
+                    aria-expanded="false"
+                    aria-controls="{{ body_id }}"
+                    aria-label="Expand details"
+                    title="Click or press Enter to expand">
+                <span class="expand-icon">▼</span>
+            </button>
+        </div>
+
+        {# Card Body - Collapsible #}
+        <div class="code-body"
+             id="{{ body_id }}"
+             aria-hidden="true"
+             hidden>
+
+            {# EPIC-14: LSP Type Information (if available) #}
+            {% if result.metadata and (result.metadata.signature or result.metadata.param_types or result.metadata.docstring) %}
+            <div class="lsp-section">
+                <div class="lsp-header">
+                    <span class="lsp-label">📘 Type Information</span>
+                    {% if result.metadata.signature %}
+                    <button class="copy-btn"
+                            data-copy="{{ result.metadata.signature }}"
+                            aria-label="Copy signature to clipboard"
+                            title="Copy signature (shortcut: c)">
+                        <span class="copy-icon">📋</span>
+                        <span class="copy-text">Copy</span>
+                    </button>
+                    {% endif %}
+                </div>
+
+                {% if result.metadata.signature %}
+                <div class="signature-display">
+                    <code class="signature">{{ result.metadata.signature }}</code>
+                </div>
+                {% endif %}
+
+                {% if result.metadata.param_types %}
+                <div class="param-types">
+                    <strong>Parameters:</strong>
+                    {% for param, param_type in result.metadata.param_types.items() %}
+                    <span class="param-item">
+                        <code class="param-name">{{ param }}</code>:
+                        <span class="param-type type-badge type-primitive">{{ param_type }}</span>
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if result.metadata.docstring %}
+                <div class="docstring">
+                    <strong>Documentation:</strong>
+                    <p>{{ result.metadata.docstring }}</p>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {# File Path #}
+            <div class="code-path">
+                📁 {{ result.file_path or 'Unknown' }}
+                {% if result.start_line %}
+                <span class="line-number">L{{ result.start_line }}</span>
+                {% endif %}
+            </div>
+
+            {# Source Code Snippet #}
+            <div class="code-snippet">
+                <pre><code>{{ result.source_code or '(No code content)' }}</code></pre>
+            </div>
+
+            {# Metadata Badges #}
+            <div class="code-metadata">
+                <span class="badge">{{ result.language or 'unknown' }}</span>
+                <span class="badge">{{ result.chunk_type or 'unknown' }}</span>
+
+                {# Score Badge #}
+                {% if result.rrf_score %}
+                <span class="badge badge-score">RRF: {{ "%.3f"|format(result.rrf_score) }}</span>
+                {% elif result.similarity_score %}
+                <span class="badge badge-score">SIM: {{ "%.3f"|format(result.similarity_score) }}</span>
+                {% elif result.similarity %}
+                <span class="badge badge-score">SIM: {{ "%.3f"|format(result.similarity) }}</span>
+                {% elif result.lexical_score %}
+                <span class="badge badge-score">LEX: {{ "%.3f"|format(result.lexical_score) }}</span>
+                {% endif %}
+
+                {% if result.metadata %}
+                    {% if result.metadata.complexity %}
+                    <span class="badge">Complexity: {{ result.metadata.complexity }}</span>
+                    {% endif %}
+                    {% if result.metadata.lines_count %}
+                    <span class="badge">Lines: {{ result.metadata.lines_count }}</span>
+                    {% endif %}
+                    {% if result.metadata.parameters_count is not none %}
+                    <span class="badge">Params: {{ result.metadata.parameters_count }}</span>
+                    {% endif %}
+                {% endif %}
+
+                {% if result.contribution %}
+                    {% if result.contribution.lexical and result.contribution.lexical > 0 %}
+                    <span class="badge badge-lexical">LEX: {{ "%.0f"|format(result.contribution.lexical * 100) }}%</span>
+                    {% endif %}
+                    {% if result.contribution.vector and result.contribution.vector > 0 %}
+                    <span class="badge badge-vector">VEC: {{ "%.0f"|format(result.contribution.vector * 100) }}%</span>
+                    {% endif %}
                 {% endif %}
             </div>
         </div>
-
-        <div class="code-path">
-            📁 {{ result.file_path or 'Unknown' }}
-        </div>
-
-        <div class="code-snippet">{{ result.source_code or '(No code content)' }}</div>
-
-        <div class="code-metadata">
-            <span class="badge">{{ result.language or 'unknown' }}</span>
-            <span class="badge">{{ result.chunk_type or 'unknown' }}</span>
-            {% if result.metadata %}
-                {% if result.metadata.complexity %}
-                <span class="badge">Complexity: {{ result.metadata.complexity }}</span>
-                {% endif %}
-                {% if result.metadata.lines_count %}
-                <span class="badge">Lines: {{ result.metadata.lines_count }}</span>
-                {% endif %}
-                {% if result.metadata.parameters_count is not none %}
-                <span class="badge">Params: {{ result.metadata.parameters_count }}</span>
-                {% endif %}
-            {% endif %}
-            {% if result.contribution %}
-                {% if result.contribution.lexical and result.contribution.lexical > 0 %}
-                <span class="badge badge-lexical">LEX: {{ "%.0f"|format(result.contribution.lexical * 100) }}%</span>
-                {% endif %}
-                {% if result.contribution.vector and result.contribution.vector > 0 %}
-                <span class="badge badge-vector">VEC: {{ "%.0f"|format(result.contribution.vector * 100) }}%</span>
-                {% endif %}
-            {% endif %}
-        </div>
-    </div>
+    </article>
     {% endfor %}
 </div>
 
@@ -149,18 +244,44 @@
 {% endif %}
 
 {% else %}
-<div class="empty-state">
+{# EPIC-14: Enhanced Empty States with Helpful Suggestions #}
+<div class="empty-state" role="status" aria-live="polite">
+    <div class="empty-icon">🔍</div>
     {% if query %}
-    <p>No code found matching "<em>{{ query }}</em>"</p>
-    <p class="text-muted">Try a different query or check your filters</p>
+    <h3 class="empty-title">No code found matching "<em>{{ query }}</em>"</h3>
+    <div class="empty-suggestions">
+        <p class="empty-subtitle">Try these suggestions:</p>
+        <ul class="empty-tips">
+            <li>✓ Use different keywords or synonyms</li>
+            <li>✓ Search for function/class names instead of full phrases</li>
+            <li>✓ Try hybrid search mode for better results</li>
+            <li>✓ Check if the repository has been indexed</li>
+            <li>✓ Use qualified names (e.g., "models.user.User")</li>
+        </ul>
+    </div>
     {% else %}
-    <p>No results</p>
-    <p class="text-muted">Try adjusting your search query</p>
+    <h3 class="empty-title">Start searching for code</h3>
+    <p class="empty-subtitle">
+        Enter a query above to search through indexed repositories.
+        Use natural language or code patterns.
+    </p>
     {% endif %}
 </div>
 {% endif %}
 
 <style>
+/* ============================================================
+   EPIC-14 Story 14.1: Enhanced Search Results with Performance & UX
+   - Card-based layout with progressive disclosure
+   - Color-coded type badges
+   - LSP metadata display
+   - Copy-to-clipboard
+   - Skeleton screens
+   - Enhanced empty states
+   - Keyboard navigation hints
+   - ARIA accessibility
+   ============================================================ */
+
 /* Search Info Bar */
 .search-info {
     display: flex;
@@ -173,6 +294,14 @@
     border-radius: var(--radius-sm);
     margin-bottom: var(--space-lg);
     font-size: var(--text-sm);
+    flex-wrap: wrap;
+}
+
+.keyboard-hint {
+    margin-left: auto;
+    font-size: var(--text-xs);
+    color: var(--color-text-dim);
+    font-style: italic;
 }
 
 .search-info strong {
@@ -212,6 +341,321 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-lg);
+}
+
+/* ============================================================
+   Card-Based Layout with Progressive Disclosure
+   ============================================================ */
+
+.code-card {
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-accent-cyan);
+    transition: all var(--transition);
+    cursor: pointer;
+}
+
+.code-card:hover {
+    border-left-color: var(--color-accent-blue);
+    box-shadow: var(--shadow-sm);
+}
+
+.code-card:focus {
+    outline: 2px solid var(--color-accent-blue);
+    outline-offset: 2px;
+}
+
+/* Active card (currently navigated with keyboard) */
+.code-card.active {
+    border-left-color: var(--color-accent-blue);
+    border-left-width: 4px;
+    background: var(--color-bg-elevated);
+}
+
+/* Expanded card */
+.code-card.expanded {
+    background: var(--color-bg-elevated);
+}
+
+/* Card Header - Always Visible */
+.code-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.code-name {
+    flex: 1;
+    min-width: 0; /* Allow text truncation */
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+/* Expand/Collapse Button */
+.expand-btn {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    padding: var(--space-sm) var(--space-md);
+    color: var(--color-text-tertiary);
+    cursor: pointer;
+    transition: all var(--transition);
+    font-size: var(--text-xs);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.expand-btn:hover {
+    background: var(--color-bg-elevated);
+    border-color: var(--color-accent-blue);
+    color: var(--color-accent-blue);
+}
+
+.expand-btn:focus {
+    outline: 2px solid var(--color-accent-blue);
+    outline-offset: 2px;
+}
+
+.expand-icon {
+    transition: transform var(--transition);
+    display: inline-block;
+}
+
+.expand-btn[aria-expanded="true"] .expand-icon {
+    transform: rotate(180deg);
+}
+
+/* Card Body - Collapsible */
+.code-body {
+    padding: 0 var(--space-md) var(--space-md) var(--space-md);
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.code-body[hidden] {
+    display: none;
+}
+
+/* ============================================================
+   EPIC-14: Type Badges - Color-Coded
+   ============================================================ */
+
+.type-badge {
+    padding: 2px 8px;
+    font-size: var(--text-tiny);
+    font-weight: 600;
+    border: 1px solid;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    display: inline-block;
+}
+
+/* Blue: Primitive types (int, str, float, bool, None) */
+.type-primitive {
+    background: rgba(74, 144, 226, 0.12);
+    border-color: rgba(74, 144, 226, 0.3);
+    color: #4a90e2;
+}
+
+/* Purple: Complex types (classes, custom types) */
+.type-complex {
+    background: rgba(156, 39, 176, 0.12);
+    border-color: rgba(156, 39, 176, 0.3);
+    color: #9c27b0;
+}
+
+/* Orange: Collections (List, Dict, Set) */
+.type-collection {
+    background: rgba(255, 152, 0, 0.12);
+    border-color: rgba(255, 152, 0, 0.3);
+    color: #ff9800;
+}
+
+/* Cyan: Optional types */
+.type-optional {
+    background: rgba(32, 227, 178, 0.12);
+    border-color: rgba(32, 227, 178, 0.3);
+    color: #20e3b2;
+}
+
+/* ============================================================
+   EPIC-14: LSP Metadata Section
+   ============================================================ */
+
+.lsp-section {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border-subtle);
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+
+.lsp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-md);
+}
+
+.lsp-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-accent-blue);
+}
+
+/* Signature Display */
+.signature-display {
+    background: var(--color-bg-input);
+    border: 1px solid var(--color-border);
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+    overflow-x: auto;
+}
+
+.signature {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--color-text-primary);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* Parameter Types */
+.param-types {
+    margin-bottom: var(--space-md);
+    font-size: var(--text-sm);
+}
+
+.param-item {
+    display: inline-block;
+    margin-right: var(--space-md);
+    margin-bottom: var(--space-sm);
+}
+
+.param-name {
+    font-family: var(--font-mono);
+    color: var(--color-accent-cyan);
+    font-weight: 600;
+}
+
+.param-type {
+    margin-left: var(--space-xs);
+}
+
+/* Docstring */
+.docstring {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    line-height: var(--leading-normal);
+}
+
+.docstring p {
+    margin: var(--space-sm) 0;
+}
+
+/* ============================================================
+   EPIC-14: Copy-to-Clipboard Button
+   ============================================================ */
+
+.copy-btn {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    padding: var(--space-sm) var(--space-md);
+    color: var(--color-text-tertiary);
+    cursor: pointer;
+    transition: all var(--transition);
+    font-size: var(--text-xs);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.copy-btn:hover {
+    background: var(--color-bg-elevated);
+    border-color: var(--color-accent-cyan);
+    color: var(--color-accent-cyan);
+}
+
+.copy-btn:focus {
+    outline: 2px solid var(--color-accent-cyan);
+    outline-offset: 2px;
+}
+
+.copy-btn.copied {
+    border-color: var(--color-ok);
+    color: var(--color-ok);
+}
+
+.copy-btn.copied .copy-text::after {
+    content: " ✓";
+}
+
+/* ============================================================
+   Code Path & Snippet (Updated)
+   ============================================================ */
+
+.code-path {
+    font-size: var(--text-xs);
+    color: var(--color-text-tertiary);
+    margin-bottom: var(--space-md);
+    font-family: var(--font-mono);
+}
+
+.line-number {
+    margin-left: var(--space-md);
+    color: var(--color-accent-cyan);
+    font-weight: 600;
+}
+
+.code-snippet {
+    background: var(--color-bg-input);
+    border: 1px solid var(--color-border);
+    padding: var(--space-md);
+    margin-bottom: var(--space-md);
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.code-snippet pre {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--color-text-primary);
+    white-space: pre;
+}
+
+.code-snippet code {
+    font-family: var(--font-mono);
+}
+
+/* ============================================================
+   Metadata Badges (Updated)
+   ============================================================ */
+
+.code-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    align-items: center;
+}
+
+.badge {
+    padding: 2px 8px;
+    font-size: var(--text-tiny);
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-tertiary);
+    font-family: var(--font-mono);
+}
+
+.badge-score {
+    background: rgba(74, 144, 226, 0.12);
+    border-color: rgba(74, 144, 226, 0.3);
+    color: #4a90e2;
+    font-weight: 600;
 }
 
 /* Badge Variations */
@@ -263,12 +707,6 @@
     word-break: break-word;  /* Handle long paths gracefully */
 }
 
-.name-path:focus {
-    outline: 2px solid var(--color-accent-blue);
-    outline-offset: 2px;
-    border-radius: var(--radius-sm);
-}
-
 .simple-name {
     font-size: var(--text-xs);
     color: var(--color-text-tertiary);
@@ -283,15 +721,161 @@
     font-weight: 600;
 }
 
-.name-simple:focus {
-    outline: 2px solid var(--color-accent-cyan);
-    outline-offset: 2px;
-    border-radius: var(--radius-sm);
-}
-
 .name-unknown {
     font-size: var(--text-sm);
     color: var(--color-text-dim);
     font-style: italic;
 }
+
+/* ============================================================
+   EPIC-14: Enhanced Empty States
+   ============================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: var(--space-3xl);
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+}
+
+.empty-icon {
+    font-size: 3rem;
+    margin-bottom: var(--space-lg);
+    opacity: 0.6;
+}
+
+.empty-title {
+    font-size: var(--text-lg);
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-md);
+    font-weight: 600;
+}
+
+.empty-subtitle {
+    font-size: var(--text-sm);
+    color: var(--color-text-tertiary);
+    margin-bottom: var(--space-lg);
+}
+
+.empty-suggestions {
+    max-width: 500px;
+    margin: 0 auto;
+    text-align: left;
+}
+
+.empty-tips {
+    list-style: none;
+    padding: 0;
+    margin: var(--space-md) 0;
+}
+
+.empty-tips li {
+    padding: var(--space-sm) 0;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+}
+
+.empty-tips li::before {
+    content: "→ ";
+    color: var(--color-accent-cyan);
+    font-weight: bold;
+    margin-right: var(--space-sm);
+}
+
+/* ============================================================
+   EPIC-14: Skeleton Screens (Loading States)
+   ============================================================ */
+
+.skeleton-card {
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-border);
+    padding: var(--space-md);
+    margin-bottom: var(--space-lg);
+}
+
+.skeleton-line {
+    height: 16px;
+    background: linear-gradient(
+        90deg,
+        var(--color-bg-elevated) 25%,
+        var(--color-bg-panel) 50%,
+        var(--color-bg-elevated) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+    margin-bottom: var(--space-md);
+    border-radius: var(--radius-sm);
+}
+
+.skeleton-line.short {
+    width: 40%;
+}
+
+.skeleton-line.medium {
+    width: 70%;
+}
+
+.skeleton-line.long {
+    width: 90%;
+}
+
+@keyframes skeleton-loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* Hide skeleton when results load */
+.code-list:not(:empty) + .skeleton-container {
+    display: none;
+}
+
+/* ============================================================
+   EPIC-14: Animations for Card Expansion
+   ============================================================ */
+
+.code-body {
+    animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Smooth transitions */
+.code-card,
+.expand-btn,
+.copy-btn,
+.type-badge {
+    transition: all 80ms ease-out;
+}
+
+/* Focus visible (keyboard navigation) */
+.code-card:focus-visible,
+.expand-btn:focus-visible,
+.copy-btn:focus-visible {
+    outline: 2px solid var(--color-accent-blue);
+    outline-offset: 2px;
+}
 </style>
+
+{# EPIC-14: Skeleton Loading Template #}
+<template id="skeleton-template">
+    <div class="skeleton-card">
+        <div class="skeleton-line short"></div>
+        <div class="skeleton-line medium"></div>
+        <div class="skeleton-line long"></div>
+    </div>
+</template>
