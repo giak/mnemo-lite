@@ -214,8 +214,12 @@ async def lifespan(app: FastAPI):
 
             logger.info("⏳ Starting TypeScript LSP client...")
 
+            # Create workspace directory if it doesn't exist
+            ts_workspace_root = "/tmp/ts_lsp_workspace"
+            Path(ts_workspace_root).mkdir(parents=True, exist_ok=True)
+
             # Create and start TypeScript LSP client
-            typescript_lsp = TypeScriptLSPClient(workspace_root="/tmp/ts_lsp_workspace")
+            typescript_lsp = TypeScriptLSPClient(workspace_root=ts_workspace_root)
             await typescript_lsp.start()
 
             # Store in app.state for access in routes and dependencies
