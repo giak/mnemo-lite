@@ -52,7 +52,9 @@
       "Bash(for file in docs/agile/serena-evolution/03_EPICS/EPIC-11_STORY_*.md)",
       "Bash(xargs:*)",
       "Bash(git checkout:*)",
-      "Bash(for file in .claude/skills/mnemolite-gotchas/domains/*.md)"
+      "Bash(for file in .claude/skills/mnemolite-gotchas/domains/*.md)",
+      "Bash(docker-compose build:*)",
+      "Bash(docker-compose up:*)"
     ],
     "deny": [],
     "ask": []

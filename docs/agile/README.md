@@ -73,7 +73,7 @@ Les documents **d'archive historique** (EPIC-01 à EPIC-05) peuvent contenir des
 - **Infrastructure** : CI/CD (GitHub Actions), E2E (Playwright), Load (Locust)
 - **Livrables** : Memory cache, pool optimization, deployment automation, testing suite
 
-#### Serena Evolution (EPIC-10 à EPIC-13) - Oct 2025
+#### Serena Evolution (EPIC-10 à EPIC-14) - Oct 2025
 
 **EPIC-10: Performance & Caching (L1/L2)** - ✅ 100% COMPLET
 - **Documentation** : `serena-evolution/03_EPICS/EPIC-10_PERFORMANCE_CACHING.md`
@@ -98,6 +98,22 @@ Les documents **d'archive historique** (EPIC-01 à EPIC-05) peuvent contenir des
 - **Résumé** : 21/21 pts, 5 stories (13.1-13.5 ALL COMPLETE: LSP Wrapper, Type Extraction, Lifecycle, Caching, Call Resolution)
 - **Gains** : 90%+ type coverage, 95%+ call resolution accuracy, LSP queries <1ms (cached), >99% LSP uptime, 30-50× faster (cached)
 - **Infrastructure** : Pyright LSP client, TypeExtractorService, LSPLifecycleManager, L2 Redis cache, name_path-based call resolution
+
+**EPIC-14: LSP UI/UX Enhancements** - ✅ 100% COMPLET (25/25 pts) + **CRITICAL FIXES** ✅
+- **Documentation** : `serena-evolution/03_EPICS/EPIC-14_LSP_UI_ENHANCEMENTS.md`, `EPIC-14_README.md`, `EPIC-14_FINAL_SUMMARY.md`, `EPIC-14_INDEX.md`
+- **Résumé** : 25/25 pts (100% COMPLETE), 5 stories (all COMPLETE) + 9 critical fixes
+  - Story 14.1: Enhanced Search Results (**8 pts**) ✅ - card layout, virtual scrolling, keyboard shortcuts, copy-to-clipboard
+  - Story 14.2: Enhanced Graph Tooltips (**5 pts**) ✅ - debounced hover, tooltip pooling, LSP metadata display
+  - Story 14.3: LSP Health Widget (**3 pts**) ✅ - real-time status, uptime, cache hit rate, Chart.js visualizations
+  - Story 14.4: Type-Aware Filters + Autocomplete (**6 pts**) ✅ - smart autocomplete, debounced input, backend filtering
+  - Story 14.5: Visual Enhancements (**3 pts**) ✅ - interactive legend, micro-animations, SCADA styling
+- **Critical Fixes** : 9 issues (3 XSS vulnerabilities, 4 memory leaks, 2 critical bugs) - All resolved ✅
+- **Security** : C (70/100) → A (95/100) ⬆ +25 points
+- **Performance** : A- (90/100) → A (95/100) ⬆ +5 points
+- **Overall Grade** : B+ (85/100) → A- (92/100) ⬆ +7 points
+- **Production Status** : ✅ READY - All stories complete, all critical vulnerabilities eliminated
+- **Gains** : 100% LSP metadata exposure, <300ms search (1000+ results), <10ms tooltips, WCAG 2.1 AA compliant, 10× fewer API calls
+- **Livrables** : Card-based search results, color-coded type badges, smart autocomplete, copy-to-clipboard, LSP health dashboard, html_utils.js (XSS prevention)
 
 ### 🟡 Archive Historique (Q1-Q2 2025)
 
@@ -143,7 +159,7 @@ Ces documents restent utiles pour :
 | **Mars-Mai 2025** | Phase Initiale | EPIC-01 à EPIC-05 (Archives) |
 | **Octobre 2025** | Code Intelligence | EPIC-06 (Backend, 10 jours) + EPIC-07 (UI, 2 jours) |
 | **Octobre 2025** | Performance & Testing | EPIC-08 (Optimization, 1 jour) |
-| **Octobre 2025** | Serena Evolution | EPIC-10 (Caching) + EPIC-11 (Symbols) + EPIC-12 (Robustness) + EPIC-13 (LSP) |
+| **Octobre 2025** | Serena Evolution | EPIC-10 (Caching) + EPIC-11 (Symbols) + EPIC-12 (Robustness) + EPIC-13 (LSP Backend) + EPIC-14 (LSP UI) |
 
 **Version actuelle du projet** : v2.3.0 → v3.0.0 (en cours - Octobre 2025)
 
@@ -155,17 +171,19 @@ Ces documents restent utiles pour :
 - ✅ EPIC-10 : 36/36 pts (Oct 2025) - Serena Evolution
 - ✅ EPIC-11 : 13/13 pts (Oct 2025) - Serena Evolution
 - ✅ EPIC-12 : 23/23 pts (Oct 2025) - Serena Evolution
-- ✅ EPIC-13 : 21/21 pts (Oct 2025) - Serena Evolution - **100% COMPLETE**
+- ✅ EPIC-13 : 21/21 pts (Oct 2025) - Serena Evolution - **100% COMPLETE (Backend)**
+- ✅ EPIC-14 : 25/25 pts (Oct 2025) - Serena Evolution - **100% COMPLETE (UI/UX) + CRITICAL FIXES** ✅
 
 ## 🌟 Serena Evolution (v3.0)
 
-La phase **Serena Evolution** (EPIC-10 à EPIC-13) transforme MnemoLite en plateforme de code intelligence ultra-performante et ultra-robuste :
+La phase **Serena Evolution** (EPIC-10 à EPIC-14) transforme MnemoLite en plateforme de code intelligence ultra-performante et ultra-robuste :
 
 **Objectifs v3.0** :
-- ✅ Performance : 100× plus rapide (cache L1/L2)
-- ✅ Robustness : 0 crash, graceful degradation partout
-- ✅ Precision : Type information complète via LSP + call resolution 95%+ (100% complete)
-- ✅ Scalability : Gérer 100k+ fichiers sans ralentir
+- ✅ Performance : 100× plus rapide (cache L1/L2) - EPIC-10 ✅
+- ✅ Robustness : 0 crash, graceful degradation partout - EPIC-12 ✅
+- ✅ Precision : Type information complète via LSP + call resolution 95%+ - EPIC-13 ✅ (backend)
+- 🚧 UI/UX : Exposer LSP metadata dans l'interface - EPIC-14 🚧 (en cours)
+- ✅ Scalability : Gérer 100k+ fichiers sans ralentir - EPIC-10/11/12 ✅
 
 **Documentation complète** : `serena-evolution/00_CONTROL/CONTROL_MISSION_CONTROL.md`
 
