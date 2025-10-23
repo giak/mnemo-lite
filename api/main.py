@@ -183,9 +183,9 @@ async def lifespan(app: FastAPI):
     try:
         from services.lsp import LSPLifecycleManager
 
-        logger.info("⏳ Starting LSP Lifecycle Manager...")
+        logger.info("⏳ Starting Python LSP Lifecycle Manager...")
 
-        # Create and start LSP lifecycle manager
+        # Create and start Python LSP lifecycle manager
         lsp_lifecycle_manager = LSPLifecycleManager(
             workspace_root="/tmp/lsp_workspace",
             max_restart_attempts=3
@@ -196,15 +196,45 @@ async def lifespan(app: FastAPI):
         app.state.lsp_lifecycle_manager = lsp_lifecycle_manager
 
         logger.info(
-            "✅ LSP Lifecycle Manager started successfully",
+            "✅ Python LSP Lifecycle Manager started successfully",
             pid=lsp_lifecycle_manager.client.process.pid if lsp_lifecycle_manager.client and lsp_lifecycle_manager.client.process else None
         )
     except Exception as e:
         logger.warning(
-            "LSP Lifecycle Manager initialization failed - continuing without LSP type extraction",
+            "Python LSP Lifecycle Manager initialization failed - continuing without Python LSP type extraction",
             error=str(e)
         )
         app.state.lsp_lifecycle_manager = None
+
+    # 6. Initialize TypeScript LSP Client (EPIC-16 Story 16.3)
+    typescript_lsp_enabled = os.getenv("TYPESCRIPT_LSP_ENABLED", "true").lower() == "true"
+    if typescript_lsp_enabled:
+        try:
+            from services.lsp.typescript_lsp_client import TypeScriptLSPClient
+
+            logger.info("⏳ Starting TypeScript LSP client...")
+
+            # Create and start TypeScript LSP client
+            typescript_lsp = TypeScriptLSPClient(workspace_root="/tmp/ts_lsp_workspace")
+            await typescript_lsp.start()
+
+            # Store in app.state for access in routes and dependencies
+            app.state.typescript_lsp = typescript_lsp
+
+            logger.info(
+                "✅ TypeScript LSP client started successfully",
+                pid=typescript_lsp.process.pid if typescript_lsp.process else None
+            )
+        except Exception as e:
+            logger.warning(
+                "TypeScript LSP client initialization failed - continuing without TypeScript LSP type extraction",
+                error=str(e)
+            )
+            # Graceful degradation: continue without TypeScript LSP
+            app.state.typescript_lsp = None
+    else:
+        logger.info("TypeScript LSP disabled via TYPESCRIPT_LSP_ENABLED=false")
+        app.state.typescript_lsp = None
 
     yield
 
@@ -241,11 +271,21 @@ async def lifespan(app: FastAPI):
             if hasattr(app.state, "error_tracking_service"):
                 del app.state.error_tracking_service
 
-    # Cleanup LSP Lifecycle Manager (EPIC-13 Story 13.3)
+    # Cleanup TypeScript LSP Client (EPIC-16 Story 16.3)
+    if hasattr(app.state, "typescript_lsp") and app.state.typescript_lsp:
+        try:
+            await app.state.typescript_lsp.shutdown()
+            logger.info("TypeScript LSP client shut down gracefully.")
+        except Exception as e:
+            logger.warning("Error shutting down TypeScript LSP client", error=str(e))
+        finally:
+            del app.state.typescript_lsp
+
+    # Cleanup Python LSP Lifecycle Manager (EPIC-13 Story 13.3)
     if hasattr(app.state, "lsp_lifecycle_manager") and app.state.lsp_lifecycle_manager:
         try:
             await app.state.lsp_lifecycle_manager.shutdown()
-            logger.info("LSP Lifecycle Manager shut down gracefully.")
+            logger.info("Python LSP Lifecycle Manager shut down gracefully.")
         except Exception as e:
             logger.warning("Error shutting down LSP Lifecycle Manager", error=str(e))
         finally:

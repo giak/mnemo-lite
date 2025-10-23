@@ -614,7 +614,7 @@ async def get_error_tracking_service(
 
 
 # ============================================================================
-# EPIC-13 Story 13.3: LSP Lifecycle Management
+# EPIC-13 Story 13.3: LSP Lifecycle Management (Python)
 # ============================================================================
 
 def get_lsp_lifecycle_manager():
@@ -638,6 +638,35 @@ def get_lsp_lifecycle_manager():
     lsp_manager = getattr(app.state, "lsp_lifecycle_manager", None)
 
     if lsp_manager is None:
-        logger.warning("LSP lifecycle manager not initialized")
+        logger.warning("Python LSP lifecycle manager not initialized")
 
     return lsp_manager
+
+
+# ============================================================================
+# EPIC-16 Story 16.3: TypeScript LSP Client
+# ============================================================================
+
+def get_typescript_lsp_client():
+    """
+    Récupère l'instance du TypeScript LSP client depuis l'état de l'application.
+
+    Le client TypeScript LSP est initialisé au démarrage dans main.py lifespan
+    et stocké dans app.state pour permettre un accès global.
+
+    Returns:
+        TypeScriptLSPClient | None: Instance du client TypeScript LSP si disponible
+
+    Note:
+        Graceful degradation: retourne None si TypeScript LSP n'est pas disponible.
+        Le code appelant doit vérifier si le client est None avant utilisation.
+    """
+    # Import here to avoid circular dependency
+    from main import app
+
+    typescript_lsp = getattr(app.state, "typescript_lsp", None)
+
+    if typescript_lsp is None:
+        logger.debug("TypeScript LSP client not initialized (may be disabled)")
+
+    return typescript_lsp

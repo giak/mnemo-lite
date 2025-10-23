@@ -39,14 +39,20 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Install runtime dependencies only
+# Install runtime dependencies (including Node.js for TypeScript LSP)
 RUN sed -i 's|http://deb.debian.org/debian|http://ftp.fr.debian.org/debian|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         curl \
         libatomic1 \
+        nodejs \
+        npm \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Install TypeScript Language Server globally (EPIC-16)
+RUN npm install -g typescript typescript-language-server && \
+    npm cache clean --force
 
 # Create appuser BEFORE copying files (OPTIMIZATION: better layer caching)
 RUN useradd -m -u 1000 appuser
