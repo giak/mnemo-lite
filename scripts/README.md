@@ -1,113 +1,117 @@
-# MnemoLite Scripts
+# Scripts MnemoLite
 
-Scripts utilitaires pour MnemoLite v2.0.0
+## claude-with-hooks.sh
 
-## 📁 Structure
+**Workaround pour Bug Claude Code #10401**
 
-```
-scripts/
-├── performance/        # Performance & optimization (EPIC-08)
-│   ├── apply_optimizations.sh       # Apply/rollback optimizations (4 modes)
-│   ├── fix_embedding_performance.sh # Fix embedding model loading
-│   └── verify_optimizations.py      # Verify optimizations work
-│
-├── testing/            # Test utilities (EPIC-08)
-│   ├── test_application.sh          # Quick testing (quick/full/load)
-│   ├── generate_test_data.py        # Generate test events (768D embeddings)
-│   └── fake_event_poster.py         # Post fake events to API
-│
-├── database/           # Database utilities
-│   └── init_test_db.sql             # Initialize test database
-│
-├── benchmarks/         # Performance benchmarking
-│   └── (benchmark scripts)
-│
-└── archive/            # Historical scripts (Q1-Q2 2025)
-    └── (old migration/audit scripts)
-```
+### Problème
 
-## 🚀 Scripts Actifs (v2.0.0)
+Claude Code v2.0.27+ ne déclenche **AUCUN hook** (Stop, UserPromptSubmit, etc.) sans le flag `--debug hooks`.
 
-### Performance (EPIC-08)
+**Impact**: Les conversations ne sont PAS sauvegardées automatiquement malgré la configuration correcte dans `.claude/settings.local.json`.
 
-**apply_optimizations.sh** - Manage performance optimizations
+**Issue GitHub**: [#10401](https://github.com/anthropics/claude-code/issues/10401) - OPEN
+
+### Solution
+
+Ce wrapper script force automatiquement le flag `--debug hooks` à chaque lancement de Claude Code.
+
+### Installation Rapide
+
 ```bash
-# Test current performance
-scripts/performance/apply_optimizations.sh test
+# Option 1: Alias global (recommandé)
+echo 'alias claude="$HOME/Work/MnemoLite/scripts/claude-with-hooks.sh"' >> ~/.bashrc
+source ~/.bashrc
 
-# Apply optimizations
-scripts/performance/apply_optimizations.sh apply
+# Option 2: Copie dans ~/bin (si ~/bin est dans PATH)
+cp scripts/claude-with-hooks.sh ~/bin/
+chmod +x ~/bin/claude-with-hooks.sh
+alias claude="$HOME/bin/claude-with-hooks.sh"
 
-# Benchmark (100 req/s)
-scripts/performance/apply_optimizations.sh benchmark
-
-# Rollback (10-second recovery)
-scripts/performance/apply_optimizations.sh rollback
+# Option 3: Lien symbolique
+ln -s ~/Work/MnemoLite/scripts/claude-with-hooks.sh ~/bin/claude-hooks
+alias claude='claude-hooks'
 ```
 
-**verify_optimizations.py** - Verify optimizations
+### Vérification
+
 ```bash
-python scripts/performance/verify_optimizations.py
+# 1. Tester l'alias
+claude --version
+# → Doit afficher: "🔧 Workaround Bug #10401: Activating hooks with --debug"
+
+# 2. Vérifier que hooks s'exécutent
+claude
+# Poser une question, puis vérifier:
+cat /tmp/mnemo-hook-stop.log
+# → Doit contenir des entrées récentes
+
+# 3. Vérifier conversations sauvegardées
+docker compose exec -T db psql -U mnemo -d mnemolite -c "
+SELECT COUNT(*), MAX(created_at)
+FROM memories
+WHERE memory_type = 'conversation' AND author = 'AutoSave';"
+# → Count devrait augmenter après chaque conversation
 ```
 
-### Testing (EPIC-08)
+### Usage
 
-**test_application.sh** - Quick testing suite
 ```bash
-# Quick test (health + events)
-scripts/testing/test_application.sh quick
+# Lancer nouvelle session (avec hooks activés)
+claude
 
-# Full test suite
-scripts/testing/test_application.sh full
+# Reprendre session précédente (avec hooks activés)
+claude --resume
 
-# Load testing
-scripts/testing/test_application.sh load
+# Continue session spécifique (avec hooks activés)
+claude --continue --session-id abc123
+
+# Toutes les commandes Claude fonctionnent normalement
+claude --help
 ```
 
-**generate_test_data.py** - Generate test data
+### Désinstallation
+
+Quand le bug sera corrigé en upstream:
+
 ```bash
-# Generate 100 test events (768D embeddings)
-docker exec mnemo-api python scripts/testing/generate_test_data.py
-```
+# Supprimer l'alias
+sed -i '/claude-with-hooks/d' ~/.bashrc
+source ~/.bashrc
 
-**fake_event_poster.py** - Post fake events
-```bash
-# Post fake events to API
-docker exec mnemo-api python scripts/testing/fake_event_poster.py
-```
-
-### Database
-
-**init_test_db.sql** - Initialize test database
-```bash
-docker exec mnemo-postgres psql -U mnemo -d mnemolite_test -f /app/scripts/database/init_test_db.sql
-```
-
-## 📦 Scripts Archivés
-
-Scripts historiques de la phase initiale (Q1-Q2 2025) conservés pour référence:
-
-- `cleanup_phase1.sh` - Migration structure api/ (déjà complétée)
-- `migrate_imports.sh` - Migration imports (déjà complétée)
-- `standardize_imports.py` - Standardisation imports (déjà complétée)
-- `audit_story3_*.py` - Audits EPIC-06 Story 3 (déjà complétés)
-- `validate_story3_metadata.py` - Validation EPIC-06 (déjà complétée)
-
-**Note**: Ces scripts ne sont plus nécessaires pour v2.0.0 mais sont conservés pour historique.
-
-## 🔧 Maintenance
-
-### Ajouter un nouveau script
-1. Placer dans le dossier approprié (performance/testing/database)
-2. Rendre exécutable: `chmod +x scripts/<category>/<script>.sh`
-3. Documenter dans ce README
-
-### Archiver un script obsolète
-```bash
-mv scripts/<category>/<script> scripts/archive/
+# Vérifier que claude original fonctionne avec hooks
+ps aux | grep "claude.*--debug"
+# → Si vide et hooks fonctionnent: bug corrigé, wrapper plus nécessaire
 ```
 
 ---
 
-**Last Updated**: 2025-10-17
-**Version**: v2.0.0 (EPIC-08 Complete)
+## mcp_server.sh
+
+Script pour lancer le serveur MCP MnemoLite en standalone (pour debug).
+
+**Usage**:
+```bash
+./scripts/mcp_server.sh
+```
+
+**Logs**: stdout/stderr
+
+---
+
+## periodic-conversation-scanner.py (À venir)
+
+Background job pour parser périodiquement les transcripts Claude Code et sauvegarder les conversations manquées.
+
+**Status**: Pas encore implémenté (Layer 3 de l'architecture multi-couches)
+
+**Plan**:
+- Parse `~/.claude/projects/` toutes les 5 minutes
+- Détecte nouveaux échanges via hash deduplication
+- Sauvegarde via `write_memory` MCP tool
+- Coverage: +1.5% (rattrapage des hooks manqués)
+
+---
+
+**Dernière mise à jour**: 2025-10-29
+**EPIC**: EPIC-24 (Auto-save Conversations)
