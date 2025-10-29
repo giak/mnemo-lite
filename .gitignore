@@ -44,6 +44,9 @@ htmlcov/
 .nox/
 coverage.xml
 *.cover
+test_reports/
+*.test.json
+*.test.log
 
 # Backup files
 .backup*/
