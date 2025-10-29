@@ -670,3 +670,114 @@ def get_typescript_lsp_client():
         logger.debug("TypeScript LSP client not initialized (may be disabled)")
 
     return typescript_lsp
+
+
+# ============================================================================
+# EPIC-22 Story 22.1: MetricsCollector dependency
+# ============================================================================
+
+async def get_metrics_collector(
+    request: Request,
+    engine: AsyncEngine = Depends(get_db_engine)
+):
+    """
+    Récupère une instance du MetricsCollector pour l'observabilité (EPIC-22).
+
+    Le MetricsCollector collecte des métriques depuis:
+    - PostgreSQL (via engine)
+    - Redis (via client asyncio)
+    - Système (via psutil)
+
+    Args:
+        request: La requête HTTP pour accéder à app.state
+        engine: Le moteur PostgreSQL
+
+    Returns:
+        Instance de MetricsCollector
+
+    Note:
+        Le client Redis est créé à la demande (pas singleton comme RedisCache).
+        Cela évite les problèmes de connexion partagée entre threads.
+    """
+    # Import here to avoid circular dependency
+    from services.metrics_collector import MetricsCollector
+    import redis.asyncio as aioredis
+
+    # Get or create Redis client
+    redis_client = getattr(request.app.state, "metrics_redis_client", None)
+
+    if redis_client is None:
+        # Create new Redis client for metrics
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        redis_client = aioredis.from_url(
+            redis_url,
+            decode_responses=False  # Keep bytes for INFO command
+        )
+        request.app.state.metrics_redis_client = redis_client
+
+        logger.debug(
+            "EPIC-22: MetricsCollector Redis client created",
+            redis_url=redis_url
+        )
+
+    return MetricsCollector(engine, redis_client)
+
+
+# ============================================================================
+# EPIC-22 Story 22.5: EndpointPerformanceService dependency
+# ============================================================================
+
+async def get_endpoint_performance_service(
+    engine: AsyncEngine = Depends(get_db_engine)
+):
+    """
+    Récupère une instance du EndpointPerformanceService pour l'analyse API (EPIC-22 Story 22.5).
+
+    Analyse les performances API par endpoint depuis la table metrics:
+    - P50/P95/P99 latency par endpoint
+    - Error rate et throughput
+    - Impact calculation (time wasted)
+
+    Args:
+        engine: Le moteur PostgreSQL
+
+    Returns:
+        Instance de EndpointPerformanceService
+
+    Note:
+        Service stateless - crée une nouvelle instance par requête.
+        Les agrégations sont calculées à la volée depuis la table metrics.
+    """
+    from services.endpoint_performance_service import EndpointPerformanceService
+    return EndpointPerformanceService(engine)
+
+
+# ============================================================================
+# EPIC-22 Story 22.7: MonitoringAlertService dependency
+# ============================================================================
+
+async def get_monitoring_alert_service(
+    engine: AsyncEngine = Depends(get_db_engine)
+):
+    """
+    Récupère une instance du MonitoringAlertService pour l'alerting (EPIC-22 Story 22.7).
+
+    Gère les alertes basées sur les seuils de métriques:
+    - Cache hit rate < 70% → Warning
+    - Memory > 80% → Critical
+    - Slow queries > 10 → Warning
+    - Error rate > 5% → Critical
+    - etc.
+
+    Args:
+        engine: Le moteur PostgreSQL
+
+    Returns:
+        Instance de MonitoringAlertService
+
+    Note:
+        Service stateless - crée une nouvelle instance par requête.
+        Les alertes sont persistées dans la table `alerts`.
+    """
+    from services.monitoring_alert_service import MonitoringAlertService
+    return MonitoringAlertService(engine)

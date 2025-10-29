@@ -980,6 +980,33 @@
                 </div>
             </div>
 
+            <!-- EPIC-21 Story 21.1: Path Finder -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Path Finder</div>
+                <div class="detail-row" style="margin-bottom: 8px; padding: 8px; background: #0d1117; border-left: 2px solid #21262d;">
+                    <div class="detail-label" style="margin-bottom: 2px;">Source</div>
+                    <div class="detail-value" id="path-source-label" style="font-size: 11px; color: #6e7681; font-style: italic;">None selected</div>
+                </div>
+                <div class="detail-row" style="margin-bottom: 12px; padding: 8px; background: #0d1117; border-left: 2px solid #21262d;">
+                    <div class="detail-label" style="margin-bottom: 2px;">Target</div>
+                    <div class="detail-value" id="path-target-label" style="font-size: 11px; color: #6e7681; font-style: italic;">None selected</div>
+                </div>
+                <div class="layout-controls">
+                    <button class="layout-btn" id="set-source-btn" onclick="setPathSource()">
+                        <span>🎯</span> Set Source
+                    </button>
+                    <button class="layout-btn" id="set-target-btn" onclick="setPathTarget()">
+                        <span>🎯</span> Set Target
+                    </button>
+                    <button class="layout-btn" id="find-path-btn" onclick="findPath()" style="border-left-color: #20e3b2;">
+                        <span>🔍</span> Find Path
+                    </button>
+                    <button class="layout-btn" onclick="clearPath()">
+                        <span>✕</span> Clear Path
+                    </button>
+                </div>
+            </div>
+
             <!-- EPIC-14 Story 14.5: Graph Legend -->
             <div class="sidebar-section" id="legend-section">
                 <div class="sidebar-section-title" style="cursor: pointer;" onclick="toggleLegend()">

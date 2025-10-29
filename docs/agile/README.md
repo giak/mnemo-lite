@@ -130,6 +130,35 @@ Les documents **d'archive historique** (EPIC-01 à EPIC-05) peuvent contenir des
 - **Gains**: 100% file indexing success, constant resource usage, auto-recovery on LSP crash
 - **Livrables**: Global singleton LSP clients, .d.ts filter, stderr drain tasks, comprehensive validation suite
 
+**EPIC-22: Advanced Observability & Real-Time Monitoring** - 🟡 53% EN COURS (10/19 pts) - **PRODUCTION-CRITICAL**
+- **Documentation** : `serena-evolution/03_EPICS/EPIC-22_README.md`
+- **Résumé** : 10/19 pts (53% COMPLETE), Phase 1 (5/5 pts) ✅ + Phase 2 (5/6 pts) 🟡
+  - Story 22.1: Metrics Infrastructure (**2 pts**) ✅ - PostgreSQL metrics table, trace_id, middleware
+  - Story 22.2: Dashboard Unifié UI (**2 pts**) ✅ - `/ui/monitoring/advanced`, KPI cards, ECharts
+  - Story 22.3: Logs Streaming SSE (**1 pt**) ✅ - Real-time logs with filters
+  - Story 22.5: Endpoint Performance Deep Dive (**2 pts**) ✅ - Latency by endpoint, TOP 10 slowest
+  - Story 22.6: Alerting Backend (**2 pts**) ✅ - Alert rules, evaluation engine, persistence
+  - Story 22.7: Alerting UI (**1 pt**) 🟡 - IN PROGRESS
+- **Vision**: "En 30 secondes, diagnostiquer n'importe quel problème production depuis l'UI"
+- **Stack**: Zero nouvelle dépendance (FastAPI + PostgreSQL + HTMX + ECharts + SSE)
+- **Production Status**: 🟡 Phase 1 & 2 DEPLOYED - Phase 3 (Advanced Features) pending
+- **Gains**: Monitoring unifié, métriques persistées, logs streaming temps réel, alerting proactif
+- **Livrables**: Dashboard avancé, metrics table, SSE logs, endpoint performance tracking, alert system
+
+**EPIC-23: MCP Integration** - 🚧 **PHASE 2 IN PROGRESS** (11/23 pts, 48%) - **FOUNDATION VALIDATED**
+- **Documentation** : `serena-evolution/03_EPICS/EPIC-23_README.md`, `EPIC-23_PROGRESS_TRACKER.md`, `EPIC-23_VALIDATION_REPORT_2025-10-28.md` ⭐
+- **Résumé** : 11/23 pts (48% COMPLETE), Phase 1 (3/3 stories - 100% ✅) + Phase 2 (1/4 stories - 25% 🚧)
+  - Story 23.1: Project Structure & FastMCP Setup (**3 pts**) ✅ 2025-10-27 - Server initialization, DB/Redis connectivity
+  - Story 23.2: Code Search Tool (**3 pts**) ✅ 2025-10-27 - Hybrid search (lexical+vector+RRF), 6 filters, pagination, cache
+  - Story 23.3: Memory Tools & Resources (**2 pts**) ✅ 2025-10-28 - CRUD tools + resources + vector search + 89 tests
+  - Story 23.4: Code Graph Resources (**3 pts**) ✅ 2025-10-28 - 3 graph resources, 11 models, pagination, Redis cache, 35 tests
+- **Vision**: Transformer MnemoLite en MCP Server pour exposer code intelligence aux LLMs (Claude Desktop)
+- **Architecture**: FastMCP SDK (mcp==1.12.3), stdio/HTTP transport, Pydantic structured output, SQLAlchemy Core
+- **Spec**: MCP 2025-06-18 compliant (5 Tools + 7 Resources implemented)
+- **Production Status**: ✅ Phase 1 COMPLETE & VALIDATED - 🚧 Phase 2 IN PROGRESS - 149/149 tests passing (100%)
+- **Gains**: 5 tools operational, 7 resources implemented, graph navigation, memory persistence with vector search, soft/hard delete, Redis L2 cache
+- **Livrables**: 3 memory tools, 6 resources (3 memory + 3 graph), 22 Pydantic models, MemoryRepository, NodeRepository + GraphTraversalService integration, DB migration v7→v8, comprehensive validation report
+
 ### 🟡 Archive Historique (Q1-Q2 2025)
 
 #### Epics Historiques
@@ -174,9 +203,10 @@ Ces documents restent utiles pour :
 | **Mars-Mai 2025** | Phase Initiale | EPIC-01 à EPIC-05 (Archives) |
 | **Octobre 2025** | Code Intelligence | EPIC-06 (Backend, 10 jours) + EPIC-07 (UI, 2 jours) |
 | **Octobre 2025** | Performance & Testing | EPIC-08 (Optimization, 1 jour) |
-| **Octobre 2025** | Serena Evolution | EPIC-10 (Caching) + EPIC-11 (Symbols) + EPIC-12 (Robustness) + EPIC-13 (LSP Backend) + EPIC-14 (LSP UI) + EPIC-18 (LSP Stability) |
+| **Octobre 2025** | Serena Evolution | EPIC-10 (Caching) + EPIC-11 (Symbols) + EPIC-12 (Robustness) + EPIC-13 (LSP Backend) + EPIC-14 (LSP UI) + EPIC-18 (LSP Stability) + EPIC-19 (Embeddings) |
+| **Octobre 2025** | Production Readiness | EPIC-22 (Observability) 🟡 53% + EPIC-23 (MCP Integration) ✅ Phase 1 Complete (35%) |
 
-**Version actuelle du projet** : v2.3.0 → v3.0.0 (en cours - Octobre 2025)
+**Version actuelle du projet** : v3.0.0 → v3.1.0-dev (en cours - Octobre 2025)
 
 **Progrès Total** :
 - ✅ EPIC-01 à EPIC-05 : Complétés (Q1-Q2 2025)
@@ -189,6 +219,9 @@ Ces documents restent utiles pour :
 - ✅ EPIC-13 : 21/21 pts (Oct 2025) - Serena Evolution - **100% COMPLETE (Backend)**
 - ✅ EPIC-14 : 25/25 pts (Oct 2025) - Serena Evolution - **100% COMPLETE (UI/UX) + CRITICAL FIXES** ✅
 - ✅ EPIC-18 : 8/8 pts (Oct 2025) - Serena Evolution - **100% COMPLETE (LSP Stability) + CRITICAL PRODUCTION FIX** ✅
+- ✅ EPIC-19 : ? pts (Oct 2025) - Serena Evolution - **100% COMPLETE (Embeddings Optimization)**
+- 🟡 EPIC-22 : 10/19 pts (Oct 2025) - Production Readiness - **53% COMPLETE (Observability)** 🟡
+- 🚧 EPIC-23 : 11/23 pts (Oct 2025) - Production Readiness - **48% COMPLETE (MCP Integration Phase 2 🚧)** 🟡
 
 ## 🌟 Serena Evolution (v3.0)
 
@@ -206,4 +239,20 @@ La phase **Serena Evolution** (EPIC-10 à EPIC-18) transforme MnemoLite en plate
 
 ---
 
-_Dernière mise à jour de cette documentation : 2025-10-23 (EPIC-18 ajouté)_
+## 🚀 Production Readiness Phase (v3.1)
+
+La phase **Production Readiness** (EPIC-22, EPIC-23) finalise MnemoLite pour un déploiement production robuste :
+
+**Objectifs v3.1** :
+- 🟡 Observability : Monitoring unifié, métriques temps réel, alerting proactif - EPIC-22 (53%) 🟡
+- 🚧 MCP Integration Phase 2 : Exposer code intelligence via Model Context Protocol (Claude Desktop) - EPIC-23 (48%) 🚧
+- ⏳ Production Deployment : CI/CD, scaling, high availability
+
+**Documentation complète** :
+- EPIC-22 : `serena-evolution/03_EPICS/EPIC-22_README.md`
+- EPIC-23 : `serena-evolution/03_EPICS/EPIC-23_README.md` + `EPIC-23_PROGRESS_TRACKER.md` + `EPIC-23_VALIDATION_REPORT_2025-10-28.md` ⭐
+- Story 23.1-23.4 : Completion Reports + ULTRATHINK + Phase 1 Validation Report
+
+---
+
+_Dernière mise à jour de cette documentation : 2025-10-28 03:00 UTC (EPIC-23 Phase 2 IN PROGRESS - Stories 23.1-23.4 validés, 149/149 tests ✅)_

@@ -1,7 +1,8 @@
 # Serena Evolution - Documentation Hub
 
-**Version**: 2.0
-**Last Updated**: 2025-01-20
+**Version**: 3.0
+**Last Updated**: 2025-10-28
+**Status**: Production Readiness Phase (v3.1) - EPIC-22 (53%) + EPIC-23 (100%) + EPIC-24 (100%)
 **Method**: [Screaming Document Architecture](#-screaming-architecture-method)
 
 ---
@@ -37,10 +38,16 @@ serena-evolution/
 │   └── RESEARCH_2025-01-15_serena_deep_dive.md
 │
 ├── 03_EPICS/                # 📦 Project Tracking (Permanent)
-│   ├── EPIC-10_PERFORMANCE_CACHING.md
-│   ├── EPIC-11_SYMBOL_ENHANCEMENT.md
-│   ├── EPIC-12_ROBUSTNESS.md
-│   └── EPIC-13_LSP_INTEGRATION.md
+│   ├── EPIC-10_PERFORMANCE_CACHING.md (✅ Complete - 36 pts)
+│   ├── EPIC-11_SYMBOL_ENHANCEMENT.md (✅ Complete - 13 pts)
+│   ├── EPIC-12_ROBUSTNESS.md (✅ Complete - 23 pts)
+│   ├── EPIC-13_LSP_INTEGRATION.md (✅ Complete - 21 pts)
+│   ├── EPIC-14_LSP_UI_ENHANCEMENTS.md (✅ Complete - 25 pts)
+│   ├── EPIC-18_TYPESCRIPT_LSP_STABILITY.md (✅ Complete - 8 pts)
+│   ├── EPIC-19_* (✅ Complete - Embeddings)
+│   ├── EPIC-22_README.md (🟡 In Progress - 10/19 pts)
+│   ├── EPIC-23_README.md (✅ Complete - 23/23 pts - MCP Integration)
+│   └── EPIC-24_README.md (✅ Complete - Auto-Save Conversations)
 │
 ├── 88_ARCHIVE/              # 📚 Historical (Read-only)
 │   ├── 2025-01-19_deep_challenge/  (Deep challenge research)
@@ -181,24 +188,26 @@ mv 02_RESEARCH/RESEARCH_*_topic* 88_ARCHIVE/$(date +%Y-%m-%d)_topic_name/
 
 ---
 
-## 📊 Current Status (2025-01-20)
+## 📊 Current Status (2025-10-27)
 
 **Documents**:
 - Control: 2 (dashboards)
 - Decisions: 3 ADRs (source of truth)
 - Research: 1 active (serena deep dive)
-- EPICs: 4 (defined)
-- Archived: 6 files (~2800 lines)
+- EPICs: 9 (4 complete Serena v3.0 + 2 in progress v3.1)
+- Archived: 6+ files (~2800+ lines)
 
 **Recent Activity**:
-- ✅ Deep Challenge completed (2025-01-19) - integrated into ADRs
-- ✅ Structure reorganized (2025-01-20) - screaming architecture applied
+- ✅ Serena Evolution v3.0 COMPLETE (2025-10-23) - EPIC-10/11/12/13/14/18 (126 pts)
+- 🟡 EPIC-22 Phase 2 (2025-10-24) - Observability 53% complete (10/19 pts)
+- 🚧 EPIC-23 Story 23.1 (2025-10-27) - MCP Server Foundation complete (3/23 pts)
 - 🟢 All ADRs current and validated
 
-**Key Decisions** (last 7 days):
-1. **Cache Strategy** (ADR-001): Redis Standard > Dragonfly (pérennité priority)
-2. **LSP Analysis** (ADR-002): basedpyright primary, Pyright v315 fallback
-3. **Breaking Changes** (ADR-003): Expand-Contract validated
+**Key Milestones** (October 2025):
+1. **Performance** (EPIC-10): 100× faster re-indexing with L1/L2/L3 cache ✅
+2. **LSP Integration** (EPIC-13/14): Type information complete, UI enhanced ✅
+3. **Observability** (EPIC-22): Unified monitoring dashboard, real-time logs 🟡
+4. **MCP Integration** (EPIC-23): FastMCP server operational, Phase 1 started 🚧
 
 ---
 

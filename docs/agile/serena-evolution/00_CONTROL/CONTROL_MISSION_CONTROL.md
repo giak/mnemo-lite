@@ -1,9 +1,9 @@
-# 🚀 MISSION CONTROL - MnemoLite v3.0 Evolution
+# 🚀 MISSION CONTROL - MnemoLite v3.0 → v3.1 Evolution
 
-**Version**: 1.5.0
+**Version**: 1.9.0
 **Date de création**: 2025-10-18
-**Dernière mise à jour**: 2025-10-23 07:00 UTC
-**Status**: ✅ **EPIC-14 COMPLETE** (25/25 pts + 9 critical fixes) - LSP UI/UX Enhancements | Production Ready | Grade: A- (92/100)
+**Dernière mise à jour**: 2025-10-28 03:00 UTC
+**Status**: 🚧 **EPIC-23 PHASE 2 IN PROGRESS** (Stories 23.1-23.4 ✅, 11/23 pts, 48%) - MCP Server + Code Search + Memory + Code Graph | EPIC-22 Phase 2 (10/19 pts) | Production Readiness Phase
 
 ---
 
@@ -388,7 +388,293 @@ MnemoLite v2.0.0 est fonctionnel (EPIC-06/07/08 complets) mais présente des **l
 
 ---
 
+### EPIC-22 : Advanced Observability & Real-Time Monitoring (19 pts) - 🟡 53% COMPLETE
+
+**Status** : 🟡 **PHASE 2 IN PROGRESS (10/19 pts - 53%)**
+**Priority** : 🔴 PRODUCTION-CRITICAL (P1)
+**Owner** : Claude Code
+**Started** : 2025-10-24
+**Target** : Phase 1 ✅ Complete | Phase 2 🟡 In Progress | Phase 3 ⏸️ Paused
+**Documentation** : ✅ COMPLETE
+
+**Objectif** : "En 30 secondes, diagnostiquer n'importe quel problème production depuis l'UI"
+
+**Context** : Production-ready observability intégrée nativement dans MnemoLite, **sans dépendances externes** (pas de Prometheus/Grafana/ELK). Stack: FastAPI + PostgreSQL + HTMX + ECharts + SSE.
+
+**Stories** :
+- [x] Story 22.1 : Metrics Infrastructure (**2 pts**) ✅ 2025-10-24
+- [x] Story 22.2 : Dashboard Unifié UI (**2 pts**) ✅ 2025-10-24
+- [x] Story 22.3 : Logs Streaming SSE (**1 pt**) ✅ 2025-10-24
+- [x] Story 22.5 : Endpoint Performance Deep Dive (**2 pts**) ✅ 2025-10-24
+- [x] Story 22.6 : Alerting Backend (**2 pts**) ✅ 2025-10-24
+- [ ] Story 22.7 : Alerting UI (**1 pt**) 🟡 IN PROGRESS
+- [ ] Story 22.4 : Advanced Metrics & Trends (Phase 3) (**3 pts**) ⏸️ PAUSED
+- [ ] Story 22.8-22.10 : Advanced Features (Phase 3) (**6 pts**) ⏸️ PAUSED
+
+**KPIs Achieved** :
+- Dashboard unifié : ✅ `/ui/monitoring/advanced` with 4+ KPI cards
+- Metrics persistés : ✅ PostgreSQL `metrics` table with 158+ entries
+- Logs streaming : ✅ SSE real-time with filters
+- Endpoint tracking : ✅ Latency by endpoint, TOP 10 slowest
+- Alerting : ✅ Backend rules engine, evaluation, persistence
+- Trace ID : ✅ UUID injection in headers and logs
+
+**Fichier détails** : `03_EPICS/EPIC-22_README.md` ✅
+
+---
+
+### EPIC-23 : MCP Integration (23 pts) - 🚧 48% IN PROGRESS
+
+**Status** : 🚧 **PHASE 2 IN PROGRESS (11/23 pts - 48%)**
+**Priority** : 🟡 HIGH
+**Owner** : Claude Code
+**Started** : 2025-10-27
+**Target** : Phase 1 ✅ Complete (8 pts) | Phase 2 🚧 In Progress (9 pts, 1/4 stories) | Phase 3 ⏳ Pending (6 pts)
+**Documentation** : ✅ COMPLETE
+
+**Objectif** : Transformer MnemoLite en MCP Server pour exposer code intelligence aux LLMs (Claude Desktop)
+
+**Context** : Intégration du Model Context Protocol (MCP 2025-06-18) via FastMCP SDK. Permet à Claude Desktop et autres LLM clients d'accéder aux features MnemoLite (code search, graph, memories) via protocole standard.
+
+**Architecture** : FastMCP SDK (mcp==1.12.3), stdio/HTTP transport, Pydantic structured output, service injection pattern
+
+**Stories Phase 1** ✅ :
+- [x] Story 23.1 : Project Structure & FastMCP Setup (**3 pts**) ✅ 2025-10-27
+  - Package `api/mnemo_mcp/` créé (18 files)
+  - FastMCP server initialization avec lifespan management
+  - Database (PostgreSQL 18) + Redis connectivity
+  - Service injection pattern working
+  - `ping` tool + `health://status` resource functional
+  - 17/17 unit tests passing
+  - Getting Started documentation
+- [x] Story 23.2 : Code Search Tool (**3 pts**) ✅ 2025-10-27
+  - `search_code` tool (implemented as Tool, not Resource)
+  - Hybrid search (lexical + vector + RRF fusion)
+  - 6 filter types + offset-based pagination
+  - Redis L2 cache (SHA256 keys, 5-min TTL)
+  - Graceful degradation (embedding failure → lexical-only)
+  - 8 unit tests, 25/25 total passing
+- [x] Story 23.3 : Memory Tools & Resources (**2 pts**) ✅ 2025-10-28
+  - DB migration v7→v8 (`memories` table, 15 columns, 9 indexes)
+  - 3 Memory tools + 3 Memory resources
+  - CRUD operations + semantic vector search
+  - Redis L2 cache (1-5 min TTL)
+  - Soft delete + hard delete with restoration
+  - 89 unit tests, 114/114 total passing
+
+**Stories Phase 2** 🚧 :
+- [x] Story 23.4 : Code Graph Resources (**3 pts**) ✅ 2025-10-28
+  - 3 Graph resources: `graph://nodes/{chunk_id}`, `graph://callers/{qualified_name}`, `graph://callees/{qualified_name}`
+  - 11 Pydantic models with MCP 2025-06-18 resource links
+  - Pagination with next/prev/first/last page links
+  - NodeRepository + GraphTraversalService integration
+  - Redis L2 cache (120s TTL) via existing GraphTraversalService
+  - Performance: <200ms traversal (cached <5ms)
+  - 35 unit tests, 149/149 total passing
+- [ ] Story 23.5 : Project Indexing Tools (**2 pts**) ⏳ PENDING
+- [ ] Story 23.6 : Analytics & Observability (**2 pts**) ⏳ PENDING
+- [ ] Story 23.10 : Prompts Library (**2 pts**) ⏳ PENDING
+
+**KPIs Achieved** :
+- Server startup : ✅ ~0.5s (Docker container)
+- DB connection : ✅ ~40ms (asyncpg pool)
+- Redis connection : ✅ ~1ms
+- Tests passing : ✅ 149/149 (100%)
+- Type hints : ✅ 100% coverage
+- Code lines : ✅ ~4100 lines (Python)
+- Documentation : ✅ ~3500 lines (Markdown)
+- Time spent : ✅ 28.5h actual (vs 41.5h estimated, 31% ahead)
+
+**Performance Metrics** :
+- Ping tool latency : <1ms
+- Health check latency : <50ms (includes DB + Redis queries)
+- Code search (cached) : <10ms
+- Code search (uncached) : 150-300ms
+- Graph traversal (cached) : <5ms
+- Graph traversal (uncached) : <200ms
+- Test execution : 149 tests in <10s
+
+**Critical Decisions** :
+- Package name : `mnemo_mcp` (avoid conflict with MCP SDK)
+- MCP Spec : 2025-06-18 (latest features)
+- Database : Docker service names (`db:5432`, `redis:6379`)
+- Resources : No `Context` param (FastMCP design constraint)
+- Dependencies : Upgraded pydantic-settings ≥2.5.2, python-multipart ≥0.0.9
+- Search Tool : Implemented as Tool (not Resource) for complex parameter support
+- Graph Resources : MCP wrappers only, reused existing services (EPIC-06)
+
+**Fichier détails** :
+- `03_EPICS/EPIC-23_README.md` ✅ (main spec)
+- `03_EPICS/EPIC-23_PROGRESS_TRACKER.md` ✅ (progress tracking)
+- `03_EPICS/EPIC-23_STORY_23.1_COMPLETION_REPORT.md` ✅ (Story 23.1 complete)
+- `03_EPICS/EPIC-23_STORY_23.2_COMPLETION_REPORT.md` ✅ (Story 23.2 complete)
+- `03_EPICS/EPIC-23_STORY_23.2_ULTRATHINK.md` ✅ (Story 23.2 deep analysis)
+- `03_EPICS/EPIC-23_STORY_23.3_COMPLETION_REPORT.md` ✅ (Story 23.3 complete)
+- `03_EPICS/EPIC-23_STORY_23.4_COMPLETION_REPORT.md` ✅ (Story 23.4 complete)
+- `03_EPICS/EPIC-23_VALIDATION_REPORT_2025-10-28.md` ✅ (Phase 1 validation)
+- `03_EPICS/EPIC-23_PHASE1_STORIES_BREAKDOWN.md` ✅ (Phase 1 breakdown)
+- `03_EPICS/EPIC-23_PHASE2_STORIES_BREAKDOWN.md` ✅ (Phase 2 breakdown)
+- `03_EPICS/EPIC-23_PHASE3_STORIES_BREAKDOWN.md` ✅ (Phase 3 breakdown)
+- `docs/mcp/GETTING_STARTED.md` ✅ (user guide)
+
+---
+
 ## 📝 CHANGELOG (Trace des Décisions)
+
+### 2025-10-28 (AM) : EPIC-23 Story 23.4 COMPLETE - Code Graph Resources ✅
+
+**Milestone** : 🎉 **EPIC-23 Phase 2 STARTED** - Story 23.4 Complete (11/23 pts, 48%)
+
+**Achievement** :
+- Story 23.4 completed in 3.5h (vs 11h estimated - 68% ahead of schedule)
+- 149/149 unit tests passing (35 new graph tests)
+- 3 graph resources operational with MCP 2025-06-18 resource links
+- Reused existing EPIC-06 services (NodeRepository + GraphTraversalService)
+
+**Code Created (4 files, ~2100 lines)** :
+1. `api/mnemo_mcp/models/graph_models.py` (430 lines) - 11 Pydantic models + 2 helper functions
+2. `api/mnemo_mcp/resources/graph_resources.py` (586 lines) - 3 resource implementations
+3. `tests/mnemo_mcp/test_graph_models.py` (513 lines) - 22 unit tests
+4. `tests/mnemo_mcp/test_graph_resources.py` (565 lines) - 13 unit tests
+
+**Server Integration** :
+- Modified `api/mnemo_mcp/server.py` - Service initialization + registration function
+
+**Documentation (1 file, ~450 lines)** :
+1. `EPIC-23_STORY_23.4_COMPLETION_REPORT.md` (~450 lines) - Complete deliverable report
+
+**Technical Achievements** :
+- ✅ 3 Graph resources: nodes, callers, callees
+- ✅ 11 Pydantic models with MCP resource links
+- ✅ Pagination (limit, offset) with next/prev/first/last page links
+- ✅ NodeRepository + GraphTraversalService integration
+- ✅ Redis L2 cache (120s TTL) via existing GraphTraversalService
+- ✅ Graceful degradation (works without Redis)
+- ✅ MCP 2025-06-18 compliant (resource links for navigation)
+- ✅ Performance: <200ms traversal (cached <5ms, baseline 0.155ms)
+
+**Critical Decision - Reuse Existing Services** :
+- **Approach**: Created MCP wrapper resources that delegate to existing services
+- **Rationale**: EPIC-06 already has robust graph traversal with Redis cache
+- **Result**: 68% time savings, 100% reliability, no new graph logic needed
+- **Architecture**: MCP adapters only, no business logic duplication
+
+**Bug Found & Fixed** :
+- **Issue**: Pydantic validation error on `GraphNodeDetailsResponse.node` field
+- **Cause**: Field was required (MCPNode) but error cases returned node=None
+- **Fix**: Changed to `Optional[MCPNode] = None` with default for neighbors
+- **Impact**: All 13 graph resource tests passing after fix
+
+**Performance** :
+- Graph traversal (cached): <5ms P95 ✅
+- Graph traversal (uncached): <200ms P95 ✅
+- Baseline traversal: 0.155ms ✅
+- Test execution: <10s (149 total tests)
+
+**Next Steps** :
+- [ ] Story 23.5 : Project Indexing Tools (2 pts, ~7h)
+
+---
+
+### 2025-10-27 (PM) : EPIC-23 Story 23.2 COMPLETE - Code Search Tool ✅
+
+**Milestone** : 🎉 **EPIC-23 Phase 1 75% COMPLETE** - Stories 23.1 & 23.2 Done (6/23 pts, 26%)
+
+**Achievement** :
+- Story 23.2 completed in 4h (vs 12h estimated - 67% improvement)
+- 25/25 unit tests passing
+- `search_code` tool operational with hybrid search
+- Architecture decision: Tool (not Resource) for complex parameter support
+
+**Code Created (3 files, ~1250 lines)** :
+1. `api/mnemo_mcp/models/search_models.py` (372 lines) - 5 Pydantic models
+2. `api/mnemo_mcp/tools/search_tool.py` (385 lines) - SearchCodeTool implementation
+3. `tests/mnemo_mcp/test_search_tool.py` (496 lines) - 8 unit tests
+
+**Documentation (2 files, ~2600 lines)** :
+1. `EPIC-23_STORY_23.2_ULTRATHINK.md` (~1400 lines) - Deep analysis + BLOCKER resolution
+2. `EPIC-23_STORY_23.2_COMPLETION_REPORT.md` (~1200 lines) - Complete deliverable report
+
+**Technical Achievements** :
+- ✅ Hybrid search (lexical + vector + RRF fusion)
+- ✅ 6 filter types (language, chunk_type, repository, file_path, return_type, param_type)
+- ✅ Offset-based pagination (limit 1-100, offset 0-1000)
+- ✅ Redis L2 cache (SHA256 keys, 5-min TTL)
+- ✅ Graceful degradation (embedding failure → lexical-only fallback)
+- ✅ MockEmbeddingService integration (fast startup, no model loading)
+
+**Critical Decision - BLOCKER 1 Resolution** :
+- **Issue**: FastMCP Resources support URI templates but complex parameters (filters with 6 fields, pagination) don't fit URI paradigm
+- **Options Evaluated**: (A) Tool with JSON args, (B) Simple Resource (limited), (C) Hybrid (Resource + Tool)
+- **Decision**: Option A (Tool) - approved by user after web research validation
+- **Rationale**: Production-ready flexibility, supports complex JSON arguments, Pydantic validation, no functional loss
+- **Documentation**: Full analysis in EPIC-23_STORY_23.2_ULTRATHINK.md
+
+**Performance** :
+- Cached: <10ms P95 ✅
+- Uncached hybrid: 150-300ms P95 ✅
+- Lexical-only fallback: ~50ms P95 ✅
+- Test execution: <1s (8 new tests)
+
+**Next Steps** :
+- [ ] Story 23.3 : Memory Tools & Resources (2 pts, ~9h) - Last Phase 1 story
+
+---
+
+### 2025-10-27 (AM) : EPIC-23 Story 23.1 COMPLETE - MCP Server Foundation ✅
+
+**Milestone** : 🎉 **EPIC-23 STARTED** - Story 23.1 Complete (3/23 pts)
+
+**Achievement** :
+- Phase 1 Story 1 completed in 1 day (2025-10-27)
+- MCP server successfully running in Docker
+- 17/17 unit tests passing
+- Full integration with PostgreSQL 18 + Redis
+- Getting Started documentation created
+
+**Livrables créés** :
+
+**Code (18 files)** :
+1. ✅ Package structure : `api/mnemo_mcp/` with subdirectories (tools/, resources/, prompts/, transport/)
+2. ✅ Core modules : `base.py`, `models.py`, `config.py`, `server.py` (~15+ Pydantic models)
+3. ✅ Test tool : `tools/test_tool.py` (PingTool with response model)
+4. ✅ Health resource : `resources/health_resource.py` (DB + Redis connectivity check)
+5. ✅ Unit tests : `tests/mnemo_mcp/` (test_base.py, test_test_tool.py, test_health_resource.py)
+
+**Documentation (2 files, ~600 lines)** :
+1. `docs/mcp/GETTING_STARTED.md` (comprehensive guide, ~300 lines)
+2. `docs/mcp/claude_desktop_config.example.json` (config template)
+
+**Reports (2 files, ~600 lines)** :
+1. `EPIC-23_STORY_23.1_COMPLETION_REPORT.md` (detailed completion report, ~390 lines)
+2. `EPIC-23_PROGRESS_TRACKER.md` (progress tracking document, ~300 lines)
+
+**Technical Achievements** :
+- ✅ FastMCP SDK integrated (mcp==1.12.3, MCP 2025-06-18 compliant)
+- ✅ Service injection pattern working
+- ✅ Database (PostgreSQL 18) connectivity : ~40ms
+- ✅ Redis connectivity : ~1ms
+- ✅ Server startup : ~0.5s
+- ✅ Ping tool latency : <1ms
+- ✅ Health check latency : <50ms
+- ✅ Test execution : 0.42s (17 tests)
+
+**Challenges Resolved** :
+1. 🔴 Package namespace conflict : `api/mcp/` → `api/mnemo_mcp/` (avoided MCP SDK collision)
+2. 🔴 Dependency conflicts : Upgraded pydantic-settings ≥2.5.2, python-multipart ≥0.0.9
+3. 🔴 Docker networking : Changed `localhost` → `db:5432`, `redis:6379` (service names)
+4. 🔴 FastMCP Context : Resources don't get `Context` parameter (design constraint)
+
+**Git Commits** :
+1. feat(EPIC-23): Story 23.1 - Project Structure & FastMCP Setup (3 pts)
+2. test(EPIC-23): Add unit tests for MCP base components (17 tests passing)
+3. docs(EPIC-23): Add Getting Started guide + Story 23.1 completion report
+
+**Next Steps** :
+- [ ] Story 23.2 : Code Search Resources (3 pts) - Implement `code://search/{query}`
+- [ ] Story 23.3 : Memory Tools & Resources (2 pts) - CRUD operations + DB migration
+
+---
 
 ### 2025-10-23 (Morning) : EPIC-14 COMPLETE - Production Ready ✅
 
@@ -814,15 +1100,25 @@ MnemoLite v2.0.0 est fonctionnel (EPIC-06/07/08 complets) mais présente des **l
 ### Progress Overview
 
 ```
-DOCUMENTATION COMPLETE (Phase 1)
+SERENA EVOLUTION (v3.0) - COMPLETE
 ═══════════════════════════════════════════════════════════
 
-EPIC-10 (Performance)    [░░░░░░░░░░░░░░░░░░░░] 0/36 pts   (📝 READY - 6 stories)
-EPIC-11 (Symbol)         [░░░░░░░░░░░░░░░░░░░░] 0/13 pts   (📝 READY - 4 stories)
-EPIC-12 (Robustness)     [░░░░░░░░░░░░░░░░░░░░] 0/18 pts   (📝 READY - 5 stories)
-EPIC-13 (LSP Analysis)   [░░░░░░░░░░░░░░░░░░░░] 0/21 pts   (📝 READY - 5 stories)
+EPIC-10 (Performance)    [████████████████████] 36/36 pts   (✅ COMPLETE)
+EPIC-11 (Symbol)         [████████████████████] 13/13 pts   (✅ COMPLETE)
+EPIC-12 (Robustness)     [████████████████████] 23/23 pts   (✅ COMPLETE)
+EPIC-13 (LSP Backend)    [████████████████████] 21/21 pts   (✅ COMPLETE)
+EPIC-14 (LSP UI)         [████████████████████] 25/25 pts   (✅ COMPLETE)
+EPIC-18 (LSP Stability)  [████████████████████] 8/8 pts     (✅ COMPLETE)
 ───────────────────────────────────────────────────────────
-TOTAL                    [░░░░░░░░░░░░░░░░░░░░] 0/88 pts   (📝 DOCUMENTATION: 100%)
+TOTAL v3.0               [████████████████████] 126/126 pts (✅ 100%)
+
+PRODUCTION READINESS (v3.1) - IN PROGRESS
+═══════════════════════════════════════════════════════════
+
+EPIC-22 (Observability)  [██████████░░░░░░░░░░] 10/19 pts   (🟡 53% - Phase 2)
+EPIC-23 (MCP)            [██████████░░░░░░░░░░] 11/23 pts   (🚧 48% - Phase 2)
+───────────────────────────────────────────────────────────
+TOTAL v3.1               [█████████░░░░░░░░░░░] 21/42 pts   (🚧 50%)
 ```
 
 ### Phase Timeline
@@ -950,9 +1246,17 @@ PHASE 6 (Integration)    [░░░░░░░░░░░░░░░░░░
 
 ---
 
-**Dernière mise à jour** : 2025-10-19
-**Prochaine révision** : 2025-10-20 (ADR-003 + EPICs détaillés)
+**Dernière mise à jour** : 2025-10-28 03:00 UTC
+**Prochaine révision** : 2025-10-28 (Story 23.5: Project Indexing Tools)
 **Maintainer** : Claude Code
+
+**Version History** :
+- v1.9.0 (2025-10-28) : 🚧 EPIC-23 PHASE 2 IN PROGRESS - Story 23.4 complete (11/23 pts, 48%, 149/149 tests ✅)
+- v1.8.0 (2025-10-28) : ✅ EPIC-23 PHASE 1 COMPLETE - Story 23.3 validated (8/23 pts, 35%, 114/114 tests ✅)
+- v1.7.0 (2025-10-27 PM) : EPIC-23 Story 23.2 complete (6/23 pts, 26%)
+- v1.6.0 (2025-10-27 AM) : EPIC-23 Story 23.1 complete + EPIC-22 Phase 2 progress
+- v1.5.0 (2025-10-23) : EPIC-14 complete
+- v1.0.0 (2025-10-18) : Initial MISSION CONTROL creation
 
 ---
 

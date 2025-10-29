@@ -11,6 +11,9 @@
     <!-- Custom CSS - Modular Architecture v4.0 -->
     <link rel="stylesheet" href="/static/css/style.css?v=4.0">
 
+    <!-- Prism.js for Syntax Highlighting (EPIC-21 Story 21.2) - Local -->
+    <link href="/static/vendor/prism-okaidia.min.css" rel="stylesheet">
+
     {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -68,6 +71,147 @@
     <script src="/static/js/core/modal.js"></script>
     <script src="/static/js/core/htmx-helpers.js"></script>
     <script src="/static/js/components/filters.js"></script>
+
+    <!-- Prism.js for Syntax Highlighting (EPIC-21 Story 21.2) - Local -->
+    <script src="/static/vendor/prism.min.js"></script>
+    <script src="/static/vendor/prism-python.min.js"></script>
+    <script src="/static/vendor/prism-javascript.min.js"></script>
+    <script src="/static/vendor/prism-typescript.min.js"></script>
+
+    <script>
+    // Auto-highlight code blocks after HTMX swaps (EPIC-21 Story 21.2)
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        // Highlight code results after search
+        if (evt.detail.target.id === 'code-results') {
+            console.log('[EPIC-21] HTMX afterSwap fired for code-results');
+            Prism.highlightAllUnder(evt.detail.target);
+
+            // EPIC-21 Story 21.3: Log toggle buttons found
+            const toggleButtons = evt.detail.target.querySelectorAll('.code-toggle-btn');
+            console.log('[EPIC-21] Found', toggleButtons.length, 'toggle buttons after HTMX swap');
+            toggleButtons.forEach((btn, i) => {
+                console.log(`[EPIC-21] Button ${i}:`, btn.getAttribute('onclick'));
+            });
+        }
+    });
+
+    // Initial highlight on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('[EPIC-21] DOMContentLoaded - Initial Prism highlight');
+        Prism.highlightAll();
+    });
+    </script>
+
+    <style>
+    /* Prism.js SCADA theme override (EPIC-21 Story 21.2) */
+    code[class*="language-"],
+    pre[class*="language-"] {
+        background: var(--color-bg-input) !important;
+        color: var(--color-text-primary) !important;
+        font-family: var(--font-mono) !important;
+        font-size: 13px !important;
+        line-height: 1.5 !important;
+    }
+
+    /* Token colors (SCADA theme) */
+    .token.keyword { color: #4a90e2 !important; } /* Blue */
+    .token.string { color: #20e3b2 !important; }  /* Cyan */
+    .token.function { color: #00f2fe !important; } /* Bright cyan */
+    .token.class-name { color: #9c27b0 !important; } /* Purple */
+    .token.comment { color: var(--color-text-dim) !important; }
+    .token.operator { color: #ff9800 !important; } /* Orange */
+    .token.number { color: #00ff88 !important; }  /* Green */
+    .token.boolean { color: #ff4466 !important; } /* Red */
+    .token.punctuation { color: var(--color-text-tertiary) !important; }
+
+    /* EPIC-21 Story 21.3 & 21.4: Collapsible Code Cards + Copy Button (Global styles for HTMX partials) */
+    .code-snippet-container {
+        margin-top: var(--space-md);
+    }
+
+    /* EPIC-21 Story 21.4: Header with Toggle + Copy buttons */
+    .code-snippet-header {
+        display: flex !important;
+        gap: var(--space-sm);
+        margin-bottom: var(--space-sm);
+        align-items: center;
+    }
+
+    .code-toggle-btn {
+        display: flex !important;
+        align-items: center;
+        gap: var(--space-xs);
+        padding: var(--space-sm) var(--space-md);
+        background: var(--color-bg-panel) !important;
+        border: 1px solid var(--color-border) !important;
+        border-radius: var(--radius-sm);
+        color: var(--color-accent-blue) !important;
+        font-size: var(--text-xs);
+        font-weight: 600;
+        font-family: var(--font-mono);
+        cursor: pointer !important;
+        transition: all var(--transition);
+        flex: 1; /* Take remaining space */
+        text-align: left;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
+    .code-toggle-btn:hover {
+        background: var(--color-bg-elevated);
+        border-color: var(--color-accent-blue);
+    }
+
+    .code-toggle-btn .toggle-icon {
+        font-size: var(--text-sm);
+        transition: transform 0.3s ease;
+    }
+
+    .code-toggle-btn.expanded .toggle-icon {
+        transform: rotate(180deg);
+    }
+
+    /* EPIC-21 Story 21.4: Copy button for code snippets */
+    .code-copy-btn {
+        flex-shrink: 0; /* Don't shrink */
+        white-space: nowrap;
+    }
+
+    .code-copy-btn.copied {
+        border-color: var(--color-ok) !important;
+        color: var(--color-ok) !important;
+    }
+
+    .code-copy-btn.copied .copy-text::after {
+        content: " ✓";
+    }
+
+    .code-snippet.collapsed {
+        max-height: 120px; /* ~5 lines of code */
+        overflow: hidden;
+        position: relative;
+    }
+
+    .code-snippet.collapsed::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: linear-gradient(to bottom, transparent, var(--color-bg-panel));
+        pointer-events: none;
+    }
+
+    .code-snippet {
+        transition: max-height 0.3s ease-in-out;
+    }
+
+    .code-snippet:not(.collapsed) {
+        max-height: 600px; /* Expanded height */
+        overflow-y: auto;
+    }
+    </style>
 
     {% block extra_scripts %}{% endblock %}
 </body>

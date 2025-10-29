@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -7,6 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
+
+# EPIC-22: Metrics middleware for observability
+from middleware.metrics_middleware import MetricsMiddleware
 
 import structlog
 from fastapi.routing import APIRoute
@@ -22,7 +26,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy.event import listen
 
 # Import des routes
-from routes import health_routes, event_routes, search_routes, ui_routes, graph_routes, monitoring_routes, code_graph_routes, code_search_routes, code_indexing_routes, cache_admin_routes, lsp_routes
+from routes import health_routes, event_routes, search_routes, ui_routes, graph_routes, monitoring_routes, code_graph_routes, code_search_routes, code_indexing_routes, cache_admin_routes, lsp_routes, monitoring_routes_advanced
 
 # Configuration de base
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -41,6 +45,10 @@ class ErrorResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # EPIC-22 Story 22.6: Configure logging with trace_id propagation
+    from utils.logging_config import configure_logging
+    configure_logging()
+
     # Initialisation au démarrage: Créer le moteur SQLAlchemy
     logger.info(f"Starting MnemoLite API in {ENVIRONMENT} mode")
 
@@ -240,6 +248,53 @@ async def lifespan(app: FastAPI):
         logger.info("TypeScript LSP disabled via TYPESCRIPT_LSP_ENABLED=false")
         app.state.typescript_lsp = None
 
+    # 7. Initialize Monitoring Alert Service (EPIC-22 Story 22.7)
+    try:
+        from services.monitoring_alert_service import MonitoringAlertService
+        from services.metrics_collector import MetricsCollector
+        import redis.asyncio as aioredis
+
+        logger.info("⏳ Initializing monitoring alert service...")
+
+        # Create Redis client for MetricsCollector
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        redis_client = aioredis.from_url(redis_url, decode_responses=False)
+
+        # Create MetricsCollector and MonitoringAlertService
+        metrics_collector = MetricsCollector(app.state.db_engine, redis_client)
+        monitoring_alert_service = MonitoringAlertService(app.state.db_engine)
+
+        # Store in app.state
+        app.state.monitoring_alert_service = monitoring_alert_service
+        app.state.metrics_redis_client = redis_client
+
+        # Start background task to check thresholds every 60 seconds
+        async def alert_monitoring_loop():
+            logger.info("Alert monitoring loop started (60s interval)")
+            while True:
+                try:
+                    await asyncio.sleep(60)  # Wait 1 minute
+                    metrics = await metrics_collector.collect_all()
+                    alerts = await monitoring_alert_service.check_thresholds(metrics)
+                    if alerts:
+                        logger.info(f"Created {len(alerts)} new alerts", alert_count=len(alerts))
+                except asyncio.CancelledError:
+                    logger.info("Alert monitoring loop cancelled")
+                    break
+                except Exception as e:
+                    logger.error("Error in alert monitoring loop", error=str(e))
+
+        app.state.alert_monitoring_task = asyncio.create_task(alert_monitoring_loop())
+        logger.info("✅ Monitoring alert service started successfully")
+
+    except Exception as e:
+        logger.warning(
+            "Monitoring alert service initialization failed - continuing without alerting",
+            error=str(e)
+        )
+        app.state.monitoring_alert_service = None
+        app.state.alert_monitoring_task = None
+
     yield
 
     # Nettoyage à l'arrêt: Disposer le moteur
@@ -285,6 +340,28 @@ async def lifespan(app: FastAPI):
         finally:
             del app.state.typescript_lsp
 
+    # Cleanup Monitoring Alert Service (EPIC-22 Story 22.7)
+    if hasattr(app.state, "alert_monitoring_task") and app.state.alert_monitoring_task:
+        try:
+            app.state.alert_monitoring_task.cancel()
+            try:
+                await app.state.alert_monitoring_task
+            except asyncio.CancelledError:
+                pass
+            logger.info("Monitoring alert task stopped.")
+        except Exception as e:
+            logger.warning("Error stopping monitoring alert task", error=str(e))
+        finally:
+            del app.state.alert_monitoring_task
+            if hasattr(app.state, "monitoring_alert_service"):
+                del app.state.monitoring_alert_service
+            if hasattr(app.state, "metrics_redis_client"):
+                try:
+                    await app.state.metrics_redis_client.close()
+                except Exception:
+                    pass
+                del app.state.metrics_redis_client
+
     # Cleanup Python LSP Lifecycle Manager (EPIC-13 Story 13.3)
     if hasattr(app.state, "lsp_lifecycle_manager") and app.state.lsp_lifecycle_manager:
         try:
@@ -319,9 +396,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# EPIC-22 Story 22.1: Metrics middleware for observability
+app.add_middleware(MetricsMiddleware)
+
+# EPIC-21: Disable browser cache in development for instant UI reload
+@app.middleware("http")
+async def disable_cache_in_development(request: Request, call_next):
+    response = await call_next(request)
+
+    if ENVIRONMENT == "development":
+        # Disable caching for HTML responses (templates)
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+
+    return response
+
 # Configuration UI: Templates et Static Files
 BASE_DIR = Path(__file__).parent  # /app in Docker
+
+# EPIC-21: Disable Jinja2 cache in development for instant template reload
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+if ENVIRONMENT == "development":
+    templates.env.auto_reload = True
+    templates.env.cache = None  # Disable template cache
+    logger.info("Jinja2 template caching DISABLED (development mode)")
+
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 # Custom Jinja2 filter for French date formatting
@@ -382,6 +483,7 @@ app.include_router(health_routes.router)
 app.include_router(ui_routes.router)
 app.include_router(graph_routes.router)
 app.include_router(monitoring_routes.router)
+app.include_router(monitoring_routes_advanced.router)  # EPIC-22 Story 22.1
 # app.include_router(embedding_routes.router)
 
 # --- Endpoint pour la création d'événements PENDANT LES TESTS ---

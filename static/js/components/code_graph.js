@@ -10,8 +10,17 @@
 // Global state
 let cy = null;
 let minimap = null;
-let currentLayout = 'cose';
+// EPIC-21 Story 21.5: Load saved layout from localStorage, fallback to 'cose'
+let currentLayout = localStorage.getItem('mnemolite_graph_layout') || 'cose';
 let graphData = { nodes: [], edges: [] };
+
+// EPIC-21 Story 21.5: Log loaded layout
+console.log('[EPIC-21] Story 21.5: Loaded layout from localStorage:', currentLayout);
+
+// EPIC-21 Story 21.1: Path Finder State
+let pathSourceNode = null;
+let pathTargetNode = null;
+let pathMode = null; // 'source' or 'target'
 
 /**
  * Initialize Cytoscape instance
@@ -111,7 +120,14 @@ function initCytoscape(data) {
         // Event handlers
         cy.on('tap', 'node', function(evt) {
             const node = evt.target;
-            showNodeDetails(node);
+
+            // EPIC-21 Story 21.1: Check if in path selection mode
+            if (pathMode === 'source' || pathMode === 'target') {
+                handlePathNodeSelection(node);
+            } else {
+                showNodeDetails(node);
+            }
+
             updateKPIs();
         });
 
@@ -685,6 +701,10 @@ function updateFilters() {
  * Change graph layout
  * @param {string} layoutName - Layout algorithm name
  */
+/**
+ * EPIC-21 Story 21.5: Change graph layout with localStorage persistence
+ * @param {string} layoutName - Layout name (cose, circle, grid, breadthfirst, concentric, dagre)
+ */
 function changeLayout(layoutName) {
     if (!cy) return;
 
@@ -694,7 +714,16 @@ function changeLayout(layoutName) {
     document.querySelectorAll('.layout-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    document.querySelector(`[data-layout="${layoutName}"]`).classList.add('active');
+    const layoutBtn = document.querySelector(`[data-layout="${layoutName}"]`);
+    if (layoutBtn) layoutBtn.classList.add('active');
+
+    // EPIC-21 Story 21.5: Save layout choice to localStorage
+    try {
+        localStorage.setItem('mnemolite_graph_layout', layoutName);
+        console.log('[EPIC-21] Story 21.5: Saved layout to localStorage:', layoutName);
+    } catch (e) {
+        console.warn('[EPIC-21] Story 21.5: Failed to save layout to localStorage:', e);
+    }
 
     // Apply layout
     cy.layout({
@@ -876,6 +905,362 @@ function destroyGraph() {
     }
 }
 
+/**
+ * ============================================================
+ * EPIC-21 Story 21.1: Path Finder Implementation
+ * ============================================================
+ */
+
+/**
+ * Enter source node selection mode
+ */
+function setPathSource() {
+    if (!cy) return;
+
+    pathMode = 'source';
+
+    // Update UI
+    document.getElementById('set-source-btn').classList.add('active');
+    document.getElementById('set-target-btn').classList.remove('active');
+
+    // Show instruction in sidebar
+    const sidebar = document.getElementById('right-sidebar');
+    const content = document.getElementById('sidebar-content');
+    const icon = document.getElementById('sidebar-icon');
+    const title = document.getElementById('sidebar-title-text');
+
+    icon.textContent = '🎯';
+    title.textContent = 'PATH FINDER - SELECT SOURCE';
+
+    content.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-state-icon">🎯</div>
+            <div class="empty-state-text">CLICK A NODE</div>
+            <div class="empty-state-subtext">Click on any node to set it as the path source</div>
+        </div>
+    `;
+
+    sidebar.classList.remove('collapsed');
+}
+
+/**
+ * Enter target node selection mode
+ */
+function setPathTarget() {
+    if (!cy) return;
+
+    pathMode = 'target';
+
+    // Update UI
+    document.getElementById('set-source-btn').classList.remove('active');
+    document.getElementById('set-target-btn').classList.add('active');
+
+    // Show instruction in sidebar
+    const sidebar = document.getElementById('right-sidebar');
+    const content = document.getElementById('sidebar-content');
+    const icon = document.getElementById('sidebar-icon');
+    const title = document.getElementById('sidebar-title-text');
+
+    icon.textContent = '🎯';
+    title.textContent = 'PATH FINDER - SELECT TARGET';
+
+    content.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-state-icon">🎯</div>
+            <div class="empty-state-text">CLICK A NODE</div>
+            <div class="empty-state-subtext">Click on any node to set it as the path target</div>
+        </div>
+    `;
+
+    sidebar.classList.remove('collapsed');
+}
+
+/**
+ * Handle node selection for path finder
+ * @param {Object} node - Cytoscape node
+ */
+function handlePathNodeSelection(node) {
+    if (pathMode === 'source') {
+        pathSourceNode = node;
+        const label = node.data('name_path') || node.data('label') || 'Unknown';
+        document.getElementById('path-source-label').textContent = label;
+        document.getElementById('path-source-label').style.color = '#20e3b2';
+        document.getElementById('path-source-label').style.fontStyle = 'normal';
+
+        // Highlight source node
+        cy.nodes().removeClass('path-source');
+        node.addClass('path-source');
+
+        // Exit selection mode
+        pathMode = null;
+        document.getElementById('set-source-btn').classList.remove('active');
+
+        // Show confirmation
+        showPathSelectionConfirmation('source', label);
+    } else if (pathMode === 'target') {
+        pathTargetNode = node;
+        const label = node.data('name_path') || node.data('label') || 'Unknown';
+        document.getElementById('path-target-label').textContent = label;
+        document.getElementById('path-target-label').style.color = '#20e3b2';
+        document.getElementById('path-target-label').style.fontStyle = 'normal';
+
+        // Highlight target node
+        cy.nodes().removeClass('path-target');
+        node.addClass('path-target');
+
+        // Exit selection mode
+        pathMode = null;
+        document.getElementById('set-target-btn').classList.remove('active');
+
+        // Show confirmation
+        showPathSelectionConfirmation('target', label);
+    }
+}
+
+/**
+ * Show confirmation message after node selection
+ * @param {string} type - 'source' or 'target'
+ * @param {string} label - Node label
+ */
+function showPathSelectionConfirmation(type, label) {
+    const sidebar = document.getElementById('right-sidebar');
+    const content = document.getElementById('sidebar-content');
+    const icon = document.getElementById('sidebar-icon');
+    const title = document.getElementById('sidebar-title-text');
+
+    icon.textContent = '✅';
+    title.textContent = type.toUpperCase() + ' NODE SELECTED';
+
+    content.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-state-icon">✅</div>
+            <div class="empty-state-text">${escapeHtml(type.toUpperCase())} SET</div>
+            <div class="empty-state-subtext">${escapeHtml(label)}</div>
+        </div>
+        <div class="detail-section">
+            <div class="detail-section-title">Next Steps</div>
+            <div class="detail-row">
+                <div class="detail-value" style="font-size: 12px;">
+                    ${pathSourceNode && pathTargetNode
+                        ? '✅ Both nodes selected. Click <strong>Find Path</strong> to calculate the shortest path.'
+                        : type === 'source'
+                            ? '📍 Now select a <strong>Target</strong> node.'
+                            : '📍 Now select a <strong>Source</strong> node.'}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Find and highlight the shortest path between source and target
+ */
+function findPath() {
+    if (!cy || !pathSourceNode || !pathTargetNode) {
+        alert('Please select both source and target nodes first.');
+        return;
+    }
+
+    // Clear previous path highlighting
+    cy.elements().removeClass('path-highlight path-node-highlight');
+
+    // Use Cytoscape A* algorithm to find shortest path
+    const aStar = cy.elements().aStar({
+        root: pathSourceNode,
+        goal: pathTargetNode,
+        directed: true
+    });
+
+    if (!aStar.found) {
+        // No path found
+        showPathNotFound();
+        return;
+    }
+
+    const path = aStar.path;
+
+    // Highlight path
+    path.addClass('path-highlight');
+    path.nodes().addClass('path-node-highlight');
+
+    // Add custom styles for path highlighting
+    addPathHighlightStyles();
+
+    // Show path details in sidebar
+    showPathDetails(path);
+
+    // Fit graph to show entire path
+    cy.fit(path, 50);
+}
+
+/**
+ * Add custom styles for path highlighting
+ */
+function addPathHighlightStyles() {
+    // Add styles dynamically via Cytoscape style API
+    cy.style()
+        .selector('.path-highlight')
+        .style({
+            'line-color': '#ffa502',
+            'target-arrow-color': '#ffa502',
+            'width': 4,
+            'z-index': 999
+        })
+        .selector('.path-node-highlight')
+        .style({
+            'border-width': 4,
+            'border-color': '#ffa502',
+            'z-index': 999
+        })
+        .update();
+}
+
+/**
+ * Show path details in right sidebar
+ * @param {Object} path - Cytoscape path collection
+ */
+function showPathDetails(path) {
+    const sidebar = document.getElementById('right-sidebar');
+    const content = document.getElementById('sidebar-content');
+    const icon = document.getElementById('sidebar-icon');
+    const title = document.getElementById('sidebar-title-text');
+
+    icon.textContent = '🛤️';
+    title.textContent = 'PATH FOUND';
+
+    const nodes = path.nodes();
+    const edges = path.edges();
+
+    let html = `
+        <div class="detail-section">
+            <div class="detail-section-title">Path Summary</div>
+            <div class="detail-row">
+                <div class="detail-label">Total Hops</div>
+                <div class="detail-value"><strong style="color: #20e3b2;">${edges.length}</strong></div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Nodes in Path</div>
+                <div class="detail-value"><strong style="color: #20e3b2;">${nodes.length}</strong></div>
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <div class="detail-section-title">Path Nodes (${nodes.length})</div>
+    `;
+
+    nodes.forEach((node, index) => {
+        const data = node.data();
+        const label = data.name_path || data.label || 'Unknown';
+        const nodeType = data.node_type || data.type || 'unknown';
+
+        const isSource = index === 0;
+        const isTarget = index === nodes.length - 1;
+
+        let badge = '';
+        if (isSource) badge = '<span style="color: #4a90e2; font-weight: 700;">SOURCE</span>';
+        else if (isTarget) badge = '<span style="color: #f5576c; font-weight: 700;">TARGET</span>';
+        else badge = `<span style="color: #6e7681;">Step ${index}</span>`;
+
+        html += `
+            <div class="detail-row">
+                <div class="detail-label">${badge}</div>
+                <div class="detail-value" style="font-size: 11px;">
+                    <strong>${escapeHtml(label)}</strong><br>
+                    <span style="color: #6e7681; font-style: italic;">${escapeHtml(nodeType)}</span>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `</div>`;
+
+    content.innerHTML = html;
+    sidebar.classList.remove('collapsed');
+}
+
+/**
+ * Show "path not found" message
+ */
+function showPathNotFound() {
+    const sidebar = document.getElementById('right-sidebar');
+    const content = document.getElementById('sidebar-content');
+    const icon = document.getElementById('sidebar-icon');
+    const title = document.getElementById('sidebar-title-text');
+
+    icon.textContent = '❌';
+    title.textContent = 'NO PATH FOUND';
+
+    const sourceLabel = pathSourceNode.data('name_path') || pathSourceNode.data('label') || 'Unknown';
+    const targetLabel = pathTargetNode.data('name_path') || pathTargetNode.data('label') || 'Unknown';
+
+    content.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-state-icon">❌</div>
+            <div class="empty-state-text">NO PATH EXISTS</div>
+            <div class="empty-state-subtext">No connection found between the selected nodes</div>
+        </div>
+
+        <div class="detail-section">
+            <div class="detail-section-title">Selected Nodes</div>
+            <div class="detail-row">
+                <div class="detail-label">Source</div>
+                <div class="detail-value">${escapeHtml(sourceLabel)}</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Target</div>
+                <div class="detail-value">${escapeHtml(targetLabel)}</div>
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <div class="detail-value" style="font-size: 11px; color: #8b949e; font-style: italic;">
+                These nodes may be in separate disconnected components of the graph.
+                Try selecting nodes that are visually connected.
+            </div>
+        </div>
+    `;
+
+    sidebar.classList.remove('collapsed');
+}
+
+/**
+ * Clear path highlighting and reset selection
+ */
+function clearPath() {
+    if (!cy) return;
+
+    // Clear highlighting
+    cy.elements().removeClass('path-highlight path-node-highlight path-source path-target');
+
+    // Reset state
+    pathSourceNode = null;
+    pathTargetNode = null;
+    pathMode = null;
+
+    // Reset UI
+    document.getElementById('path-source-label').textContent = 'None selected';
+    document.getElementById('path-source-label').style.color = '#6e7681';
+    document.getElementById('path-source-label').style.fontStyle = 'italic';
+
+    document.getElementById('path-target-label').textContent = 'None selected';
+    document.getElementById('path-target-label').style.color = '#6e7681';
+    document.getElementById('path-target-label').style.fontStyle = 'italic';
+
+    document.getElementById('set-source-btn').classList.remove('active');
+    document.getElementById('set-target-btn').classList.remove('active');
+
+    // Remove path highlight styles
+    cy.style()
+        .selector('.path-highlight')
+        .style({})
+        .selector('.path-node-highlight')
+        .style({})
+        .update();
+
+    // Close sidebar
+    closeRightSidebar();
+}
+
 // Expose functions to global scope for onclick handlers
 window.loadGraph = loadGraph;
 window.updateFilters = updateFilters;
@@ -889,13 +1274,38 @@ window.toggleLegend = toggleLegend;  // EPIC-14 Story 14.5
 window.simplifyType = simplifyType;  // EPIC-14 Story 14.5
 window.getTypeBadgeHTML = getTypeBadgeHTML;  // EPIC-14 Story 14.5
 window.destroyGraph = destroyGraph;  // EPIC-14 Fix: Cleanup function
+window.setPathSource = setPathSource;  // EPIC-21 Story 21.1
+window.setPathTarget = setPathTarget;  // EPIC-21 Story 21.1
+window.findPath = findPath;  // EPIC-21 Story 21.1
+window.clearPath = clearPath;  // EPIC-21 Story 21.1
+
+/**
+ * EPIC-21 Story 21.5: Restore saved layout button state
+ */
+function restoreLayoutButtonState() {
+    // Remove active class from all buttons
+    document.querySelectorAll('.layout-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    // Add active class to saved layout button
+    const savedLayoutBtn = document.querySelector(`[data-layout="${currentLayout}"]`);
+    if (savedLayoutBtn) {
+        savedLayoutBtn.classList.add('active');
+        console.log('[EPIC-21] Story 21.5: Restored active state for layout button:', currentLayout);
+    }
+}
 
 // Initialize on page load
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function() {
         loadGraph();
+        // EPIC-21 Story 21.5: Restore layout button state after DOM loads
+        setTimeout(restoreLayoutButtonState, 100);
     });
 } else {
     // DOM already loaded
     loadGraph();
+    // EPIC-21 Story 21.5: Restore layout button state
+    setTimeout(restoreLayoutButtonState, 100);
 }

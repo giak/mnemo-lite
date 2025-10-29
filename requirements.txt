@@ -19,4 +19,10 @@ structlog>=24.1.0
 pgvector>=0.2.0,<0.3.0
 
 # Pydantic
-pydantic>=2.5.0 
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# MCP Server (Model Context Protocol)
+mcp==1.12.3
+sse-starlette>=1.8.0
+pyjwt>=2.8.0

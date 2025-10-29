@@ -93,19 +93,18 @@
 
             {# Expand/Collapse Button #}
             <button class="expand-btn"
-                    aria-expanded="false"
+                    aria-expanded="true"
                     aria-controls="{{ body_id }}"
-                    aria-label="Expand details"
-                    title="Click or press Enter to expand">
+                    aria-label="Collapse details"
+                    title="Click or press Enter to collapse">
                 <span class="expand-icon">▼</span>
             </button>
         </div>
 
-        {# Card Body - Collapsible #}
+        {# Card Body - Expanded by Default (EPIC-21 Story 21.3: Make code toggle visible) #}
         <div class="code-body"
              id="{{ body_id }}"
-             aria-hidden="true"
-             hidden>
+             aria-hidden="false">
 
             {# EPIC-14: LSP Type Information (if available) #}
             {% if result.metadata and (result.metadata.signature or result.metadata.param_types or result.metadata.docstring) %}
@@ -158,9 +157,24 @@
                 {% endif %}
             </div>
 
-            {# Source Code Snippet #}
-            <div class="code-snippet">
-                <pre><code>{{ result.source_code or '(No code content)' }}</code></pre>
+            {# Source Code Snippet - EPIC-21 Story 21.3 & 21.4: Collapsible + Copy #}
+            <div class="code-snippet-container">
+                <div class="code-snippet-header">
+                    <button class="code-toggle-btn" onclick="toggleCodeSnippet(this)" aria-label="Expand code">
+                        <span class="toggle-icon">▼</span>
+                        <span class="toggle-text">Show Code</span>
+                    </button>
+                    <button class="copy-btn code-copy-btn"
+                            data-copy="{{ result.source_code|e }}"
+                            aria-label="Copy code to clipboard"
+                            title="Copy code (shortcut: c)">
+                        <span class="copy-icon">📋</span>
+                        <span class="copy-text">Copy</span>
+                    </button>
+                </div>
+                <div class="code-snippet collapsed">
+                    <pre><code class="language-{{ result.language or 'python' }}">{{ result.source_code or '(No code content)' }}</code></pre>
+                </div>
             </div>
 
             {# Metadata Badges #}

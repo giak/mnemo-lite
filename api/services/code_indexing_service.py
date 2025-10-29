@@ -12,7 +12,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -147,6 +147,7 @@ class CodeIndexingService:
         self,
         files: List[FileInput],
         options: IndexingOptions,
+        progress_callback: Optional[Callable[[int, int, str], Awaitable[None]]] = None,
     ) -> IndexingSummary:
         """
         Index a complete repository (multiple files).
@@ -154,6 +155,9 @@ class CodeIndexingService:
         Args:
             files: List of files to index
             options: Indexing options (metadata, embeddings, graph)
+            progress_callback: Optional async callback for progress updates.
+                              Called with (current, total, message) after each file.
+                              Example: async def callback(current, total, msg): ...
 
         Returns:
             IndexingSummary with statistics and errors
@@ -170,7 +174,9 @@ class CodeIndexingService:
         # Future: Consider parallel processing in v1.1
         file_results: List[FileIndexingResult] = []
 
-        for file_input in files:
+        total_files = len(files)
+
+        for i, file_input in enumerate(files, start=1):
             try:
                 # EPIC-12 Story 12.1: Wrap file indexing with timeout protection
                 # Prevents infinite hangs on pathological files
@@ -193,6 +199,20 @@ class CodeIndexingService:
                 else:
                     failed_files += 1
                     errors.append({"file": result.file_path, "error": result.error})
+
+                # Report progress after each file
+                if progress_callback:
+                    try:
+                        await progress_callback(
+                            i,
+                            total_files,
+                            f"Indexed {file_input.path}"
+                        )
+                    except Exception as callback_error:
+                        # Progress callback failure should not break indexing
+                        self.logger.warning(
+                            f"Progress callback failed: {callback_error}"
+                        )
 
             except TimeoutError as e:
                 # File indexing timed out - treat as failure

@@ -10,13 +10,15 @@
     <p class="subtitle">Search indexed code with hybrid/lexical/vector modes</p>
 </div>
 
-<div class="search-box">
-    <form id="search-form"
-          hx-get="/ui/code/search/results"
-          hx-target="#code-results"
-          hx-trigger="submit"
-          hx-indicator="#search-loading">
+<!-- Unified Form (HTMX requires inputs INSIDE form) -->
+<form id="unified-search-form"
+      hx-get="/ui/code/search/results"
+      hx-target="#code-results"
+      hx-trigger="submit, change from:find input[type='radio'], change from:find select"
+      hx-indicator="#search-loading">
 
+    <!-- Search Box (inside form for HTMX) -->
+    <div class="search-box">
         <div class="search-input-group">
             <input type="text"
                    name="q"
@@ -28,31 +30,24 @@
                 Search
             </button>
         </div>
-    </form>
 
-    <div id="search-loading" class="htmx-indicator">
-        <span class="spinner"></span> Searching...
+        <div id="search-loading" class="htmx-indicator">
+            <span class="spinner"></span> Searching...
+        </div>
     </div>
-</div>
 
-<!-- Search Mode & Filters -->
-<div class="filters-bar">
-    <form id="filters-form"
-          hx-get="/ui/code/search/results"
-          hx-target="#code-results"
-          hx-trigger="change from:find input, change from:find select"
-          hx-include="#search-query">
-
+    <!-- Search Mode & Filters -->
+    <div class="filters-bar">
         <!-- Search Mode (Radio Buttons) -->
         <div class="filter-group">
             <label class="filter-label">Search Mode</label>
             <div class="search-mode-buttons">
-                <label class="mode-btn active">
-                    <input type="radio" name="mode" value="hybrid" checked>
+                <label class="mode-btn">
+                    <input type="radio" name="mode" value="hybrid">
                     <span>Hybrid (RRF)</span>
                 </label>
-                <label class="mode-btn">
-                    <input type="radio" name="mode" value="lexical">
+                <label class="mode-btn active">
+                    <input type="radio" name="mode" value="lexical" checked>
                     <span>Lexical</span>
                 </label>
                 <label class="mode-btn">
@@ -137,14 +132,17 @@
             <button type="button" class="btn btn-clear" onclick="clearCodeFilters()">Clear Filters</button>
             <button type="submit" class="btn btn-primary">Apply Filters</button>
         </div>
-    </form>
-</div>
+    </div>
+    <!-- End filters-bar -->
+
+</form>
+<!-- End unified-search-form -->
 
 <div id="code-results" class="search-results">
     <!-- Results will be loaded here via HTMX -->
     <div class="empty-state">
         <p>Enter a search query to find code</p>
-        <p class="text-muted">💡 Hybrid mode combines lexical + vector search with RRF fusion</p>
+        <p class="text-muted">💡 Lexical mode uses PostgreSQL full-text search (BM25)</p>
     </div>
 </div>
 
@@ -166,10 +164,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Clear Code Filters
 function clearCodeFilters() {
-    // Reset search mode to hybrid
-    document.querySelector('input[name="mode"][value="hybrid"]').checked = true;
+    // Reset search query
+    document.getElementById('search-query').value = '';
+
+    // Reset search mode to lexical (default)
+    document.querySelector('input[name="mode"][value="lexical"]').checked = true;
     document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
-    document.querySelector('.mode-btn').classList.add('active');
+    document.querySelectorAll('.mode-btn')[1].classList.add('active'); // LEXICAL is 2nd button
 
     // Reset filters
     document.getElementById('filter-repository').value = '';
@@ -183,13 +184,81 @@ function clearCodeFilters() {
     document.getElementById('code-results').innerHTML = `
         <div class="empty-state">
             <p>Enter a search query to find code</p>
-            <p class="text-muted">💡 Hybrid mode combines lexical + vector search with RRF fusion</p>
+            <p class="text-muted">💡 Lexical mode uses PostgreSQL full-text search (BM25)</p>
         </div>
     `;
 }
 
+// EPIC-21 Story 21.3: Toggle Code Snippet Expand/Collapse
+function toggleCodeSnippet(button) {
+    console.log('[EPIC-21] toggleCodeSnippet() called', button);
+
+    const container = button.parentElement;
+    console.log('[EPIC-21] Container:', container);
+
+    const snippet = container.querySelector('.code-snippet');
+    console.log('[EPIC-21] Snippet element:', snippet);
+    console.log('[EPIC-21] Snippet classes:', snippet ? snippet.className : 'SNIPPET NOT FOUND');
+
+    const toggleText = button.querySelector('.toggle-text');
+
+    if (snippet.classList.contains('collapsed')) {
+        // Expand
+        console.log('[EPIC-21] Expanding code snippet');
+        snippet.classList.remove('collapsed');
+        button.classList.add('expanded');
+        toggleText.textContent = 'Hide Code';
+        button.setAttribute('aria-label', 'Collapse code');
+
+        // Trigger Prism.js highlighting after expand (EPIC-21 Story 21.2)
+        if (window.Prism) {
+            console.log('[EPIC-21] Triggering Prism.js highlighting');
+            Prism.highlightAllUnder(snippet);
+        } else {
+            console.warn('[EPIC-21] Prism.js not loaded!');
+        }
+    } else {
+        // Collapse
+        console.log('[EPIC-21] Collapsing code snippet');
+        snippet.classList.add('collapsed');
+        button.classList.remove('expanded');
+        toggleText.textContent = 'Show Code';
+        button.setAttribute('aria-label', 'Expand code');
+    }
+
+    console.log('[EPIC-21] Toggle complete, new classes:', snippet.className);
+}
+
+// EPIC-21 Story 21.3 & 21.4: Log when page loads
+console.log('[EPIC-21] Code search page loaded - toggleCodeSnippet function available:', typeof toggleCodeSnippet);
+
+// EPIC-21 Story 21.4: Setup copy buttons after HTMX swap
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+    if (evt.detail.target.id === 'code-results') {
+        console.log('[EPIC-21] Story 21.4: HTMX afterSwap fired for #code-results');
+
+        // Re-trigger search results manager setup
+        if (window.searchResultsManager) {
+            console.log('[EPIC-21] Story 21.4: Calling searchResultsManager.setup()');
+            window.searchResultsManager.setup();
+        } else {
+            console.warn('[EPIC-21] Story 21.4: searchResultsManager not available!');
+        }
+
+        // Debug copy buttons
+        const copyButtons = evt.detail.target.querySelectorAll('.copy-btn');
+        console.log('[EPIC-21] Story 21.4: Found', copyButtons.length, 'copy buttons');
+        copyButtons.forEach((btn, i) => {
+            const dataCopy = btn.getAttribute('data-copy');
+            console.log(`[EPIC-21] Story 21.4: Button ${i} data-copy length:`, dataCopy ? dataCopy.length : 'NULL');
+        });
+    }
+});
+
 // Load repository options dynamically
 document.addEventListener('DOMContentLoaded', async function() {
+    console.log('[EPIC-21] DOMContentLoaded fired');
+
     try {
         const response = await fetch('/v1/code/index/repositories');
         const data = await response.json();
@@ -230,7 +299,7 @@ document.addEventListener('DOMContentLoaded', function() {
             onSelect: (suggestion) => {
                 console.log('[Autocomplete] Return type selected:', suggestion.value);
                 // Trigger HTMX search
-                document.getElementById('filters-form').dispatchEvent(new Event('change', { bubbles: true }));
+                document.getElementById('unified-search-form').dispatchEvent(new Event('change', { bubbles: true }));
             }
         });
     }
@@ -246,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
             onSelect: (suggestion) => {
                 console.log('[Autocomplete] Param type selected:', suggestion.value);
                 // Trigger HTMX search
-                document.getElementById('filters-form').dispatchEvent(new Event('change', { bubbles: true }));
+                document.getElementById('unified-search-form').dispatchEvent(new Event('change', { bubbles: true }));
             }
         });
     }
@@ -401,6 +470,72 @@ document.addEventListener('DOMContentLoaded', function() {
 .filter-input.autocomplete-input::placeholder {
     color: var(--color-text-dim);
     font-style: italic;
+}
+
+/* EPIC-21 Story 21.3: Collapsible Code Cards */
+.code-snippet-container {
+    margin-top: var(--space-md);
+}
+
+.code-toggle-btn {
+    display: flex !important;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-sm);
+    background: var(--color-bg-panel) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--radius-sm);
+    color: var(--color-accent-blue) !important;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    font-family: var(--font-mono);
+    cursor: pointer !important;
+    transition: all var(--transition);
+    width: 100%;
+    text-align: left;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.code-toggle-btn:hover {
+    background: var(--color-bg-elevated);
+    border-color: var(--color-accent-blue);
+}
+
+.code-toggle-btn .toggle-icon {
+    font-size: var(--text-sm);
+    transition: transform 0.3s ease;
+}
+
+.code-toggle-btn.expanded .toggle-icon {
+    transform: rotate(180deg);
+}
+
+.code-snippet.collapsed {
+    max-height: 120px !important; /* ~5 lines of code */
+    overflow: hidden !important;
+    position: relative;
+}
+
+.code-snippet.collapsed::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: linear-gradient(to bottom, transparent, var(--color-bg-panel));
+    pointer-events: none;
+}
+
+.code-snippet {
+    transition: max-height 0.3s ease-in-out;
+}
+
+.code-snippet:not(.collapsed) {
+    max-height: 600px !important; /* Expanded height */
+    overflow-y: auto !important;
 }
 </style>
 {% endblock %}

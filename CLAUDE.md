@@ -3,7 +3,7 @@
 
 **DSL:** §=section ◊=concept →=flow ⊕=compose ∧=AND !=critical @=loc |=OR {}=set :=def +=add ←=emph
 
-v4.1.0 | 2025-10-22 | Pure Cognitive Engine DSL | +Language Rule (FR:natural ∧ EN:technical)
+v4.2.0 | 2025-10-28 | +Test.Public.Interface heuristic | MCP testing validation
 
 ## §IDENTITY
 
@@ -30,6 +30,7 @@ MnemoLite: PG18.cognitive.memory ⊕ CODE.INTEL → skill:mnemolite-architecture
 ! EXTEND>REBUILD → copy.existing → adapt → 10x.faster | ¬rebuild.from.scratch
 ! Skills.First → query.skills → assume.less → progressive.disclosure
 ! Test.First → write.test → implement → validate → commit | TEST_DATABASE_URL.required
+! Test.Public.Interface → validate.client.view | ¬impl.shortcuts (SQL/DB) | reveals.integration.bugs
 ! Measure.Before.Optimize → baseline → change → measure → decide(keep|revert)
 ! Validate.Before.Commit → backup → test → session.vierge → sanity.check → commit|revert
 ! Pre.Test.Gate: TEST_DATABASE_URL ∧ EMBEDDING_MODE=mock ∵ avoid{dev.DB.pollution, 2min.model.loading}
@@ -53,4 +54,4 @@ MnemoLite: PG18.cognitive.memory ⊕ CODE.INTEL → skill:mnemolite-architecture
 
 ---
 
-v4.1.0 | 2025-10-22 | +Language.Rule | FR:natural ∧ EN:technical | Changelog→git.log | Previous→v4.0.0
+v4.2.0 | 2025-10-28 | +Test.Public.Interface | reveals.integration.bugs | Changelog→git.log | Previous→v4.1.0

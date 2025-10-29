@@ -369,6 +369,25 @@ async def monitoring_page(request: Request):
     )
 
 
+@router.get("/monitoring/advanced", response_class=HTMLResponse)
+async def monitoring_advanced_page(request: Request):
+    """
+    Advanced Observability Dashboard (EPIC-22 Story 22.2).
+
+    Shows comprehensive system metrics:
+    - API metrics: latency (avg, P50, P95, P99), throughput, error rate
+    - Redis metrics: hit rate, memory usage, keys, evictions
+    - PostgreSQL metrics: connections, cache hit ratio, slow queries
+    - System metrics: CPU, memory, disk usage
+    - Real-time logs stream (SSE)
+    - Auto-refresh (10s)
+    """
+    return templates.TemplateResponse(
+        "monitoring_advanced.html",
+        {"request": request}
+    )
+
+
 @router.get("/cache", response_class=HTMLResponse)
 async def cache_dashboard_page(request: Request):
     """

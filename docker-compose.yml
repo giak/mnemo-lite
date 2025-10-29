@@ -110,6 +110,7 @@ services:
       - ./logs:/app/logs
       - ./templates:/app/templates
       - ./static:/app/static
+      - ./.claude:/app/.claude:ro  # Claude Code hooks for auto-save conversations
       # REMOVED: postgres_data volume (SECURITY: API should NOT access DB files directly)
     deploy:
       resources:
