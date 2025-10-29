@@ -83,7 +83,7 @@ services:
       context: .
       dockerfile: api/Dockerfile
     container_name: mnemo-api
-    restart: unless-stopped
+    restart: unless-stopped  # Best practice: restart except manual stop
     ports:
       - "127.0.0.1:${API_PORT:-8001}:8000"
     environment:
@@ -95,6 +95,10 @@ services:
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
       EMBEDDING_MODE: ${EMBEDDING_MODE:-real}
       ENVIRONMENT: ${ENVIRONMENT:-development}
+      # Conversation Auto-Save Daemon (EPIC-24)
+      CLAUDE_PROJECTS_DIR: /home/user/.claude/projects
+      POLL_INTERVAL: ${POLL_INTERVAL:-30}
+      IMPORT_HISTORICAL: ${IMPORT_HISTORICAL:-false}
     depends_on:
       db:
         condition: service_healthy
@@ -111,6 +115,7 @@ services:
       - ./templates:/app/templates
       - ./static:/app/static
       - ./.claude:/app/.claude:ro  # Claude Code hooks for auto-save conversations
+      - ${CLAUDE_PROJECTS_DIR:-~/.claude/projects/-home-giak-Work-MnemoLite}:/home/user/.claude/projects:ro  # Claude Code transcripts
       # REMOVED: postgres_data volume (SECURITY: API should NOT access DB files directly)
     deploy:
       resources:
@@ -122,12 +127,19 @@ services:
       backend:
       frontend:
     logging: *default-logging
+    command:
+      - sh
+      - -c
+      - |
+        nohup bash /app/scripts/conversation-auto-import.sh > /tmp/daemon.log 2>&1 &
+        exec uvicorn main:app --host 0.0.0.0 --port 8000
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
+      # Multi-step health check: API + Daemon monitoring
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:8000/health && curl -f http://localhost:8000/v1/autosave/health"]
+      interval: 60s        # Check every minute
+      timeout: 10s         # 10s max per check
+      retries: 3           # 3 consecutive failures = unhealthy (triggers restart)
+      start_period: 120s   # Grace period for startup
 
   # worker:
   #   build:

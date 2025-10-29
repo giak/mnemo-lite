@@ -1579,3 +1579,15 @@ async def code_upload_status(upload_id: str):
             "status": "error",
             "error": str(e)
         }
+
+
+@router.get("/autosave", response_class=HTMLResponse)
+async def autosave_dashboard(request: Request):
+    """
+    Dashboard de monitoring de l'auto-save des conversations.
+    EPIC-24: Auto-Save Conversations - UI/UX
+    """
+    return templates.TemplateResponse(
+        "autosave_dashboard.html",
+        {"request": request}
+    )
