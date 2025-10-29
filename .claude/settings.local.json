@@ -54,11 +54,54 @@
       "Bash(git checkout:*)",
       "Bash(for file in .claude/skills/mnemolite-gotchas/domains/*.md)",
       "Bash(docker-compose build:*)",
-      "Bash(docker-compose up:*)"
+      "Bash(docker-compose up:*)",
+      "Bash(docker cp:*)",
+      "Bash(for i in {1..5})",
+      "Bash(do curl -s http://localhost:8001/health)",
+      "Bash(timeout 5 curl:*)",
+      "Bash(timeout 5 docker compose exec:*)",
+      "Bash(timeout 180 docker compose build:*)",
+      "Bash(cat:*)",
+      "Bash(timeout 8 docker compose exec:*)",
+      "Bash(timeout 10 docker compose exec:*)",
+      "Read(//tmp/**)",
+      "Bash(test:*)",
+      "Bash(timeout 5 /home/giak/Work/MnemoLite/scripts/mcp_server.sh:*)",
+      "Bash(chmod:*)",
+      "mcp__mnemolite__ping",
+      "Bash(bash:*)",
+      "mcp__mnemolite__search_code",
+      "mcp__mnemolite__write_memory",
+      "Bash(\"Test utilisateur: Est-ce que le hook fonctionne?\" )",
+      "Bash(\"Test assistant: Oui, le hook devrait maintenant fonctionner après les 3 bugfixes!\" )",
+      "Bash(\"20251028_test_hook\")",
+      "Bash(\"20251028_test\")",
+      "Bash(\"du cop, cette conversation, ce message précedent est sauvagardé ?\" )",
+      "Bash(\"Bonne question! Vérifions si le hook Stop a bien sauvegardé notre conversation sur les tests MCP...\" )",
+      "Bash(\"test-session-manual\")",
+      "Bash(jq:*)"
     ],
     "deny": [],
     "ask": []
   },
-  "disableAllHooks": true,
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "mnemolite"
+  ],
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/Stop/auto-save.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "disableAllHooks": false,
   "outputStyle": "default"
 }
