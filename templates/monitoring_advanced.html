@@ -1,0 +1,1427 @@
+{% extends "base.html" %}
+
+{% block title %}Observability - MnemoLite{% endblock %}
+{% block nav_monitoring %}active{% endblock %}
+
+{% block extra_head %}
+<!-- Apache ECharts 5.5.0 (local) -->
+<script src="/static/vendor/echarts.min.js"></script>
+
+<style>
+/* SCADA Industrial Observability Design - Zero Rounded Corners */
+
+.monitoring-container {
+    padding: 20px;
+    min-height: calc(100vh - 180px);
+}
+
+/* Status Banner */
+.status-banner {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-left: 4px solid #21262d;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: border-left-color 0.08s ease;
+}
+
+.status-banner.operational {
+    border-left-color: #3fb950;
+}
+
+.status-banner.degraded {
+    border-left-color: #d29922;
+}
+
+.status-banner.critical {
+    border-left-color: #f85149;
+}
+
+.status-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.status-indicator {
+    font-size: 32px;
+    line-height: 1;
+}
+
+.status-text h1 {
+    margin: 0 0 4px 0;
+    font-size: 18px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-text p {
+    margin: 0;
+    font-size: 12px;
+    color: #8b949e;
+    font-family: 'Courier New', monospace;
+}
+
+.refresh-control {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.refresh-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #8b949e;
+}
+
+.refresh-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+}
+
+.refresh-btn {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #58a6ff;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 0.08s ease;
+}
+
+.refresh-btn:hover {
+    border-color: #58a6ff;
+}
+
+/* KPI Cards Grid */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.kpi-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-top: 2px solid #21262d;
+    padding: 16px;
+    transition: border-top-color 0.08s ease;
+}
+
+.kpi-card.critical {
+    border-top-color: #f85149;
+}
+
+.kpi-card.warning {
+    border-top-color: #d29922;
+}
+
+.kpi-card.success {
+    border-top-color: #3fb950;
+}
+
+.kpi-card.info {
+    border-top-color: #58a6ff;
+}
+
+.kpi-card.metric {
+    border-top-color: #6e7681;
+}
+
+.kpi-label {
+    font-size: 11px;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.kpi-value {
+    font-size: 32px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    line-height: 1;
+    margin-bottom: 4px;
+}
+
+.kpi-card.critical .kpi-value {
+    color: #f85149;
+}
+
+.kpi-card.warning .kpi-value {
+    color: #d29922;
+}
+
+.kpi-card.success .kpi-value {
+    color: #3fb950;
+}
+
+.kpi-card.info .kpi-value {
+    color: #58a6ff;
+}
+
+.kpi-card.metric .kpi-value {
+    color: #8b949e;
+}
+
+.kpi-unit {
+    font-size: 11px;
+    color: #6e7681;
+    font-family: 'Courier New', monospace;
+}
+
+/* Charts Grid */
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.chart-panel {
+    background: #0d1117;
+    border: 1px solid #21262d;
+    padding: 0;
+}
+
+.panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #21262d;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #c9d1d9;
+}
+
+.panel-body {
+    padding: 16px;
+}
+
+.chart-container {
+    width: 100%;
+    height: 250px;
+}
+
+/* Metrics Table */
+.metrics-table-panel {
+    background: #0d1117;
+    border: 1px solid #21262d;
+    margin-bottom: 20px;
+}
+
+.metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.metrics-table thead {
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+}
+
+.metrics-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #8b949e;
+}
+
+.metrics-table tbody tr {
+    border-bottom: 1px solid #21262d;
+    transition: background 0.08s ease;
+}
+
+.metrics-table tbody tr:hover {
+    background: #161b22;
+}
+
+.metrics-table td {
+    padding: 12px 16px;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    color: #c9d1d9;
+}
+
+.metric-label {
+    color: #8b949e;
+}
+
+.metric-value {
+    font-weight: 600;
+}
+
+.metric-good {
+    color: #3fb950;
+}
+
+.metric-warning {
+    color: #d29922;
+}
+
+.metric-critical {
+    color: #f85149;
+}
+
+/* EPIC-22 Story 22.5: API Performance by Endpoint */
+.endpoints-panel {
+    background: #0d1117;
+    border: 1px solid #21262d;
+    margin-bottom: 20px;
+}
+
+.endpoints-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.endpoints-table thead {
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+}
+
+.endpoints-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #8b949e;
+}
+
+.endpoints-table th.text-right {
+    text-align: right;
+}
+
+.endpoints-table tbody tr {
+    border-bottom: 1px solid #21262d;
+    transition: background 0.08s ease;
+}
+
+.endpoints-table tbody tr:hover {
+    background: #161b22;
+}
+
+.endpoints-table td {
+    padding: 12px 16px;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    color: #c9d1d9;
+}
+
+.endpoints-table td.text-right {
+    text-align: right;
+}
+
+.endpoint-path {
+    color: #58a6ff;
+    font-weight: 500;
+}
+
+.endpoint-method {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    background: #30363d;
+    color: #c9d1d9;
+    margin-right: 8px;
+}
+
+.endpoint-method.GET {
+    background: #1f6feb;
+}
+
+.endpoint-method.POST {
+    background: #3fb950;
+}
+
+.endpoint-method.PUT {
+    background: #d29922;
+}
+
+.endpoint-method.DELETE {
+    background: #f85149;
+}
+
+.latency-badge {
+    font-weight: 600;
+}
+
+.latency-good {
+    color: #3fb950;
+}
+
+.latency-warning {
+    color: #d29922;
+}
+
+.latency-critical {
+    color: #f85149;
+}
+
+.error-badge {
+    font-weight: 600;
+}
+
+.error-none {
+    color: #8b949e;
+}
+
+.error-low {
+    color: #d29922;
+}
+
+.error-high {
+    color: #f85149;
+}
+
+.period-selector {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+}
+
+.period-selector:focus {
+    outline: 1px solid #58a6ff;
+    outline-offset: -1px;
+}
+
+.slow-endpoints-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 12px;
+    padding: 16px;
+}
+
+.slow-endpoint-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-left: 3px solid #f85149;
+    padding: 12px;
+}
+
+.slow-endpoint-card.warning {
+    border-left-color: #d29922;
+}
+
+.slow-endpoint-path {
+    font-size: 13px;
+    font-weight: 600;
+    color: #58a6ff;
+    margin-bottom: 8px;
+}
+
+.slow-endpoint-stats {
+    font-size: 11px;
+    color: #8b949e;
+    font-family: 'Courier New', monospace;
+    line-height: 1.6;
+}
+
+.slow-endpoint-impact {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #30363d;
+    font-size: 12px;
+    font-weight: 600;
+    color: #f85149;
+}
+
+.slow-endpoint-impact.warning {
+    color: #d29922;
+}
+
+/* Logs Stream Panel */
+.logs-panel {
+    background: #0d1117;
+    border: 1px solid #21262d;
+    margin-bottom: 20px;
+}
+
+.logs-container {
+    padding: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.log-entry {
+    padding: 4px 8px;
+    margin-bottom: 2px;
+    border-left: 2px solid #21262d;
+    background: #0d1117;
+    transition: background 0.08s ease;
+}
+
+.log-entry:hover {
+    background: #161b22;
+}
+
+.log-entry.log-error {
+    border-left-color: #f85149;
+    background: rgba(248, 81, 73, 0.05);
+}
+
+.log-entry.log-warning {
+    border-left-color: #d29922;
+    background: rgba(210, 153, 34, 0.05);
+}
+
+.log-entry.log-info {
+    border-left-color: #58a6ff;
+    background: rgba(88, 166, 255, 0.05);
+}
+
+.log-timestamp {
+    color: #6e7681;
+}
+
+.log-level {
+    font-weight: 600;
+    text-transform: uppercase;
+    margin: 0 8px;
+}
+
+.log-level-error {
+    color: #f85149;
+}
+
+.log-level-warning {
+    color: #d29922;
+}
+
+.log-level-info {
+    color: #58a6ff;
+}
+
+.log-message {
+    color: #c9d1d9;
+}
+
+/* EPIC-22 Story 22.6: Trace ID Badges and Filter */
+.log-trace-id {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    background: #1f6feb;
+    color: #ffffff;
+    cursor: pointer;
+    border: 1px solid #58a6ff;
+    transition: background 0.08s ease;
+    font-family: 'Courier New', monospace;
+}
+
+.log-trace-id:hover {
+    background: #58a6ff;
+    border-color: #79c0ff;
+}
+
+.trace-filter-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+}
+
+.trace-filter-label {
+    font-size: 11px;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.trace-filter-input {
+    flex: 1;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+}
+
+.trace-filter-input:focus {
+    outline: 1px solid #58a6ff;
+    outline-offset: -1px;
+}
+
+.trace-filter-input::placeholder {
+    color: #6e7681;
+}
+
+.filter-clear-btn {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    color: #f85149;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 0.08s ease;
+}
+
+.filter-clear-btn:hover {
+    border-color: #f85149;
+    background: rgba(248, 81, 73, 0.1);
+}
+
+.filter-clear-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.log-entry.filtered-out {
+    display: none;
+}
+
+.filter-active-indicator {
+    font-size: 11px;
+    color: #3fb950;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+}
+
+/* Loading State */
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #6e7681;
+    font-size: 12px;
+}
+
+/* Scrollbar SCADA Style */
+.logs-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.logs-container::-webkit-scrollbar-track {
+    background: #0d1117;
+}
+
+.logs-container::-webkit-scrollbar-thumb {
+    background: #30363d;
+    border: 1px solid #21262d;
+}
+
+.logs-container::-webkit-scrollbar-thumb:hover {
+    background: #484f58;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="monitoring-container">
+    <!-- Status Banner -->
+    <div class="status-banner operational" id="status-banner">
+        <div class="status-info">
+            <div class="status-indicator" id="status-icon">🟢</div>
+            <div class="status-text">
+                <h1 id="status-text">SYSTÈME OPÉRATIONNEL</h1>
+                <p id="status-timestamp">Chargement...</p>
+            </div>
+        </div>
+        <div class="refresh-control">
+            <label class="refresh-toggle">
+                <input type="checkbox" id="auto-refresh" checked>
+                AUTO-REFRESH (10s)
+            </label>
+            <button class="refresh-btn" onclick="refreshAll()">🔄 ACTUALISER</button>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card info">
+            <div class="kpi-label">⚡ API Latency (P95)</div>
+            <div class="kpi-value" id="kpi-api-latency">-</div>
+            <div class="kpi-unit">ms</div>
+        </div>
+        <div class="kpi-card success">
+            <div class="kpi-label">📊 Redis Hit Rate</div>
+            <div class="kpi-value" id="kpi-redis-hitrate">-</div>
+            <div class="kpi-unit">%</div>
+        </div>
+        <div class="kpi-card success">
+            <div class="kpi-label">💾 PG Cache Hit</div>
+            <div class="kpi-value" id="kpi-pg-cache">-</div>
+            <div class="kpi-unit">%</div>
+        </div>
+        <div class="kpi-card metric">
+            <div class="kpi-label">🖥️ System CPU</div>
+            <div class="kpi-value" id="kpi-cpu">-</div>
+            <div class="kpi-unit">%</div>
+        </div>
+        <div class="kpi-card metric">
+            <div class="kpi-label">💿 System Memory</div>
+            <div class="kpi-value" id="kpi-memory">-</div>
+            <div class="kpi-unit">%</div>
+        </div>
+        <div class="kpi-card metric">
+            <div class="kpi-label">📡 Requests/sec</div>
+            <div class="kpi-value" id="kpi-rps">-</div>
+            <div class="kpi-unit">req/s</div>
+        </div>
+    </div>
+
+    <!-- Charts Grid -->
+    <div class="charts-grid">
+        <!-- API Latency Chart -->
+        <div class="chart-panel">
+            <div class="panel-header">
+                <span class="panel-title">📈 API Latency Distribution</span>
+            </div>
+            <div class="panel-body">
+                <div id="api-latency-chart" class="chart-container"></div>
+            </div>
+        </div>
+
+        <!-- Redis Memory Chart -->
+        <div class="chart-panel">
+            <div class="panel-header">
+                <span class="panel-title">💾 Redis Memory Usage</span>
+            </div>
+            <div class="panel-body">
+                <div id="redis-memory-chart" class="chart-container"></div>
+            </div>
+        </div>
+
+        <!-- PostgreSQL Connections Chart -->
+        <div class="chart-panel">
+            <div class="panel-header">
+                <span class="panel-title">🔗 PostgreSQL Connections</span>
+            </div>
+            <div class="panel-body">
+                <div id="pg-connections-chart" class="chart-container"></div>
+            </div>
+        </div>
+
+        <!-- System Resources Chart -->
+        <div class="chart-panel">
+            <div class="panel-header">
+                <span class="panel-title">🖥️ System Resources</span>
+            </div>
+            <div class="panel-body">
+                <div id="system-resources-chart" class="chart-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Metrics Tables -->
+    <div class="metrics-table-panel">
+        <div class="panel-header">
+            <span class="panel-title">📊 Detailed Metrics</span>
+        </div>
+        <table class="metrics-table">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="metrics-table-body">
+                <tr>
+                    <td class="metric-label">Loading metrics...</td>
+                    <td>-</td>
+                    <td>-</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- EPIC-22 Story 22.5: API Performance by Endpoint -->
+    <div class="endpoints-panel">
+        <div class="panel-header">
+            <span class="panel-title">📊 API Performance by Endpoint</span>
+            <select class="period-selector" id="endpoints-period" onchange="refreshEndpointsData()">
+                <option value="1" selected>Last 1 hour</option>
+                <option value="24">Last 24 hours</option>
+                <option value="168">Last 7 days</option>
+            </select>
+        </div>
+        <div style="overflow-x: auto;">
+            <table class="endpoints-table">
+                <thead>
+                    <tr>
+                        <th>Endpoint</th>
+                        <th class="text-right">Calls</th>
+                        <th class="text-right">P50</th>
+                        <th class="text-right">P95</th>
+                        <th class="text-right">P99</th>
+                        <th class="text-right">Error%</th>
+                        <th class="text-right">RPS</th>
+                    </tr>
+                </thead>
+                <tbody id="endpoints-table-body">
+                    <tr>
+                        <td colspan="7" class="metric-label">Loading endpoints...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- EPIC-22 Story 22.5: Slow Endpoints -->
+    <div class="endpoints-panel" id="slow-endpoints-panel" style="display: none;">
+        <div class="panel-header">
+            <span class="panel-title">🐌 Slow Endpoints (P95 > 100ms)</span>
+        </div>
+        <div class="slow-endpoints-grid" id="slow-endpoints-grid">
+            <!-- Populated by JavaScript -->
+        </div>
+    </div>
+
+    <!-- Logs Stream (Story 22.3) -->
+    <div class="logs-panel">
+        <div class="panel-header">
+            <span class="panel-title">📜 Real-Time Logs Stream</span>
+        </div>
+        <!-- EPIC-22 Story 22.6: Trace ID Filter -->
+        <div class="trace-filter-container">
+            <span class="trace-filter-label">🔍 Filter by Trace ID:</span>
+            <input
+                type="text"
+                id="trace-filter-input"
+                class="trace-filter-input"
+                placeholder="Click a trace ID badge or paste here..."
+                oninput="filterLogsByTraceId()">
+            <button class="filter-clear-btn" id="filter-clear-btn" onclick="clearTraceFilter()" disabled>
+                ✕ CLEAR
+            </button>
+            <span class="filter-active-indicator" id="filter-active-indicator" style="display: none;"></span>
+        </div>
+        <div class="logs-container" id="logs-container">
+            <div class="loading">Connecting to logs stream...</div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// EPIC-22 Story 22.2: Advanced Monitoring Dashboard
+let metricsData = null;
+let autoRefreshInterval = null;
+let charts = {};
+
+// Initialize charts
+function initCharts() {
+    // API Latency Chart
+    charts.apiLatency = echarts.init(document.getElementById('api-latency-chart'), 'dark');
+    charts.apiLatency.setOption({
+        backgroundColor: '#0d1117',
+        textStyle: { color: '#8b949e', fontFamily: 'Courier New' },
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['Avg', 'P50', 'P95', 'P99'], textStyle: { color: '#8b949e' } },
+        xAxis: { type: 'category', data: ['Current'], axisLine: { lineStyle: { color: '#30363d' } } },
+        yAxis: { type: 'value', name: 'ms', axisLine: { lineStyle: { color: '#30363d' } } },
+        series: [
+            { name: 'Avg', type: 'bar', data: [0], itemStyle: { color: '#58a6ff' } },
+            { name: 'P50', type: 'bar', data: [0], itemStyle: { color: '#3fb950' } },
+            { name: 'P95', type: 'bar', data: [0], itemStyle: { color: '#d29922' } },
+            { name: 'P99', type: 'bar', data: [0], itemStyle: { color: '#f85149' } }
+        ]
+    });
+
+    // Redis Memory Chart
+    charts.redisMemory = echarts.init(document.getElementById('redis-memory-chart'), 'dark');
+    charts.redisMemory.setOption({
+        backgroundColor: '#0d1117',
+        textStyle: { color: '#8b949e', fontFamily: 'Courier New' },
+        tooltip: { trigger: 'item' },
+        series: [{
+            type: 'pie',
+            radius: ['40%', '70%'],
+            data: [
+                { value: 0, name: 'Used', itemStyle: { color: '#58a6ff' } },
+                { value: 100, name: 'Free', itemStyle: { color: '#30363d' } }
+            ],
+            label: { color: '#8b949e', fontFamily: 'Courier New' }
+        }]
+    });
+
+    // PostgreSQL Connections Chart
+    charts.pgConnections = echarts.init(document.getElementById('pg-connections-chart'), 'dark');
+    charts.pgConnections.setOption({
+        backgroundColor: '#0d1117',
+        textStyle: { color: '#8b949e', fontFamily: 'Courier New' },
+        tooltip: { trigger: 'item' },
+        series: [{
+            type: 'pie',
+            radius: ['40%', '70%'],
+            data: [
+                { value: 0, name: 'Active', itemStyle: { color: '#3fb950' } },
+                { value: 0, name: 'Idle', itemStyle: { color: '#58a6ff' } },
+                { value: 100, name: 'Available', itemStyle: { color: '#30363d' } }
+            ],
+            label: { color: '#8b949e', fontFamily: 'Courier New' }
+        }]
+    });
+
+    // System Resources Chart
+    charts.systemResources = echarts.init(document.getElementById('system-resources-chart'), 'dark');
+    charts.systemResources.setOption({
+        backgroundColor: '#0d1117',
+        textStyle: { color: '#8b949e', fontFamily: 'Courier New' },
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['CPU %', 'Memory %', 'Disk %'], textStyle: { color: '#8b949e' } },
+        xAxis: { type: 'category', data: ['Current'], axisLine: { lineStyle: { color: '#30363d' } } },
+        yAxis: { type: 'value', name: '%', max: 100, axisLine: { lineStyle: { color: '#30363d' } } },
+        series: [
+            { name: 'CPU %', type: 'bar', data: [0], itemStyle: { color: '#58a6ff' } },
+            { name: 'Memory %', type: 'bar', data: [0], itemStyle: { color: '#d29922' } },
+            { name: 'Disk %', type: 'bar', data: [0], itemStyle: { color: '#6e7681' } }
+        ]
+    });
+}
+
+// Fetch metrics from API
+async function fetchMetrics() {
+    try {
+        const response = await fetch('/api/monitoring/advanced/summary');
+        if (!response.ok) throw new Error('Failed to fetch metrics');
+        metricsData = await response.json();
+        updateDashboard();
+    } catch (error) {
+        console.error('Error fetching metrics:', error);
+        updateStatusBanner('critical', '🔴', 'ERREUR SYSTÈME', error.message);
+    }
+}
+
+// Update dashboard with new data
+function updateDashboard() {
+    if (!metricsData) return;
+
+    // Update status banner
+    const now = new Date().toLocaleString('fr-FR');
+    updateStatusBanner('operational', '🟢', 'SYSTÈME OPÉRATIONNEL', now);
+
+    // Update KPIs
+    updateKPIs();
+
+    // Update charts
+    updateCharts();
+
+    // Update metrics table
+    updateMetricsTable();
+}
+
+// Update status banner
+function updateStatusBanner(status, icon, text, timestamp) {
+    const banner = document.getElementById('status-banner');
+    banner.className = `status-banner ${status}`;
+    document.getElementById('status-icon').textContent = icon;
+    document.getElementById('status-text').textContent = text;
+    document.getElementById('status-timestamp').textContent = timestamp;
+}
+
+// Update KPI cards
+function updateKPIs() {
+    const { api, redis, postgres, system } = metricsData;
+
+    document.getElementById('kpi-api-latency').textContent = api.p95_latency_ms.toFixed(1);
+    document.getElementById('kpi-redis-hitrate').textContent = redis.hit_rate.toFixed(1);
+    document.getElementById('kpi-pg-cache').textContent = postgres.cache_hit_ratio.toFixed(1);
+    document.getElementById('kpi-cpu').textContent = system.cpu_percent.toFixed(1);
+    document.getElementById('kpi-memory').textContent = system.memory_percent.toFixed(1);
+    document.getElementById('kpi-rps').textContent = api.requests_per_second.toFixed(2);
+
+    // Update KPI card colors based on thresholds
+    updateKPIColor('kpi-api-latency', api.p95_latency_ms, [0, 100, 200], ['success', 'warning', 'critical']);
+    updateKPIColor('kpi-redis-hitrate', redis.hit_rate, [80, 50, 0], ['success', 'warning', 'critical']);
+    updateKPIColor('kpi-pg-cache', postgres.cache_hit_ratio, [90, 70, 0], ['success', 'warning', 'critical']);
+    updateKPIColor('kpi-cpu', system.cpu_percent, [0, 70, 90], ['success', 'warning', 'critical']);
+    updateKPIColor('kpi-memory', system.memory_percent, [0, 70, 90], ['success', 'warning', 'critical']);
+}
+
+// Update KPI card color based on value and thresholds
+function updateKPIColor(id, value, thresholds, colors) {
+    const card = document.getElementById(id).closest('.kpi-card');
+    card.className = 'kpi-card metric';
+
+    if (id.includes('hitrate') || id.includes('cache')) {
+        // Higher is better
+        if (value >= thresholds[0]) card.classList.add(colors[0]);
+        else if (value >= thresholds[1]) card.classList.add(colors[1]);
+        else card.classList.add(colors[2]);
+    } else {
+        // Lower is better
+        if (value <= thresholds[1]) card.classList.add(colors[0]);
+        else if (value <= thresholds[2]) card.classList.add(colors[1]);
+        else card.classList.add(colors[2]);
+    }
+}
+
+// Update all charts
+function updateCharts() {
+    const { api, redis, postgres, system } = metricsData;
+
+    // API Latency Chart
+    charts.apiLatency.setOption({
+        series: [
+            { data: [api.avg_latency_ms] },
+            { data: [api.p50_latency_ms] },
+            { data: [api.p95_latency_ms] },
+            { data: [api.p99_latency_ms] }
+        ]
+    });
+
+    // Redis Memory Chart
+    charts.redisMemory.setOption({
+        series: [{
+            data: [
+                { value: redis.memory_used_mb, name: `Used: ${redis.memory_used_mb.toFixed(1)} MB` },
+                { value: redis.memory_max_mb - redis.memory_used_mb, name: `Free: ${(redis.memory_max_mb - redis.memory_used_mb).toFixed(1)} MB` }
+            ]
+        }]
+    });
+
+    // PostgreSQL Connections Chart
+    const pgAvailable = postgres.connections_max - postgres.connections_total;
+    charts.pgConnections.setOption({
+        series: [{
+            data: [
+                { value: postgres.connections_active, name: `Active: ${postgres.connections_active}` },
+                { value: postgres.connections_idle, name: `Idle: ${postgres.connections_idle}` },
+                { value: pgAvailable, name: `Available: ${pgAvailable}` }
+            ]
+        }]
+    });
+
+    // System Resources Chart
+    charts.systemResources.setOption({
+        series: [
+            { data: [system.cpu_percent] },
+            { data: [system.memory_percent] },
+            { data: [system.disk_percent] }
+        ]
+    });
+}
+
+// Update metrics table
+function updateMetricsTable() {
+    const { api, redis, postgres, system } = metricsData;
+
+    const metrics = [
+        // API Metrics
+        { label: 'API Avg Latency', value: `${api.avg_latency_ms.toFixed(2)} ms`, status: getLatencyStatus(api.avg_latency_ms) },
+        { label: 'API P50 Latency', value: `${api.p50_latency_ms.toFixed(2)} ms`, status: getLatencyStatus(api.p50_latency_ms) },
+        { label: 'API P95 Latency', value: `${api.p95_latency_ms.toFixed(2)} ms`, status: getLatencyStatus(api.p95_latency_ms) },
+        { label: 'API P99 Latency', value: `${api.p99_latency_ms.toFixed(2)} ms`, status: getLatencyStatus(api.p99_latency_ms) },
+        { label: 'API Request Count', value: api.request_count, status: 'info' },
+        { label: 'API Error Rate', value: `${api.error_rate.toFixed(2)}%`, status: getErrorRateStatus(api.error_rate) },
+        { label: 'API Slow Queries', value: postgres.slow_queries_count, status: postgres.slow_queries_count > 10 ? 'warning' : 'good' },
+
+        // Redis Metrics
+        { label: 'Redis Connected', value: redis.connected ? 'Yes' : 'No', status: redis.connected ? 'good' : 'critical' },
+        { label: 'Redis Memory Used', value: `${redis.memory_used_mb.toFixed(2)} MB`, status: 'info' },
+        { label: 'Redis Memory Percent', value: `${redis.memory_percent.toFixed(2)}%`, status: getPercentStatus(redis.memory_percent, false) },
+        { label: 'Redis Keys Total', value: redis.keys_total, status: 'info' },
+        { label: 'Redis Hit Rate', value: `${redis.hit_rate.toFixed(2)}%`, status: getPercentStatus(redis.hit_rate, true) },
+        { label: 'Redis Evicted Keys', value: redis.evicted_keys, status: redis.evicted_keys > 100 ? 'warning' : 'good' },
+        { label: 'Redis Clients', value: redis.connected_clients, status: 'info' },
+
+        // PostgreSQL Metrics
+        { label: 'PG Active Connections', value: postgres.connections_active, status: 'info' },
+        { label: 'PG Idle Connections', value: postgres.connections_idle, status: 'info' },
+        { label: 'PG Total Connections', value: `${postgres.connections_total} / ${postgres.connections_max}`, status: getConnectionStatus(postgres.connections_total, postgres.connections_max) },
+        { label: 'PG Cache Hit Ratio', value: `${postgres.cache_hit_ratio.toFixed(2)}%`, status: getPercentStatus(postgres.cache_hit_ratio, true) },
+        { label: 'PG Database Size', value: `${postgres.db_size_mb.toFixed(2)} MB`, status: 'info' },
+
+        // System Metrics
+        { label: 'System CPU Usage', value: `${system.cpu_percent.toFixed(2)}% (${system.cpu_count} cores)`, status: getPercentStatus(system.cpu_percent, false) },
+        { label: 'System Memory Usage', value: `${system.memory_percent.toFixed(2)}% (${system.memory_used_mb.toFixed(0)}/${system.memory_total_mb.toFixed(0)} MB)`, status: getPercentStatus(system.memory_percent, false) },
+        { label: 'System Disk Usage', value: `${system.disk_percent.toFixed(2)}% (${system.disk_used_gb.toFixed(1)}/${system.disk_total_gb.toFixed(1)} GB)`, status: getPercentStatus(system.disk_percent, false) }
+    ];
+
+    const tbody = document.getElementById('metrics-table-body');
+    tbody.innerHTML = metrics.map(m => `
+        <tr>
+            <td class="metric-label">${m.label}</td>
+            <td class="metric-value">${m.value}</td>
+            <td class="metric-${m.status}">${m.status.toUpperCase()}</td>
+        </tr>
+    `).join('');
+}
+
+// Status helpers
+function getLatencyStatus(latency) {
+    if (latency < 100) return 'good';
+    if (latency < 200) return 'warning';
+    return 'critical';
+}
+
+function getErrorRateStatus(rate) {
+    if (rate === 0) return 'good';
+    if (rate < 5) return 'warning';
+    return 'critical';
+}
+
+function getPercentStatus(percent, higherIsBetter) {
+    if (higherIsBetter) {
+        if (percent >= 80) return 'good';
+        if (percent >= 50) return 'warning';
+        return 'critical';
+    } else {
+        if (percent < 70) return 'good';
+        if (percent < 90) return 'warning';
+        return 'critical';
+    }
+}
+
+function getConnectionStatus(total, max) {
+    const percent = (total / max) * 100;
+    if (percent < 70) return 'good';
+    if (percent < 90) return 'warning';
+    return 'critical';
+}
+
+// Refresh all data
+function refreshAll() {
+    fetchMetrics();
+    refreshEndpointsData();
+    refreshSlowEndpoints();
+}
+
+// Auto-refresh toggle
+document.getElementById('auto-refresh').addEventListener('change', (e) => {
+    if (e.target.checked) {
+        autoRefreshInterval = setInterval(() => {
+            fetchMetrics();
+            refreshEndpointsData();
+            refreshSlowEndpoints();
+        }, 10000); // 10 seconds
+    } else {
+        if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    }
+});
+
+// Initialize on load
+window.addEventListener('load', () => {
+    initCharts();
+    fetchMetrics();
+    refreshEndpointsData();
+    refreshSlowEndpoints();
+
+    // Start auto-refresh
+    autoRefreshInterval = setInterval(() => {
+        fetchMetrics();
+        refreshEndpointsData();
+        refreshSlowEndpoints();
+    }, 10000);
+
+    // Connect to logs stream
+    connectLogsStream();
+});
+
+// ============================================================================
+// EPIC-22 Story 22.5: API Performance by Endpoint
+// ============================================================================
+
+async function refreshEndpointsData() {
+    const periodSelect = document.getElementById('endpoints-period');
+    const periodHours = periodSelect.value;
+    const tbody = document.getElementById('endpoints-table-body');
+
+    try {
+        const response = await fetch(`/api/monitoring/advanced/performance/endpoints?period_hours=${periodHours}&limit=20`);
+        if (!response.ok) throw new Error('Failed to fetch endpoints data');
+
+        const endpoints = await response.json();
+
+        if (endpoints.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="metric-label">No data available for selected period</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = endpoints.map(ep => {
+            // Color coding for P95 latency
+            let p95Class = 'latency-good';
+            if (ep.p95_latency_ms > 200) p95Class = 'latency-critical';
+            else if (ep.p95_latency_ms > 100) p95Class = 'latency-warning';
+
+            // Color coding for error rate
+            let errorClass = 'error-none';
+            if (ep.error_rate > 10) errorClass = 'error-high';
+            else if (ep.error_rate > 5) errorClass = 'error-low';
+
+            return `
+                <tr>
+                    <td>
+                        <span class="endpoint-method ${ep.method}">${ep.method}</span>
+                        <span class="endpoint-path">${ep.endpoint}</span>
+                    </td>
+                    <td class="text-right">${ep.request_count}</td>
+                    <td class="text-right">${ep.p50_latency_ms.toFixed(1)}ms</td>
+                    <td class="text-right latency-badge ${p95Class}">${ep.p95_latency_ms.toFixed(1)}ms</td>
+                    <td class="text-right">${ep.p99_latency_ms.toFixed(1)}ms</td>
+                    <td class="text-right error-badge ${errorClass}">${ep.error_rate.toFixed(1)}%</td>
+                    <td class="text-right">${ep.requests_per_second.toFixed(3)}</td>
+                </tr>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Error fetching endpoints data:', error);
+        tbody.innerHTML = '<tr><td colspan="7" class="metric-label">Error loading data</td></tr>';
+    }
+}
+
+async function refreshSlowEndpoints() {
+    const periodSelect = document.getElementById('endpoints-period');
+    const periodHours = periodSelect.value;
+    const panel = document.getElementById('slow-endpoints-panel');
+    const grid = document.getElementById('slow-endpoints-grid');
+
+    try {
+        const response = await fetch(`/api/monitoring/advanced/performance/slow-endpoints?threshold_ms=100&period_hours=${periodHours}`);
+        if (!response.ok) throw new Error('Failed to fetch slow endpoints');
+
+        const slowEndpoints = await response.json();
+
+        if (slowEndpoints.length === 0) {
+            panel.style.display = 'none';
+            return;
+        }
+
+        panel.style.display = 'block';
+        grid.innerHTML = slowEndpoints.map(ep => {
+            // Severity based on latency above target
+            const severity = ep.latency_above_target_ms > 200 ? 'critical' : 'warning';
+            const impactClass = ep.impact_seconds_wasted_per_hour > 10 ? '' : 'warning';
+
+            return `
+                <div class="slow-endpoint-card ${severity === 'warning' ? 'warning' : ''}">
+                    <div class="slow-endpoint-path">${ep.endpoint}</div>
+                    <div class="slow-endpoint-stats">
+                        P95: ${ep.p95_latency_ms.toFixed(1)}ms<br>
+                        Target: ${ep.target_latency_ms}ms<br>
+                        Above target: +${ep.latency_above_target_ms.toFixed(1)}ms<br>
+                        Calls: ${ep.request_count}
+                    </div>
+                    <div class="slow-endpoint-impact ${impactClass}">
+                        ⚠️ Impact: ${ep.impact_seconds_wasted_per_hour.toFixed(2)}s wasted/hour
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Error fetching slow endpoints:', error);
+        panel.style.display = 'none';
+    }
+}
+
+// EPIC-22 Story 22.3: Real-Time Logs Streaming (SSE)
+let logsEventSource = null;
+const logsContainer = document.getElementById('logs-container');
+const maxLogsDisplay = 100; // Keep only last 100 logs in DOM
+
+function connectLogsStream() {
+    // Close existing connection if any
+    if (logsEventSource) {
+        logsEventSource.close();
+    }
+
+    // Create new EventSource connection
+    logsEventSource = new EventSource('/api/monitoring/advanced/logs/stream');
+
+    logsEventSource.onopen = () => {
+        console.log('SSE logs stream connected');
+        logsContainer.innerHTML = '<div class="loading">📡 Logs stream connected...</div>';
+    };
+
+    logsEventSource.onmessage = (event) => {
+        try {
+            const log = JSON.parse(event.data);
+            addLogToDisplay(log);
+        } catch (error) {
+            console.error('Failed to parse log event:', error);
+        }
+    };
+
+    logsEventSource.onerror = (error) => {
+        console.error('SSE logs stream error:', error);
+        logsContainer.innerHTML = '<div class="loading">❌ Logs stream disconnected. Reconnecting...</div>';
+
+        // Reconnect after 5 seconds
+        setTimeout(() => {
+            connectLogsStream();
+        }, 5000);
+    };
+}
+
+function addLogToDisplay(log) {
+    // Remove loading message if present
+    const loading = logsContainer.querySelector('.loading');
+    if (loading) {
+        logsContainer.innerHTML = '';
+    }
+
+    // Create log entry element
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry log-${log.level}`;
+
+    // Format timestamp
+    const timestamp = new Date(log.timestamp).toLocaleTimeString('fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        fractionalSecondDigits: 3
+    });
+
+    // EPIC-22 Story 22.6: Extract trace_id from metadata
+    const traceId = log.metadata?.trace_id || null;
+    const traceIdHtml = traceId
+        ? `<span class="log-trace-id" onclick="filterByTraceId('${traceId}')"
+                 data-trace-id="${traceId}" title="${traceId}">
+             🔍 ${traceId.substring(0, 8)}
+           </span>`
+        : '';
+
+    // Store trace_id on element for filtering
+    if (traceId) {
+        logEntry.setAttribute('data-trace-id', traceId);
+    }
+
+    // Build log HTML
+    logEntry.innerHTML = `
+        <span class="log-timestamp">[${timestamp}]</span>
+        <span class="log-level log-level-${log.level}">[${log.level.toUpperCase()}]</span>
+        <span class="log-message">${escapeHtml(log.message)}</span>
+        ${traceIdHtml}
+    `;
+
+    // Prepend (newest at top)
+    logsContainer.insertBefore(logEntry, logsContainer.firstChild);
+
+    // Apply current filter if active
+    const filterInput = document.getElementById('trace-filter-input');
+    if (filterInput && filterInput.value) {
+        const currentFilter = filterInput.value.trim();
+        if (currentFilter && (!traceId || !traceId.includes(currentFilter))) {
+            logEntry.classList.add('filtered-out');
+        }
+    }
+
+    // Trim old logs (keep only last maxLogsDisplay)
+    while (logsContainer.children.length > maxLogsDisplay) {
+        logsContainer.removeChild(logsContainer.lastChild);
+    }
+
+    // Auto-scroll to top if user is already at top
+    if (logsContainer.scrollTop === 0) {
+        logsContainer.scrollTop = 0;
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// EPIC-22 Story 22.6: Trace ID Filtering Functions
+function filterByTraceId(traceId) {
+    const filterInput = document.getElementById('trace-filter-input');
+    filterInput.value = traceId;
+    filterLogsByTraceId();
+}
+
+function filterLogsByTraceId() {
+    const filterInput = document.getElementById('trace-filter-input');
+    const clearBtn = document.getElementById('filter-clear-btn');
+    const indicator = document.getElementById('filter-active-indicator');
+    const filterValue = filterInput.value.trim();
+
+    // Get all log entries
+    const logEntries = logsContainer.querySelectorAll('.log-entry');
+
+    if (!filterValue) {
+        // No filter - show all logs
+        logEntries.forEach(entry => {
+            entry.classList.remove('filtered-out');
+        });
+        clearBtn.disabled = true;
+        indicator.style.display = 'none';
+        return;
+    }
+
+    // Apply filter
+    let visibleCount = 0;
+    logEntries.forEach(entry => {
+        const entryTraceId = entry.getAttribute('data-trace-id');
+        if (entryTraceId && entryTraceId.includes(filterValue)) {
+            entry.classList.remove('filtered-out');
+            visibleCount++;
+        } else {
+            entry.classList.add('filtered-out');
+        }
+    });
+
+    // Update UI
+    clearBtn.disabled = false;
+    indicator.style.display = 'inline';
+    indicator.textContent = `✓ ${visibleCount} log(s) match`;
+}
+
+function clearTraceFilter() {
+    const filterInput = document.getElementById('trace-filter-input');
+    filterInput.value = '';
+    filterLogsByTraceId();
+}
+
+// Cleanup on unload
+window.addEventListener('beforeunload', () => {
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    Object.values(charts).forEach(chart => chart.dispose());
+    if (logsEventSource) logsEventSource.close();
+});
+</script>
+{% endblock %}
