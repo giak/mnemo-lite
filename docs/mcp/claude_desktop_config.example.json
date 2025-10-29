@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "mnemolite": {
+      "command": "python",
+      "args": ["-m", "api.mcp.server"],
+      "cwd": "/absolute/path/to/MnemoLite",
+      "env": {
+        "MCP_DATABASE_URL": "postgresql://mnemo:mnemopass@localhost:5432/mnemolite",
+        "MCP_REDIS_URL": "redis://localhost:6379/0",
+        "MCP_LOG_LEVEL": "INFO",
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}
