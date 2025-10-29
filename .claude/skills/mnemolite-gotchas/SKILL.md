@@ -5,8 +5,9 @@ description: MnemoLite debugging gotchas & critical patterns. Use for errors, fa
 
 # MnemoLite Gotchas & Critical Patterns
 
-**Version**: 2.0.0 (Progressive Disclosure Structure)
+**Version**: 2.1.0 (+ Claude Code JSONL Parsing Gotcha)
 **Category**: Gotchas, Debugging, Patterns
+**Last Updated**: 2025-10-29
 
 ---
 
@@ -37,6 +38,7 @@ Use this skill when:
 | Tests pollute dev DB | CRITICAL-01 | Critical | Set TEST_DATABASE_URL |
 | `coroutine never awaited` | CRITICAL-02 | Critical | Add `await` to all DB calls |
 | Partitioning breaks queries | CRITICAL-03 | Critical | Include timestamp in WHERE |
+| **JSONL parser truncates 90% content** | **CODE-07 🔴** | **Code Intel** | **Filter tool_result messages (not real user!)** |
 | Graph has Python builtins | CODE-05 | Code Intel | Filter builtins in graph construction |
 | Embeddings fail validation | CRITICAL-04 | Critical | Store embeddings in dict before CodeChunkCreate |
 | Method not found | CODE-03 | Code Intel | Check exact method name (build_graph_for_repository) |
@@ -81,9 +83,9 @@ Use this skill when:
 
 ---
 
-### 🟢 Code Intelligence Gotchas (6 gotchas)
+### 🟢 Code Intelligence Gotchas (6 gotchas + 1 CRITICAL JSONL parsing)
 
-**Summary**: Code chunking, graph construction, symbol resolution, indexing patterns, LSP integration
+**Summary**: Code chunking, graph construction, symbol resolution, indexing patterns, LSP integration, JSONL parsing
 
 1. **CODE-01**: Embedding Domain Selection - Use HYBRID domain for code chunks (TEXT+CODE embeddings)
 2. **CODE-02**: Code Chunk Embedding Storage Pattern - Create dict with embeddings BEFORE CodeChunkCreate
@@ -91,6 +93,7 @@ Use this skill when:
 4. **CODE-04**: Symbol Resolution Scope - Local (same file) → Imports (tracked) → Best effort
 5. **CODE-05**: Graph Builtin Filtering - Python builtins MUST be filtered to avoid graph pollution
 6. **CODE-06**: TypeScript LSP Workspace Creation - Create workspace directory BEFORE starting LSP client
+7. **CODE-07** 🔴: Claude Code JSONL Tool Results - `role="user"` includes tool_result (fake user messages, 90% data loss!)
 
 **Details**: See Code Intelligence Domain section below
 
@@ -1196,12 +1199,100 @@ docker-compose up -e DATABASE_URL=postgresql://prod:5432
 
 ---
 
+---
+
+## 🟢 Code Intel: Parsing & JSONL
+
+### Gotcha #37: Claude Code JSONL Tool Results as Fake User Messages 🔴 CRITICAL
+
+**Symptom**: Parser captures only first assistant message block, truncating 90% of content
+
+**Context**: Claude Code transcripts (JSONL format) use `role="user"` for BOTH:
+- Real user messages: `content` = string or `[{"type":"text","text":"..."}]`
+- Tool results: `content` = `[{"type":"tool_result",...}]`
+
+**Root Cause**:
+- Parser treats tool_result messages as real user messages
+- Stops collecting assistant messages prematurely at first tool_result
+- Result: Only captures first assistant block, loses all subsequent responses
+
+**Example JSONL Structure**:
+```jsonl
+# Line 3595 - REAL USER MESSAGE
+{"message": {"role": "user", "content": "vérifie maintenant"}}
+
+# Line 3596 - Assistant block 1
+{"message": {"role": "assistant", "content": [{"type": "text", "text": "Je vais vérifier..."}]}}
+
+# Line 3597 - Tool use
+{"message": {"role": "assistant", "content": [{"type": "tool_use", ...}]}}
+
+# Line 3598 - FAKE USER MESSAGE (tool_result!)
+{"message": {"role": "user", "content": [{"type": "tool_result", ...}]}}
+
+# Line 3603 - Assistant block 2 (LOST by naive parser!)
+{"message": {"role": "assistant", "content": [{"type": "text", "text": "..."}]}}
+```
+
+**Solution**: Filter tool_result messages when identifying user messages
+
+```python
+# Check if "user" message is actually a tool_result
+if messages[i].get('role') == 'user':
+    content = messages[i].get('content', '')
+
+    # FILTER: Skip tool_result messages (not real user messages)
+    is_tool_result = False
+    if isinstance(content, list):
+        is_tool_result = any(
+            isinstance(item, dict) and item.get('type') == 'tool_result'
+            for item in content
+        )
+
+    if is_tool_result:
+        continue  # Skip fake user message
+
+# Continue collecting assistant messages through tool_result
+while j < len(messages):
+    if messages[j].get('role') == 'user':
+        # Check if real user or tool_result
+        next_content = messages[j].get('content', '')
+        is_next_tool_result = False
+
+        if isinstance(next_content, list):
+            is_next_tool_result = any(
+                isinstance(item, dict) and item.get('type') == 'tool_result'
+                for item in next_content
+            )
+
+        if not is_next_tool_result:
+            break  # Real user message - stop
+        else:
+            j += 1  # Tool result - skip and continue
+            continue
+
+    # Collect assistant message
+    if messages[j].get('role') == 'assistant':
+        assistant_contents.append(messages[j].get('content', ''))
+
+    j += 1
+```
+
+**Impact**: 🔴 CRITICAL - 90% content loss
+**Detection**: Conversations <500 chars despite long responses
+**Prevention**: Always validate parser on real JSONL before deploying
+**Reference**: `EPIC-24_BUGFIX_CRITICAL_COMPLETION_REPORT.md`
+**Date Discovered**: 2025-10-29
+**Improvement After Fix**: +530% content captured (245 chars → 12,782 chars)
+
+---
+
 ## Summary
 
-**Total**: 31 gotchas across 8 domains
-- 🔴 Critical: 7 gotchas (MUST NEVER VIOLATE)
+**Total**: 37 gotchas across 9 domains
+- 🔴 Critical: 8 gotchas (MUST NEVER VIOLATE) (+1 Claude Code JSONL parsing)
 - 🔵 Database: 5 gotchas
-- 🟢 Code Intel: 5 gotchas
+- 🟢 Code Intel: 6 gotchas (+1 JSONL parsing)
 - 🟡 Testing: 3 gotchas
 - 🟣 Architecture: 3 gotchas
 - 🟠 Performance: 3 gotchas

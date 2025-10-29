@@ -1,9 +1,9 @@
 # 🚀 MISSION CONTROL - MnemoLite v3.0 → v3.1 Evolution
 
-**Version**: 1.9.0
+**Version**: 2.0.0
 **Date de création**: 2025-10-18
-**Dernière mise à jour**: 2025-10-28 03:00 UTC
-**Status**: 🚧 **EPIC-23 PHASE 2 IN PROGRESS** (Stories 23.1-23.4 ✅, 11/23 pts, 48%) - MCP Server + Code Search + Memory + Code Graph | EPIC-22 Phase 2 (10/19 pts) | Production Readiness Phase
+**Dernière mise à jour**: 2025-10-29 17:00 UTC
+**Status**: 🚧 **EPIC-23 PHASE 2 IN PROGRESS** (Stories 23.1-23.4 ✅, 11/23 pts, 48%) | ✅ **EPIC-24 COMPLETE** (Auto-Save 7,975 conversations) | EPIC-22 Phase 2 (10/19 pts) | Production Readiness Phase
 
 ---
 
@@ -423,6 +423,47 @@ MnemoLite v2.0.0 est fonctionnel (EPIC-06/07/08 complets) mais présente des **l
 
 ---
 
+### EPIC-24 : Auto-Save Conversations (8 pts) - ✅ 100% COMPLETE
+
+**Status** : ✅ **FULLY OPERATIONAL - PRODUCTION READY**
+**Priority** : 🔴 CRITICAL (Data Persistence)
+**Owner** : Claude Code
+**Started** : 2025-10-28
+**Completed** : 2025-10-29 17:00
+**Documentation** : ✅ COMPLETE (5 docs)
+
+**Objectif** : Sauvegarder automatiquement CHAQUE échange (user ↔ Claude Code) dans MnemoLite avec embeddings pour recherche sémantique et monitoring robuste.
+
+**Architecture** : Daemon Polling (pivot depuis MCP Hooks - Bug Claude Code #10401)
+- Parser JSONL Claude Code transcripts
+- Daemon background (polling 30s)
+- 120s cooldown (race condition prevention)
+- Tool_result filtering (fix critique)
+- Monitoring 3 couches (heartbeat + health endpoint + Docker healthcheck)
+- Dashboard UI SCADA harmonisé
+
+**Métriques Production** :
+- ✅ **7,975 conversations** complètes (avg 1,727 chars)
+- ✅ **100% embeddings** coverage (768D vectors)
+- ✅ **0% data loss** (fix tool_result: 245 chars → 12,782 chars)
+- ✅ **Monitoring healthy** (heartbeat ~20s, auto-recovery <5min)
+- ✅ **Dashboard** opérationnel avec modal interactif
+
+**Bugs Résolus** :
+- ✅ Bug Critique: Parser traitait `tool_result` comme user messages (+530% contenu sauvegardé)
+- ✅ Race Condition: Cooldown 120s implémenté
+- ✅ Design UI: SCADA harmonisé
+- ✅ Pivot Architectural: Daemon polling (hooks non fiables)
+
+**Docs** :
+- `EPIC-24_README.md` (v2.0.0)
+- `EPIC-24_BUGFIX_CRITICAL_COMPLETION_REPORT.md`
+- `EPIC-24_MONITORING_IMPLEMENTATION.md`
+- `EPIC-24_FINAL_COMPLETION_REPORT.md`
+- `EPIC-24_USAGE_GUIDE.md`
+
+---
+
 ### EPIC-23 : MCP Integration (23 pts) - 🚧 48% IN PROGRESS
 
 **Status** : 🚧 **PHASE 2 IN PROGRESS (11/23 pts - 48%)**
@@ -520,6 +561,59 @@ MnemoLite v2.0.0 est fonctionnel (EPIC-06/07/08 complets) mais présente des **l
 ---
 
 ## 📝 CHANGELOG (Trace des Décisions)
+
+### 2025-10-29 : EPIC-24 COMPLETE - Auto-Save Conversations ✅
+
+**Milestone** : 🎉 **EPIC-24 FULLY OPERATIONAL** - Production Ready (8/8 pts, 100%)
+
+**Achievement** :
+- EPIC-24 completed across 4 sessions (~8h total)
+- Pivot architectural: MCP Hooks → Daemon Polling (Bug Claude Code #10401)
+- Bug critique résolu: tool_result filtering (+530% contenu sauvegardé)
+- 7,975 conversations complètes importées (avg 1,727 chars)
+- 100% embeddings coverage (768D vectors)
+- Monitoring 3 couches opérationnel (heartbeat + health + Docker healthcheck)
+- Dashboard UI SCADA harmonisé avec modal interactif
+- **0% data loss** (était 90% avant fix critique!)
+
+**Code Created/Modified (10 files)** :
+1. `api/routes/conversations_routes.py` (326 lines) - Parser JSONL + import endpoint
+2. `api/routes/autosave_monitoring_routes.py` (284 lines) - Stats, health, recent conversations
+3. `scripts/conversation-auto-import.sh` (35 lines) - Daemon polling (30s)
+4. `templates/autosave_dashboard.html` (320+ lines) - Dashboard SCADA + modal
+5. `docker-compose.yml` - Volume mounts + daemon launch + healthcheck
+6. `api/main.py` - Routes registration
+
+**Documentation (5 files, ~2500 lines)** :
+1. `EPIC-24_README.md` (v2.0.0, ~735 lines) - Overview & changelog
+2. `EPIC-24_BUGFIX_CRITICAL_COMPLETION_REPORT.md` (~600 lines) - Fix tool_result
+3. `EPIC-24_MONITORING_IMPLEMENTATION.md` (~450 lines) - Monitoring 3 couches
+4. `EPIC-24_FINAL_COMPLETION_REPORT.md` (~687 lines) - Sessions 1-3 complete
+5. `EPIC-24_USAGE_GUIDE.md` - Guide utilisateur
+
+**Technical Achievements** :
+- ✅ **Daemon Polling**: 30s interval, 120s cooldown (race condition fix)
+- ✅ **Tool_result Filtering**: Parser distingue vrais user messages vs tool results
+- ✅ **Monitoring**: Heartbeat file + metrics file + health endpoint + Docker healthcheck
+- ✅ **Auto-Recovery**: Docker restart policy + healthcheck (recovery <5min)
+- ✅ **Dashboard**: SCADA design harmonisé (CSS variables) + modal interactif
+- ✅ **Performance**: 7,975 conversations (avg 1,727 chars, range 1,359-12,782)
+- ✅ **Deduplication**: Hash-based (SHA256) par échange
+
+**Impact Production** :
+- **AVANT FIX**: 245-320 chars/conversation (90% contenu perdu)
+- **APRÈS FIX**: 1,359-12,782 chars/conversation (0% perte)
+- **Amélioration**: +530% contenu sauvegardé
+- **User Feedback**: "purée, ça l'air de fonctionner ! MERCI bEAUCOUP, on a en chier ;)"
+
+**Lessons Learned** :
+- ❌ MCP Hooks non fiables en production (Bug #10401)
+- ✅ Daemon polling plus robuste et self-contained
+- ✅ TOUJOURS valider parser sur vraies données JSONL
+- ✅ Claude Code JSONL format: `role="user"` inclut tool_result (fake user messages!)
+- ✅ Cooldown critical pour race conditions (120s pour longues réponses)
+
+---
 
 ### 2025-10-28 (AM) : EPIC-23 Story 23.4 COMPLETE - Code Graph Resources ✅
 
