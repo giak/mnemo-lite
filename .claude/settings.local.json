@@ -79,7 +79,14 @@
       "Bash(\"du cop, cette conversation, ce message précedent est sauvagardé ?\" )",
       "Bash(\"Bonne question! Vérifions si le hook Stop a bien sauvegardé notre conversation sur les tests MCP...\" )",
       "Bash(\"test-session-manual\")",
-      "Bash(jq:*)"
+      "Bash(jq:*)",
+      "Bash(\"docs/agile/serena-evolution/03_EPICS/EPIC-24_BUGFIX_CRITICAL_COMPLETION_REPORT.md\" )",
+      "Bash(\"docs/agile/serena-evolution/03_EPICS/EPIC-24_FINAL_COMPLETION_REPORT.md\" )",
+      "Bash(\"docs/agile/serena-evolution/03_EPICS/EPIC-24_MONITORING_IMPLEMENTATION.md\")",
+      "Bash(\"docs/agile/serena-evolution/03_EPICS/EPIC-24_ARCHITECTURE_ULTRATHINK.md\" )",
+      "Bash(\"docs/agile/serena-evolution/03_EPICS/EPIC-24_MONITORING_ULTRATHINK.md\" )",
+      "Bash(\"docs/agile/serena-evolution/03_EPICS/EPIC-24_SOLUTIONS_COMPARISON_ULTRATHINK.md\" )",
+      "Bash(\"docs/agile/serena-evolution/03_EPICS/EPIC-24_SIMULATION_DEEP_ANALYSIS.md\")"
     ],
     "deny": [],
     "ask": []
@@ -96,6 +103,18 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/Stop/auto-save.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/UserPromptSubmit/auto-save-previous.sh",
             "timeout": 5
           }
         ]

@@ -19,6 +19,7 @@ MnemoLite: PG18.cognitive.memory ⊕ CODE.INTEL → skill:mnemolite-architecture
 
 ## §COGNITIVE.WORKFLOWS
 
+
 ◊Decision.Frameworks:
   New.Feature → Test.First → Implement.Minimal → Document → Commit
   Bug.Fix → Reproduce → Root.Cause → Fix → Regression.Test → Document
