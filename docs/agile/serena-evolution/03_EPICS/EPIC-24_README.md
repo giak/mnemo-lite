@@ -351,6 +351,60 @@ Precision: 100%
 
 ---
 
+## 🧪 Tests Automatisés (Pytest)
+
+**Test Coverage**: ✅ **15 passed** (100% pass rate)
+
+### Routes Tests (15 tests)
+**File**: `tests/routes/test_autosave_monitoring_routes.py`
+
+#### GET /v1/autosave/stats (2 tests)
+- ✅ `test_get_autosave_stats_empty` - Empty database returns zero counts
+- ✅ `test_get_autosave_stats_with_data` - Aggregation across time windows (24h, 7d, 30d)
+
+#### GET /v1/autosave/timeline (2 tests)
+- ✅ `test_get_import_timeline_empty` - Empty list when no imports
+- ✅ `test_get_import_timeline_with_data` - Timeline aggregation by day
+
+#### GET /v1/autosave/recent (3 tests)
+- ✅ `test_get_recent_conversations_empty` - Empty list validation
+- ✅ `test_get_recent_conversations_with_data` - Preview truncation (200 chars)
+- ✅ `test_get_recent_conversations_limit` - Limit parameter validation
+
+#### GET /v1/autosave/daemon-status (2 tests)
+- ✅ `test_get_daemon_status_no_state_file` - Status 'unknown' when file missing
+- ✅ `test_get_daemon_status_with_state_file` - State file parsing and metrics
+
+#### GET /v1/autosave/health (3 tests)
+- ✅ `test_daemon_health_check_missing_heartbeat` - Critical status (503) when heartbeat missing
+- ✅ `test_daemon_health_check_stale_heartbeat` - Unhealthy status when heartbeat stale (>2min)
+- ✅ `test_daemon_health_check_healthy` - Healthy status when all checks pass
+
+#### GET /v1/autosave/conversation/{id} (3 tests)
+- ✅ `test_get_conversation_content_not_found` - Error response for non-existent ID
+- ✅ `test_get_conversation_content_success` - Full content retrieval
+- ✅ `test_get_conversation_only_autoimport` - Filter by author='AutoImport'
+
+### Database Setup
+- ✅ Migration v7→v8 applied (CREATE memories table)
+- ✅ conftest.py updated to truncate memories table
+
+### Bugs Discovered & Fixed
+**🐛 Bug #6: Missing HTTPException Import** (routes/autosave_monitoring_routes.py:248)
+- **Symptom**: `NameError: name 'HTTPException' is not defined` when health check returns 503
+- **Fix**: Added `HTTPException` to FastAPI imports
+- **Impact**: Health check endpoint would crash on critical status
+
+### Running Tests
+```bash
+# Run all autosave tests
+docker compose exec -T api bash -c "EMBEDDING_MODE=mock pytest tests/routes/test_autosave_monitoring_routes.py -v"
+
+# Expected output: 15 passed in ~5s
+```
+
+---
+
 ## 📁 Fichiers Modifiés/Créés
 
 ### Fichiers Modifiés (Bugfixes)

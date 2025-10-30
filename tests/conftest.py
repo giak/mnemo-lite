@@ -99,6 +99,10 @@ async def clean_db(test_engine):
                 IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'alerts') THEN
                     TRUNCATE TABLE alerts CASCADE;
                 END IF;
+                -- EPIC-24 tables (may not exist in all test DBs yet)
+                IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'memories') THEN
+                    TRUNCATE TABLE memories CASCADE;
+                END IF;
             END $$;
         """))
         await conn.commit()

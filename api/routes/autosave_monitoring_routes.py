@@ -9,7 +9,7 @@ from typing import Dict, Any, List
 from pathlib import Path
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy import text
 
