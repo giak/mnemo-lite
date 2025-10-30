@@ -150,7 +150,8 @@ async def test_get_event_by_id_not_found(mocker):
     found_event = await repository.get_by_id(event_id=test_event_id)
 
     # 3. Vérification (Assert)
-    mock_builder.build_get_by_id_query.assert_called_once_with(test_event_id)
+    # Repository converts UUID to string before calling query builder
+    mock_builder.build_get_by_id_query.assert_called_once_with(str(test_event_id))
     mock_connection.execute.assert_awaited_once()
     # Vérifier que execute est appelé avec la requête et params du builder mocké
     execute_call_args = mock_connection.execute.call_args
@@ -198,7 +199,8 @@ async def test_delete_event_success(mocker):
     deleted = await repository.delete(event_id=test_event_id)
     
     # 3. Vérification (Assert)
-    mock_builder.build_delete_query.assert_called_once_with(test_event_id)
+    # Repository converts UUID to string before calling query builder
+    mock_builder.build_delete_query.assert_called_once_with(str(test_event_id))
     mock_connection.execute.assert_awaited_once_with(mock_query, mock_params)
     mock_transaction.commit.assert_awaited_once()
     assert deleted is True
@@ -241,7 +243,8 @@ async def test_delete_event_not_found(mocker):
     deleted = await repository.delete(event_id=test_event_id)
     
     # 3. Vérification (Assert)
-    mock_builder.build_delete_query.assert_called_once_with(test_event_id)
+    # Repository converts UUID to string before calling query builder
+    mock_builder.build_delete_query.assert_called_once_with(str(test_event_id))
     mock_connection.execute.assert_awaited_once_with(mock_query, mock_params)
     mock_transaction.commit.assert_awaited_once() # Should still commit even if 0 rows affected
     assert deleted is False # Check return value based on scalar_one_or_none()
@@ -356,9 +359,9 @@ async def test_search_vector_metadata_only(mocker):
     mock_engine = AsyncMock(spec=AsyncEngine)
     mock_connection = AsyncMock(spec=AsyncConnection)
     mock_result = AsyncMock(spec=Result)
+    mock_count_result = AsyncMock(spec=Result)  # Separate result for count query
     mock_builder = MagicMock(spec=EventQueryBuilder)  # Mock builder
     mock_engine.connect.return_value.__aenter__.return_value = mock_connection
-    mock_connection.execute.return_value = mock_result
 
     criteria = {"source": "search_test"}
     expected_id1 = uuid.uuid4()
@@ -389,6 +392,14 @@ async def test_search_vector_metadata_only(mocker):
     mock_mappings.all.return_value = fake_db_records_dicts
     mock_result.mappings.return_value = mock_mappings
 
+    # Setup count result: mappings().first()['total'] returns total count
+    mock_count_mappings = MagicMock()
+    mock_count_mappings.first.return_value = {'total': 2}
+    mock_count_result.mappings.return_value = mock_count_mappings
+
+    # Execute will be called twice: once for search, once for count
+    mock_connection.execute.side_effect = [mock_result, mock_count_result]
+
     # Define test_limit and test_offset before using them in mock_params_data
     test_limit = 10
     test_offset = 0
@@ -397,6 +408,11 @@ async def test_search_vector_metadata_only(mocker):
     mock_query_data = text("SELECT ... DATA ...")
     mock_params_data = {"md_filter": json.dumps(criteria), "lim": test_limit, "off": test_offset} # Example params
     mock_builder.build_search_vector_query.return_value = (mock_query_data, mock_params_data)
+
+    # Mock build_count_query (called by search_vector to get total_hits)
+    mock_count_query = text("SELECT COUNT(*) as total FROM events WHERE ...")
+    mock_count_params = {"md_filter": json.dumps(criteria)}
+    mock_builder.build_count_query.return_value = (mock_count_query, mock_count_params)
 
     repository = EventRepository(engine=mock_engine)
     repository.query_builder = mock_builder  # Inject mock
@@ -423,12 +439,23 @@ async def test_search_vector_metadata_only(mocker):
         distance_threshold=None # Updated default: 5.0 → None
     )
 
-    # Assert execute calls (data query only)
-    mock_connection.execute.assert_awaited_once_with(mock_query_data, mock_params_data)
+    # Assert execute was called twice: once for search, once for count
+    assert mock_connection.execute.await_count == 2
+    # Verify first call was for search query
+    first_call = mock_connection.execute.await_args_list[0]
+    assert first_call[0][0] == mock_query_data
+    assert first_call[0][1] == mock_params_data
+    # Verify second call was for count query
+    second_call = mock_connection.execute.await_args_list[1]
+    assert second_call[0][0] == mock_count_query
+    assert second_call[0][1] == mock_count_params
+
+    # Verify results
     assert len(events) == 2
     assert events[0].id == expected_id1
     assert events[1].id == expected_id2
     assert events[0].embedding == None
+    assert total_hits == 2  # From count query
     assert events[1].embedding == None
 
 
@@ -439,9 +466,9 @@ async def test_search_vector_vector_only(mocker):
     mock_engine = AsyncMock(spec=AsyncEngine)
     mock_connection = AsyncMock(spec=AsyncConnection)
     mock_result = AsyncMock(spec=Result)
+    mock_count_result = AsyncMock(spec=Result)  # Separate result for count query
     mock_builder = MagicMock(spec=EventQueryBuilder)  # Mock builder
     mock_engine.connect.return_value.__aenter__.return_value = mock_connection
-    mock_connection.execute.return_value = mock_result
 
     query_vector = [0.1, 0.9, 0.2]
     expected_id1 = uuid.uuid4()
@@ -464,6 +491,14 @@ async def test_search_vector_vector_only(mocker):
     mock_mappings.all.return_value = fake_db_records_dicts
     mock_result.mappings.return_value = mock_mappings
 
+    # Setup count result: mappings().first()['total'] returns total count
+    mock_count_mappings = MagicMock()
+    mock_count_mappings.first.return_value = {'total': 1}
+    mock_count_result.mappings.return_value = mock_count_mappings
+
+    # Execute will be called twice: once for search, once for count
+    mock_connection.execute.side_effect = [mock_result, mock_count_result]
+
     # Define test_limit and test_offset before using them in mock_params_data
     test_limit = 10
     test_offset = 0
@@ -472,6 +507,11 @@ async def test_search_vector_vector_only(mocker):
     mock_query_data = text("SELECT ... DATA ...")
     mock_params_data = {"vec_query": EventModel._format_embedding_for_db(query_vector), "dist_threshold": 5.0, "lim": test_limit, "off": test_offset} # Example params
     mock_builder.build_search_vector_query.return_value = (mock_query_data, mock_params_data)
+
+    # Mock build_count_query (called by search_vector to get total_hits)
+    mock_count_query = text("SELECT COUNT(*) as total FROM events WHERE ...")
+    mock_count_params = {"vec_query": EventModel._format_embedding_for_db(query_vector), "dist_threshold": 5.0}
+    mock_builder.build_count_query.return_value = (mock_count_query, mock_count_params)
 
     repository = EventRepository(engine=mock_engine)
     repository.query_builder = mock_builder  # Inject mock
@@ -497,14 +537,25 @@ async def test_search_vector_vector_only(mocker):
         distance_threshold=None # Updated default: 5.0 → None
     )
 
-    # Assert execute calls (data query only)
-    mock_connection.execute.assert_awaited_once_with(mock_query_data, mock_params_data)
+    # Assert execute was called twice: once for search, once for count
+    assert mock_connection.execute.await_count == 2
+    # Verify first call was for search query
+    first_call = mock_connection.execute.await_args_list[0]
+    assert first_call[0][0] == mock_query_data
+    assert first_call[0][1] == mock_params_data
+    # Verify second call was for count query
+    second_call = mock_connection.execute.await_args_list[1]
+    assert second_call[0][0] == mock_count_query
+    assert second_call[0][1] == mock_count_params
+
+    # Verify results
     assert len(events) == 1
     assert events[0].id == expected_id1
     assert (
         events[0].embedding == expected_embedding_list
     )  # Check parsing back to list
     assert events[0].similarity_score == 0.05
+    assert total_hits == 1  # From count query
 
 
 @pytest.mark.anyio
@@ -514,9 +565,9 @@ async def test_search_vector_hybrid(mocker):
     mock_engine = AsyncMock(spec=AsyncEngine)
     mock_connection = AsyncMock(spec=AsyncConnection)
     mock_result = AsyncMock(spec=Result)
+    mock_count_result = AsyncMock(spec=Result)  # Separate result for count query
     mock_builder = MagicMock(spec=EventQueryBuilder)  # Mock builder
     mock_engine.connect.return_value.__aenter__.return_value = mock_connection
-    mock_connection.execute.return_value = mock_result
 
     query_vector = [0.5, 0.5]
     criteria = {"tag": "hybrid"}
@@ -540,6 +591,14 @@ async def test_search_vector_hybrid(mocker):
     mock_mappings.all.return_value = fake_db_records_dicts
     mock_result.mappings.return_value = mock_mappings
 
+    # Setup count result: mappings().first()['total'] returns total count
+    mock_count_mappings = MagicMock()
+    mock_count_mappings.first.return_value = {'total': 1}
+    mock_count_result.mappings.return_value = mock_count_mappings
+
+    # Execute will be called twice: once for search, once for count
+    mock_connection.execute.side_effect = [mock_result, mock_count_result]
+
     # Define test_limit and test_offset before using them in mock_params_data
     test_limit = 5
     test_offset = 0
@@ -548,12 +607,21 @@ async def test_search_vector_hybrid(mocker):
     mock_query_data = text("SELECT ... DATA ...")
     mock_params_data = { # Example params, adjust based on actual builder output for these inputs
         "vec_query": EventModel._format_embedding_for_db(query_vector),
-        "dist_threshold": 5.0, 
-        "md_filter": json.dumps(criteria), 
-        "lim": test_limit, 
+        "dist_threshold": 5.0,
+        "md_filter": json.dumps(criteria),
+        "lim": test_limit,
         "off": test_offset
     }
     mock_builder.build_search_vector_query.return_value = (mock_query_data, mock_params_data)
+
+    # Mock build_count_query (called by search_vector to get total_hits)
+    mock_count_query = text("SELECT COUNT(*) as total FROM events WHERE ...")
+    mock_count_params = {
+        "vec_query": EventModel._format_embedding_for_db(query_vector),
+        "dist_threshold": 5.0,
+        "md_filter": json.dumps(criteria)
+    }
+    mock_builder.build_count_query.return_value = (mock_count_query, mock_count_params)
 
     repository = EventRepository(engine=mock_engine)
     repository.query_builder = mock_builder  # Inject mock
@@ -578,15 +646,26 @@ async def test_search_vector_hybrid(mocker):
         offset=test_offset,
         distance_threshold=None # Updated default: 5.0 → None
     )
-    
-    # Assert execute calls (data query only)
-    mock_connection.execute.assert_awaited_once_with(mock_query_data, mock_params_data)
+
+    # Assert execute was called twice: once for search, once for count
+    assert mock_connection.execute.await_count == 2
+    # Verify first call was for search query
+    first_call = mock_connection.execute.await_args_list[0]
+    assert first_call[0][0] == mock_query_data
+    assert first_call[0][1] == mock_params_data
+    # Verify second call was for count query
+    second_call = mock_connection.execute.await_args_list[1]
+    assert second_call[0][0] == mock_count_query
+    assert second_call[0][1] == mock_count_params
+
+    # Verify results
     assert len(events) == 1
     assert events[0].id == expected_id1
     assert (
         events[0].embedding == expected_embedding_list
     )  # Check parsing back to list
     assert events[0].similarity_score == 0.02
+    assert total_hits == 1  # From count query
 
 
 # Ajouter ici d'autres tests pour update_metadata, delete quand implémentés
@@ -610,7 +689,15 @@ def test_build_add_query(query_builder: EventQueryBuilder):
         timestamp=now_utc
     )
 
-    query, params = query_builder.build_add_query(event_data)
+    # New signature: build_add_query(event_id, content, metadata, embedding, timestamp)
+    event_id = str(uuid.uuid4())
+    query, params = query_builder.build_add_query(
+        event_id=event_id,
+        content=event_data.content,
+        metadata=event_data.metadata,
+        embedding=event_data.embedding,
+        timestamp=event_data.timestamp
+    )
 
     # Assertions for TextClause query and parameters
     assert isinstance(query, TextClause), "Query should be a TextClause object"
@@ -633,12 +720,13 @@ def test_build_add_query(query_builder: EventQueryBuilder):
 def test_build_get_by_id_query(query_builder: EventQueryBuilder):
     """Teste la construction de la requête SELECT par ID."""
     test_id = uuid.uuid4()
-    query, params = query_builder.build_get_by_id_query(test_id)
+    # build_get_by_id_query expects string, pass str(test_id)
+    query, params = query_builder.build_get_by_id_query(str(test_id))
     query_str = str(query).upper()
 
     assert "SELECT" in query_str
     assert "ID" in query_str
-    assert "FROM" in query_str 
+    assert "FROM" in query_str
     assert "EVENTS" in query_str
     assert "WHERE" in query_str
     assert params["event_id"] == str(test_id) # Expect string representation
@@ -648,7 +736,8 @@ def test_build_update_metadata_query(query_builder: EventQueryBuilder):
     """Teste la construction de la requête UPDATE metadata."""
     test_id = uuid.uuid4()
     metadata_update = {"new_tag": "updated", "status": "active"}
-    query, params = query_builder.build_update_metadata_query(test_id, metadata_update)
+    # build_update_metadata_query expects string, pass str(test_id)
+    query, params = query_builder.build_update_metadata_query(str(test_id), metadata_update)
     query_str = str(query).upper()
 
     assert "UPDATE" in query_str
@@ -662,11 +751,13 @@ def test_build_update_metadata_query(query_builder: EventQueryBuilder):
 def test_build_delete_query(query_builder: EventQueryBuilder):
     """Teste la construction de la requête DELETE."""
     test_id = uuid.uuid4()
-    query, params = query_builder.build_delete_query(test_id)
-    assert isinstance(query, Delete), "Query should be a Delete object"
-    query_str = str(query.compile(compile_kwargs={"literal_binds": False})).upper()
+    # build_delete_query expects string, pass str(test_id)
+    query, params = query_builder.build_delete_query(str(test_id))
+    # Query is now TextClause, not Delete object
+    assert isinstance(query, TextClause), "Query should be a TextClause object"
+    query_str = str(query).upper()
     assert "DELETE FROM EVENTS" in query_str
-    assert "WHERE EVENTS.ID = :EVENT_ID" in query_str
+    assert "WHERE ID = :EVENT_ID" in query_str  # TextClause format doesn't include table alias
     assert params["event_id"] == str(test_id) # Expect string representation
 
 
@@ -692,7 +783,7 @@ def test_build_filter_by_metadata_query(query_builder: EventQueryBuilder):
 
 def test_build_search_vector_query_vector_only(query_builder: EventQueryBuilder):
     """Teste build_search_vector_query avec seulement un vecteur."""
-    vector = [0.1] * query_builder._get_vector_dimensions()
+    vector = [0.1] * query_builder.vector_dimension  # Use property, not method
     limit, offset = 5, 0
     distance_threshold_test = 1.0  # Explicitly pass a threshold for this test
     query_tuple = query_builder.build_search_vector_query(
@@ -760,7 +851,7 @@ def test_build_search_vector_query_time_only(query_builder: EventQueryBuilder):
 
 def test_build_search_vector_query_hybrid(query_builder: EventQueryBuilder):
     """Teste build_search_vector_query avec tous les critères."""
-    vector = [0.2] * query_builder._get_vector_dimensions()
+    vector = [0.2] * query_builder.vector_dimension  # Use property, not method
     metadata = {"type": "hybrid_builder"}
     ts_start = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
     ts_end = datetime.datetime.now(datetime.timezone.utc)
@@ -817,7 +908,7 @@ def test_build_search_vector_query_invalid_dimension(query_builder: EventQueryBu
     vector_invalid = [0.1, 0.2]  # Dimension incorrecte
     with pytest.raises(ValueError) as excinfo:
         query_builder.build_search_vector_query(vector=vector_invalid)
-    assert str(query_builder._get_vector_dimensions()) in str(excinfo.value)
+    assert str(query_builder.vector_dimension) in str(excinfo.value)  # Use property, not method
     assert str(len(vector_invalid)) in str(excinfo.value)
 
 

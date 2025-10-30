@@ -49,21 +49,16 @@ async def test_code_upload_process_success(test_client):
     assert response.status_code == 200
     result = response.json()
 
-    # Check response structure
+    # Check async response structure (processing started, not completed)
     assert "status" in result
+    assert result["status"] == "processing"
     assert "repository" in result
-    assert "indexed_files" in result
-    assert "indexed_chunks" in result
-    assert "total_files" in result
-    assert "processing_time_ms" in result
-
-    # Check values
     assert result["repository"] == "test-repo"
+    assert "total_files" in result
     assert result["total_files"] == 3
-    # We expect some files to be processed (may fail due to tree-sitter issues in test env)
-    assert result["indexed_files"] >= 0
-    assert result["failed_files"] >= 0
-    assert result["indexed_files"] + result["failed_files"] == 3
+    assert "upload_id" in result
+    assert "message" in result
+    assert "status" in result["message"].lower()  # Message mentions status polling
 
 
 @pytest.mark.anyio
@@ -85,12 +80,12 @@ async def test_code_upload_process_missing_repository(test_client):
 
     response = await test_client.post("/ui/code/upload/process", json=payload)
 
-    assert response.status_code == 200
+    # API now returns 400 for validation errors
+    assert response.status_code == 400
     result = response.json()
 
-    assert result["status"] == "error"
-    assert "error" in result
-    assert "repository" in result["error"].lower()
+    assert "detail" in result
+    assert "repository" in result["detail"].lower()
 
 
 @pytest.mark.anyio
@@ -107,11 +102,11 @@ async def test_code_upload_process_no_files(test_client):
 
     response = await test_client.post("/ui/code/upload/process", json=payload)
 
-    assert response.status_code == 200
+    # API now returns 400 for validation errors (empty files list)
+    assert response.status_code == 400
     result = response.json()
 
-    assert result["status"] == "error"
-    assert "error" in result
+    assert "detail" in result
 
 
 @pytest.mark.anyio
@@ -140,10 +135,10 @@ async def test_code_upload_process_file_too_large(test_client):
     assert response.status_code == 200
     result = response.json()
 
-    # File should be rejected
-    assert result["failed_files"] == 1
-    assert len(result["errors"]) == 1
-    assert "too large" in result["errors"][0]["error"].lower()
+    # Async response - processing started (file validation happens async)
+    assert result["status"] == "processing"
+    assert "upload_id" in result
+    assert result["total_files"] == 1
 
 
 @pytest.mark.anyio
@@ -175,10 +170,10 @@ async def test_code_upload_process_batch_processing(test_client):
     assert response.status_code == 200
     result = response.json()
 
-    # Should process all files
+    # Async response - batch processing started
+    assert result["status"] == "processing"
+    assert "upload_id" in result
     assert result["total_files"] == 150
-    # Check that processing completed (some may fail in test env)
-    assert result["indexed_files"] + result["failed_files"] == 150
 
 
 @pytest.mark.anyio
@@ -211,12 +206,11 @@ async def test_code_upload_process_missing_file_data(test_client):
 
     response = await test_client.post("/ui/code/upload/process", json=payload)
 
-    assert response.status_code == 200
+    # API now validates file data upfront and returns 400 for invalid files
+    assert response.status_code == 400
     result = response.json()
 
-    # Should handle invalid files gracefully
-    assert result["failed_files"] >= 2  # At least 2 invalid files
-    assert len(result["errors"]) >= 2
+    assert "detail" in result
 
 
 @pytest.mark.anyio
@@ -253,13 +247,10 @@ async def test_code_upload_process_partial_success(test_client):
     assert response.status_code == 200
     result = response.json()
 
-    # Should have at least 1 failure (the large file)
-    assert result["failed_files"] >= 1
-    # Should have processed some files
+    # Async response - partial success will be determined during processing
+    assert result["status"] == "processing"
+    assert "upload_id" in result
     assert result["total_files"] == 3
-    # Status should be partial if there are failures
-    if result["failed_files"] > 0:
-        assert result["status"] in ["partial", "success"]
 
 
 @pytest.mark.anyio
@@ -319,13 +310,10 @@ async def test_code_upload_process_error_overflow(test_client):
     assert response.status_code == 200
     result = response.json()
 
-    # Should have many failures
-    assert result["failed_files"] == 150
-    # Errors should be limited to 100
-    assert len(result["errors"]) <= 100
-    # Should have overflow warning
-    if len(result["errors"]) == 100:
-        assert "error_overflow" in result
+    # Async response - error overflow will be tracked during processing
+    assert result["status"] == "processing"
+    assert "upload_id" in result
+    assert result["total_files"] == 150
 
 
 @pytest.mark.anyio
