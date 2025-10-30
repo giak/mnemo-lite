@@ -86,9 +86,20 @@ async def clean_db(test_engine):
     """Provide a clean database for each test."""
     from sqlalchemy import text
     async with test_engine.connect() as conn:
-        # Fast truncate with CASCADE
+        # Fast truncate with CASCADE (EPIC-22: added metrics and alerts tables)
+        # Use TRUNCATE only if tables exist (they may not exist in older test DBs)
         await conn.execute(text("""
-            TRUNCATE TABLE events, code_chunks, nodes, edges CASCADE
+            DO $$
+            BEGIN
+                TRUNCATE TABLE events, code_chunks, nodes, edges CASCADE;
+                -- EPIC-22 tables (may not exist in all test DBs yet)
+                IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'metrics') THEN
+                    TRUNCATE TABLE metrics CASCADE;
+                END IF;
+                IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'alerts') THEN
+                    TRUNCATE TABLE alerts CASCADE;
+                END IF;
+            END $$;
         """))
         await conn.commit()
     yield test_engine
