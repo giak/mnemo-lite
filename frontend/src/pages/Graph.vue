@@ -9,11 +9,16 @@ import { useCodeGraph } from '@/composables/useCodeGraph'
 import cytoscape from 'cytoscape'
 import type { Core } from 'cytoscape'
 
-const { stats, loading, error, fetchStats } = useCodeGraph()
+const { stats, loading, error, building, buildError, fetchStats, buildGraph } = useCodeGraph()
 
 const graphContainer = ref<HTMLElement | null>(null)
 const cy = ref<Core | null>(null)
 const repository = ref('MnemoLite')
+
+// Build graph handler
+const handleBuildGraph = async () => {
+  await buildGraph(repository.value, 'python')
+}
 
 // Initialize Cytoscape graph
 const initGraph = async () => {
@@ -173,13 +178,39 @@ onMounted(async () => {
           </div>
         </div>
 
+        <!-- Build Error Banner -->
+        <div v-if="buildError" class="alert-error">
+          <div class="flex items-start">
+            <svg class="h-5 w-5 text-red-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+            </svg>
+            <div class="ml-3">
+              <h3 class="text-sm font-medium text-red-300 uppercase">Build Error</h3>
+              <p class="mt-1 text-sm text-red-400">{{ buildError }}</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Graph Visualization -->
         <div class="section">
-          <div class="mb-4">
-            <h2 class="text-xl font-semibold text-heading">Graph Visualization</h2>
-            <p class="text-sm text-gray-400 mt-1">
-              Interactive visualization of code dependencies
-            </p>
+          <div class="mb-4 flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-semibold text-heading">Graph Visualization</h2>
+              <p class="text-sm text-gray-400 mt-1">
+                Interactive visualization of code dependencies
+              </p>
+            </div>
+            <button
+              @click="handleBuildGraph"
+              :disabled="building || loading"
+              class="btn-primary"
+            >
+              <svg v-if="building" class="animate-spin -ml-1 mr-2 h-4 w-4 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ building ? 'Building...' : 'Build Graph' }}
+            </button>
           </div>
 
           <!-- Cytoscape Container -->
@@ -198,7 +229,7 @@ onMounted(async () => {
               <div class="ml-3">
                 <h3 class="text-sm font-medium text-amber-300">Graph Not Built</h3>
                 <p class="mt-1 text-sm text-amber-400/80">
-                  The code graph has not been built yet. Run <code class="px-2 py-1 bg-slate-800 rounded">POST /v1/code/graph/build</code> to generate the graph.
+                  The code graph has not been built yet. Click the <strong>"Build Graph"</strong> button above to analyze code dependencies and generate the graph.
                 </p>
               </div>
             </div>
