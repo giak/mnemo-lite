@@ -14,6 +14,20 @@ def test_detect_barrel_by_filename():
     assert file_type == FileType.POTENTIAL_BARREL
 
 
+def test_detect_barrel_tsx_jsx():
+    """Detect barrel files with .tsx/.jsx extensions (React projects)."""
+    classifier = FileClassificationService()
+
+    barrel_files = [
+        "packages/ui/src/index.tsx",
+        "packages/shared/index.jsx",
+    ]
+
+    for file_path in barrel_files:
+        file_type = classifier.classify_by_filename(file_path)
+        assert file_type == FileType.POTENTIAL_BARREL, f"Failed for {file_path}"
+
+
 def test_detect_config_by_filename():
     """Detect config files by naming pattern."""
     classifier = FileClassificationService()

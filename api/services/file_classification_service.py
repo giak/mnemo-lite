@@ -85,7 +85,7 @@ class FileClassificationService:
             return FileType.CONFIG
 
         # Potential barrels - need AST confirmation
-        if filename == "index.ts" or filename == "index.js":
+        if filename in ("index.ts", "index.js", "index.tsx", "index.jsx"):
             return FileType.POTENTIAL_BARREL
 
         # Regular source file
