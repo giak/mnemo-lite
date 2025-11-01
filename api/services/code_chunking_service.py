@@ -322,6 +322,10 @@ class CodeChunkingService:
         self._parse_cache: dict[str, Tree] = {}  # Cache parsed trees
         self._metadata_service = metadata_service  # EPIC-26: Metadata extraction integration
 
+        # EPIC-29: Add file classifier for barrels, configs, and tests
+        from api.services.file_classification_service import FileClassificationService
+        self._classifier = FileClassificationService()
+
         # Initialize parsers (lazy loading)
         # EPIC-15: Multi-language support (Python, TypeScript, JavaScript)
         self._supported_languages = {
@@ -376,6 +380,17 @@ class CodeChunkingService:
         if not source_code.strip():
             raise ValueError("source_code cannot be empty")
 
+        # EPIC-29: Classify file type (for TypeScript/JavaScript only)
+        from api.services.file_classification_service import FileType
+        file_type = None
+        if language.lower() in ("typescript", "javascript", "tsx"):
+            file_type = self._classifier.classify_by_filename(file_path)
+
+            # Skip test files entirely
+            if self._classifier.should_skip_file(file_path):
+                logger.info(f"Skipping test file: {file_path}")
+                return []
+
         # Try AST-based chunking
         parser = self._get_parser(language.lower())
         if parser is None:
@@ -400,6 +415,33 @@ class CodeChunkingService:
                 raise_on_timeout=True
             )
 
+            # EPIC-29: Handle config files (light extraction)
+            if file_type == FileType.CONFIG:
+                return await self._chunk_config_file(
+                    source_code, file_path, language, tree
+                )
+
+            # EPIC-29: Check if barrel using heuristic
+            if file_type == FileType.POTENTIAL_BARREL and self._metadata_service:
+                # Extract metadata first to get re_exports
+                from api.services.metadata_extractors.typescript_extractor import TypeScriptMetadataExtractor
+                extractor = TypeScriptMetadataExtractor(language)
+                metadata = await extractor.extract_metadata(
+                    source_code=source_code,
+                    node=tree.root_node,
+                    tree=tree
+                )
+
+                # Check if barrel
+                is_barrel = await self._classifier.is_barrel_heuristic(
+                    source_code, metadata
+                )
+
+                if is_barrel:
+                    return await self._chunk_barrel_file(
+                        source_code, file_path, language, tree, metadata
+                    )
+
             # Extract code units
             code_units = await self._extract_code_units(parser, tree, source_code)
 
@@ -414,7 +456,8 @@ class CodeChunkingService:
             )
 
             # EPIC-26 Story 26.3: Extract metadata for each chunk (TypeScript/JavaScript support)
-            if self._metadata_service and language.lower() in ("typescript", "javascript", "tsx"):
+            # EPIC-25 Story 25.5: Enable Python metadata extraction for graph relations
+            if self._metadata_service and language.lower() in ("python", "typescript", "javascript", "tsx"):
                 await self._extract_metadata_for_chunks(chunks, tree, source_code, language)
 
             logger.info(f"Chunked {file_path}: {len(chunks)} chunks via AST")
@@ -445,14 +488,19 @@ class CodeChunkingService:
         Extract metadata for each chunk using MetadataExtractorService.
 
         EPIC-26 Story 26.3: TypeScript/JavaScript metadata extraction integration.
+        EPIC-25 Story 25.5: Python metadata extraction for graph relations.
 
         For TypeScript/JavaScript chunks:
         - Extracts imports (file-level, from tree)
         - Extracts calls (chunk-level, from node)
 
+        For Python chunks:
+        - Uses ast module instead of tree-sitter
+        - Extracts calls, imports, docstrings, complexity
+
         Args:
             chunks: List of chunks to populate with metadata
-            tree: Tree-sitter AST tree
+            tree: Tree-sitter AST tree (or Python ast tree if language='python')
             source_code: Full source code
             language: Programming language
 
@@ -463,20 +511,61 @@ class CodeChunkingService:
 
         logger.debug(f"Extracting metadata for {len(chunks)} {language} chunks")
 
+        # EPIC-25: For Python, parse with ast module instead of tree-sitter
+        if language.lower() == "python":
+            import ast as python_ast
+            try:
+                python_tree = python_ast.parse(source_code)
+            except SyntaxError as e:
+                logger.warning(f"Failed to parse Python source with ast: {e}")
+                # Fallback: set empty metadata for all chunks
+                for chunk in chunks:
+                    chunk.metadata = {"imports": [], "calls": []}
+                return
+        else:
+            python_tree = None
+
         for chunk in chunks:
             try:
-                # Find the tree-sitter node corresponding to this chunk's line range
-                # For now, use the root node (will extract file-level imports + all calls)
-                # TODO: Optimize by finding exact node for chunk (performance improvement)
-                node = tree.root_node
+                # EPIC-25: For Python, find the ast.FunctionDef/ClassDef node for this chunk
+                if language.lower() == "python" and python_tree:
+                    # Find the ast node corresponding to this chunk
+                    # Simple approach: walk ast and match by name
+                    import ast as python_ast
+                    ast_node = None
+                    for node in python_ast.walk(python_tree):
+                        if isinstance(node, (python_ast.FunctionDef, python_ast.AsyncFunctionDef, python_ast.ClassDef)):
+                            if node.name == chunk.name:
+                                ast_node = node
+                                break
 
-                # Extract metadata (imports + calls)
-                metadata = await self._metadata_service.extract_metadata(
-                    source_code=source_code,
-                    node=node,
-                    tree=tree,
-                    language=language
-                )
+                    if not ast_node:
+                        logger.debug(f"Could not find ast node for chunk '{chunk.name}', using tree root")
+                        ast_node = python_tree
+
+                    # EPIC-28: Extract metadata using FULL file source (not chunk source!)
+                    # This ensures byte offsets are correct for ast.get_source_segment()
+                    metadata = await self._metadata_service.extract_metadata(
+                        source_code=source_code,  # FULL file source
+                        node=ast_node,
+                        tree=python_tree,
+                        language=language
+                    )
+                else:
+                    # For TypeScript/JavaScript, use tree-sitter nodes
+                    # Find the tree-sitter node corresponding to this chunk's line range
+                    # For now, use the root node (will extract file-level imports + all calls)
+                    # TODO: Optimize by finding exact node for chunk (performance improvement)
+                    node = tree.root_node
+
+                    # EPIC-28: Extract metadata using FULL file source (not chunk source!)
+                    # This ensures tree-sitter byte offsets are correct
+                    metadata = await self._metadata_service.extract_metadata(
+                        source_code=source_code,  # FULL file source
+                        node=node,
+                        tree=tree,
+                        language=language
+                    )
 
                 # Assign metadata to chunk
                 chunk.metadata = metadata
@@ -684,6 +773,115 @@ class CodeChunkingService:
 
         logger.info(f"Fixed chunking: created {len(chunks)} chunks for {file_path}")
         return chunks
+
+    async def _chunk_barrel_file(
+        self,
+        source_code: str,
+        file_path: str,
+        language: str,
+        tree: Tree,
+        metadata: dict[str, Any]
+    ) -> list[CodeChunk]:
+        """
+        Create single BARREL chunk for re-export aggregators.
+
+        EPIC-29 Task 4: Barrels become Module nodes in graph.
+
+        Args:
+            source_code: Full file source
+            file_path: Path to file
+            language: Programming language
+            tree: Parsed AST tree
+            metadata: Pre-extracted metadata with re_exports
+
+        Returns:
+            List with single BARREL chunk
+        """
+        from pathlib import Path
+
+        # Derive module name from path
+        # packages/shared/src/index.ts -> "shared"
+        # packages/core/src/cv/index.ts -> "cv"
+        path_parts = Path(file_path).parts
+        if "packages" in path_parts:
+            pkg_index = path_parts.index("packages")
+            if pkg_index + 1 < len(path_parts):
+                module_name = path_parts[pkg_index + 1]
+            else:
+                module_name = "index"
+        else:
+            # For non-package files, use parent directory name
+            module_name = Path(file_path).parent.name
+
+        chunk = CodeChunk(
+            file_path=file_path,
+            language=language,
+            chunk_type=ChunkType.BARREL,
+            name=module_name,
+            source_code=source_code,
+            start_line=1,
+            end_line=len(source_code.split('\n')),
+            metadata=metadata
+        )
+
+        logger.info(
+            f"Created BARREL chunk for {file_path}: "
+            f"{len(metadata.get('re_exports', []))} re-exports"
+        )
+
+        return [chunk]
+
+    async def _chunk_config_file(
+        self,
+        source_code: str,
+        file_path: str,
+        language: str,
+        tree: Tree
+    ) -> list[CodeChunk]:
+        """
+        Create single CONFIG_MODULE chunk with light extraction.
+
+        EPIC-29 Task 4: Configs get imports only, no call extraction.
+
+        Args:
+            source_code: Full file source
+            file_path: Path to file
+            language: Programming language
+            tree: Parsed AST tree
+
+        Returns:
+            List with single CONFIG_MODULE chunk
+        """
+        from pathlib import Path
+        from api.services.metadata_extractors.typescript_extractor import TypeScriptMetadataExtractor
+
+        # Light extraction: imports only
+        extractor = TypeScriptMetadataExtractor(language)
+
+        # Extract only imports
+        imports = await extractor.extract_imports(tree.root_node, source_code)
+
+        # Derive config name from filename
+        config_name = Path(file_path).stem  # vite.config.ts -> vite.config
+
+        chunk = CodeChunk(
+            file_path=file_path,
+            language=language,
+            chunk_type=ChunkType.CONFIG_MODULE,
+            name=config_name,
+            source_code=source_code,
+            start_line=1,
+            end_line=len(source_code.split('\n')),
+            metadata={
+                "imports": imports,
+                "calls": [],  # No call extraction for configs
+                "re_exports": []
+            }
+        )
+
+        logger.info(f"Created CONFIG_MODULE chunk for {file_path}")
+
+        return [chunk]
 
 
 # Singleton instance (will be injected via dependencies)
