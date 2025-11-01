@@ -65,15 +65,17 @@ class MetadataExtractorService:
         # EPIC-26: Initialize language-specific extractors
         self.extractors = {}
 
-        # TypeScript/JavaScript extractor (tree-sitter)
+        # TypeScript/JavaScript extractors (tree-sitter)
         if TYPESCRIPT_EXTRACTOR_AVAILABLE:
             try:
-                ts_extractor = TypeScriptMetadataExtractor()
+                # EPIC-26: Create separate extractors with correct language grammar
+                ts_extractor = TypeScriptMetadataExtractor(language="typescript")
+                js_extractor = TypeScriptMetadataExtractor(language="javascript")
                 self.extractors["typescript"] = ts_extractor
-                self.extractors["javascript"] = ts_extractor  # Reuse for JavaScript
-                self.logger.info("TypeScript/JavaScript metadata extractor initialized")
+                self.extractors["javascript"] = js_extractor
+                self.logger.info("TypeScript/JavaScript metadata extractors initialized")
             except Exception as e:
-                self.logger.warning(f"Failed to initialize TypeScript extractor: {e}")
+                self.logger.warning(f"Failed to initialize TypeScript/JavaScript extractors: {e}")
 
         # Python uses built-in methods (no separate extractor class)
         self.extractors["python"] = None  # Marker for built-in Python extraction

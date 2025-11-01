@@ -25,9 +25,15 @@ class TypeScriptMetadataExtractor:
     - Method calls (TODO: Story 26.2)
     """
 
-    def __init__(self):
-        """Initialize TypeScript language and queries."""
-        self.language = get_language("typescript")
+    def __init__(self, language: str = "typescript"):
+        """
+        Initialize TypeScript/JavaScript language and queries.
+
+        Args:
+            language: Language name ('typescript' or 'javascript')
+        """
+        self.language = get_language(language)
+        self.language_name = language
         self.logger = logging.getLogger(__name__)
 
         # Import extraction queries

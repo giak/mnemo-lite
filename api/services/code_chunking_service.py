@@ -85,9 +85,7 @@ class PythonParser(LanguageParser):
 
         query = tree_sitter.Query(
             self.tree_sitter_language,
-            """
-            (function_definition) @function
-            """
+            "(function_definition) @function"
         )
         cursor = tree_sitter.QueryCursor(query)
         matches = cursor.matches(tree.root_node)
@@ -104,9 +102,7 @@ class PythonParser(LanguageParser):
 
         query = tree_sitter.Query(
             self.tree_sitter_language,
-            """
-            (class_definition) @class
-            """
+            "(class_definition) @class"
         )
         cursor = tree_sitter.QueryCursor(query)
         matches = cursor.matches(tree.root_node)
@@ -183,12 +179,7 @@ class TypeScriptParser(LanguageParser):
 
         query = tree_sitter.Query(
             self.tree_sitter_language,
-            """
-            (function_declaration) @function
-            (lexical_declaration
-              (variable_declarator
-                value: (arrow_function) @arrow_function))
-            """
+            "(function_declaration) @function (lexical_declaration (variable_declarator value: (arrow_function) @arrow_function))"
         )
         cursor = tree_sitter.QueryCursor(query)
         matches = cursor.matches(tree.root_node)
@@ -205,9 +196,7 @@ class TypeScriptParser(LanguageParser):
 
         query = tree_sitter.Query(
             self.tree_sitter_language,
-            """
-            (class_declaration) @class
-            """
+            "(class_declaration) @class"
         )
         cursor = tree_sitter.QueryCursor(query)
         matches = cursor.matches(tree.root_node)
@@ -223,9 +212,7 @@ class TypeScriptParser(LanguageParser):
 
         query = tree_sitter.Query(
             self.tree_sitter_language,
-            """
-            (interface_declaration) @interface
-            """
+            "(interface_declaration) @interface"
         )
         cursor = tree_sitter.QueryCursor(query)
         matches = cursor.matches(tree.root_node)
@@ -290,12 +277,21 @@ class JavaScriptParser(TypeScriptParser):
     - JavaScript uses "javascript" grammar (no type syntax)
 
     EPIC-15 Story 15.2: JavaScript support (3 pts)
+    EPIC-26 Story 26.3: JavaScript doesn't support interfaces - override to return empty list
     """
 
     def __init__(self):
         # Call LanguageParser.__init__ directly to override language name
         LanguageParser.__init__(self, "javascript")
         # Do NOT call super().__init__() - would set language to "typescript"
+
+    def get_interface_nodes(self, tree: Tree) -> list[Node]:
+        """
+        JavaScript doesn't support interfaces.
+
+        EPIC-26 Story 26.3: Override TypeScript's get_interface_nodes to return empty list.
+        """
+        return []
 
 
 class CodeChunkingService:
@@ -313,10 +309,18 @@ class CodeChunkingService:
     Quality target: >80% chunks = complete functions/classes
     """
 
-    def __init__(self, max_workers: int = 4):
+    def __init__(self, max_workers: int = 4, metadata_service: Optional['MetadataExtractorService'] = None):
+        """
+        Initialize CodeChunkingService.
+
+        Args:
+            max_workers: Number of thread pool workers for parsing
+            metadata_service: Optional metadata extractor service (EPIC-26: TypeScript/JavaScript metadata extraction)
+        """
         self._parsers: dict[str, LanguageParser] = {}
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._parse_cache: dict[str, Tree] = {}  # Cache parsed trees
+        self._metadata_service = metadata_service  # EPIC-26: Metadata extraction integration
 
         # Initialize parsers (lazy loading)
         # EPIC-15: Multi-language support (Python, TypeScript, JavaScript)
@@ -327,7 +331,10 @@ class CodeChunkingService:
             "tsx": TypeScriptParser,  # TSX uses TypeScript parser
         }
 
-        logger.info(f"CodeChunkingService initialized with {len(self._supported_languages)} language parsers")
+        logger.info(
+            f"CodeChunkingService initialized with {len(self._supported_languages)} language parsers "
+            f"(metadata_extraction={'enabled' if metadata_service else 'disabled'})"
+        )
 
     def _get_parser(self, language: str) -> Optional[LanguageParser]:
         """Get parser for language (lazy loading)."""
@@ -406,6 +413,10 @@ class CodeChunkingService:
                 min_chunk_size
             )
 
+            # EPIC-26 Story 26.3: Extract metadata for each chunk (TypeScript/JavaScript support)
+            if self._metadata_service and language.lower() in ("typescript", "javascript", "tsx"):
+                await self._extract_metadata_for_chunks(chunks, tree, source_code, language)
+
             logger.info(f"Chunked {file_path}: {len(chunks)} chunks via AST")
             return chunks
 
@@ -422,6 +433,72 @@ class CodeChunkingService:
             logger.error(f"AST chunking failed for {file_path}: {e}", exc_info=True)
             logger.info(f"Falling back to fixed chunking for {file_path}")
             return await self._fallback_fixed_chunking(source_code, file_path, language, max_chunk_size)
+
+    async def _extract_metadata_for_chunks(
+        self,
+        chunks: list[CodeChunk],
+        tree: Tree,
+        source_code: str,
+        language: str
+    ) -> None:
+        """
+        Extract metadata for each chunk using MetadataExtractorService.
+
+        EPIC-26 Story 26.3: TypeScript/JavaScript metadata extraction integration.
+
+        For TypeScript/JavaScript chunks:
+        - Extracts imports (file-level, from tree)
+        - Extracts calls (chunk-level, from node)
+
+        Args:
+            chunks: List of chunks to populate with metadata
+            tree: Tree-sitter AST tree
+            source_code: Full source code
+            language: Programming language
+
+        Modifies chunks in-place by setting chunk.metadata.
+        """
+        if not chunks:
+            return
+
+        logger.debug(f"Extracting metadata for {len(chunks)} {language} chunks")
+
+        for chunk in chunks:
+            try:
+                # Find the tree-sitter node corresponding to this chunk's line range
+                # For now, use the root node (will extract file-level imports + all calls)
+                # TODO: Optimize by finding exact node for chunk (performance improvement)
+                node = tree.root_node
+
+                # Extract metadata (imports + calls)
+                metadata = await self._metadata_service.extract_metadata(
+                    source_code=source_code,
+                    node=node,
+                    tree=tree,
+                    language=language
+                )
+
+                # Assign metadata to chunk
+                chunk.metadata = metadata
+
+                logger.debug(
+                    f"Extracted metadata for chunk '{chunk.name}': "
+                    f"{len(metadata.get('imports', []))} imports, "
+                    f"{len(metadata.get('calls', []))} calls"
+                )
+
+            except Exception as e:
+                # Graceful degradation: log error but continue with empty metadata
+                logger.warning(
+                    f"Failed to extract metadata for chunk '{chunk.name}': {e}",
+                    exc_info=True
+                )
+                chunk.metadata = {"imports": [], "calls": []}
+
+        logger.info(
+            f"Metadata extraction complete for {len(chunks)} chunks "
+            f"({language})"
+        )
 
     async def _extract_code_units(
         self,
@@ -614,8 +691,19 @@ _chunking_service: Optional[CodeChunkingService] = None
 
 
 def get_code_chunking_service() -> CodeChunkingService:
-    """Get singleton instance of CodeChunkingService."""
+    """
+    Get singleton instance of CodeChunkingService.
+
+    EPIC-26 Story 26.3: Injects MetadataExtractorService for TypeScript/JavaScript metadata extraction.
+    """
     global _chunking_service
     if _chunking_service is None:
-        _chunking_service = CodeChunkingService(max_workers=4)
+        # EPIC-26: Import and inject MetadataExtractorService
+        from services.metadata_extractor_service import get_metadata_extractor_service
+
+        metadata_service = get_metadata_extractor_service()
+        _chunking_service = CodeChunkingService(
+            max_workers=4,
+            metadata_service=metadata_service
+        )
     return _chunking_service
