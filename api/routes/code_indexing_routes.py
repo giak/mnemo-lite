@@ -261,8 +261,12 @@ async def get_indexing_service(
     redis_cache: RedisCache = Depends(get_redis_cache),  # EPIC-13 Story 13.4
 ) -> CodeIndexingService:
     """Get CodeIndexingService instance with all dependencies (including L1 cache)."""
-    chunking_service = CodeChunkingService()
+    # EPIC-26: Create MetadataExtractorService first
     metadata_service = MetadataExtractorService()
+
+    # EPIC-26: Inject metadata_service into CodeChunkingService for TypeScript/JavaScript support
+    chunking_service = CodeChunkingService(metadata_service=metadata_service)
+
     embedding_service = DualEmbeddingService()
     graph_service = GraphConstructionService(engine)
     chunk_repository = CodeChunkRepository(engine)
