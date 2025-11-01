@@ -1,7 +1,7 @@
 """Tests for TypeScript re-export extraction (EPIC-29 Task 2)."""
 import pytest
 from tree_sitter_language_pack import get_parser
-from api.services.metadata_extractors.typescript_extractor import TypeScriptMetadataExtractor
+from services.metadata_extractors.typescript_extractor import TypeScriptMetadataExtractor
 
 
 @pytest.mark.asyncio
