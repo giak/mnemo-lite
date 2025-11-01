@@ -234,13 +234,13 @@ async def get_graph_stats(
                     node_type,
                     COUNT(*) as count
                 FROM nodes
-                WHERE properties->>'file_path' LIKE :repository_pattern
+                WHERE properties->>'repository' = :repository
                 GROUP BY node_type
             """)
 
             nodes_result = await conn.execute(
                 nodes_query,
-                {"repository_pattern": f"%{repository}%"}
+                {"repository": repository}
             )
             nodes_rows = nodes_result.fetchall()
             nodes_by_type = {row[0]: row[1] for row in nodes_rows}
@@ -253,13 +253,13 @@ async def get_graph_stats(
                     COUNT(*) as count
                 FROM edges e
                 JOIN nodes n ON e.source_node_id = n.node_id
-                WHERE n.properties->>'file_path' LIKE :repository_pattern
+                WHERE n.properties->>'repository' = :repository
                 GROUP BY e.relation_type
             """)
 
             edges_result = await conn.execute(
                 edges_query,
-                {"repository_pattern": f"%{repository}%"}
+                {"repository": repository}
             )
             edges_rows = edges_result.fetchall()
             edges_by_type = {row[0]: row[1] for row in edges_rows}
@@ -316,14 +316,14 @@ async def get_graph_data(
                     node_type,
                     properties
                 FROM nodes
-                WHERE properties->>'file_path' LIKE :repository_pattern
+                WHERE properties->>'repository' = :repository
                 ORDER BY created_at DESC
                 LIMIT :limit
             """)
 
             nodes_result = await conn.execute(
                 nodes_query,
-                {"repository_pattern": f"%{repository}%", "limit": limit}
+                {"repository": repository, "limit": limit}
             )
             nodes_rows = nodes_result.fetchall()
 

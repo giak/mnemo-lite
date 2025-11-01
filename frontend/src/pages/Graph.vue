@@ -13,7 +13,7 @@ const { stats, graphData, loading, error, building, buildError, fetchStats, fetc
 
 const graphContainer = ref<HTMLElement | null>(null)
 const cy = ref<Core | null>(null)
-const repository = ref('MnemoLite')
+const repository = ref('CVGenerator')
 
 // Build graph handler
 const handleBuildGraph = async () => {
