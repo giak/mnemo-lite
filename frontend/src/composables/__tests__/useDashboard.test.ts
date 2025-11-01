@@ -57,13 +57,13 @@ describe('useDashboard', () => {
           json: () => Promise.resolve(mockHealthData),
         })
       }
-      if (url.includes('/text-embeddings')) {
+      if (url.includes('/embeddings/text')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve(mockTextData),
         })
       }
-      if (url.includes('/code-embeddings')) {
+      if (url.includes('/embeddings/code')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve(mockCodeData),
