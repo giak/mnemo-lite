@@ -13,8 +13,9 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
-    "cytoscape": "^3.33.1",
+    "@antv/g6": "^5.0.50",
     "pinia": "^3.0.3",
+    "v-network-graph": "^0.9.21",
     "vue": "^3.5.22",
     "vue-router": "^4.6.3"
   },
