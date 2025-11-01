@@ -25,6 +25,28 @@ class TypeScriptMetadataExtractor:
     - Method calls (TODO: Story 26.2)
     """
 
+    # EPIC-27 Story 27.4: Framework function blacklist
+    # Common test framework functions to filter out (reduce noise)
+    FRAMEWORK_BLACKLIST = {
+        # Vitest/Jest test structure
+        "describe", "it", "test", "suite", "beforeEach", "afterEach",
+        "beforeAll", "afterAll", "setup", "teardown",
+        # Vitest/Jest assertions
+        "expect", "assert", "toBe", "toEqual", "toHaveBeenCalled",
+        "toHaveBeenCalledWith", "toBeNull", "toBeDefined", "toBeUndefined",
+        "toBeTruthy", "toBeFalsy", "toContain", "toMatch", "toThrow",
+        "toHaveProperty", "toBeInstanceOf", "toBeCloseTo", "toBeGreaterThan",
+        "toBeLessThan", "toMatchSnapshot", "toMatchInlineSnapshot",
+        # Vitest mocking
+        "vi", "mock", "mockReturnValue", "mockResolvedValue", "mockRejectedValue",
+        "mockImplementation", "spyOn", "fn", "clearAllMocks", "resetAllMocks",
+        # Common DOM testing
+        "mount", "shallowMount", "render", "screen", "fireEvent", "waitFor",
+        "getByText", "getByRole", "queryByText", "findByText",
+        # Console logging
+        "log", "error", "warn", "info", "debug",
+    }
+
     def __init__(self, language: str = "typescript"):
         """
         Initialize TypeScript/JavaScript language and queries.
@@ -87,12 +109,265 @@ class TypeScriptMetadataExtractor:
         Returns:
             String content without quotes (e.g., './models' → ./models)
         """
-        text = source_code[node.start_byte:node.end_byte]
+        # EPIC-28: Fix UTF-8 byte offset bug (slice bytes, not chars)
+        source_bytes = source_code.encode('utf-8')
+        text_bytes = source_bytes[node.start_byte:node.end_byte]
+        text = text_bytes.decode('utf-8')
         # Remove quotes (single or double)
         if (text.startswith("'") and text.endswith("'")) or \
            (text.startswith('"') and text.endswith('"')):
             return text[1:-1]
         return text
+
+    def _is_blacklisted(self, call_name: str) -> bool:
+        """
+        Check if a call name is in the framework blacklist.
+
+        EPIC-27 Story 27.4: Filter out test framework functions.
+
+        Args:
+            call_name: Function/method name to check
+
+        Returns:
+            True if call should be filtered out, False otherwise
+
+        Examples:
+            >>> _is_blacklisted("describe")
+            True
+
+            >>> _is_blacklisted("validateEmail")
+            False
+        """
+        if not call_name:
+            return True
+
+        # Check against blacklist (case-sensitive)
+        return call_name in self.FRAMEWORK_BLACKLIST
+
+    def _clean_call_name(self, raw_call: str) -> str | None:
+        """
+        Clean up extracted call expression to get function name.
+
+        EPIC-27 Story 27.3: Post-processing cleanup for better call resolution.
+
+        Handles:
+        - Chained method calls: "obj.method" → "method"
+        - Incomplete fragments: "e('valid" → None
+        - Method chains: "vi.fn().mockReturnValue" → "mockReturnValue"
+        - Already clean names: "validateEmail" → "validateEmail"
+
+        Args:
+            raw_call: Raw call text from tree-sitter
+
+        Returns:
+            Clean function name or None if invalid
+
+        Examples:
+            >>> _clean_call_name("validateEmail")
+            "validateEmail"
+
+            >>> _clean_call_name("obj.method")
+            "method"
+
+            >>> _clean_call_name("vi.fn().mockReturnValue")
+            "mockReturnValue"
+
+            >>> _clean_call_name("e('valid")
+            None
+
+            >>> _clean_call_name("expect(wrapper.exists()).toBe")
+            "toBe"
+        """
+        import re
+
+        # Filter out invalid/incomplete fragments
+        if not raw_call or len(raw_call) < 2:
+            return None
+
+        if not raw_call[0].isalpha() and raw_call[0] not in ('_', '$'):
+            return None
+
+        # Handle chained calls/methods: extract the LAST identifier
+        # Pattern: "obj.method", "a.b().c", "vi.fn().mock"
+        if '.' in raw_call or '(' in raw_call:
+            # Extract last identifier before '(' or at end
+            match = re.search(r'([a-zA-Z_$][a-zA-Z0-9_$]*)(?:\(|$)', raw_call)
+            if match:
+                clean_name = match.group(1)
+                # Validate it's a real identifier
+                if clean_name and len(clean_name) >= 2:
+                    return clean_name
+            return None
+
+        # Already clean identifier
+        if re.match(r'^[a-zA-Z_$][a-zA-Z0-9_$]*$', raw_call):
+            return raw_call
+
+        # Invalid format
+        return None
+
+    async def extract_re_exports(self, node: Node, source_code: str) -> list[dict[str, Any]]:
+        """
+        Extract re-export statements from TypeScript/JavaScript.
+
+        EPIC-29 Task 2: Support all re-export patterns:
+        - Named: export { X, Y } from 'source'
+        - Wildcard: export * from 'source'
+        - Renamed: export { X as Y } from 'source'
+        - Type-only: export type { T } from 'source'
+
+        Args:
+            node: Tree-sitter AST node (typically root)
+            source_code: Full file source code
+
+        Returns:
+            List of re-export dicts with keys: symbol, source, [original], [is_type]
+        """
+        re_exports = []
+        re_exports_seen = set()  # Track to avoid duplicates
+
+        try:
+            # Process all export_statement nodes
+            def walk_tree(n):
+                if n.type == "export_statement":
+                    self._process_export_statement(n, source_code, re_exports, re_exports_seen)
+                for child in n.children:
+                    walk_tree(child)
+
+            walk_tree(node)
+
+        except Exception as e:
+            self.logger.error(f"Failed to extract re-exports: {e}", exc_info=True)
+
+        self.logger.debug(f"Extracted {len(re_exports)} re-exports")
+        return re_exports
+
+    def _process_export_statement(
+        self,
+        export_node: Node,
+        source_code: str,
+        re_exports: list,
+        re_exports_seen: set
+    ):
+        """
+        Process a single export_statement node to extract re-export info.
+
+        Args:
+            export_node: export_statement node
+            source_code: Full source code
+            re_exports: List to append results to
+            re_exports_seen: Set to track duplicates
+        """
+        # Check if this export has a 'from' clause (re-export)
+        has_from = False
+        source_str = None
+        is_type_only = False
+        has_wildcard = False
+        export_clause_node = None
+
+        for child in export_node.children:
+            if child.type == "from":
+                has_from = True
+            elif child.type == "string" and has_from:
+                source_str = self._extract_string_literal(child, source_code)
+            elif child.type == "type":
+                is_type_only = True
+            elif child.type == "*":
+                has_wildcard = True
+            elif child.type == "export_clause":
+                export_clause_node = child
+
+        # Not a re-export (no 'from' clause)
+        if not has_from or not source_str:
+            return
+
+        # Case 1: Wildcard re-export (export * from 'source')
+        if has_wildcard:
+            re_export_key = (source_str, "*", "")
+            if re_export_key not in re_exports_seen:
+                re_exports.append({
+                    "symbol": "*",
+                    "source": source_str,
+                    "is_type": is_type_only
+                })
+                re_exports_seen.add(re_export_key)
+            return
+
+        # Case 2: Named re-exports (export { X, Y } from 'source')
+        if export_clause_node:
+            for specifier in export_clause_node.children:
+                if specifier.type == "export_specifier":
+                    self._process_export_specifier(
+                        specifier, source_code, source_str, is_type_only,
+                        re_exports, re_exports_seen
+                    )
+
+    def _process_export_specifier(
+        self,
+        specifier_node: Node,
+        source_code: str,
+        source_str: str,
+        is_type_only: bool,
+        re_exports: list,
+        re_exports_seen: set
+    ):
+        """
+        Process an export_specifier node.
+
+        Handles:
+        - Simple: export { X } from 'Y'
+        - Renamed: export { X as Z } from 'Y'
+
+        Args:
+            specifier_node: export_specifier node
+            source_code: Full source code
+            source_str: Source module path
+            is_type_only: Whether this is a type-only export
+            re_exports: List to append results to
+            re_exports_seen: Set to track duplicates
+        """
+        identifiers = []
+        has_as = False
+
+        for child in specifier_node.children:
+            if child.type == "identifier":
+                # EPIC-28: Fix UTF-8 byte offset
+                source_bytes = source_code.encode('utf-8')
+                name_bytes = source_bytes[child.start_byte:child.end_byte]
+                name = name_bytes.decode('utf-8')
+                identifiers.append(name)
+            elif child.type == "as":
+                has_as = True
+
+        # Case: export { X as Y } from 'source'
+        # identifiers = ['X', 'Y'], has_as = True
+        if has_as and len(identifiers) == 2:
+            original_name = identifiers[0]
+            alias_name = identifiers[1]
+            re_export_key = (source_str, alias_name, original_name)
+
+            if re_export_key not in re_exports_seen:
+                re_exports.append({
+                    "symbol": alias_name,
+                    "original": original_name,
+                    "source": source_str,
+                    "is_type": is_type_only
+                })
+                re_exports_seen.add(re_export_key)
+
+        # Case: export { X } from 'source'
+        # identifiers = ['X'], has_as = False
+        elif not has_as and len(identifiers) == 1:
+            symbol_name = identifiers[0]
+            re_export_key = (source_str, symbol_name, "")
+
+            if re_export_key not in re_exports_seen:
+                re_exports.append({
+                    "symbol": symbol_name,
+                    "source": source_str,
+                    "is_type": is_type_only
+                })
+                re_exports_seen.add(re_export_key)
 
     async def extract_imports(self, tree: Tree, source_code: str) -> list[str]:
         """
@@ -141,7 +416,10 @@ class TypeScriptMetadataExtractor:
                 if source_nodes and name_nodes:
                     source = self._extract_string_literal(source_nodes[0], source_code)
                     for name_node in name_nodes:
-                        name = source_code[name_node.start_byte:name_node.end_byte]
+                        # EPIC-28: Fix UTF-8 byte offset bug
+                        source_bytes = source_code.encode('utf-8')
+                        name_bytes = source_bytes[name_node.start_byte:name_node.end_byte]
+                        name = name_bytes.decode('utf-8')
                         import_ref = f"{source}.{name}"
                         if import_ref not in imports_seen:
                             imports.append(import_ref)
@@ -184,7 +462,10 @@ class TypeScriptMetadataExtractor:
                 if source_nodes and name_nodes:
                     source = self._extract_string_literal(source_nodes[0], source_code)
                     for name_node in name_nodes:
-                        name = source_code[name_node.start_byte:name_node.end_byte]
+                        # EPIC-28: Fix UTF-8 byte offset bug
+                        source_bytes = source_code.encode('utf-8')
+                        name_bytes = source_bytes[name_node.start_byte:name_node.end_byte]
+                        name = name_bytes.decode('utf-8')
                         import_ref = f"{source}.{name}"
                         if import_ref not in imports_seen:
                             imports.append(import_ref)
@@ -218,6 +499,8 @@ class TypeScriptMetadataExtractor:
 
         Returns:
             Call reference string or None if failed to extract.
+
+        EPIC-27 Story 27.3: Now applies cleanup to extract clean function names.
         """
         try:
             # Get the function part (before the arguments)
@@ -226,13 +509,24 @@ class TypeScriptMetadataExtractor:
 
             function_node = call_node.children[0]
 
-            # Extract the call text
-            call_text = source_code[function_node.start_byte:function_node.end_byte]
+            # EPIC-28: Fix UTF-8 byte offset bug
+            # Tree-sitter returns BYTE offsets, but Python string slicing uses CHARACTER indices
+            # With UTF-8 multi-byte chars (é, à, etc.), these don't align
+            # Solution: Slice bytes, then decode
+            source_bytes = source_code.encode('utf-8')
+            call_bytes = source_bytes[function_node.start_byte:function_node.end_byte]
+            call_text = call_bytes.decode('utf-8')
 
             # Clean up the text (remove whitespace/newlines)
             call_text = call_text.strip()
 
-            return call_text if call_text else None
+            # EPIC-27 Story 27.3: Apply cleanup to get clean function name
+            # Example: "obj.method()" → "method", "vi.fn().mock" → "mock"
+            if call_text:
+                cleaned = self._clean_call_name(call_text)
+                return cleaned
+
+            return None
 
         except Exception as e:
             self.logger.debug(f"Failed to extract call expression: {e}")
@@ -288,7 +582,8 @@ class TypeScriptMetadataExtractor:
 
                 for call_node in call_nodes:
                     call_ref = self._extract_call_expression(call_node, source_code)
-                    if call_ref and call_ref not in calls_seen:
+                    # EPIC-27 Story 27.4: Filter out blacklisted framework functions
+                    if call_ref and call_ref not in calls_seen and not self._is_blacklisted(call_ref):
                         calls.append(call_ref)
                         calls_seen.add(call_ref)
 
@@ -300,7 +595,10 @@ class TypeScriptMetadataExtractor:
                 constructor_nodes = captures_dict.get('constructor', [])
 
                 for constructor_node in constructor_nodes:
-                    constructor_text = source_code[constructor_node.start_byte:constructor_node.end_byte]
+                    # EPIC-28: Fix UTF-8 byte offset bug
+                    source_bytes = source_code.encode('utf-8')
+                    constructor_bytes = source_bytes[constructor_node.start_byte:constructor_node.end_byte]
+                    constructor_text = constructor_bytes.decode('utf-8')
                     constructor_text = constructor_text.strip()
 
                     # Format: 'new ClassName' or just 'ClassName'
@@ -324,30 +622,46 @@ class TypeScriptMetadataExtractor:
         """
         Extract all metadata from TypeScript/JavaScript code.
 
+        EPIC-28: This method MUST receive full file source code, not chunk source.
+        Tree-sitter byte offsets are absolute and require the complete source context.
+        EPIC-29: Adds re-export extraction.
+
         Args:
-            source_code: Full source code
-            node: tree-sitter AST node (function, class, method)
-            tree: Full AST tree
+            source_code: FULL FILE source code (CRITICAL: not chunk source!)
+            node: tree-sitter AST node (function, class, method) from full file tree
+            tree: Full file AST tree (parsed from source_code)
 
         Returns:
-            Metadata dict with imports and calls.
+            Metadata dict with imports, calls, and re_exports.
 
         Example:
             {
                 "imports": ["./models.MyClass", "lodash"],
-                "calls": []  # TODO: Story 26.2
+                "calls": ["validateEmail", "createSuccess"],
+                "re_exports": [
+                    {"symbol": "Success", "source": "./types", "is_type": False}
+                ]
             }
+
+        Note:
+            Byte offsets (node.start_byte, node.end_byte) are absolute positions
+            in the full source file. Using chunk source will cause misalignment
+            and truncated call names.
         """
         try:
             # Extract imports from full tree
             imports = await self.extract_imports(tree, source_code)
 
-            # Extract calls from specific node (TODO: Story 26.2)
+            # Extract calls from specific node
             calls = await self.extract_calls(node, source_code)
+
+            # EPIC-29: Extract re-exports
+            re_exports = await self.extract_re_exports(node, source_code)
 
             return {
                 "imports": imports,
                 "calls": calls,
+                "re_exports": re_exports
             }
 
         except Exception as e:
@@ -356,4 +670,5 @@ class TypeScriptMetadataExtractor:
             return {
                 "imports": [],
                 "calls": [],
+                "re_exports": []
             }
