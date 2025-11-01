@@ -64,6 +64,7 @@ class CodeChunk(BaseModel):
     Used during chunking process before DB storage.
     """
 
+    id: Optional[UUID] = Field(None, description="Optional chunk ID (auto-generated if not provided)")
     file_path: str = Field(..., description="Path to source file")
     language: str = Field(..., description="Programming language (python, javascript, etc.)")
     chunk_type: ChunkType = Field(..., description="Type of code chunk")

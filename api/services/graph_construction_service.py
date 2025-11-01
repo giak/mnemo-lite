@@ -171,6 +171,30 @@ class GraphConstructionService:
                         raise_on_timeout=True
                     )
 
+                    # EPIC-29 Task 5: Create re-export edges for barrel chunks
+                    reexport_edge_dicts = []
+                    barrel_chunks = [c for c in chunks if c.chunk_type == "barrel"]
+                    for barrel in barrel_chunks:
+                        edges = await self._create_reexport_edges(barrel, chunks)
+                        reexport_edge_dicts.extend(edges)
+
+                    # Save re-export edges to database
+                    reexport_edges = []
+                    for edge_dict in reexport_edge_dicts:
+                        # Get source and target nodes
+                        source_node = chunk_to_node.get(edge_dict["source_chunk_id"])
+                        target_node = chunk_to_node.get(edge_dict["target_chunk_id"])
+
+                        if source_node and target_node:
+                            edge = await self.edge_repo.create_dependency_edge(
+                                source_node=source_node.node_id,
+                                target_node=target_node.node_id,
+                                relationship=edge_dict["edge_type"],
+                                metadata=edge_dict["properties"],
+                                connection=conn,
+                            )
+                            reexport_edges.append(edge)
+
                 except TimeoutError as e:
                     self.logger.error(
                         f"Edge creation timed out for repository '{repository}' after {get_timeout('graph_construction')}s",
@@ -181,7 +205,7 @@ class GraphConstructionService:
                 # Transaction auto-commits on successful context exit
                 self.logger.info(
                     f"✅ EPIC-12: Graph construction transaction committed - "
-                    f"{len(chunk_to_node)} nodes and {len(call_edges) + len(import_edges)} edges stored atomically"
+                    f"{len(chunk_to_node)} nodes and {len(call_edges) + len(import_edges) + len(reexport_edges)} edges stored atomically"
                 )
 
         except Exception as e:
@@ -192,8 +216,11 @@ class GraphConstructionService:
             )
             raise
 
-        total_edges = len(call_edges) + len(import_edges)
-        self.logger.info(f"Created {len(call_edges)} call edges and {len(import_edges)} import edges")
+        total_edges = len(call_edges) + len(import_edges) + len(reexport_edges)
+        self.logger.info(
+            f"Created {len(call_edges)} call edges, {len(import_edges)} import edges, "
+            f"and {len(reexport_edges)} re-export edges"
+        )
 
         # Step 5: Compute statistics
         construction_time = time.time() - start_time
@@ -207,6 +234,7 @@ class GraphConstructionService:
         edges_by_type = {
             "calls": len(call_edges),
             "imports": len(import_edges),
+            "re_exports": len(reexport_edges),
         }
 
         # Compute resolution accuracy (calls resolved / total calls)
@@ -294,6 +322,65 @@ class GraphConstructionService:
 
         return [CodeChunkModel.from_db_record(row) for row in rows]
 
+    async def _create_node_from_chunk(self, chunk: CodeChunkModel) -> dict:
+        """
+        Create node dictionary from code chunk.
+
+        EPIC-29 Task 5: Extracts node creation logic for testability and barrel support.
+
+        Args:
+            chunk: Code chunk to convert to node
+
+        Returns:
+            Dictionary with 'label', 'node_type', and 'properties' keys
+        """
+        # Determine node type based on chunk_type
+        if chunk.chunk_type == "barrel":
+            node_type = "Module"  # Barrels are Module nodes
+        elif chunk.chunk_type == "config_module":
+            node_type = "Config"
+        elif chunk.chunk_type in ("class", "interface"):
+            node_type = "Class"
+        elif chunk.chunk_type in ("function", "method", "arrow_function", "async_function"):
+            node_type = "Function"
+        else:
+            node_type = chunk.chunk_type  # Use chunk type as-is for others
+
+        # Use chunk name as label (fallback to "anonymous")
+        label = chunk.name if chunk.name else "anonymous"
+
+        # Build base properties
+        properties = {
+            "chunk_id": str(chunk.id),
+            "name": chunk.name,
+            "node_type": node_type,
+            "file_path": chunk.file_path,
+            "language": chunk.language,
+            "repository": chunk.repository,
+            "is_builtin": False,
+            "is_stdlib": False,
+            "start_line": chunk.start_line,
+            "end_line": chunk.end_line,
+        }
+
+        # EPIC-29: Add barrel-specific properties
+        if chunk.chunk_type == "barrel":
+            properties["is_barrel"] = True
+            properties["re_exports"] = chunk.metadata.get("re_exports", [])
+        else:
+            properties["is_barrel"] = False
+
+        # Add function/method metadata
+        if node_type == "Function":
+            properties["signature"] = chunk.metadata.get("signature", "")
+            properties["complexity"] = chunk.metadata.get("complexity", {})
+
+        return {
+            "label": label,
+            "node_type": node_type,
+            "properties": properties
+        }
+
     async def _create_nodes_from_chunks(
         self,
         chunks: List[CodeChunkModel],
@@ -312,43 +399,27 @@ class GraphConstructionService:
         chunk_to_node: Dict[uuid.UUID, NodeModel] = {}
 
         for chunk in chunks:
-            # Only create nodes for functions, methods, classes
-            # Skip nodes for imports, file-level code, etc.
-            if chunk.chunk_type not in ["function", "method", "class"]:
+            # EPIC-29: Include barrels and config modules
+            # Skip only imports and file-level code
+            if chunk.chunk_type not in ["function", "method", "class", "barrel", "config_module",
+                                       "interface", "arrow_function", "async_function"]:
                 continue
 
-            # Determine node type
-            node_type = chunk.chunk_type
+            # Create node dict using helper
+            node_dict = await self._create_node_from_chunk(chunk)
 
-            # Use chunk name as label (fallback to "anonymous")
-            label = chunk.name if chunk.name else "anonymous"
-
-            # Build node properties from chunk metadata
-            properties = {
-                "chunk_id": str(chunk.id),
-                "file_path": chunk.file_path,
-                "language": chunk.language,
-                "repository": chunk.repository,  # CRITICAL: Store repository for filtering
-                "signature": chunk.metadata.get("signature", ""),
-                "complexity": chunk.metadata.get("complexity", {}),
-                "is_builtin": False,
-                "is_stdlib": False,
-                "start_line": chunk.start_line,
-                "end_line": chunk.end_line,
-            }
-
-            # Create node (EPIC-12 Story 12.2: Pass connection for transaction support)
+            # Create node in database (EPIC-12 Story 12.2: Pass connection for transaction support)
             try:
                 node = await self.node_repo.create_code_node(
-                    node_type=node_type,
-                    label=label,
+                    node_type=node_dict["node_type"],
+                    label=node_dict["label"],
                     chunk_id=chunk.id,
                     file_path=chunk.file_path,
-                    metadata=properties,
+                    metadata=node_dict["properties"],
                     connection=connection,
                 )
                 chunk_to_node[chunk.id] = node
-                self.logger.debug(f"Created node {node.node_id} for chunk {chunk.id} ({label})")
+                self.logger.debug(f"Created node {node.node_id} for chunk {chunk.id} ({node_dict['label']})")
             except Exception as e:
                 self.logger.error(f"Failed to create node for chunk {chunk.id}: {e}")
                 # Continue with other chunks
@@ -520,6 +591,86 @@ class GraphConstructionService:
         # TODO: Implement import resolution
         # For now, skip import edges (Phase 1 MVP focuses on call graph)
         # Can be added in Phase 2 if needed
+
+        return edges
+
+    async def _create_reexport_edges(
+        self,
+        barrel_chunk: CodeChunkModel,
+        all_chunks: List[CodeChunkModel]
+    ) -> List[dict]:
+        """
+        Create re-export edges from barrel to original symbols.
+
+        EPIC-29 Task 5: Barrels create 're_exports' edges to symbols.
+
+        Pattern:
+            Barrel (Module) --[re_exports]--> Original Symbol (Function/Class)
+
+        Args:
+            barrel_chunk: Barrel chunk with re_exports metadata
+            all_chunks: All chunks in repository (to find targets)
+
+        Returns:
+            List of edge dicts with keys: edge_type, properties, source_chunk_id, target_chunk_id
+        """
+        from pathlib import Path
+
+        edges = []
+        re_exports = barrel_chunk.metadata.get("re_exports", []) if barrel_chunk.metadata else []
+
+        for reexport in re_exports:
+            symbol = reexport["symbol"]
+            source_path = reexport["source"]
+
+            # Skip wildcard exports (handle separately in future)
+            if symbol == "*":
+                continue
+
+            # Find target chunk by symbol name and file path
+            # source_path is relative: './utils/result.utils'
+            # Need to resolve to absolute path
+            barrel_dir = Path(barrel_chunk.file_path).parent
+            target_path_base = (barrel_dir / source_path).resolve()
+
+            # Find chunk with matching name in target file
+            target_chunk = None
+            for chunk in all_chunks:
+                chunk_path = Path(chunk.file_path).resolve()
+                # Match file (with or without .ts/.js extension)
+                chunk_path_str = str(chunk_path)
+                target_path_str = str(target_path_base)
+
+                # Try exact match or with common extensions
+                matches = (
+                    chunk_path_str.startswith(target_path_str) or
+                    chunk_path_str.startswith(target_path_str + ".ts") or
+                    chunk_path_str.startswith(target_path_str + ".js") or
+                    chunk_path_str.startswith(target_path_str + ".tsx")
+                )
+
+                if matches and chunk.name == symbol:
+                    target_chunk = chunk
+                    break
+
+            if target_chunk:
+                edge = {
+                    "source_chunk_id": barrel_chunk.id,
+                    "target_chunk_id": target_chunk.id,
+                    "edge_type": "re_exports",
+                    "properties": {
+                        "symbol": symbol,
+                        "source_file": reexport["source"],
+                        "is_type": reexport.get("is_type", False)
+                    }
+                }
+                edges.append(edge)
+                self.logger.debug(f"Created re-export edge: {barrel_chunk.name} -> {symbol}")
+            else:
+                self.logger.debug(
+                    f"Could not find target for re-export: {symbol} "
+                    f"from {source_path} (barrel: {barrel_chunk.file_path})"
+                )
 
         return edges
 
