@@ -6,13 +6,33 @@ Extracts rich metadata from code chunks including:
 - Docstrings
 - Complexity metrics (cyclomatic, LOC)
 - Imports and function calls
+
+EPIC-26 Story 26.3: Multi-language support (Python, TypeScript, JavaScript).
 """
 
 import ast
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from radon.complexity import cc_visit
+
+# EPIC-26: tree-sitter support for TypeScript/JavaScript
+try:
+    from tree_sitter import Node, Tree
+    from tree_sitter_language_pack import get_parser
+    TREE_SITTER_AVAILABLE = True
+except ImportError:
+    Node = None  # type: ignore
+    Tree = None  # type: ignore
+    TREE_SITTER_AVAILABLE = False
+
+# EPIC-26: Import TypeScript/JavaScript extractors
+try:
+    from services.metadata_extractors.typescript_extractor import TypeScriptMetadataExtractor
+    TYPESCRIPT_EXTRACTOR_AVAILABLE = True
+except ImportError:
+    TypeScriptMetadataExtractor = None  # type: ignore
+    TYPESCRIPT_EXTRACTOR_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -21,59 +41,166 @@ class MetadataExtractorService:
     """
     Extract code metadata from AST nodes.
 
-    Supports Python only in Phase 1. Extracts 9 core metadata fields:
-    - signature: Full function/class signature
-    - parameters: List of parameter names
-    - returns: Return type annotation (if present)
-    - decorators: List of decorator names
-    - docstring: Function/class docstring
-    - complexity.cyclomatic: Cyclomatic complexity (McCabe)
-    - complexity.lines_of_code: Lines of code count
-    - imports: List of imports used in chunk
-    - calls: List of function calls made in chunk
+    EPIC-26: Multi-language support (Python, TypeScript, JavaScript).
+
+    Supports:
+    - Python: Using ast module (EPIC-06)
+    - TypeScript: Using tree-sitter (EPIC-26)
+    - JavaScript: Using tree-sitter (EPIC-26, Story 26.4)
+
+    Extracts core metadata fields:
+    - signature: Full function/class signature (Python only)
+    - parameters: List of parameter names (Python only)
+    - returns: Return type annotation (Python only)
+    - decorators: List of decorator names (Python only)
+    - docstring: Function/class docstring (Python only)
+    - complexity: Cyclomatic complexity + LOC (Python only)
+    - imports: List of imports used in chunk (ALL languages)
+    - calls: List of function calls made in chunk (ALL languages)
     """
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
+        # EPIC-26: Initialize language-specific extractors
+        self.extractors = {}
+
+        # TypeScript/JavaScript extractor (tree-sitter)
+        if TYPESCRIPT_EXTRACTOR_AVAILABLE:
+            try:
+                ts_extractor = TypeScriptMetadataExtractor()
+                self.extractors["typescript"] = ts_extractor
+                self.extractors["javascript"] = ts_extractor  # Reuse for JavaScript
+                self.logger.info("TypeScript/JavaScript metadata extractor initialized")
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize TypeScript extractor: {e}")
+
+        # Python uses built-in methods (no separate extractor class)
+        self.extractors["python"] = None  # Marker for built-in Python extraction
+
     async def extract_metadata(
         self,
         source_code: str,
-        node: ast.AST,
-        tree: ast.AST,
+        node: Union[ast.AST, Any],  # EPIC-26: Support both ast.AST and tree_sitter.Node
+        tree: Union[ast.AST, Any],  # EPIC-26: Support both ast.AST and tree_sitter.Tree
         language: str = "python",
-        module_imports: dict[str, str] | None = None  # Perf optimization
+        module_imports: dict[str, str] | None = None  # Perf optimization (Python only)
     ) -> dict[str, Any]:
         """
         Extract metadata from AST node.
 
+        EPIC-26: Multi-language support (Python, TypeScript, JavaScript).
+
         Args:
-            source_code: Full source code (for radon and ast.get_source_segment)
-            node: AST node (FunctionDef, ClassDef, AsyncFunctionDef)
-            tree: Full AST tree (for module-level imports)
-            language: Programming language (only 'python' supported in Phase 1)
+            source_code: Full source code
+            node: AST node (Python: ast.AST, TypeScript/JS: tree_sitter.Node)
+            tree: Full AST tree (Python: ast.AST, TypeScript/JS: tree_sitter.Tree)
+            language: Programming language ('python', 'typescript', 'javascript')
+            module_imports: Pre-extracted module imports (Python only, optimization)
 
         Returns:
-            Metadata dict with 9 core fields. If extraction fails for any field,
-            returns None or empty list for that field (graceful degradation).
+            Metadata dict with core fields. Structure varies by language:
 
-        Example:
-            {
-                "signature": "def calculate_total(items: List[Item]) -> float:",
-                "parameters": ["items"],
-                "returns": "float",
-                "decorators": ["@staticmethod"],
-                "docstring": "Calculate total price from items list",
-                "complexity": {"cyclomatic": 3, "lines_of_code": 12},
-                "imports": ["typing.List", "models.Item"],
-                "calls": ["sum", "item.get_price"]
-            }
+            Python:
+                {
+                    "signature": "def calculate_total(items: List[Item]) -> float:",
+                    "parameters": ["items"],
+                    "returns": "float",
+                    "decorators": ["@staticmethod"],
+                    "docstring": "Calculate total price from items list",
+                    "complexity": {"cyclomatic": 3, "lines_of_code": 12},
+                    "imports": ["typing.List", "models.Item"],
+                    "calls": ["sum", "item.get_price"]
+                }
+
+            TypeScript/JavaScript:
+                {
+                    "imports": ["./models.MyClass", "lodash"],
+                    "calls": ["calculateTotal", "this.service.fetchData"]
+                }
+
+        If extraction fails for any field, returns None or empty list (graceful degradation).
         """
-        if language != "python":
-            # Fallback: basic metadata only for non-Python
+        # EPIC-26: Route to appropriate extractor based on language
+        if language in ("typescript", "javascript"):
+            return await self._extract_typescript_metadata(source_code, node, tree, language)
+        elif language == "python":
+            return await self._extract_python_metadata(source_code, node, tree, module_imports)
+        else:
+            # Fallback: basic metadata only for unsupported languages
             self.logger.warning(f"Language '{language}' not supported, returning basic metadata")
             return self._extract_basic_metadata(node)
 
+    async def _extract_typescript_metadata(
+        self,
+        source_code: str,
+        node: Any,  # tree_sitter.Node
+        tree: Any,  # tree_sitter.Tree
+        language: str
+    ) -> dict[str, Any]:
+        """
+        Extract metadata from TypeScript/JavaScript code using tree-sitter.
+
+        EPIC-26 Story 26.3: TypeScript/JavaScript metadata extraction.
+
+        Args:
+            source_code: Full source code
+            node: tree_sitter.Node
+            tree: tree_sitter.Tree
+            language: 'typescript' or 'javascript'
+
+        Returns:
+            Metadata dict with imports and calls
+        """
+        # Check if extractor is available
+        extractor = self.extractors.get(language)
+        if not extractor:
+            self.logger.warning(
+                f"TypeScript/JavaScript extractor not available for '{language}', "
+                "returning empty metadata"
+            )
+            return {
+                "imports": [],
+                "calls": []
+            }
+
+        try:
+            # Use TypeScriptMetadataExtractor
+            metadata = await extractor.extract_metadata(source_code, node, tree)
+            return metadata
+
+        except Exception as e:
+            self.logger.error(
+                f"TypeScript/JavaScript metadata extraction failed: {e}",
+                exc_info=True
+            )
+            # Graceful degradation
+            return {
+                "imports": [],
+                "calls": []
+            }
+
+    async def _extract_python_metadata(
+        self,
+        source_code: str,
+        node: ast.AST,
+        tree: ast.AST,
+        module_imports: dict[str, str] | None = None
+    ) -> dict[str, Any]:
+        """
+        Extract metadata from Python code using ast module.
+
+        Original EPIC-06 Python extraction logic (unchanged).
+
+        Args:
+            source_code: Full source code
+            node: ast.AST node
+            tree: Full ast.AST tree
+            module_imports: Pre-extracted module imports (optimization)
+
+        Returns:
+            Metadata dict with 9 core fields
+        """
         metadata = {}
 
         try:
@@ -91,7 +218,7 @@ class MetadataExtractorService:
             metadata["calls"] = self._extract_calls(node)
 
         except Exception as e:
-            self.logger.error(f"Metadata extraction failed: {e}", exc_info=True)
+            self.logger.error(f"Python metadata extraction failed: {e}", exc_info=True)
             # Return partial metadata (graceful degradation)
 
         return metadata

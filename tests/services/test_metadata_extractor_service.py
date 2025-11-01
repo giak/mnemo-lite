@@ -338,15 +338,19 @@ async def fetch_data(url: str) -> dict:
     assert "Fetch data" in metadata["docstring"]
 
 
-# Test 15: Graceful degradation - non-Python
+# Test 15: Graceful degradation - unsupported language
 
 @pytest.mark.asyncio
 async def test_graceful_degradation_non_python(metadata_service):
-    """Test that non-Python language returns basic metadata."""
-    # JavaScript code (won't parse as Python AST)
+    """Test that unsupported language returns basic metadata."""
+    # EPIC-26: JavaScript is now supported, so test with unsupported language (Go)
     source_code = """
-function calculateTotal(items) {
-    return items.reduce((sum, item) => sum + item.price, 0);
+func calculateTotal(items []Item) int {
+    total := 0
+    for _, item := range items {
+        total += item.Price
+    }
+    return total
 }
 """
 
@@ -354,11 +358,12 @@ function calculateTotal(items) {
     tree = ast.parse("")
     node = ast.FunctionDef(name="dummy", args=ast.arguments(args=[], posonlyargs=[], kwonlyargs=[], kw_defaults=[], defaults=[]), body=[], decorator_list=[])
 
-    metadata = await metadata_service.extract_metadata(source_code, node, tree, language="javascript")
+    # Use unsupported language (Go) to test graceful degradation
+    metadata = await metadata_service.extract_metadata(source_code, node, tree, language="go")
 
     # Should return basic structure
     assert "signature" in metadata
     assert "parameters" in metadata
     assert "complexity" in metadata
-    assert metadata["signature"] is None  # No extraction for non-Python
+    assert metadata["signature"] is None  # No extraction for unsupported language
     assert metadata["parameters"] == []
