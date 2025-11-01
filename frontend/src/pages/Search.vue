@@ -32,7 +32,9 @@ const handleSearch = async () => {
   await search(query.value, {
     lexical_weight: 0.5,
     vector_weight: 0.5,
-    limit: 50,
+    top_k: 50,
+    enable_lexical: true,
+    enable_vector: false, // Disabled in mock mode
     filters,
   })
 }
@@ -59,12 +61,22 @@ const formatLineRange = (start: number, end: number) => {
 
 // Truncate content for preview
 const truncateContent = (content: string, maxLength: number = 200) => {
+  if (!content) return ''
   if (content.length <= maxLength) return content
   return content.slice(0, maxLength) + '...'
 }
 
+// Get line range from metadata
+const getLineRange = (metadata: Record<string, any>) => {
+  const startLine = metadata?.start_line
+  const endLine = metadata?.end_line
+  if (!startLine) return null
+  return { start: startLine, end: endLine || startLine }
+}
+
 // Get badge color for search type
 const getSearchTypeBadge = (searchType: string) => {
+  if (!searchType) return 'badge-info'
   if (searchType === 'hybrid') return 'badge-info'
   if (searchType === 'lexical') return 'badge-success'
   if (searchType === 'vector') return 'badge-warning'
@@ -73,6 +85,7 @@ const getSearchTypeBadge = (searchType: string) => {
 
 // Get badge color for chunk type
 const getChunkTypeBadge = (chunkType: string) => {
+  if (!chunkType) return 'badge-info'
   if (chunkType === 'function' || chunkType === 'method') return 'badge-success'
   if (chunkType === 'class' || chunkType === 'interface') return 'badge-info'
   return 'badge-info'
@@ -188,42 +201,42 @@ const getChunkTypeBadge = (chunkType: string) => {
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2 flex-1 min-w-0">
               <span class="text-sm text-cyan-400 font-mono truncate">
-                {{ result.file_path }}
+                {{ result.file_path || 'Unknown file' }}
               </span>
-              <span class="text-xs text-gray-500">
-                {{ formatLineRange(result.line_start, result.line_end) }}
+              <span v-if="getLineRange(result.metadata)" class="text-xs text-gray-500">
+                {{ formatLineRange(getLineRange(result.metadata)!.start, getLineRange(result.metadata)!.end) }}
               </span>
             </div>
             <div class="flex gap-2 flex-shrink-0">
-              <span :class="['text-xs', getChunkTypeBadge(result.chunk_type)]">
+              <span v-if="result.chunk_type" :class="['text-xs', getChunkTypeBadge(result.chunk_type)]">
                 {{ result.chunk_type }}
               </span>
-              <span class="badge-info text-xs">
+              <span v-if="result.language" class="badge-info text-xs">
                 {{ result.language }}
               </span>
-              <span :class="['text-xs', getSearchTypeBadge(result.search_type)]">
-                {{ result.search_type }}
+              <span v-if="result.lexical_score" class="text-xs badge-success">
+                lexical
               </span>
             </div>
           </div>
 
           <!-- Name Path (if available) -->
-          <div v-if="result.name_path && result.name_path.length > 0" class="mb-2">
+          <div v-if="result.name_path" class="mb-2">
             <span class="text-xs text-gray-500">Path: </span>
             <span class="text-xs text-emerald-400 font-mono">
-              {{ result.name_path.join(' → ') }}
+              {{ result.name_path }}
             </span>
           </div>
 
           <!-- Code Content -->
           <div class="bg-slate-900 border border-slate-700 p-4 overflow-x-auto">
-            <pre class="text-sm text-gray-300 font-mono whitespace-pre-wrap">{{ truncateContent(result.content, 400) }}</pre>
+            <pre class="text-sm text-gray-300 font-mono whitespace-pre-wrap">{{ truncateContent(result.source_code, 400) }}</pre>
           </div>
 
           <!-- Score -->
-          <div class="mt-2 text-right">
+          <div v-if="result.rrf_score !== undefined && result.rrf_score !== null" class="mt-2 text-right">
             <span class="text-xs text-gray-500">
-              Score: <span class="text-cyan-400">{{ result.score.toFixed(4) }}</span>
+              RRF Score: <span class="text-cyan-400">{{ result.rrf_score.toFixed(4) }}</span>
             </span>
           </div>
         </div>

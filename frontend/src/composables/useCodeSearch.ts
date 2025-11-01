@@ -7,17 +7,22 @@
 
 import { ref, computed } from 'vue'
 
-interface SearchResult {
+export interface SearchResult {
   chunk_id: string
-  content: string
+  source_code: string
   file_path: string
   language: string
   chunk_type: string
-  name_path?: string[]
-  line_start: number
-  line_end: number
-  score: number
-  search_type: string
+  name: string
+  name_path?: string | null
+  rrf_score: number
+  rank: number
+  metadata: Record<string, any>
+  lexical_score?: number | null
+  vector_similarity?: number | null
+  vector_distance?: number | null
+  contribution: Record<string, number>
+  related_nodes: string[]
 }
 
 interface SearchFilters {
@@ -30,7 +35,9 @@ interface SearchFilters {
 interface SearchOptions {
   lexical_weight?: number
   vector_weight?: number
-  limit?: number
+  top_k?: number
+  enable_lexical?: boolean
+  enable_vector?: boolean
   filters?: SearchFilters
 }
 
@@ -65,7 +72,9 @@ export function useCodeSearch(): UseCodeSearchReturn {
         query: query.trim(),
         lexical_weight: options.lexical_weight ?? 0.5,
         vector_weight: options.vector_weight ?? 0.5,
-        limit: options.limit ?? 50,
+        top_k: options.top_k ?? 50,
+        enable_lexical: options.enable_lexical ?? true,
+        enable_vector: options.enable_vector ?? false, // Disabled in mock mode
         filters: options.filters ?? {}
       }
 
