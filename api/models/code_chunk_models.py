@@ -32,6 +32,10 @@ class ChunkType(str, Enum):
     TYPE_ALIAS = "type_alias"              # type User = {...}
     ENUM = "enum"                          # enum Status {}
 
+    # EPIC-29: Special file types
+    BARREL = "barrel"                      # Re-export aggregators (index.ts)
+    CONFIG_MODULE = "config_module"        # Config files (vite.config.ts)
+
     # PHP-specific (Phase 1.6)
     TRAIT = "trait"                        # trait Loggable {}
     NAMESPACE = "namespace"                # namespace App\Models;
