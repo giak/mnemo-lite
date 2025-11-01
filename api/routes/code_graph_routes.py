@@ -84,7 +84,7 @@ async def build_graph(
         service = GraphConstructionService(engine)
         stats = await service.build_graph_for_repository(
             repository=request.repository,
-            language=request.language
+            languages=[request.language] if request.language else None
         )
         logger.info(f"Graph built successfully: {stats.total_nodes} nodes, {stats.total_edges} edges")
         return stats
