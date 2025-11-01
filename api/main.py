@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy.event import listen
 
 # Import des routes
-from routes import health_routes, event_routes, search_routes, ui_routes, graph_routes, monitoring_routes, code_graph_routes, code_search_routes, code_indexing_routes, cache_admin_routes, lsp_routes, monitoring_routes_advanced, conversations_routes, autosave_monitoring_routes
+from routes import health_routes, event_routes, search_routes, ui_routes, graph_routes, monitoring_routes, code_graph_routes, code_search_routes, code_indexing_routes, cache_admin_routes, lsp_routes, monitoring_routes_advanced, conversations_routes, autosave_monitoring_routes, dashboard_routes
 
 # Configuration de base
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -388,9 +388,17 @@ app = FastAPI(
 )
 
 # Configuration CORS
+# EPIC-25: Allow Vue.js frontend in development
+allowed_origins = ["*"] if ENVIRONMENT == "development" else [
+    "https://app.mnemolite.com",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if DEBUG else ["https://app.mnemolite.com"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -486,6 +494,7 @@ app.include_router(monitoring_routes.router)
 app.include_router(monitoring_routes_advanced.router)  # EPIC-22 Story 22.1
 app.include_router(conversations_routes.router, tags=["v1_Conversations"])  # EPIC-24: Auto-Save
 app.include_router(autosave_monitoring_routes.router, tags=["v1_AutoSave_Monitoring"])  # EPIC-24: Auto-Save Monitoring UI
+app.include_router(dashboard_routes.router, tags=["v1_Dashboard"])  # EPIC-25: Dashboard Backend API
 # app.include_router(embedding_routes.router)
 
 # --- Endpoint pour la création d'événements PENDANT LES TESTS ---
