@@ -9,7 +9,7 @@ import { useCodeGraph } from '@/composables/useCodeGraph'
 import cytoscape from 'cytoscape'
 import type { Core } from 'cytoscape'
 
-const { stats, loading, error, building, buildError, fetchStats, buildGraph } = useCodeGraph()
+const { stats, graphData, loading, error, building, buildError, fetchStats, fetchGraphData, buildGraph } = useCodeGraph()
 
 const graphContainer = ref<HTMLElement | null>(null)
 const cy = ref<Core | null>(null)
@@ -18,6 +18,8 @@ const repository = ref('MnemoLite')
 // Build graph handler
 const handleBuildGraph = async () => {
   await buildGraph(repository.value, 'python')
+  // Refresh visualization after build
+  await populateGraph()
 }
 
 // Initialize Cytoscape graph
@@ -81,11 +83,70 @@ const initGraph = async () => {
   }
 }
 
+// Populate graph with real data
+const populateGraph = async () => {
+  if (!cy.value) return
+
+  // Fetch graph data
+  await fetchGraphData(repository.value, 500)
+
+  if (!graphData.value) return
+
+  // Clear existing elements
+  cy.value.elements().remove()
+
+  // Add nodes
+  if (graphData.value.nodes && graphData.value.nodes.length > 0) {
+    const nodes = graphData.value.nodes.map(node => ({
+      group: 'nodes' as const,
+      data: {
+        id: node.id,
+        label: node.label,
+        type: node.type
+      }
+    }))
+    cy.value.add(nodes)
+  }
+
+  // Add edges
+  if (graphData.value.edges && graphData.value.edges.length > 0) {
+    const edges = graphData.value.edges.map(edge => ({
+      group: 'edges' as const,
+      data: {
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        type: edge.type
+      }
+    }))
+    cy.value.add(edges)
+  }
+
+  // Run layout if we have nodes
+  if (graphData.value.nodes.length > 0) {
+    cy.value.layout({
+      name: 'cose',
+      animate: true,
+      animationDuration: 500,
+      nodeRepulsion: 8000,
+      idealEdgeLength: 100,
+      edgeElasticity: 100,
+      nestingFactor: 5,
+      gravity: 80,
+      numIter: 1000,
+      initialTemp: 200,
+      coolingFactor: 0.95,
+      minTemp: 1.0
+    }).run()
+  }
+}
+
 // Fetch stats and initialize graph
 onMounted(async () => {
   await fetchStats(repository.value)
   await nextTick()
   initGraph()
+  await populateGraph()
 })
 </script>
 
@@ -221,7 +282,7 @@ onMounted(async () => {
           ></div>
 
           <!-- Info Message -->
-          <div v-if="stats.total_edges === 0" class="mt-4 p-4 bg-amber-900/20 border border-amber-700/30 rounded">
+          <div v-if="stats.total_nodes === 0" class="mt-4 p-4 bg-amber-900/20 border border-amber-700/30 rounded">
             <div class="flex items-start">
               <svg class="h-5 w-5 text-amber-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
@@ -230,6 +291,21 @@ onMounted(async () => {
                 <h3 class="text-sm font-medium text-amber-300">Graph Not Built</h3>
                 <p class="mt-1 text-sm text-amber-400/80">
                   The code graph has not been built yet. Click the <strong>"Build Graph"</strong> button above to analyze code dependencies and generate the graph.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- No Edges Warning -->
+          <div v-else-if="stats.total_nodes > 0 && stats.total_edges === 0" class="mt-4 p-4 bg-blue-900/20 border border-blue-700/30 rounded">
+            <div class="flex items-start">
+              <svg class="h-5 w-5 text-blue-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+              </svg>
+              <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-300">No Dependencies Detected</h3>
+                <p class="mt-1 text-sm text-blue-400/80">
+                  Graph shows {{ stats.total_nodes }} nodes but no edges. This means no code dependencies (imports/calls) were detected between functions and classes.
                 </p>
               </div>
             </div>

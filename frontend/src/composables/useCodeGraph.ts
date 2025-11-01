@@ -31,20 +31,25 @@ export interface GraphEdge {
 export interface GraphData {
   nodes: GraphNode[]
   edges: GraphEdge[]
+  total_returned: number
+  limit: number
 }
 
 interface UseCodeGraphReturn {
   stats: ReturnType<typeof ref<GraphStats | null>>
+  graphData: ReturnType<typeof ref<GraphData | null>>
   loading: ReturnType<typeof ref<boolean>>
   error: ReturnType<typeof ref<string | null>>
   building: ReturnType<typeof ref<boolean>>
   buildError: ReturnType<typeof ref<string | null>>
   fetchStats: (repository: string) => Promise<void>
+  fetchGraphData: (repository: string, limit?: number) => Promise<void>
   buildGraph: (repository: string, language?: string) => Promise<void>
 }
 
 export function useCodeGraph(): UseCodeGraphReturn {
   const stats = ref<GraphStats | null>(null)
+  const graphData = ref<GraphData | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
   const building = ref(false)
@@ -108,13 +113,40 @@ export function useCodeGraph(): UseCodeGraphReturn {
     }
   }
 
+  const fetchGraphData = async (repository: string = 'MnemoLite', limit: number = 500) => {
+    loading.value = true
+    error.value = null
+
+    try {
+      const response = await fetch(
+        `http://localhost:8001/v1/code/graph/data/${repository}?limit=${limit}`
+      )
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch graph data: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      graphData.value = data
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
+      error.value = errorMessage
+      console.error('Graph data error:', err)
+      graphData.value = null
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     stats,
+    graphData,
     loading,
     error,
     building,
     buildError,
     fetchStats,
+    fetchGraphData,
     buildGraph,
   }
 }

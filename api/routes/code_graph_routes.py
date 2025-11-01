@@ -276,3 +276,113 @@ async def get_graph_stats(
     except Exception as e:
         logger.error(f"Failed to get graph stats for {repository}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+
+@router.get("/data/{repository}")
+async def get_graph_data(
+    repository: str = Path(..., description="Repository name"),
+    limit: int = Query(500, ge=1, le=2000, description="Maximum number of nodes to return"),
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """
+    Get graph nodes and edges for visualization.
+
+    Returns actual node and edge data with IDs, labels, types, etc.
+    Limited to prevent overwhelming the browser with large graphs.
+
+    Example:
+        GET /v1/code/graph/data/MnemoLite?limit=500
+
+    Returns:
+        {
+            "nodes": [
+                {"id": "uuid", "label": "MyClass", "type": "class", "file_path": "..."},
+                ...
+            ],
+            "edges": [
+                {"id": "uuid", "source": "uuid", "target": "uuid", "type": "calls"},
+                ...
+            ]
+        }
+    """
+    try:
+        from sqlalchemy.sql import text
+
+        async with engine.connect() as conn:
+            # Fetch nodes
+            nodes_query = text("""
+                SELECT
+                    node_id::text,
+                    node_type,
+                    properties
+                FROM nodes
+                WHERE properties->>'file_path' LIKE :repository_pattern
+                ORDER BY created_at DESC
+                LIMIT :limit
+            """)
+
+            nodes_result = await conn.execute(
+                nodes_query,
+                {"repository_pattern": f"%{repository}%", "limit": limit}
+            )
+            nodes_rows = nodes_result.fetchall()
+
+            nodes = []
+            for row in nodes_rows:
+                node_id, node_type, properties = row
+                nodes.append({
+                    "id": node_id,
+                    "label": properties.get("name", f"{node_type}_{node_id[:8]}"),
+                    "type": node_type,
+                    "file_path": properties.get("file_path"),
+                    "start_line": properties.get("start_line"),
+                    "end_line": properties.get("end_line")
+                })
+
+            # Get node IDs for edge filtering
+            node_ids = [n["id"] for n in nodes]
+
+            # Fetch edges (only between fetched nodes)
+            if node_ids:
+                edges_query = text("""
+                    SELECT
+                        edge_id::text,
+                        source_node_id::text,
+                        target_node_id::text,
+                        relation_type
+                    FROM edges
+                    WHERE source_node_id::text = ANY(:node_ids)
+                      AND target_node_id::text = ANY(:node_ids)
+                    LIMIT :edge_limit
+                """)
+
+                edges_result = await conn.execute(
+                    edges_query,
+                    {"node_ids": node_ids, "edge_limit": limit * 2}
+                )
+                edges_rows = edges_result.fetchall()
+
+                edges = []
+                for row in edges_rows:
+                    edge_id, source_id, target_id, relation_type = row
+                    edges.append({
+                        "id": edge_id,
+                        "source": source_id,
+                        "target": target_id,
+                        "type": relation_type
+                    })
+            else:
+                edges = []
+
+        logger.info(f"Retrieved {len(nodes)} nodes and {len(edges)} edges for {repository}")
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "total_returned": len(nodes),
+            "limit": limit
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get graph data for {repository}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get graph data: {str(e)}")
