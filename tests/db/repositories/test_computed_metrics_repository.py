@@ -78,3 +78,61 @@ async def test_update_coupling_metrics(clean_db):
 
     assert updated.afferent_coupling == 10
     assert updated.efferent_coupling == 5
+
+
+@pytest.mark.asyncio
+async def test_get_by_repository(clean_db):
+    """Test retrieving all metrics for a repository."""
+    repo = ComputedMetricsRepository(clean_db)
+
+    # Create two nodes in same repository
+    node_id_1 = uuid.uuid4()
+    node_id_2 = uuid.uuid4()
+    chunk_id_1 = uuid.uuid4()
+    chunk_id_2 = uuid.uuid4()
+
+    async with clean_db.begin() as conn:
+        # Create nodes
+        await conn.execute(text("""
+            INSERT INTO nodes (node_id, label, node_type, properties)
+            VALUES (:node_id, 'func1', 'function', '{"repository": "my-repo"}'::jsonb)
+        """), {"node_id": str(node_id_1)})
+
+        await conn.execute(text("""
+            INSERT INTO nodes (node_id, label, node_type, properties)
+            VALUES (:node_id, 'func2', 'function', '{"repository": "my-repo"}'::jsonb)
+        """), {"node_id": str(node_id_2)})
+
+        # Create chunks
+        await conn.execute(text("""
+            INSERT INTO code_chunks (id, file_path, language, chunk_type, source_code, metadata, indexed_at)
+            VALUES (:chunk_id, '/test1.ts', 'typescript', 'function', 'code1', '{}'::jsonb, NOW())
+        """), {"chunk_id": str(chunk_id_1)})
+
+        await conn.execute(text("""
+            INSERT INTO code_chunks (id, file_path, language, chunk_type, source_code, metadata, indexed_at)
+            VALUES (:chunk_id, '/test2.ts', 'typescript', 'function', 'code2', '{}'::jsonb, NOW())
+        """), {"chunk_id": str(chunk_id_2)})
+
+    # Create metrics for both nodes
+    await repo.create(
+        node_id_1, chunk_id_1, "my-repo",
+        cyclomatic_complexity=5,
+        cognitive_complexity=3,
+        lines_of_code=50
+    )
+    await repo.create(
+        node_id_2, chunk_id_2, "my-repo",
+        cyclomatic_complexity=8,
+        cognitive_complexity=6,
+        lines_of_code=80
+    )
+
+    # Get all metrics for repository
+    results = await repo.get_by_repository("my-repo", version=1)
+
+    assert len(results) == 2
+    assert all(m.version == 1 for m in results)
+    assert all(m.repository == "my-repo" for m in results)
+    node_ids = {m.node_id for m in results}
+    assert node_ids == {node_id_1, node_id_2}

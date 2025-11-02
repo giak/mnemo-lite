@@ -125,12 +125,15 @@ async def phase1_chunking(files: list[Path], repository: str, verbose: bool = Fa
         Tuple (chunks: list, errors: list)
     """
     from services.code_chunking_service import CodeChunkingService
+    from services.metadata_extractor_service import get_metadata_extractor_service
 
     print("\n" + "=" * 80)
     print("📖 Phase 1/4: Code Chunking & AST Parsing")
     print("=" * 80)
 
-    chunking_service = CodeChunkingService(max_workers=1)
+    # EPIC-26: Inject metadata extractor service for TypeScript/JavaScript metadata extraction
+    metadata_service = get_metadata_extractor_service()
+    chunking_service = CodeChunkingService(max_workers=1, metadata_service=metadata_service)
 
     all_chunks = []
     errors = []
@@ -479,7 +482,7 @@ async def phase4_graph_construction(repository: str, verbose: bool = False):
 
     await engine.dispose()
 
-    return stats, chunk_to_node
+    return stats, chunk_to_node, chunks
 
 
 async def main():
@@ -534,17 +537,18 @@ async def main():
     # Phase 3: Graph Construction
     # Note: Graph construction must run before metadata extraction because metadata tables
     # have foreign key constraints on nodes table
-    graph_stats, chunk_to_node = await phase4_graph_construction(repository, args.verbose)
+    graph_stats, chunk_to_node, db_chunks = await phase4_graph_construction(repository, args.verbose)
 
     # Phase 4: Metadata Extraction
     # Now that nodes exist, we can extract and store detailed metadata
+    # Use db_chunks (chunks from database with IDs) instead of chunks (from Phase 1)
     import os
     from sqlalchemy.ext.asyncio import create_async_engine
     db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@mnemo-postgres:5432/mnemolite")
     engine = create_async_engine(db_url, echo=False)
 
     metadata_success, errors_phase3 = await phase3_metadata_extraction(
-        chunks, repository, engine, chunk_to_node, args.verbose
+        db_chunks, repository, engine, chunk_to_node, args.verbose
     )
 
     # Final summary

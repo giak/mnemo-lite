@@ -227,6 +227,34 @@ class NodeRepository:
             self.logger.error(f"Failed to search nodes by label '{label}': {e}", exc_info=True)
             raise RepositoryError(f"Failed to search nodes by label '{label}': {e}") from e
 
+    async def get_by_repository(
+        self,
+        repository: str
+    ) -> List[NodeModel]:
+        """
+        Get all nodes for a repository.
+
+        Args:
+            repository: Repository name
+
+        Returns:
+            List of nodes for the repository
+        """
+        query = text("""
+            SELECT * FROM nodes
+            WHERE properties->>'repository' = :repository
+            ORDER BY created_at
+        """)
+        params = {"repository": repository}
+
+        try:
+            db_result = await self._execute_query(query, params)
+            rows = db_result.mappings().all()
+            return [NodeModel.from_db_record(row) for row in rows]
+        except Exception as e:
+            self.logger.error(f"Failed to get nodes for repository '{repository}': {e}", exc_info=True)
+            raise RepositoryError(f"Failed to get nodes for repository '{repository}': {e}") from e
+
     async def delete(
         self,
         node_id: uuid.UUID,

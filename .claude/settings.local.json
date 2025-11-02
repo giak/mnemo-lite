@@ -94,7 +94,10 @@
       "Bash(git show:*)",
       "Bash(python -m pytest:*)",
       "Bash(python /home/giak/Work/MnemoLite/scripts/index_directory.py:*)",
-      "Bash(docker restart:*)"
+      "Bash(docker restart:*)",
+      "Bash(/home/giak/.local/bin/pytest:*)",
+      "Bash(source:*)",
+      "Bash(PYTHONPATH=/home/giak/Work/MnemoLite/api:$PYTHONPATH python -m pytest:*)"
     ],
     "deny": [],
     "ask": []

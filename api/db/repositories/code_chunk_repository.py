@@ -477,6 +477,32 @@ class CodeChunkRepository:
             self.logger.error(f"Failed to get code chunk {chunk_id}: {e}", exc_info=True)
             raise RepositoryError(f"Failed to get code chunk {chunk_id}: {e}") from e
 
+    async def get_by_repository(self, repository: str) -> List[CodeChunkModel]:
+        """
+        Get all code chunks for a repository.
+
+        Args:
+            repository: Repository name
+
+        Returns:
+            List of code chunks for the repository
+        """
+        from sqlalchemy import text
+        query = text("""
+            SELECT * FROM code_chunks
+            WHERE repository = :repository
+            ORDER BY indexed_at
+        """)
+        params = {"repository": repository}
+
+        try:
+            db_result = await self._execute_query(query, params)
+            rows = db_result.mappings().all()
+            return [CodeChunkModel.from_db_record(row) for row in rows]
+        except Exception as e:
+            self.logger.error(f"Failed to get chunks for repository '{repository}': {e}", exc_info=True)
+            raise RepositoryError(f"Failed to get chunks for repository '{repository}': {e}") from e
+
     async def update(
         self,
         chunk_id: uuid.UUID,
