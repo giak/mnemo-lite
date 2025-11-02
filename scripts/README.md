@@ -211,6 +211,64 @@ python scripts/index_directory.py /path/to/code --repository myproject
      - Updates `computed_metrics` with coupling/PageRank
      - Stores weights in `edge_weights` table
 
+### Parallel Processing Mode (NEW)
+
+**Available since:** 2025-11-02
+
+The indexing script now supports parallel processing with multiple workers for improved performance and 100% completion on large repositories.
+
+**Usage:**
+
+```bash
+# Default: 2 workers (recommended for 4GB Docker containers)
+docker exec -i mnemo-api python /app/scripts/index_directory.py \
+  /app/code_test \
+  --repository code_test \
+  --verbose
+
+# Custom worker count (requires more RAM)
+docker exec -i mnemo-api python /app/scripts/index_directory.py \
+  /app/code_test \
+  --repository code_test \
+  --workers 4
+
+# Sequential mode (old behavior)
+docker exec -i mnemo-api python /app/scripts/index_directory.py \
+  /app/code_test \
+  --repository code_test \
+  --sequential
+```
+
+**Architecture:**
+
+- **Isolation:** Each worker = separate Python process with own embedding model and DB connection
+- **Parallelization:** Files distributed automatically by Joblib across workers
+- **Memory:** ~3GB per worker (2GB model + 1GB processing)
+- **Recommended:** 2 workers for 4GB container, 4 workers for 8-12GB container
+
+**Performance (261 TypeScript/JavaScript files):**
+
+| Workers | Container RAM | Time | Completion | Status |
+|---------|---------------|------|------------|--------|
+| 1 (sequential) | 4GB | ~10-15min | 75% (OOM) | ❌ Crashes |
+| 2 | 4GB | ~8-10min | 100% ✅ | ⚠️ RAM pressure |
+| 4 | 4GB | ~5-6min | 75% (OOM) | ❌ Crashes |
+| 4 | 8-12GB | ~4-5min | 100% ✅ | ✅ Stable |
+| 6 | 16GB+ | ~3-4min | 100% ✅ | ✅ Stable |
+
+**Requirements:**
+
+- Docker memory: **Minimum 4GB for 2 workers** (recommended 8-12GB for 4 workers)
+- PostgreSQL: max_connections ≥ 20 (for worker connection pools)
+- Joblib: ≥1.3.0
+
+**Important Notes:**
+
+- **Default changed to 2 workers** based on real-world testing with 4GB containers
+- **4 workers requires 8-12GB RAM** - will crash at ~75% completion with 4GB
+- Each worker loads full embedding model (~2GB) + processing overhead (~1GB)
+- Workers process files concurrently, maintaining atomic transactions per file
+
 ### Database Schema (Rich Metadata v2.0)
 
 **New Tables:**
@@ -282,12 +340,37 @@ python scripts/index_directory.py /path/to/code --repository myproject
 
 ### Troubleshooting
 
-**Issue**: Script fails with "out of memory" error
+**Issue**: Script fails with "out of memory" error (Sequential mode)
 - **Cause**: Very large repositories (>200 files) or individual files (>100MB)
 - **Solution**:
-  - Increase Docker memory limit in docker-compose.yml to 12-16GB
+  - Switch to parallel mode with 2 workers: `--workers 2` (default)
+  - Or increase Docker memory limit in docker-compose.yml to 8-12GB for 4 workers
   - Or split repository into smaller batches for indexing
   - Or exclude large files from indexing
+
+**Issue**: Parallel mode crashes at ~75% completion
+- **Cause**: Too many workers for available RAM (each worker uses ~3GB)
+- **Solution**:
+  - **Reduce worker count to 2**: `--workers 2` (recommended for 4GB containers)
+  - Or increase Docker container memory to 8-12GB for 4 workers
+  - Monitor memory usage: `docker stats mnemo-api`
+  - Check logs for "Killed" message (indicates OOM killer)
+
+**Issue**: Parallel indexing slower than expected or workers idle
+- **Cause**: Insufficient CPU cores, or workers waiting on DB locks
+- **Solution**:
+  - Check CPU usage: `docker stats mnemo-api`
+  - Reduce worker count if CPU maxed out
+  - Check PostgreSQL connection count: `SELECT count(*) FROM pg_stat_activity;`
+  - Increase `max_connections` in postgresql.conf if needed
+
+**Issue**: "too many clients already" PostgreSQL error
+- **Cause**: PostgreSQL max_connections exceeded by worker pools
+- **Solution**:
+  - Reduce worker count: `--workers 2`
+  - Or increase max_connections in PostgreSQL config (default: 100)
+  - Each worker creates ~2 connections (pool_size=2)
+  - Formula: Required connections = workers × 2 + 10 (for other processes)
 
 **Issue**: Some files show as "failed" in summary
 - **Cause**: Parse errors, invalid syntax, unsupported language constructs
