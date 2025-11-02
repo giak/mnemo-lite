@@ -113,5 +113,77 @@ Background job pour parser périodiquement les transcripts Claude Code et sauveg
 
 ---
 
-**Dernière mise à jour**: 2025-10-29
-**EPIC**: EPIC-24 (Auto-save Conversations)
+## index_directory.py
+
+Index entire TypeScript/JavaScript codebases into MnemoLite.
+
+### Requirements
+
+- Python 3.12+
+- Docker (for running in container)
+- tqdm: `pip install tqdm`
+
+### Usage
+
+**In Docker (recommended)**:
+```bash
+# Copy script to container
+docker cp scripts/index_directory.py mnemo-api:/app/scripts/
+
+# Run indexing
+docker exec -i mnemo-api python3 /app/scripts/index_directory.py \
+  /app/code_test \
+  --repository code_test \
+  --verbose
+```
+
+**On Host**:
+```bash
+# Ensure DATABASE_URL is set
+export DATABASE_URL="postgresql+asyncpg://mnemo:mnemo@localhost:5432/mnemolite"
+
+# Run indexing
+python scripts/index_directory.py /path/to/code --repository myproject
+```
+
+### Options
+
+- `directory` (required): Path to codebase
+- `--repository` (optional): Repository name (default: directory name)
+- `--verbose`: Enable detailed logging
+
+### Pipeline
+
+1. **Phase 1: Chunking** (~1 min)
+   - Scans TypeScript/JavaScript files
+   - Excludes tests, node_modules, declarations
+   - AST parsing with tree-sitter
+
+2. **Phase 2: Embeddings** (~3-5 min)
+   - Generates CODE embeddings (768D)
+   - Uses jinaai/jina-embeddings-v2-base-code
+   - Stores in PostgreSQL
+
+3. **Phase 3: Graph** (~10-20s)
+   - Creates nodes (functions, classes)
+   - Resolves call/import edges
+   - EPIC-30: Filters anonymous functions
+
+### Performance
+
+- 100 files: ~2 minutes
+- 500 files: ~8 minutes
+- 1000 files: ~15 minutes
+
+Bottleneck: Embedding generation (CPU-bound)
+
+### Viewing Results
+
+1. Open http://localhost:3002/
+2. Select repository from dropdown
+3. Explore graph visualization
+
+---
+
+**Dernière mise à jour**: 2025-11-02
+**EPIC**: Directory Indexing (2025-11-02)
