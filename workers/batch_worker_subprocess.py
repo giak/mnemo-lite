@@ -42,8 +42,13 @@ async def process_batch(repository: str, db_url: str, files: list) -> dict:
     print(f"Loading embedding models...", file=sys.stderr)
     embedding_service = DualEmbeddingService()
 
+    # EPIC-26: Inject metadata extractor service for TypeScript/JavaScript metadata extraction
+    print(f"Initializing metadata extractor...", file=sys.stderr)
+    from services.metadata_extractor_service import get_metadata_extractor_service
+    metadata_service = get_metadata_extractor_service()
+
     print(f"Initializing chunking service...", file=sys.stderr)
-    chunking_service = CodeChunkingService()
+    chunking_service = CodeChunkingService(metadata_service=metadata_service)
 
     # Create DB engine
     engine = create_async_engine(db_url, echo=False, pool_size=2, max_overflow=0)
@@ -98,8 +103,10 @@ async def process_file_atomically(
     Process 1 file: chunking + embeddings + persist.
 
     Implementation reuses existing logic from scripts/index_directory.py
+    using repository pattern (EPIC-27 code review fix).
     """
-    from sqlalchemy import text
+    from db.repositories.code_chunk_repository import CodeChunkRepository
+    from models.code_chunk_models import CodeChunkCreate
 
     try:
         # Read file
@@ -108,7 +115,7 @@ async def process_file_atomically(
         # Determine language
         language = "typescript" if file_path.suffix == ".ts" else "javascript"
 
-        # Chunk code (without metadata for now - simplified)
+        # Chunk code (with metadata extraction via injected metadata_service)
         chunks = await chunking_service.chunk_code(
             source_code=content,
             language=language,
@@ -118,50 +125,42 @@ async def process_file_atomically(
         if not chunks:
             return {"success": False, "error": "no chunks generated"}
 
-        # Generate embeddings
-        texts = [chunk.source_code for chunk in chunks]
-        embedding_results = await embedding_service.generate_embeddings_batch(
-            texts,
-            domain=EmbeddingDomain.CODE,
-            show_progress_bar=False
-        )
-        # Extract just the code embeddings from the results
-        embeddings = [result['code'] for result in embedding_results]
-
-        # Persist to DB
-        async with engine.begin() as conn:
-            # First delete existing chunks for this file (simple upsert strategy)
-            await conn.execute(
-                text("DELETE FROM code_chunks WHERE repository = :repository AND file_path = :file_path"),
-                {"repository": repository, "file_path": str(file_path)}
+        # Generate embeddings for all chunks
+        chunk_creates = []
+        for chunk in chunks:
+            # Generate CODE embedding
+            embedding_result = await embedding_service.generate_embedding(
+                chunk.source_code,
+                domain=EmbeddingDomain.CODE
             )
 
-            # Then insert new chunks
-            for chunk, embedding in zip(chunks, embeddings):
-                await conn.execute(
-                    text("""
-                        INSERT INTO code_chunks (
-                            repository, file_path, language, chunk_type,
-                            source_code, start_line, end_line,
-                            embedding_code, metadata, indexed_at
-                        ) VALUES (
-                            :repository, :file_path, :language, :chunk_type,
-                            :source_code, :start_line, :end_line,
-                            :embedding_code, :metadata, NOW()
-                        )
-                    """),
-                    {
-                        "repository": repository,
-                        "file_path": str(file_path),
-                        "language": language,
-                        "chunk_type": chunk.chunk_type.value if hasattr(chunk.chunk_type, 'value') else str(chunk.chunk_type),
-                        "source_code": chunk.source_code,
-                        "start_line": chunk.start_line or 0,
-                        "end_line": chunk.end_line or 0,
-                        "embedding_code": "[" + ",".join(map(str, embedding)) + "]",
-                        "metadata": json.dumps(chunk.metadata)
-                    }
-                )
+            # Create chunk model with embedding
+            chunk_create = CodeChunkCreate(
+                file_path=chunk.file_path,
+                language=chunk.language,
+                chunk_type=chunk.chunk_type,
+                name=chunk.name,
+                source_code=chunk.source_code,
+                start_line=chunk.start_line,
+                end_line=chunk.end_line,
+                repository=repository,
+                metadata=chunk.metadata,  # Already contains calls, imports from chunking
+                embedding_text=None,
+                embedding_code=embedding_result['code']
+            )
+
+            chunk_creates.append(chunk_create)
+
+        # Persist to DB using repository pattern (single transaction)
+        async with engine.begin() as conn:
+            chunk_repo = CodeChunkRepository(engine, connection=conn)
+
+            # Delete existing chunks for this file (simple upsert strategy)
+            await chunk_repo.delete_by_file_path(str(file_path), connection=conn)
+
+            # Insert new chunks
+            for chunk_create in chunk_creates:
+                await chunk_repo.add(chunk_create, connection=conn)
 
         return {"success": True, "chunks": len(chunks)}
 
