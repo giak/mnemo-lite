@@ -181,6 +181,100 @@ async def phase1_chunking(files: list[Path], repository: str, verbose: bool = Fa
     return all_chunks, errors
 
 
+async def phase2_embeddings(chunks: list, repository: str, verbose: bool = False):
+    """
+    Phase 2: Generate embeddings and persist chunks to database.
+
+    Activates real embeddings (overrides EMBEDDING_MODE=mock).
+
+    Returns:
+        Tuple (success_count: int, errors: list)
+    """
+    import os
+    from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomain
+    from db.repositories.code_chunk_repository import CodeChunkRepository
+    from models.code_chunk_models import CodeChunkCreate
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    print("\n" + "=" * 80)
+    print("🧠 Phase 2/3: Embedding Generation")
+    print("=" * 80)
+
+    # Override embedding mode to use real embeddings
+    os.environ["EMBEDDING_MODE"] = "real"
+
+    # Create database engine
+    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@mnemo-postgres:5432/mnemolite")
+    engine = create_async_engine(db_url, echo=False)
+
+    embedding_service = DualEmbeddingService()
+    chunk_repo = CodeChunkRepository(engine)
+
+    print(f"\n🔧 Loading embedding model: jinaai/jina-embeddings-v2-base-code")
+    print("   (This may take 1-2 minutes on first run...)")
+
+    success_count = 0
+    errors = []
+    batch_size = 50
+
+    start_time = datetime.now()
+
+    # Process in batches with progress bar
+    with tqdm(total=len(chunks), desc="Generating embeddings", unit="chunk") as pbar:
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i:i + batch_size]
+
+            for chunk in batch:
+                try:
+                    # Generate CODE embedding
+                    embedding_result = await embedding_service.generate_embedding(
+                        chunk.source_code,
+                        domain=EmbeddingDomain.CODE
+                    )
+
+                    # Create chunk with embedding
+                    chunk_create = CodeChunkCreate(
+                        file_path=chunk.file_path,
+                        language=chunk.language,
+                        chunk_type=chunk.chunk_type,
+                        name=chunk.name,
+                        source_code=chunk.source_code,
+                        start_line=chunk.start_line,
+                        end_line=chunk.end_line,
+                        repository=chunk.repository,
+                        metadata=chunk.metadata,
+                        embedding_text=None,  # Skip text embedding for code
+                        embedding_code=embedding_result['code']
+                    )
+
+                    # Persist to database
+                    await chunk_repo.add(chunk_create)
+                    success_count += 1
+
+                except Exception as e:
+                    errors.append({
+                        "chunk": f"{chunk.file_path}:{chunk.name}",
+                        "error": str(e),
+                        "phase": "embedding"
+                    })
+                    if verbose:
+                        print(f"\n   ⚠️  Failed: {chunk.name} - {e}")
+
+                pbar.update(1)
+
+    elapsed = (datetime.now() - start_time).total_seconds()
+
+    print(f"\n✅ Embeddings generated in {elapsed:.1f}s ({elapsed/60:.1f}m)")
+    print(f"   - Code embeddings: {success_count}")
+    print(f"   - Average time/chunk: {elapsed/len(chunks):.2f}s")
+    print(f"   - Stored in database: ✅")
+    print(f"   - Failed: {len(errors)}")
+
+    await engine.dispose()
+
+    return success_count, errors
+
+
 async def main():
     """Main indexing pipeline."""
     args = parse_args()
@@ -223,8 +317,15 @@ async def main():
         print("\n❌ No chunks created! All files failed.")
         sys.exit(1)
 
-    # TODO: Phase 2-3
-    print("\n⚠️  Embedding/Graph not yet implemented")
+    # Phase 2: Embeddings
+    success_count, errors_phase2 = await phase2_embeddings(chunks, repository, args.verbose)
+
+    if success_count == 0:
+        print("\n❌ No embeddings generated! All chunks failed.")
+        sys.exit(1)
+
+    # TODO: Phase 3
+    print("\n⚠️  Graph construction not yet implemented")
 
 
 if __name__ == "__main__":
