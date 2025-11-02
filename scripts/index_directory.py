@@ -127,7 +127,7 @@ async def phase1_chunking(files: list[Path], repository: str, verbose: bool = Fa
     from services.code_chunking_service import CodeChunkingService
 
     print("\n" + "=" * 80)
-    print("📖 Phase 1/3: Code Chunking & AST Parsing")
+    print("📖 Phase 1/4: Code Chunking & AST Parsing")
     print("=" * 80)
 
     chunking_service = CodeChunkingService(max_workers=1)
@@ -197,7 +197,7 @@ async def phase2_embeddings(chunks: list, repository: str, verbose: bool = False
     from sqlalchemy.ext.asyncio import create_async_engine
 
     print("\n" + "=" * 80)
-    print("🧠 Phase 2/3: Embedding Generation")
+    print("🧠 Phase 2/4: Embedding Generation")
     print("=" * 80)
 
     # Override embedding mode to use real embeddings
@@ -275,21 +275,142 @@ async def phase2_embeddings(chunks: list, repository: str, verbose: bool = False
     return success_count, errors
 
 
-async def phase3_graph(repository: str, verbose: bool = False):
+async def phase3_metadata_extraction(
+    chunks: list,
+    repository: str,
+    engine,
+    chunk_to_node: dict,
+    verbose: bool = False
+):
     """
-    Phase 3: Build graph (nodes + edges) from chunks.
+    Phase 3: Extract detailed metadata and store in dedicated tables.
+
+    NOTE: This phase must run AFTER Phase 4 (graph construction) because
+    the detailed_metadata and computed_metrics tables have foreign key
+    constraints on the nodes table.
+
+    For each chunk:
+    1. Extract enriched metadata (call_contexts, signature, complexity)
+    2. Store in detailed_metadata table using node_id from chunk_to_node mapping
+    3. Create initial computed_metrics entry
+
+    Args:
+        chunks: List of code chunks
+        repository: Repository name
+        engine: Database engine
+        chunk_to_node: Mapping from chunk_id to NodeModel (from graph construction)
+        verbose: Enable verbose logging
+
+    Returns:
+        Tuple (success_count, error_count)
+    """
+    from collections import defaultdict
+    from services.metadata_extractors.typescript_extractor import TypeScriptMetadataExtractor
+    from db.repositories.detailed_metadata_repository import DetailedMetadataRepository
+    from db.repositories.computed_metrics_repository import ComputedMetricsRepository
+    from tree_sitter_language_pack import get_parser
+    import json
+
+    print("\n" + "=" * 80)
+    print("📊 Phase 3/4: Detailed Metadata Extraction")
+    print("=" * 80)
+
+    metadata_repo = DetailedMetadataRepository(engine)
+    metrics_repo = ComputedMetricsRepository(engine)
+
+    success_count = 0
+    error_count = 0
+
+    start_time = datetime.now()
+
+    # Group chunks by language
+    chunks_by_language = defaultdict(list)
+    for chunk in chunks:
+        if chunk.language in ("typescript", "javascript"):
+            # Only process chunks that have corresponding nodes
+            if chunk.id in chunk_to_node:
+                chunks_by_language[chunk.language].append(chunk)
+
+    # Process TypeScript/JavaScript chunks
+    for language, lang_chunks in chunks_by_language.items():
+        print(f"\n   Processing {len(lang_chunks)} {language} chunks...")
+
+        extractor = TypeScriptMetadataExtractor(language)
+        parser = get_parser(language)
+
+        for chunk in tqdm(lang_chunks, desc=f"   Extracting {language} metadata"):
+            try:
+                # Parse the chunk's source code directly
+                tree = parser.parse(bytes(chunk.source_code, "utf8"))
+
+                # For chunks, the root node represents the entire chunk
+                # (function, class, method, etc.)
+                node = tree.root_node
+
+                # If root has a single child (common case), use that
+                if len(node.children) == 1:
+                    node = node.children[0]
+
+                # Extract enriched metadata
+                metadata = await extractor.extract_metadata(chunk.source_code, node, tree)
+
+                # Get the actual node_id from the chunk_to_node mapping
+                graph_node = chunk_to_node[chunk.id]
+                node_id = graph_node.node_id
+
+                # Store detailed metadata with correct node_id
+                await metadata_repo.create(
+                    node_id=node_id,
+                    chunk_id=chunk.id,
+                    metadata=metadata,
+                    version=1
+                )
+
+                # Create initial metrics entry
+                complexity = metadata.get("complexity", {})
+                await metrics_repo.create(
+                    node_id=node_id,
+                    chunk_id=chunk.id,
+                    repository=repository,
+                    cyclomatic_complexity=complexity.get("cyclomatic", 0),
+                    lines_of_code=complexity.get("lines_of_code", 0),
+                    version=1
+                )
+
+                success_count += 1
+
+            except Exception as e:
+                if verbose:
+                    print(f"\n   ⚠️  Failed to extract metadata for {chunk.name}: {e}")
+                error_count += 1
+
+    elapsed = (datetime.now() - start_time).total_seconds()
+
+    print(f"\n   ✅ Phase 3 complete:")
+    print(f"      Success: {success_count}")
+    print(f"      Errors: {error_count}")
+    print(f"      Time: {elapsed:.1f}s")
+
+    return (success_count, error_count)
+
+
+async def phase4_graph_construction(repository: str, verbose: bool = False):
+    """
+    Phase 4: Build graph (nodes + edges) from chunks.
 
     Uses GraphConstructionService with EPIC-30 anonymous filtering.
 
     Returns:
-        GraphStats object
+        Tuple (GraphStats, chunk_to_node mapping)
     """
     import os
     from services.graph_construction_service import GraphConstructionService
+    from db.repositories.code_chunk_repository import CodeChunkRepository
+    from db.repositories.node_repository import NodeRepository
     from sqlalchemy.ext.asyncio import create_async_engine
 
     print("\n" + "=" * 80)
-    print("🔗 Phase 3/3: Graph Construction")
+    print("🔗 Phase 4/4: Graph Construction")
     print("=" * 80)
 
     # Create database engine
@@ -327,9 +448,32 @@ async def phase3_graph(repository: str, verbose: bool = False):
         for edge_type, count in stats.edges_by_type.items():
             print(f"      - {edge_type}: {count}")
 
+    # Build chunk_to_node mapping for Phase 3 (metadata extraction)
+    # Query nodes and match them to chunks by name_path
+    print(f"\n   🔗 Building chunk-to-node mapping...")
+    node_repo = NodeRepository(engine)
+    chunk_repo = CodeChunkRepository(engine)
+
+    nodes = await node_repo.get_by_repository(repository)
+    chunks = await chunk_repo.get_by_repository(repository)
+
+    # Build mapping: chunk_id -> node
+    chunk_to_node = {}
+    node_by_name_path = {node.label: node for node in nodes}  # Simplified matching by label
+
+    for chunk in chunks:
+        # Try to find matching node by name_path (or name if name_path not available)
+        match_key = chunk.name_path if chunk.name_path else chunk.name
+        if match_key in node_by_name_path:
+            chunk_to_node[chunk.id] = node_by_name_path[match_key]
+        elif chunk.name in node_by_name_path:
+            chunk_to_node[chunk.id] = node_by_name_path[chunk.name]
+
+    print(f"   - Mapped {len(chunk_to_node)}/{len(chunks)} chunks to nodes")
+
     await engine.dispose()
 
-    return stats
+    return stats, chunk_to_node
 
 
 async def main():
@@ -382,7 +526,20 @@ async def main():
         sys.exit(1)
 
     # Phase 3: Graph Construction
-    graph_stats = await phase3_graph(repository, args.verbose)
+    # Note: Graph construction must run before metadata extraction because metadata tables
+    # have foreign key constraints on nodes table
+    graph_stats, chunk_to_node = await phase4_graph_construction(repository, args.verbose)
+
+    # Phase 4: Metadata Extraction
+    # Now that nodes exist, we can extract and store detailed metadata
+    import os
+    from sqlalchemy.ext.asyncio import create_async_engine
+    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@mnemo-postgres:5432/mnemolite")
+    engine = create_async_engine(db_url, echo=False)
+
+    metadata_success, errors_phase3 = await phase3_metadata_extraction(
+        chunks, repository, engine, chunk_to_node, args.verbose
+    )
 
     # Final summary
     print("\n" + "=" * 80)
@@ -397,6 +554,7 @@ async def main():
     print(f"\n   Chunks:")
     print(f"   - Created: {len(chunks)}")
     print(f"   - With embeddings: {success_count}")
+    print(f"   - With metadata: {metadata_success}")
     print(f"\n   Graph:")
     print(f"   - Nodes: {graph_stats.total_nodes}")
     print(f"   - Edges: {graph_stats.total_edges}")
@@ -406,7 +564,7 @@ async def main():
         print(f"   - Edge ratio: {edge_ratio:.1f}%")
 
     # Show errors
-    all_errors = errors_phase1 + errors_phase2
+    all_errors = errors_phase1 + errors_phase2 + ([] if metadata_success else [{"phase": "metadata", "error": "Phase 3 failed"}])
     if all_errors:
         print(f"\n⚠️  Failed Items ({len(all_errors)}):")
         for i, error in enumerate(all_errors[:5], 1):
