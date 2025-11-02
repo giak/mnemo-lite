@@ -56,11 +56,17 @@ class BatchIndexingProducer:
             extensions: List of extensions (e.g., [".ts", ".js"])
 
         Returns:
-            Sorted list of file paths
+            Sorted list of file paths (excluding node_modules, .git, etc.)
         """
         files = []
+        excluded_dirs = {"node_modules", ".git", ".svn", ".hg", "__pycache__", "dist", "build", ".next"}
+
         for ext in extensions:
-            files.extend(directory.rglob(f"*{ext}"))
+            for file_path in directory.rglob(f"*{ext}"):
+                # Exclude files in excluded directories
+                if not any(excluded in file_path.parts for excluded in excluded_dirs):
+                    files.append(file_path)
+
         return sorted(files)  # Sort for reproducibility
 
     def _create_batches(self, files: List[Path], batch_size: int) -> List[List[Path]]:
