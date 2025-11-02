@@ -43,9 +43,11 @@ interface UseCodeGraphReturn {
   error: ReturnType<typeof ref<string | null>>
   building: ReturnType<typeof ref<boolean>>
   buildError: ReturnType<typeof ref<string | null>>
+  repositories: ReturnType<typeof ref<string[]>>
   fetchStats: (repository: string) => Promise<void>
   fetchGraphData: (repository: string, limit?: number) => Promise<void>
   buildGraph: (repository: string, language?: string) => Promise<void>
+  fetchRepositories: () => Promise<void>
 }
 
 export function useCodeGraph(): UseCodeGraphReturn {
@@ -55,6 +57,7 @@ export function useCodeGraph(): UseCodeGraphReturn {
   const error = ref<string | null>(null)
   const building = ref(false)
   const buildError = ref<string | null>(null)
+  const repositories = ref<string[]>([])
 
   const fetchStats = async (repository: string = 'MnemoLite') => {
     loading.value = true
@@ -139,6 +142,22 @@ export function useCodeGraph(): UseCodeGraphReturn {
     }
   }
 
+  const fetchRepositories = async () => {
+    try {
+      const response = await fetch('http://localhost:8001/v1/code/graph/repositories')
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch repositories: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      repositories.value = data
+    } catch (err) {
+      console.error('Failed to fetch repositories:', err)
+      repositories.value = []
+    }
+  }
+
   return {
     stats,
     graphData,
@@ -146,8 +165,10 @@ export function useCodeGraph(): UseCodeGraphReturn {
     error,
     building,
     buildError,
+    repositories,
     fetchStats,
     fetchGraphData,
     buildGraph,
+    fetchRepositories,
   }
 }

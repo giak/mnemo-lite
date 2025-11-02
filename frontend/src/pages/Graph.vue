@@ -5,14 +5,14 @@
  * Migrated from Cytoscape.js to v-network-graph for better Vue 3 integration
  */
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useCodeGraph } from '@/composables/useCodeGraph'
 import type { Nodes, Edges, Configs, Layouts } from 'v-network-graph'
 import G6Graph from '@/components/G6Graph.vue'
 
-const { stats, graphData, loading, error, building, buildError, fetchStats, fetchGraphData, buildGraph } = useCodeGraph()
+const { stats, graphData, loading, error, building, buildError, repositories, fetchStats, fetchGraphData, buildGraph, fetchRepositories } = useCodeGraph()
 
-const repository = ref('CVGenerator')
+const repository = ref<string>('')
 const useG6 = ref(true) // Toggle between v-network-graph and G6
 
 // Extract human-readable name from file path
@@ -240,11 +240,21 @@ const handleBuildGraph = async () => {
   await fetchGraphData(repository.value, 500)
 }
 
-// Fetch stats and graph data on mount
+// Watch repository changes and reload data
+watch(repository, async (newRepo) => {
+  if (newRepo) {
+    await fetchStats(newRepo)
+    await fetchGraphData(newRepo, 80)
+  }
+})
+
+// Fetch repositories on mount
 onMounted(async () => {
-  await fetchStats(repository.value)
-  // Load 80 nodes with hierarchical layout (grouped by file)
-  await fetchGraphData(repository.value, 80)
+  await fetchRepositories()
+  // Select first repository by default
+  if (repositories.value.length > 0) {
+    repository.value = repositories.value[0]
+  }
 })
 </script>
 
@@ -253,10 +263,31 @@ onMounted(async () => {
     <div class="max-w-full mx-auto px-4 py-6">
       <!-- Header -->
       <div class="mb-6">
-        <h1 class="text-3xl text-heading">Code Graph</h1>
-        <p class="mt-2 text-sm text-gray-400">
-          Visual representation of code dependencies and relationships
-        </p>
+        <div class="flex items-center justify-between">
+          <div>
+            <h1 class="text-3xl text-heading">Code Graph</h1>
+            <p class="mt-2 text-sm text-gray-400">
+              Visual representation of code dependencies and relationships
+            </p>
+          </div>
+
+          <!-- Repository Selector -->
+          <div class="flex items-center gap-4">
+            <label for="repository-select" class="text-sm font-medium text-gray-300">
+              Repository:
+            </label>
+            <select
+              id="repository-select"
+              v-model="repository"
+              class="bg-slate-800 text-gray-200 border border-slate-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="" disabled>Select repository...</option>
+              <option v-for="repo in repositories" :key="repo" :value="repo">
+                {{ repo }}
+              </option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <!-- Loading State -->

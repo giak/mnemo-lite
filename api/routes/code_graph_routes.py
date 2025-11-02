@@ -202,6 +202,39 @@ async def find_path(
         raise HTTPException(status_code=500, detail=f"Failed to find path: {str(e)}")
 
 
+@router.get("/repositories", response_model=List[str])
+async def list_repositories(
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> List[str]:
+    """
+    Get list of all repositories that have graph nodes.
+
+    Returns:
+        List of repository names
+    """
+    try:
+        from sqlalchemy.sql import text
+
+        async with engine.connect() as conn:
+            query = text("""
+                SELECT DISTINCT properties->>'repository' as repository
+                FROM nodes
+                WHERE properties->>'repository' IS NOT NULL
+                ORDER BY repository
+            """)
+
+            result = await conn.execute(query)
+            rows = result.fetchall()
+            repositories = [row[0] for row in rows if row[0]]
+
+            logger.info(f"Found {len(repositories)} repositories with graph nodes")
+            return repositories
+
+    except Exception as e:
+        logger.error(f"Failed to list repositories: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to list repositories: {str(e)}")
+
+
 @router.get("/stats/{repository}", response_model=Dict[str, Any])
 async def get_graph_stats(
     repository: str = Path(..., description="Repository name"),
