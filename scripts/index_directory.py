@@ -27,6 +27,78 @@ class FileProcessingResult:
     error_message: str = ""
 
 
+def worker_process_file(file_path: Path, repository: str, db_url: str) -> FileProcessingResult:
+    """
+    Worker function for Joblib - processes 1 file atomically.
+    Each worker loads its own embedding model and creates DB connection.
+
+    IMPORTANT: Must be top-level function (required by multiprocessing).
+
+    Args:
+        file_path: Path to source file
+        repository: Repository name
+        db_url: Database connection URL
+
+    Returns:
+        FileProcessingResult with success status and chunk count
+    """
+    import os
+    import gc
+    from sqlalchemy.ext.asyncio import create_async_engine
+    import asyncio
+
+    # Set embedding mode for this worker
+    os.environ["EMBEDDING_MODE"] = "real"
+
+    # Helper function to run async code in worker process
+    async def _process_async():
+        # Create worker-specific resources (NOT shared between workers)
+        from services.dual_embedding_service import DualEmbeddingService
+        embedding_service = DualEmbeddingService()
+        engine = create_async_engine(db_url, echo=False, pool_size=2, max_overflow=0)
+
+        try:
+            # Run async processing
+            result = await process_file_atomically(
+                file_path, repository, embedding_service, engine
+            )
+            return result
+        except Exception as e:
+            # Catch any unhandled errors
+            return FileProcessingResult(
+                file_path=file_path,
+                success=False,
+                chunks_created=0,
+                error_message=str(e)
+            )
+        finally:
+            # Cleanup resources
+            try:
+                await engine.dispose()
+            except:
+                pass
+            del embedding_service
+            gc.collect()
+
+    # Create new event loop for this worker process
+    # Using ProcessPoolExecutor with 'spawn' gives us a clean process
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(_process_async())
+            return result
+        finally:
+            loop.close()
+    except Exception as e:
+        return FileProcessingResult(
+            file_path=file_path,
+            success=False,
+            chunks_created=0,
+            error_message=str(e)
+        )
+
+
 async def cleanup_repository(repository: str, engine):
     """
     Delete all existing data for a repository before reindexing.
@@ -192,7 +264,7 @@ def scan_files(directory: Path) -> list[Path]:
     return sorted(filtered)
 
 
-async def run_streaming_pipeline(
+async def run_streaming_pipeline_sequential(
     directory: Path,
     repository: str,
     verbose: bool = False,
@@ -212,7 +284,7 @@ async def run_streaming_pipeline(
 
     # Database setup
     if engine is None:
-        db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@mnemo-postgres:5432/mnemolite")
+        db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
         engine = create_async_engine(db_url, echo=False)
         should_dispose = True
     else:
@@ -278,10 +350,117 @@ async def run_streaming_pipeline(
     }
 
 
+async def run_parallel_pipeline(
+    directory: Path,
+    repository: str,
+    n_jobs: int = 4,
+    verbose: bool = False,
+    engine=None
+) -> dict:
+    """
+    Run parallel indexing pipeline with Joblib.
+
+    Args:
+        directory: Path to codebase
+        repository: Repository name
+        n_jobs: Number of parallel workers (default: 4)
+        verbose: Enable detailed logging
+        engine: Optional pre-created engine for cleanup phase
+
+    Returns:
+        dict with stats: total_files, success_files, error_files, total_chunks, errors
+    """
+    import os
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    # Create engine if not provided
+    if not engine:
+        db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
+        engine = create_async_engine(db_url, echo=False)
+        should_dispose = True
+    else:
+        should_dispose = False
+
+    # Phase 1: Cleanup (sequential)
+    print("\n" + "=" * 80)
+    print("🧹 Phase 1/3: Cleanup")
+    print("=" * 80)
+    await cleanup_repository(repository, engine)
+
+    # Phase 2: Scan files
+    print("\n" + "=" * 80)
+    print("🔍 Phase 2/3: Scanning Files")
+    print("=" * 80)
+    files = scan_files(directory)
+    print(f"📊 Found {len(files)} files to index")
+
+    # Phase 3: Parallel processing with ProcessPoolExecutor
+    print("\n" + "=" * 80)
+    print(f"⚡ Phase 3/3: Parallel Processing ({n_jobs} workers)")
+    print("=" * 80)
+
+    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
+
+    print(f"🔧 Starting {n_jobs} parallel workers...")
+    print(f"📈 Each worker will load its own embedding model (~2GB)")
+    print(f"💾 Expected memory usage: ~{n_jobs * 3}GB")
+    print()
+
+    # Execute parallel processing
+    # Use ProcessPoolExecutor for proper process isolation (Joblib has event loop conflicts)
+    from concurrent.futures import ProcessPoolExecutor
+    import multiprocessing
+
+    # Set start method to 'spawn' to ensure clean worker processes
+    ctx = multiprocessing.get_context('spawn')
+
+    with ProcessPoolExecutor(max_workers=n_jobs, mp_context=ctx) as executor:
+        # Submit all tasks
+        futures = [
+            executor.submit(worker_process_file, file_path, repository, db_url)
+            for file_path in files
+        ]
+
+        # Collect results with progress indication
+        results = []
+        for i, future in enumerate(futures, 1):
+            if not verbose:
+                print(f"\rProcessing: {i}/{len(files)} files", end='', flush=True)
+            result = future.result()  # Wait for completion
+            results.append(result)
+            if verbose:
+                status = "✓" if result.success else "✗"
+                print(f"{status} {result.file_path.name}: {result.chunks_created} chunks")
+
+        if not verbose:
+            print()  # New line after progress
+
+    # Aggregate results
+    success_count = sum(1 for r in results if r.success)
+    error_count = len(results) - success_count
+    total_chunks = sum(r.chunks_created for r in results)
+    errors = [
+        {"file": str(r.file_path), "error": r.error_message}
+        for r in results if not r.success
+    ]
+
+    # Cleanup engine if we created it
+    if should_dispose:
+        await engine.dispose()
+
+    return {
+        "total_files": len(files),
+        "success_files": success_count,
+        "error_files": error_count,
+        "total_chunks": total_chunks,
+        "errors": errors
+    }
+
+
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Index TypeScript/JavaScript codebase into MnemoLite"
+        description="Index TypeScript/JavaScript codebase with parallel processing"
     )
     parser.add_argument(
         "directory",
@@ -293,6 +472,17 @@ def parse_args():
         type=str,
         default=None,
         help="Repository name (default: directory name)"
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=4,
+        help="Number of parallel workers (default: 4)"
+    )
+    parser.add_argument(
+        "--sequential",
+        action="store_true",
+        help="Use sequential mode instead of parallel"
     )
     parser.add_argument(
         "--verbose",
@@ -468,7 +658,7 @@ async def phase2_embeddings(chunks: list, repository: str, verbose: bool = False
     os.environ["EMBEDDING_MODE"] = "real"
 
     # Create database engine
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@mnemo-postgres:5432/mnemolite")
+    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
     engine = create_async_engine(db_url, echo=False)
 
     embedding_service = DualEmbeddingService()
@@ -741,7 +931,7 @@ async def main():
     repository = args.repository or directory.name
 
     print("=" * 80)
-    print("🚀 MnemoLite Directory Indexer (Streaming Mode)")
+    print("🚀 MnemoLite Directory Indexer")
     print("=" * 80)
     print(f"\n📁 Repository: {repository}")
     print(f"📂 Path: {directory}")
@@ -749,16 +939,20 @@ async def main():
     start_time = datetime.now()
 
     # Create database engine for graph construction
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@mnemo-postgres:5432/mnemolite")
+    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
     engine = create_async_engine(db_url, echo=False)
 
-    # Run streaming pipeline
-    stats = await run_streaming_pipeline(
-        directory=directory,
-        repository=repository,
-        verbose=args.verbose,
-        engine=engine
-    )
+    # Run pipeline (parallel by default, sequential if --sequential flag)
+    if args.sequential:
+        print("🐌 Running in SEQUENTIAL mode")
+        stats = await run_streaming_pipeline_sequential(
+            directory, repository, verbose=args.verbose, engine=engine
+        )
+    else:
+        print(f"⚡ Running in PARALLEL mode with {args.workers} workers")
+        stats = await run_parallel_pipeline(
+            directory, repository, n_jobs=args.workers, verbose=args.verbose, engine=engine
+        )
 
     # Run Phase 4: Graph Construction
     if stats['success_files'] > 0:
@@ -769,23 +963,24 @@ async def main():
 
     elapsed = (datetime.now() - start_time).total_seconds()
 
-    # Summary
+    # Print summary
     print("\n" + "=" * 80)
     print("✅ INDEXING COMPLETE")
     print("=" * 80)
-    print(f"\n📊 Summary:")
     print(f"   - Total files: {stats['total_files']}")
-    print(f"   - Success: {stats['success_files']}")
+    print(f"   - Success: {stats['success_files']} ({stats['success_files']*100//stats['total_files'] if stats['total_files'] > 0 else 0}%)")
     print(f"   - Errors: {stats['error_files']}")
     print(f"   - Total chunks: {stats['total_chunks']}")
-    print(f"   - Graph nodes: {stats.get('graph', {}).get('total_nodes', 0)}")
-    print(f"   - Graph edges: {stats.get('graph', {}).get('total_edges', 0)}")
+    if 'graph' in stats:
+        print(f"   - Graph nodes: {stats['graph'].get('total_nodes', 0)}")
+        print(f"   - Graph edges: {stats['graph'].get('total_edges', 0)}")
     print(f"   - Time: {elapsed:.1f}s ({elapsed/60:.1f}m)")
 
     if stats['errors']:
-        print(f"\n❌ Failed files:")
+        print(f"\n❌ Failed files ({len(stats['errors'])}):")
         for error in stats['errors'][:10]:  # Show first 10
-            print(f"   - {error['file']}: {error['error']}")
+            print(f"   - {error['file']}")
+            print(f"     Error: {error['error'][:100]}")  # Truncate long errors
 
 
 if __name__ == "__main__":
