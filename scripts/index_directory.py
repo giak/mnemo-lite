@@ -130,7 +130,7 @@ async def phase1_chunking(files: list[Path], repository: str, verbose: bool = Fa
     print("📖 Phase 1/3: Code Chunking & AST Parsing")
     print("=" * 80)
 
-    chunking_service = CodeChunkingService(max_workers=4)
+    chunking_service = CodeChunkingService(max_workers=1)
 
     all_chunks = []
     errors = []
