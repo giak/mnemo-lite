@@ -243,6 +243,7 @@ const handleBuildGraph = async () => {
 // Watch repository changes and reload data
 watch(repository, async (newRepo) => {
   if (newRepo) {
+    console.log('[Graph] Loading repository:', newRepo)
     await fetchStats(newRepo)
     await fetchGraphData(newRepo, 80)
   }
@@ -250,10 +251,16 @@ watch(repository, async (newRepo) => {
 
 // Fetch repositories on mount
 onMounted(async () => {
+  console.log('[Graph] Fetching repositories...')
   await fetchRepositories()
+  console.log('[Graph] Available repositories:', repositories.value)
+
   // Select first repository by default
   if (repositories.value.length > 0) {
     repository.value = repositories.value[0]
+    // Explicitly load data for first repository
+    await fetchStats(repository.value)
+    await fetchGraphData(repository.value, 80)
   }
 })
 </script>
@@ -346,7 +353,7 @@ onMounted(async () => {
             <div class="flex items-center justify-between">
               <div>
                 <p class="label">Classes</p>
-                <p class="text-3xl font-bold text-blue-400">{{ stats.nodes_by_type.class || 0 }}</p>
+                <p class="text-3xl font-bold text-blue-400">{{ stats.nodes_by_type.Class || 0 }}</p>
               </div>
               <svg class="h-10 w-10 text-blue-500/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -359,7 +366,7 @@ onMounted(async () => {
             <div class="flex items-center justify-between">
               <div>
                 <p class="label">Functions</p>
-                <p class="text-3xl font-bold text-purple-400">{{ stats.nodes_by_type.function || 0 }}</p>
+                <p class="text-3xl font-bold text-purple-400">{{ stats.nodes_by_type.Function || 0 }}</p>
               </div>
               <svg class="h-10 w-10 text-purple-500/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
