@@ -275,6 +275,63 @@ async def phase2_embeddings(chunks: list, repository: str, verbose: bool = False
     return success_count, errors
 
 
+async def phase3_graph(repository: str, verbose: bool = False):
+    """
+    Phase 3: Build graph (nodes + edges) from chunks.
+
+    Uses GraphConstructionService with EPIC-30 anonymous filtering.
+
+    Returns:
+        GraphStats object
+    """
+    import os
+    from services.graph_construction_service import GraphConstructionService
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    print("\n" + "=" * 80)
+    print("🔗 Phase 3/3: Graph Construction")
+    print("=" * 80)
+
+    # Create database engine
+    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@mnemo-postgres:5432/mnemolite")
+    engine = create_async_engine(db_url, echo=False)
+
+    graph_service = GraphConstructionService(engine)
+
+    print(f"\nBuilding graph for repository: {repository}")
+
+    start_time = datetime.now()
+
+    # Build graph (includes EPIC-30 anonymous filtering)
+    stats = await graph_service.build_graph_for_repository(repository=repository)
+
+    elapsed = (datetime.now() - start_time).total_seconds()
+
+    print(f"\n✅ Graph constructed in {elapsed:.1f}s")
+    print(f"   - Nodes: {stats.total_nodes}")
+    print(f"   - Edges: {stats.total_edges}")
+
+    if stats.total_nodes > 0:
+        edge_ratio = (stats.total_edges / stats.total_nodes) * 100
+        print(f"   - Edge ratio: {edge_ratio:.1f}%")
+
+    # Show node breakdown
+    if stats.nodes_by_type:
+        print(f"\n   📋 Nodes by type:")
+        for node_type, count in sorted(stats.nodes_by_type.items(), key=lambda x: -x[1])[:5]:
+            print(f"      - {node_type}: {count}")
+
+    # Show edge breakdown
+    if stats.edges_by_type:
+        print(f"\n   🔗 Edges by type:")
+        for edge_type, count in stats.edges_by_type.items():
+            print(f"      - {edge_type}: {count}")
+
+    await engine.dispose()
+
+    return stats
+
+
 async def main():
     """Main indexing pipeline."""
     args = parse_args()
@@ -324,8 +381,45 @@ async def main():
         print("\n❌ No embeddings generated! All chunks failed.")
         sys.exit(1)
 
-    # TODO: Phase 3
-    print("\n⚠️  Graph construction not yet implemented")
+    # Phase 3: Graph Construction
+    graph_stats = await phase3_graph(repository, args.verbose)
+
+    # Final summary
+    print("\n" + "=" * 80)
+    print("✅ INDEXING COMPLETE!")
+    print("=" * 80)
+    print(f"\n📊 Final Summary:")
+    print(f"   Repository: {repository}")
+    print(f"\n   Files:")
+    print(f"   - Scanned: {stats['total']}")
+    print(f"   - Succeeded: {stats['total'] - len(errors_phase1)}")
+    print(f"   - Failed: {len(errors_phase1)}")
+    print(f"\n   Chunks:")
+    print(f"   - Created: {len(chunks)}")
+    print(f"   - With embeddings: {success_count}")
+    print(f"\n   Graph:")
+    print(f"   - Nodes: {graph_stats.total_nodes}")
+    print(f"   - Edges: {graph_stats.total_edges}")
+
+    if graph_stats.total_nodes > 0:
+        edge_ratio = (graph_stats.total_edges / graph_stats.total_nodes) * 100
+        print(f"   - Edge ratio: {edge_ratio:.1f}%")
+
+    # Show errors
+    all_errors = errors_phase1 + errors_phase2
+    if all_errors:
+        print(f"\n⚠️  Failed Items ({len(all_errors)}):")
+        for i, error in enumerate(all_errors[:5], 1):
+            item = error.get("file") or error.get("chunk")
+            print(f"   {i}. {item}")
+            print(f"      Error: {error['error']}")
+
+        if len(all_errors) > 5:
+            print(f"   ... and {len(all_errors) - 5} more")
+
+    print(f"\n🎨 View graph at: http://localhost:3002/")
+    print(f"   Select repository: {repository}")
+    print("=" * 80)
 
 
 if __name__ == "__main__":
