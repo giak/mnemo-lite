@@ -331,6 +331,7 @@ class BatchIndexingConsumer:
             engine: SQLAlchemy AsyncEngine for database access
         """
         from sqlalchemy.ext.asyncio import create_async_engine
+        from sqlalchemy import text
         import logging
 
         logger = logging.getLogger(__name__)
@@ -340,9 +341,30 @@ class BatchIndexingConsumer:
             if not engine:
                 engine = create_async_engine(self.db_url)
 
-            # Build graph
+            # Detect languages from chunks
+            async with engine.begin() as conn:
+                result = await conn.execute(
+                    text("""
+                        SELECT DISTINCT language
+                        FROM code_chunks
+                        WHERE repository = :repo
+                        ORDER BY language
+                    """),
+                    {"repo": repository}
+                )
+                languages = [row.language for row in result]
+
+            if not languages:
+                logger.warning(f"No chunks found for repository '{repository}', skipping graph construction")
+                return
+
+            logger.info(f"Triggering graph construction for '{repository}' with languages: {languages}")
+
+            # Build graph with detected languages
             graph_service = GraphConstructionService(engine)
-            await graph_service.build_graph_for_repository(repository, languages=None)
+            stats = await graph_service.build_graph_for_repository(repository, languages=languages)
+
+            logger.info(f"Graph construction complete: {stats.total_nodes} nodes, {stats.total_edges} edges")
 
             # Update status to completed
             await self._update_status(
