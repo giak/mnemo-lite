@@ -41,7 +41,7 @@ def test_scan_files_filters_by_extension():
         (tmp_path / "test3.py").touch()  # Should be ignored
         (tmp_path / "README.md").touch()  # Should be ignored
 
-        files = producer._scan_files(tmp_path, [".ts", ".js"])
+        files = producer.scan_files(tmp_path, [".ts", ".js"])
 
         assert len(files) == 2
         assert all(f.suffix in [".ts", ".js"] for f in files)
@@ -58,7 +58,7 @@ def test_scan_files_sorts_alphabetically():
         (tmp_path / "alpha.ts").touch()
         (tmp_path / "beta.ts").touch()
 
-        files = producer._scan_files(tmp_path, [".ts"])
+        files = producer.scan_files(tmp_path, [".ts"])
 
         assert files[0].name == "alpha.ts"
         assert files[1].name == "beta.ts"

@@ -47,7 +47,7 @@ class BatchIndexingProducer:
         if self.redis_client:
             await self.redis_client.aclose()
 
-    def _scan_files(self, directory: Path, extensions: List[str]) -> List[Path]:
+    def scan_files(self, directory: Path, extensions: List[str]) -> List[Path]:
         """
         Scan directory for files with specified extensions.
 
@@ -110,7 +110,7 @@ class BatchIndexingProducer:
         await self.connect()
 
         # 1. Scan files
-        files = self._scan_files(directory, extensions)
+        files = self.scan_files(directory, extensions)
         total_files = len(files)
 
         # 2. Divide into batches

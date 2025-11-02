@@ -18,7 +18,7 @@ def test_scan_files_excludes_dist_directory(tmp_path):
 
     # Execute: Scan files
     producer = BatchIndexingProducer()
-    files = producer._scan_files(tmp_path, [".ts", ".js"])
+    files = producer.scan_files(tmp_path, [".ts", ".js"])
 
     # Verify: Only src/ files found, dist/ excluded
     file_paths = [str(f.relative_to(tmp_path)) for f in files]
@@ -41,7 +41,7 @@ def test_scan_files_excludes_nested_dist_directory(tmp_path):
 
     # Execute
     producer = BatchIndexingProducer()
-    files = producer._scan_files(tmp_path, [".ts", ".js"])
+    files = producer.scan_files(tmp_path, [".ts", ".js"])
 
     # Verify: Only source file, nested dist excluded
     file_paths = [str(f.relative_to(tmp_path)) for f in files]
