@@ -680,7 +680,7 @@ async def build_graph_phase(repository: str, engine) -> dict:
     4. Store everything
 
     Returns:
-        Dict with stats: total_nodes, total_edges
+        Dict with stats: total_nodes, total_edges, or error dict on failure
     """
     from services.graph_construction_service import GraphConstructionService
 
@@ -688,114 +688,37 @@ async def build_graph_phase(repository: str, engine) -> dict:
     print("🕸️  Phase 4: Graph Construction")
     print("=" * 80)
 
-    graph_service = GraphConstructionService(engine)
+    try:
+        graph_service = GraphConstructionService(engine)
 
-    # Build graph for repository
-    stats = await graph_service.build_graph_for_repository(
-        repository=repository,
-        languages=["typescript", "javascript"]
-    )
+        # Build graph for repository
+        stats = await graph_service.build_graph_for_repository(
+            repository=repository,
+            languages=["typescript", "javascript"]
+        )
 
-    print(f"\n✅ Graph construction complete:")
-    print(f"   - Nodes: {stats.total_nodes}")
-    print(f"   - Edges: {stats.total_edges}")
-    print(f"   - Nodes by type: {stats.nodes_by_type}")
-    print(f"   - Edges by type: {stats.edges_by_type}")
+        print(f"\n✅ Graph construction complete:")
+        print(f"   - Nodes: {stats.total_nodes}")
+        print(f"   - Edges: {stats.total_edges}")
+        print(f"   - Nodes by type: {stats.nodes_by_type}")
+        print(f"   - Edges by type: {stats.edges_by_type}")
 
-    return {
-        "total_nodes": stats.total_nodes,
-        "total_edges": stats.total_edges,
-        "nodes_by_type": stats.nodes_by_type,
-        "edges_by_type": stats.edges_by_type
-    }
+        return {
+            "total_nodes": stats.total_nodes,
+            "total_edges": stats.total_edges,
+            "nodes_by_type": stats.nodes_by_type,
+            "edges_by_type": stats.edges_by_type
+        }
 
-
-async def phase4_graph_construction(repository: str, verbose: bool = False):
-    """
-    Phase 4: Build graph (nodes + edges) from chunks and calculate metrics.
-
-    Steps:
-    1. Build graph (nodes + edges)
-    2. Calculate coupling metrics (afferent/efferent)
-    3. Calculate PageRank scores
-    4. Calculate edge weights
-
-    Uses GraphConstructionService with EPIC-30 anonymous filtering.
-
-    Returns:
-        Tuple (GraphStats, chunk_to_node mapping)
-    """
-    import os
-    from services.graph_construction_service import GraphConstructionService
-    from db.repositories.code_chunk_repository import CodeChunkRepository
-    from db.repositories.node_repository import NodeRepository
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    print("\n" + "=" * 80)
-    print("🔗 Phase 4/4: Graph Construction & Metrics")
-    print("=" * 80)
-
-    # Create database engine
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@mnemo-postgres:5432/mnemolite")
-    engine = create_async_engine(db_url, echo=False)
-
-    graph_service = GraphConstructionService(engine)
-
-    print(f"\nBuilding graph and calculating metrics for repository: {repository}")
-
-    start_time = datetime.now()
-
-    # Build graph (includes EPIC-30 anonymous filtering + metrics calculation)
-    stats = await graph_service.build_graph_for_repository(repository=repository)
-
-    elapsed = (datetime.now() - start_time).total_seconds()
-
-    print(f"\n✅ Graph constructed and metrics calculated in {elapsed:.1f}s")
-    print(f"   - Nodes: {stats.total_nodes}")
-    print(f"   - Edges: {stats.total_edges}")
-
-    if stats.total_nodes > 0:
-        edge_ratio = (stats.total_edges / stats.total_nodes) * 100
-        print(f"   - Edge ratio: {edge_ratio:.1f}%")
-
-    # Show node breakdown
-    if stats.nodes_by_type:
-        print(f"\n   📋 Nodes by type:")
-        for node_type, count in sorted(stats.nodes_by_type.items(), key=lambda x: -x[1])[:5]:
-            print(f"      - {node_type}: {count}")
-
-    # Show edge breakdown
-    if stats.edges_by_type:
-        print(f"\n   🔗 Edges by type:")
-        for edge_type, count in stats.edges_by_type.items():
-            print(f"      - {edge_type}: {count}")
-
-    # Build chunk_to_node mapping for Phase 3 (metadata extraction)
-    # Query nodes and match them to chunks by name_path
-    print(f"\n   🔗 Building chunk-to-node mapping...")
-    node_repo = NodeRepository(engine)
-    chunk_repo = CodeChunkRepository(engine)
-
-    nodes = await node_repo.get_by_repository(repository)
-    chunks = await chunk_repo.get_by_repository(repository)
-
-    # Build mapping: chunk_id -> node
-    chunk_to_node = {}
-    node_by_name_path = {node.label: node for node in nodes}  # Simplified matching by label
-
-    for chunk in chunks:
-        # Try to find matching node by name_path (or name if name_path not available)
-        match_key = chunk.name_path if chunk.name_path else chunk.name
-        if match_key in node_by_name_path:
-            chunk_to_node[chunk.id] = node_by_name_path[match_key]
-        elif chunk.name in node_by_name_path:
-            chunk_to_node[chunk.id] = node_by_name_path[chunk.name]
-
-    print(f"   - Mapped {len(chunk_to_node)}/{len(chunks)} chunks to nodes")
-
-    await engine.dispose()
-
-    return stats, chunk_to_node, chunks
+    except Exception as e:
+        print(f"\n❌ Graph construction failed: {e}")
+        return {
+            "total_nodes": 0,
+            "total_edges": 0,
+            "nodes_by_type": {},
+            "edges_by_type": {},
+            "error": str(e)
+        }
 
 
 async def main():
