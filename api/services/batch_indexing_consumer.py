@@ -87,3 +87,65 @@ class BatchIndexingConsumer:
             return ErrorType.SUBPROCESS_CRASH
         else:
             return ErrorType.CRITICAL_ERROR
+
+    async def _run_subprocess_worker(
+        self,
+        repository: str,
+        files: List[str],
+        timeout: int = 300  # 5min per batch (40 files × 7.5s = 300s)
+    ) -> Dict:
+        """
+        Execute subprocess worker for 1 batch.
+
+        Args:
+            repository: Repository name
+            files: List of file paths to process
+            timeout: Timeout in seconds (default: 5min)
+
+        Returns:
+            Dict with keys:
+            - success_count: int
+            - error_count: int
+            - error: str (if subprocess failed)
+
+        Raises:
+            TimeoutError: If subprocess exceeds timeout
+            RuntimeError: If subprocess crashes
+        """
+        # Spawn subprocess using asyncio.create_subprocess_exec()
+        process = await asyncio.create_subprocess_exec(
+            "python3",
+            "/app/workers/batch_worker_subprocess.py",
+            "--repository", repository,
+            "--db-url", self.db_url,
+            "--files", ",".join(files),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        # Wait with timeout
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            # Kill subprocess on timeout
+            process.kill()
+            await process.wait()
+            raise TimeoutError(f"Subprocess timeout after {timeout}s")
+
+        # Check exit code
+        if process.returncode != 0:
+            stderr_str = stderr.decode() if stderr else "No error output"
+            raise RuntimeError(f"Subprocess failed with exit code {process.returncode}: {stderr_str}")
+
+        # Parse JSON result from stdout
+        try:
+            result = json.loads(stdout.decode())
+            return {
+                "success_count": result["success_count"],
+                "error_count": result["error_count"]
+            }
+        except (json.JSONDecodeError, KeyError) as e:
+            raise RuntimeError(f"Failed to parse subprocess result: {e}")
