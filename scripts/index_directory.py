@@ -12,9 +12,129 @@ import sys
 from pathlib import Path
 from datetime import datetime
 from tqdm import tqdm
+from dataclasses import dataclass
 
 # Add API to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
+
+
+@dataclass
+class FileProcessingResult:
+    """Result of processing a single file atomically."""
+    file_path: Path
+    success: bool
+    chunks_created: int
+    error_message: str = ""
+
+
+async def process_file_atomically(
+    file_path: Path,
+    repository: str,
+    embedding_service,
+    engine
+) -> FileProcessingResult:
+    """
+    Process a single source file completely and atomically.
+
+    Steps performed in-memory:
+    1. Chunk the file
+    2. Generate embeddings for each chunk
+    3. Extract metadata for each chunk
+    4. Write all data to database in single transaction
+
+    If any step fails, transaction rolls back automatically.
+
+    Args:
+        file_path: Path to source file
+        repository: Repository name
+        embedding_service: Pre-loaded DualEmbeddingService instance
+        engine: SQLAlchemy async engine
+
+    Returns:
+        FileProcessingResult with success status and count
+    """
+    from services.code_chunking_service import CodeChunkingService
+    from services.metadata_extractor_service import get_metadata_extractor_service
+    from db.repositories.code_chunk_repository import CodeChunkRepository
+    from models.code_chunk_models import CodeChunkCreate
+    from services.dual_embedding_service import EmbeddingDomain
+
+    chunks_created = 0
+
+    try:
+        # Step 1: Chunk file (in-memory)
+        metadata_service = get_metadata_extractor_service()
+        chunking_service = CodeChunkingService(max_workers=1, metadata_service=metadata_service)
+
+        # Read file content
+        content = file_path.read_text(encoding="utf-8")
+
+        # Detect language
+        language = "typescript" if file_path.suffix in {".ts", ".tsx"} else "javascript"
+
+        # Chunk code
+        chunks = await chunking_service.chunk_code(
+            source_code=content,
+            language=language,
+            file_path=str(file_path)
+        )
+
+        if not chunks:
+            return FileProcessingResult(
+                file_path=file_path,
+                success=True,
+                chunks_created=0,
+                error_message="No chunks extracted (empty or filtered)"
+            )
+
+        # Step 2 & 3: Generate embeddings + extract metadata (in-memory)
+        chunk_creates = []
+
+        for chunk in chunks:
+            # Generate CODE embedding
+            embedding_result = await embedding_service.generate_embedding(
+                chunk.source_code,
+                domain=EmbeddingDomain.CODE
+            )
+
+            # Create chunk model with embedding
+            chunk_create = CodeChunkCreate(
+                file_path=chunk.file_path,
+                language=chunk.language,
+                chunk_type=chunk.chunk_type,
+                name=chunk.name,
+                source_code=chunk.source_code,
+                start_line=chunk.start_line,
+                end_line=chunk.end_line,
+                repository=repository,
+                metadata=chunk.metadata,  # Already contains calls, imports from chunking
+                embedding_text=None,
+                embedding_code=embedding_result['code']
+            )
+
+            chunk_creates.append(chunk_create)
+
+        # Step 4: Write to database atomically (single transaction)
+        async with engine.begin() as conn:
+            chunk_repo = CodeChunkRepository(engine, connection=conn)
+
+            for chunk_create in chunk_creates:
+                await chunk_repo.add(chunk_create)
+                chunks_created += 1
+
+        return FileProcessingResult(
+            file_path=file_path,
+            success=True,
+            chunks_created=chunks_created
+        )
+
+    except Exception as e:
+        return FileProcessingResult(
+            file_path=file_path,
+            success=False,
+            chunks_created=0,
+            error_message=str(e)
+        )
 
 
 def parse_args():
@@ -218,15 +338,22 @@ async def phase2_embeddings(chunks: list, repository: str, verbose: bool = False
 
     success_count = 0
     errors = []
-    batch_size = 50
+    batch_size = 25  # Reduced from 50 to prevent OOM
 
     start_time = datetime.now()
 
     # Process in batches with progress bar
+    total_batches = (len(chunks) + batch_size - 1) // batch_size
+    print(f"   Processing {len(chunks)} chunks in {total_batches} batches of {batch_size}")
+
     with tqdm(total=len(chunks), desc="Generating embeddings", unit="chunk") as pbar:
-        for i in range(0, len(chunks), batch_size):
+        for batch_num, i in enumerate(range(0, len(chunks), batch_size), 1):
             batch = chunks[i:i + batch_size]
 
+            if verbose:
+                print(f"\n   📦 Batch {batch_num}/{total_batches} ({len(batch)} chunks)")
+
+            # Process batch
             for chunk in batch:
                 try:
                     # Generate CODE embedding
@@ -264,6 +391,10 @@ async def phase2_embeddings(chunks: list, repository: str, verbose: bool = False
                         print(f"\n   ⚠️  Failed: {chunk.name} - {e}")
 
                 pbar.update(1)
+
+            # Force garbage collection after each batch to free memory
+            import gc
+            gc.collect()
 
     elapsed = (datetime.now() - start_time).total_seconds()
 

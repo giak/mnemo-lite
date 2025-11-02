@@ -333,9 +333,16 @@ class CodeChunkQueryBuilder:
 class CodeChunkRepository:
     """Manages CRUD and search operations for code chunks."""
 
-    def __init__(self, engine: AsyncEngine):
-        """Initialize repository with AsyncEngine."""
+    def __init__(self, engine: AsyncEngine, connection: Optional[AsyncConnection] = None):
+        """
+        Initialize repository.
+
+        Args:
+            engine: SQLAlchemy async engine
+            connection: Optional connection from existing transaction
+        """
         self.engine = engine
+        self._connection = connection  # If provided, use this connection
         self.query_builder = CodeChunkQueryBuilder()
         self.logger = logging.getLogger(__name__)
         self.logger.info("CodeChunkRepository initialized.")
@@ -364,12 +371,15 @@ class CodeChunkRepository:
         Raises:
             RepositoryError: If query execution fails
         """
-        if connection:
+        # Prioritize: method parameter > instance connection > create new
+        conn_to_use = connection or self._connection
+
+        if conn_to_use:
             # Use provided connection (caller manages transaction)
             try:
                 self.logger.debug(f"Executing query with external connection: {str(query)}")
                 self.logger.debug(f"With params: {params}")
-                result = await connection.execute(query, params)
+                result = await conn_to_use.execute(query, params)
                 return result
             except Exception as e:
                 # Don't rollback - caller manages transaction
