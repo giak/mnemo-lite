@@ -75,8 +75,10 @@ def worker_process_file(file_path: Path, repository: str, db_url: str) -> FilePr
             # Cleanup resources
             try:
                 await engine.dispose()
-            except:
-                pass
+            except Exception as e:
+                # Log cleanup errors but don't fail the worker
+                import logging
+                logging.warning(f"Failed to dispose engine in worker cleanup: {e}")
             del embedding_service
             gc.collect()
 
