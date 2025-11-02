@@ -27,6 +27,36 @@ class FileProcessingResult:
     error_message: str = ""
 
 
+async def cleanup_repository(repository: str, engine):
+    """
+    Delete all existing data for a repository before reindexing.
+
+    Deletes in order:
+    1. edge_weights (FK to edges)
+    2. computed_metrics (FK to nodes)
+    3. detailed_metadata (FK to nodes)
+    4. edges (FK to nodes)
+    5. nodes (FK to code_chunks)
+    6. code_chunks
+    """
+    from sqlalchemy.sql import text
+
+    async with engine.begin() as conn:
+        # Delete in reverse FK order
+        await conn.execute(text("DELETE FROM edge_weights WHERE edge_id IN (SELECT edge_id FROM edges e JOIN nodes n ON e.source_node_id = n.node_id WHERE n.properties->>'repository' = :repo)"), {"repo": repository})
+
+        await conn.execute(text("DELETE FROM computed_metrics WHERE repository = :repo"), {"repo": repository})
+
+        await conn.execute(text("DELETE FROM detailed_metadata WHERE node_id IN (SELECT node_id FROM nodes WHERE properties->>'repository' = :repo)"), {"repo": repository})
+
+        await conn.execute(text("DELETE FROM edges WHERE source_node_id IN (SELECT node_id FROM nodes WHERE properties->>'repository' = :repo)"), {"repo": repository})
+
+        await conn.execute(text("DELETE FROM nodes WHERE properties->>'repository' = :repo"), {"repo": repository})
+
+        # Delete chunks by file_path pattern
+        await conn.execute(text("DELETE FROM code_chunks WHERE repository = :repo"), {"repo": repository})
+
+
 async def process_file_atomically(
     file_path: Path,
     repository: str,
@@ -135,6 +165,117 @@ async def process_file_atomically(
             chunks_created=0,
             error_message=str(e)
         )
+
+
+def scan_files(directory: Path) -> list[Path]:
+    """Scan directory for TypeScript/JavaScript files, applying filters."""
+    files = []
+
+    for ext in ["*.ts", "*.js"]:
+        files.extend(directory.rglob(ext))
+
+    # Filter out tests, node_modules, declarations
+    filtered = []
+    for f in files:
+        path_str = str(f)
+        # Check for node_modules
+        if "node_modules" in path_str:
+            continue
+        # Check for declaration files
+        if path_str.endswith(".d.ts"):
+            continue
+        # Check for test files (in file name, not in path)
+        if ".test." in f.name or ".spec." in f.name or "__tests__" in path_str:
+            continue
+        filtered.append(f)
+
+    return sorted(filtered)
+
+
+async def run_streaming_pipeline(
+    directory: Path,
+    repository: str,
+    verbose: bool = False,
+    engine=None
+) -> dict:
+    """
+    Run streaming pipeline: process files one-at-a-time with constant memory.
+
+    Returns:
+        Dict with statistics: total_files, success_files, error_files, total_chunks, errors
+    """
+    import os
+    from services.dual_embedding_service import DualEmbeddingService
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from tqdm import tqdm
+    import gc
+
+    # Database setup
+    if engine is None:
+        db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@mnemo-postgres:5432/mnemolite")
+        engine = create_async_engine(db_url, echo=False)
+        should_dispose = True
+    else:
+        should_dispose = False
+
+    # Cleanup existing data
+    if verbose:
+        print(f"\n🧹 Cleaning up existing data for repository: {repository}")
+    await cleanup_repository(repository, engine)
+
+    # Scan files
+    files = scan_files(directory)
+
+    if verbose:
+        print(f"\n📊 Found {len(files)} files to index")
+
+    # Load embedding model ONCE
+    if verbose:
+        print(f"\n🔧 Loading embedding model...")
+    os.environ["EMBEDDING_MODE"] = "real"
+    embedding_service = DualEmbeddingService()
+
+    # Stream files one-at-a-time
+    success_count = 0
+    error_count = 0
+    total_chunks = 0
+    errors = []
+
+    with tqdm(total=len(files), desc="Processing files", disable=not verbose) as pbar:
+        for file_path in files:
+            result = await process_file_atomically(
+                file_path=file_path,
+                repository=repository,
+                embedding_service=embedding_service,
+                engine=engine
+            )
+
+            if result.success:
+                success_count += 1
+                total_chunks += result.chunks_created
+            else:
+                error_count += 1
+                errors.append({
+                    "file": str(file_path),
+                    "error": result.error_message
+                })
+                if verbose:
+                    print(f"\n   ⚠️  Failed: {file_path.name} - {result.error_message}")
+
+            # Force memory cleanup
+            gc.collect()
+            pbar.update(1)
+
+    if should_dispose:
+        await engine.dispose()
+
+    return {
+        "total_files": len(files),
+        "success_files": success_count,
+        "error_files": error_count,
+        "total_chunks": total_chunks,
+        "errors": errors
+    }
 
 
 def parse_args():
@@ -617,7 +758,7 @@ async def phase4_graph_construction(repository: str, verbose: bool = False):
 
 
 async def main():
-    """Main indexing pipeline."""
+    """Main entry point for directory indexer."""
     args = parse_args()
 
     # Validate directory
@@ -629,96 +770,44 @@ async def main():
         print(f"❌ Path is not a directory: {args.directory}")
         sys.exit(1)
 
-    # Set repository name
-    repository = args.repository or args.directory.name
+    directory = args.directory.resolve()
+    repository = args.repository or directory.name
 
     print("=" * 80)
-    print("🚀 MnemoLite Directory Indexer")
+    print("🚀 MnemoLite Directory Indexer (Streaming Mode)")
     print("=" * 80)
     print(f"\n📁 Repository: {repository}")
-    print(f"📂 Path: {args.directory.absolute()}")
+    print(f"📂 Path: {directory}")
 
-    # Phase 0: Scan directory
-    print("\n🔍 Scanning for TypeScript/JavaScript files...")
+    start_time = datetime.now()
 
-    scan_result = scan_directory(args.directory, verbose=args.verbose)
-    files = scan_result["files"]
-    stats = scan_result["stats"]
-
-    if stats["total"] == 0:
-        print("\n❌ No TypeScript/JavaScript files found!")
-        sys.exit(1)
-
-    print(f"\n   📊 Total to index: {stats['total']} files")
-
-    # Phase 1: Chunking
-    chunks, errors_phase1 = await phase1_chunking(files, repository, args.verbose)
-
-    if len(chunks) == 0:
-        print("\n❌ No chunks created! All files failed.")
-        sys.exit(1)
-
-    # Phase 2: Embeddings
-    success_count, errors_phase2 = await phase2_embeddings(chunks, repository, args.verbose)
-
-    if success_count == 0:
-        print("\n❌ No embeddings generated! All chunks failed.")
-        sys.exit(1)
-
-    # Phase 3: Graph Construction
-    # Note: Graph construction must run before metadata extraction because metadata tables
-    # have foreign key constraints on nodes table
-    graph_stats, chunk_to_node, db_chunks = await phase4_graph_construction(repository, args.verbose)
-
-    # Phase 4: Metadata Extraction
-    # Now that nodes exist, we can extract and store detailed metadata
-    # Use db_chunks (chunks from database with IDs) instead of chunks (from Phase 1)
-    import os
-    from sqlalchemy.ext.asyncio import create_async_engine
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@mnemo-postgres:5432/mnemolite")
-    engine = create_async_engine(db_url, echo=False)
-
-    metadata_success, errors_phase3 = await phase3_metadata_extraction(
-        db_chunks, repository, engine, chunk_to_node, args.verbose
+    # Run streaming pipeline
+    stats = await run_streaming_pipeline(
+        directory=directory,
+        repository=repository,
+        verbose=args.verbose
     )
 
-    # Final summary
+    elapsed = (datetime.now() - start_time).total_seconds()
+
+    # Summary
     print("\n" + "=" * 80)
-    print("✅ INDEXING COMPLETE!")
+    print("✅ INDEXING COMPLETE")
     print("=" * 80)
-    print(f"\n📊 Final Summary:")
-    print(f"   Repository: {repository}")
-    print(f"\n   Files:")
-    print(f"   - Scanned: {stats['total']}")
-    print(f"   - Succeeded: {stats['total'] - len(errors_phase1)}")
-    print(f"   - Failed: {len(errors_phase1)}")
-    print(f"\n   Chunks:")
-    print(f"   - Created: {len(chunks)}")
-    print(f"   - With embeddings: {success_count}")
-    print(f"   - With metadata: {metadata_success}")
-    print(f"\n   Graph:")
-    print(f"   - Nodes: {graph_stats.total_nodes}")
-    print(f"   - Edges: {graph_stats.total_edges}")
+    print(f"\n📊 Summary:")
+    print(f"   - Total files: {stats['total_files']}")
+    print(f"   - Success: {stats['success_files']}")
+    print(f"   - Errors: {stats['error_files']}")
+    print(f"   - Total chunks: {stats['total_chunks']}")
+    print(f"   - Time: {elapsed:.1f}s ({elapsed/60:.1f}m)")
 
-    if graph_stats.total_nodes > 0:
-        edge_ratio = (graph_stats.total_edges / graph_stats.total_nodes) * 100
-        print(f"   - Edge ratio: {edge_ratio:.1f}%")
+    if stats['errors']:
+        print(f"\n❌ Failed files:")
+        for error in stats['errors'][:10]:  # Show first 10
+            print(f"   - {error['file']}: {error['error']}")
 
-    # Show errors
-    all_errors = errors_phase1 + errors_phase2 + ([] if metadata_success else [{"phase": "metadata", "error": "Phase 3 failed"}])
-    if all_errors:
-        print(f"\n⚠️  Failed Items ({len(all_errors)}):")
-        for i, error in enumerate(all_errors[:5], 1):
-            item = error.get("file") or error.get("chunk")
-            print(f"   {i}. {item}")
-            print(f"      Error: {error['error']}")
-
-        if len(all_errors) > 5:
-            print(f"   ... and {len(all_errors) - 5} more")
-
-    print(f"\n🎨 View graph at: http://localhost:3002/")
-    print(f"   Select repository: {repository}")
-    print("=" * 80)
+    # TODO: Run Phase 4 (Graph Construction) here
+    print("\n⚠️  Note: Graph construction (Phase 4) not yet implemented in streaming mode")
 
 
 if __name__ == "__main__":

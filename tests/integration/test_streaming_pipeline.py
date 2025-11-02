@@ -91,3 +91,66 @@ async def test_process_file_atomically_rollback_on_error(tmp_path, clean_db):
     # Verify NO chunks in database (transaction rolled back)
     chunks = await chunk_repo.get_by_repository(repository)
     assert len(chunks) == 0
+
+
+@pytest.mark.asyncio
+async def test_streaming_pipeline_processes_all_files(tmp_path, clean_db):
+    """Test that streaming pipeline processes multiple files sequentially."""
+    # Create 3 test files
+    files = []
+    for i in range(3):
+        test_file = tmp_path / f"file{i}.ts"
+        test_file.write_text(f"export function func{i}() {{ return {i}; }}")
+        files.append(test_file)
+
+    # Run streaming pipeline
+    from scripts.index_directory import run_streaming_pipeline
+
+    stats = await run_streaming_pipeline(
+        directory=tmp_path,
+        repository="test_multi",
+        verbose=False,
+        engine=clean_db
+    )
+
+    # Verify all files processed
+    assert stats['total_files'] == 3
+    assert stats['success_files'] == 3
+    assert stats['error_files'] == 0
+    assert stats['total_chunks'] == 3
+
+    # Verify chunks in database
+    from db.repositories.code_chunk_repository import CodeChunkRepository
+    chunk_repo = CodeChunkRepository(clean_db)
+    chunks = await chunk_repo.get_by_repository("test_multi")
+    assert len(chunks) == 3
+
+
+@pytest.mark.asyncio
+async def test_streaming_pipeline_continues_on_error(tmp_path, clean_db):
+    """Test that pipeline continues if one file produces no chunks."""
+    # Create 2 valid + 1 file with no chunks
+    valid1 = tmp_path / "valid1.ts"
+    valid1.write_text("export function good1() { return 1; }")
+
+    nochunks = tmp_path / "nochunks.ts"
+    nochunks.write_text("this is garbage {{{")
+
+    valid2 = tmp_path / "valid2.ts"
+    valid2.write_text("export function good2() { return 2; }")
+
+    # Run pipeline
+    from scripts.index_directory import run_streaming_pipeline
+
+    stats = await run_streaming_pipeline(
+        directory=tmp_path,
+        repository="test_errors",
+        verbose=False,
+        engine=clean_db
+    )
+
+    # Verify: 3 files processed successfully, but only 2 produced chunks
+    assert stats['total_files'] == 3
+    assert stats['success_files'] == 3  # All files processed successfully
+    assert stats['error_files'] == 0  # No errors (0 chunks is not an error)
+    assert stats['total_chunks'] == 2  # Only 2 chunks created
