@@ -419,3 +419,87 @@ async def get_graph_data(
     except Exception as e:
         logger.error(f"Failed to get graph data for {repository}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get graph data: {str(e)}")
+
+
+@router.get("/metrics/{repository}", response_model=Dict[str, Any])
+async def get_repository_metrics(
+    repository: str = Path(..., description="Repository name"),
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """
+    Get aggregated metrics for repository.
+
+    Returns:
+        {
+            "total_functions": int,
+            "avg_complexity": float,
+            "max_complexity": int,
+            "most_complex_function": str,
+            "avg_coupling": float,
+            "most_coupled_function": str,
+            "top_pagerank": [{name, score}]
+        }
+    """
+    try:
+        from sqlalchemy.sql import text
+
+        async with engine.connect() as conn:
+            # Aggregate metrics query
+            query = text("""
+                SELECT
+                    COUNT(*) as total_functions,
+                    AVG(cyclomatic_complexity) as avg_complexity,
+                    MAX(cyclomatic_complexity) as max_complexity,
+                    AVG(afferent_coupling + efferent_coupling) as avg_coupling
+                FROM computed_metrics
+                WHERE repository = :repository
+                  AND version = 1
+            """)
+
+            result = await conn.execute(query, {"repository": repository})
+            row = result.fetchone()
+
+            # Get most complex function
+            complex_query = text("""
+                SELECT n.properties->>'name' as name, cm.cyclomatic_complexity
+                FROM computed_metrics cm
+                JOIN nodes n ON cm.node_id = n.node_id
+                WHERE cm.repository = :repository
+                  AND cm.version = 1
+                ORDER BY cm.cyclomatic_complexity DESC
+                LIMIT 1
+            """)
+
+            complex_result = await conn.execute(complex_query, {"repository": repository})
+            complex_row = complex_result.fetchone()
+
+            # Get top PageRank nodes
+            pagerank_query = text("""
+                SELECT n.properties->>'name' as name, cm.pagerank_score
+                FROM computed_metrics cm
+                JOIN nodes n ON cm.node_id = n.node_id
+                WHERE cm.repository = :repository
+                  AND cm.version = 1
+                  AND cm.pagerank_score IS NOT NULL
+                ORDER BY cm.pagerank_score DESC
+                LIMIT 10
+            """)
+
+            pagerank_result = await conn.execute(pagerank_query, {"repository": repository})
+            pagerank_rows = pagerank_result.fetchall()
+
+        return {
+            "total_functions": row[0] or 0,
+            "avg_complexity": round(row[1], 2) if row[1] else 0,
+            "max_complexity": row[2] or 0,
+            "most_complex_function": complex_row[0] if complex_row else "N/A",
+            "avg_coupling": round(row[3], 2) if row[3] else 0,
+            "top_pagerank": [
+                {"name": r[0], "score": round(r[1], 4)}
+                for r in pagerank_rows
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get metrics for {repository}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get metrics: {str(e)}")

@@ -4,7 +4,7 @@
  * Composable for fetching code graph statistics and data.
  */
 
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 
 export interface GraphStats {
   repository: string
@@ -36,6 +36,15 @@ export interface GraphData {
   limit: number
 }
 
+export interface RepositoryMetrics {
+  total_functions: number
+  avg_complexity: number
+  max_complexity: number
+  most_complex_function: string
+  avg_coupling: number
+  top_pagerank: Array<{ name: string; score: number }>
+}
+
 interface UseCodeGraphReturn {
   stats: ReturnType<typeof ref<GraphStats | null>>
   graphData: ReturnType<typeof ref<GraphData | null>>
@@ -44,10 +53,12 @@ interface UseCodeGraphReturn {
   building: ReturnType<typeof ref<boolean>>
   buildError: ReturnType<typeof ref<string | null>>
   repositories: ReturnType<typeof ref<string[]>>
+  metrics: ReturnType<typeof ref<RepositoryMetrics | null>>
   fetchStats: (repository: string) => Promise<void>
   fetchGraphData: (repository: string, limit?: number) => Promise<void>
   buildGraph: (repository: string, language?: string) => Promise<void>
   fetchRepositories: () => Promise<void>
+  fetchMetrics: (repository: string) => Promise<void>
 }
 
 export function useCodeGraph(): UseCodeGraphReturn {
@@ -58,6 +69,7 @@ export function useCodeGraph(): UseCodeGraphReturn {
   const building = ref(false)
   const buildError = ref<string | null>(null)
   const repositories = ref<string[]>([])
+  const metrics = ref<RepositoryMetrics | null>(null)
 
   const fetchStats = async (repository: string = 'MnemoLite') => {
     loading.value = true
@@ -158,6 +170,29 @@ export function useCodeGraph(): UseCodeGraphReturn {
     }
   }
 
+  const fetchMetrics = async (repository: string = 'MnemoLite') => {
+    loading.value = true
+    error.value = null
+
+    try {
+      const response = await fetch(`http://localhost:8001/v1/code/graph/metrics/${repository}`)
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch metrics: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      metrics.value = data
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
+      error.value = errorMessage
+      console.error('Metrics error:', err)
+      metrics.value = null
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     stats,
     graphData,
@@ -166,9 +201,11 @@ export function useCodeGraph(): UseCodeGraphReturn {
     building,
     buildError,
     repositories,
+    metrics,
     fetchStats,
     fetchGraphData,
     buildGraph,
     fetchRepositories,
+    fetchMetrics,
   }
 }

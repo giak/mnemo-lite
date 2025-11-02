@@ -10,7 +10,7 @@ import { useCodeGraph } from '@/composables/useCodeGraph'
 import type { Nodes, Edges, Configs, Layouts } from 'v-network-graph'
 import G6Graph from '@/components/G6Graph.vue'
 
-const { stats, graphData, loading, error, building, buildError, repositories, fetchStats, fetchGraphData, buildGraph, fetchRepositories } = useCodeGraph()
+const { stats, graphData, loading, error, building, buildError, repositories, metrics, fetchStats, fetchGraphData, buildGraph, fetchRepositories, fetchMetrics } = useCodeGraph()
 
 const repository = ref<string>('')
 const useG6 = ref(true) // Toggle between v-network-graph and G6
@@ -246,6 +246,7 @@ watch(repository, async (newRepo) => {
     console.log('[Graph] Loading repository:', newRepo)
     await fetchStats(newRepo)
     await fetchGraphData(newRepo, 80)
+    await fetchMetrics(newRepo)
     console.log('[Graph] Graph data loaded:', {
       nodes: graphData.value?.nodes?.length || 0,
       edges: graphData.value?.edges?.length || 0,
@@ -266,6 +267,7 @@ onMounted(async () => {
     // Explicitly load data for first repository
     await fetchStats(repository.value)
     await fetchGraphData(repository.value, 80)
+    await fetchMetrics(repository.value)
     console.log('[Graph] Initial data loaded:', {
       nodes: graphData.value?.nodes?.length || 0,
       edges: graphData.value?.edges?.length || 0,
@@ -382,6 +384,51 @@ onMounted(async () => {
               <svg class="h-10 w-10 text-purple-500/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
               </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Code Quality Metrics Panel -->
+        <div v-if="metrics" class="bg-slate-800 rounded-lg p-6">
+          <h3 class="text-xl font-semibold text-gray-200 mb-4">Code Quality Metrics</h3>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-700 rounded p-4">
+              <p class="text-sm text-gray-400">Avg Complexity</p>
+              <p class="text-2xl font-bold text-yellow-400">{{ metrics.avg_complexity }}</p>
+            </div>
+
+            <div class="bg-slate-700 rounded p-4">
+              <p class="text-sm text-gray-400">Max Complexity</p>
+              <p class="text-2xl font-bold text-red-400">{{ metrics.max_complexity }}</p>
+              <p class="text-xs text-gray-500 mt-1">{{ metrics.most_complex_function }}</p>
+            </div>
+
+            <div class="bg-slate-700 rounded p-4">
+              <p class="text-sm text-gray-400">Avg Coupling</p>
+              <p class="text-2xl font-bold text-purple-400">{{ metrics.avg_coupling.toFixed(1) }}</p>
+            </div>
+          </div>
+
+          <div class="bg-slate-700 rounded p-4">
+            <h4 class="text-sm font-semibold text-gray-300 mb-3">Most Important Functions (PageRank)</h4>
+            <div class="space-y-2">
+              <div
+                v-for="(item, idx) in metrics.top_pagerank.slice(0, 5)"
+                :key="idx"
+                class="flex justify-between items-center text-sm"
+              >
+                <span class="text-gray-300">{{ item.name }}</span>
+                <div class="flex items-center">
+                  <div class="w-32 bg-slate-600 rounded-full h-2 mr-2">
+                    <div
+                      class="bg-green-500 h-2 rounded-full"
+                      :style="{ width: `${item.score * 100}%` }"
+                    ></div>
+                  </div>
+                  <span class="text-gray-400 w-12 text-right">{{ (item.score * 100).toFixed(1) }}%</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
