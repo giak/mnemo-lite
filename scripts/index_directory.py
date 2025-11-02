@@ -11,6 +11,7 @@ import argparse
 import sys
 from pathlib import Path
 from datetime import datetime
+from tqdm import tqdm
 
 # Add API to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
@@ -116,6 +117,70 @@ def scan_directory(directory: Path, verbose: bool = False) -> dict:
     }
 
 
+async def phase1_chunking(files: list[Path], repository: str, verbose: bool = False):
+    """
+    Phase 1: Parse files and create semantic chunks.
+
+    Returns:
+        Tuple (chunks: list, errors: list)
+    """
+    from services.code_chunking_service import CodeChunkingService
+
+    print("\n" + "=" * 80)
+    print("📖 Phase 1/3: Code Chunking & AST Parsing")
+    print("=" * 80)
+
+    chunking_service = CodeChunkingService(max_workers=4)
+
+    all_chunks = []
+    errors = []
+
+    start_time = datetime.now()
+
+    # Progress bar
+    with tqdm(total=len(files), desc="Chunking files", unit="file") as pbar:
+        for file_path in files:
+            try:
+                # Read file
+                content = file_path.read_text(encoding="utf-8")
+
+                # Detect language
+                language = "typescript" if file_path.suffix in {".ts", ".tsx"} else "javascript"
+
+                # Chunk code (note: no 'repository' parameter)
+                chunks = await chunking_service.chunk_code(
+                    source_code=content,
+                    language=language,
+                    file_path=str(file_path.relative_to(file_path.parent.parent.parent))
+                )
+
+                # Set repository on chunks
+                for chunk in chunks:
+                    chunk.repository = repository
+
+                all_chunks.extend(chunks)
+
+            except Exception as e:
+                errors.append({
+                    "file": str(file_path),
+                    "error": str(e),
+                    "phase": "chunking"
+                })
+                if verbose:
+                    print(f"\n   ⚠️  Failed: {file_path.name} - {e}")
+
+            pbar.update(1)
+
+    elapsed = (datetime.now() - start_time).total_seconds()
+
+    print(f"\n✅ Chunking complete in {elapsed:.1f}s")
+    print(f"   - Chunks created: {len(all_chunks)}")
+    print(f"   - Files succeeded: {len(files) - len(errors)}")
+    print(f"   - Files failed: {len(errors)}")
+
+    return all_chunks, errors
+
+
 async def main():
     """Main indexing pipeline."""
     args = parse_args()
@@ -151,8 +216,15 @@ async def main():
 
     print(f"\n   📊 Total to index: {stats['total']} files")
 
-    # TODO: Phase 1-3
-    print("\n⚠️  Chunking/Embedding/Graph not yet implemented")
+    # Phase 1: Chunking
+    chunks, errors_phase1 = await phase1_chunking(files, repository, args.verbose)
+
+    if len(chunks) == 0:
+        print("\n❌ No chunks created! All files failed.")
+        sys.exit(1)
+
+    # TODO: Phase 2-3
+    print("\n⚠️  Embedding/Graph not yet implemented")
 
 
 if __name__ == "__main__":
