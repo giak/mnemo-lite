@@ -44,7 +44,7 @@ const focusNodeId = ref<string | null>(null)
 const selectedNode = ref<GraphNode | null>(null)
 const hoveredNodeId = ref<string | null>(null)
 const searchQuery = ref('')
-const filterByType = ref<string[]>(['class', 'function', 'method']) // All types enabled by default
+const filterByType = ref<string[]>(['Class', 'Function', 'Method']) // All types enabled by default (case-sensitive)
 const showLabels = ref<'all' | 'focus' | 'none'>('all')
 
 // Calculate detailed stats for selected node
@@ -115,9 +115,9 @@ const calculateDepths = (focusId: string): Map<string, number> => {
 // Get node color by type
 const getNodeColor = (type: string): string => {
   const baseColors: Record<string, string> = {
-    class: '#3b82f6',      // blue
-    function: '#10b981',   // green
-    method: '#8b5cf6',     // purple
+    Class: '#3b82f6',      // blue
+    Function: '#10b981',   // green
+    Method: '#8b5cf6',     // purple
     default: '#64748b'     // gray
   }
 
@@ -289,9 +289,9 @@ const initGraph = async () => {
           if (!stats) return '<div>No data</div>'
 
           const typeColors: Record<string, string> = {
-            class: '#3b82f6',
-            function: '#10b981',
-            method: '#8b5cf6',
+            Class: '#3b82f6',
+            Function: '#10b981',
+            Method: '#8b5cf6',
             default: '#64748b'
           }
           const color = typeColors[item.data.nodeType] || typeColors.default
@@ -598,25 +598,25 @@ onMounted(() => {
         <div class="flex items-center gap-2">
           <span class="text-xs text-gray-500">Show:</span>
           <button
-            @click="toggleFilter('class')"
+            @click="toggleFilter('Class')"
             class="px-2 py-1 text-xs rounded transition-colors"
-            :class="filterByType.includes('class') ? 'bg-blue-500 text-white' : 'bg-slate-700 text-gray-400'"
+            :class="filterByType.includes('Class') ? 'bg-blue-500 text-white' : 'bg-slate-700 text-gray-400'"
           >
-            Classes ({{ props.nodes.filter(n => n.type === 'class').length }})
+            Classes ({{ props.nodes.filter(n => n.type === 'Class').length }})
           </button>
           <button
-            @click="toggleFilter('function')"
+            @click="toggleFilter('Function')"
             class="px-2 py-1 text-xs rounded transition-colors"
-            :class="filterByType.includes('function') ? 'bg-green-500 text-white' : 'bg-slate-700 text-gray-400'"
+            :class="filterByType.includes('Function') ? 'bg-green-500 text-white' : 'bg-slate-700 text-gray-400'"
           >
-            Functions ({{ props.nodes.filter(n => n.type === 'function').length }})
+            Functions ({{ props.nodes.filter(n => n.type === 'Function').length }})
           </button>
           <button
-            @click="toggleFilter('method')"
+            @click="toggleFilter('Method')"
             class="px-2 py-1 text-xs rounded transition-colors"
-            :class="filterByType.includes('method') ? 'bg-purple-500 text-white' : 'bg-slate-700 text-gray-400'"
+            :class="filterByType.includes('Method') ? 'bg-purple-500 text-white' : 'bg-slate-700 text-gray-400'"
           >
-            Methods ({{ props.nodes.filter(n => n.type === 'method').length }})
+            Methods ({{ props.nodes.filter(n => n.type === 'Method').length }})
           </button>
         </div>
 
@@ -725,10 +725,10 @@ onMounted(() => {
               <div
                 class="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
                 :class="{
-                  'bg-blue-500': selectedNode?.type === 'class',
-                  'bg-green-500': selectedNode?.type === 'function',
-                  'bg-purple-500': selectedNode?.type === 'method',
-                  'bg-gray-500': !['class', 'function', 'method'].includes(selectedNode?.type || '')
+                  'bg-blue-500': selectedNode?.type === 'Class',
+                  'bg-green-500': selectedNode?.type === 'Function',
+                  'bg-purple-500': selectedNode?.type === 'Method',
+                  'bg-gray-500': !['Class', 'Function', 'Method'].includes(selectedNode?.type || '')
                 }"
               >
                 {{ selectedNode?.type?.charAt(0).toUpperCase() }}
@@ -738,10 +738,10 @@ onMounted(() => {
                 <span
                   class="inline-block mt-1 px-2 py-0.5 text-xs rounded"
                   :class="{
-                    'bg-blue-500/20 text-blue-400': selectedNode?.type === 'class',
-                    'bg-green-500/20 text-green-400': selectedNode?.type === 'function',
-                    'bg-purple-500/20 text-purple-400': selectedNode?.type === 'method',
-                    'bg-gray-500/20 text-gray-400': !['class', 'function', 'method'].includes(selectedNode?.type || '')
+                    'bg-blue-500/20 text-blue-400': selectedNode?.type === 'Class',
+                    'bg-green-500/20 text-green-400': selectedNode?.type === 'Function',
+                    'bg-purple-500/20 text-purple-400': selectedNode?.type === 'Method',
+                    'bg-gray-500/20 text-gray-400': !['Class', 'Function', 'Method'].includes(selectedNode?.type || '')
                   }"
                 >
                   {{ selectedNode?.type }}

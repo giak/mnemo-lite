@@ -246,6 +246,11 @@ watch(repository, async (newRepo) => {
     console.log('[Graph] Loading repository:', newRepo)
     await fetchStats(newRepo)
     await fetchGraphData(newRepo, 80)
+    console.log('[Graph] Graph data loaded:', {
+      nodes: graphData.value?.nodes?.length || 0,
+      edges: graphData.value?.edges?.length || 0,
+      hasData: !!graphData.value
+    })
   }
 })
 
@@ -261,6 +266,12 @@ onMounted(async () => {
     // Explicitly load data for first repository
     await fetchStats(repository.value)
     await fetchGraphData(repository.value, 80)
+    console.log('[Graph] Initial data loaded:', {
+      nodes: graphData.value?.nodes?.length || 0,
+      edges: graphData.value?.edges?.length || 0,
+      hasData: !!graphData.value,
+      graphData: graphData.value
+    })
   }
 })
 </script>
@@ -431,14 +442,21 @@ onMounted(async () => {
 
           <!-- G6 Graph (Prototype) -->
           <div v-if="useG6">
+            <!-- Debug info -->
+            <div class="text-xs text-gray-500 mb-2">
+              Debug: graphData={{ !!graphData }}, nodes={{ graphData?.nodes?.length || 0 }}, edges={{ graphData?.edges?.length || 0 }}
+            </div>
+
             <G6Graph
               v-if="graphData?.nodes && graphData.nodes.length > 0"
               :nodes="graphData.nodes"
               :edges="graphData.edges || []"
               :loading="loading"
             />
-            <div v-else class="flex items-center justify-center h-[600px] bg-slate-900 border border-slate-700 rounded text-gray-400">
-              No graph data available
+            <div v-else class="flex flex-col items-center justify-center h-[600px] bg-slate-900 border border-slate-700 rounded text-gray-400">
+              <p>No graph data available</p>
+              <p class="text-xs mt-2">graphData: {{ graphData ? 'exists' : 'null' }}</p>
+              <p class="text-xs">nodes: {{ graphData?.nodes?.length || 0 }}</p>
             </div>
           </div>
 
