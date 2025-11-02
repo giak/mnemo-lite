@@ -17,8 +17,9 @@ TIMEOUTS: Dict[str, float] = {
     "tree_sitter_parse": float(os.getenv("TIMEOUT_TREE_SITTER", "5.0")),
 
     # Embedding generation (CPU-bound, batched)
-    "embedding_generation_single": float(os.getenv("TIMEOUT_EMBEDDING_SINGLE", "10.0")),
-    "embedding_generation_batch": float(os.getenv("TIMEOUT_EMBEDDING_BATCH", "30.0")),
+    # EPIC-26: Increased from 10s to 30s for large TypeScript/JavaScript files
+    "embedding_generation_single": float(os.getenv("TIMEOUT_EMBEDDING_SINGLE", "30.0")),
+    "embedding_generation_batch": float(os.getenv("TIMEOUT_EMBEDDING_BATCH", "60.0")),
 
     # Graph operations
     "graph_construction": float(os.getenv("TIMEOUT_GRAPH_CONSTRUCTION", "10.0")),
@@ -106,8 +107,8 @@ def reset_to_defaults() -> None:
 
     TIMEOUTS = {
         "tree_sitter_parse": 5.0,
-        "embedding_generation_single": 10.0,
-        "embedding_generation_batch": 30.0,
+        "embedding_generation_single": 30.0,  # EPIC-26: Increased for large files
+        "embedding_generation_batch": 60.0,   # EPIC-26: Increased for large batches
         "graph_construction": 10.0,
         "graph_traversal": 5.0,
         "vector_search": 5.0,
