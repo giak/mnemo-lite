@@ -913,7 +913,7 @@ class TypeScriptMetadataExtractor:
 
         # Decision point node types
         decision_nodes = {
-            "if_statement", "else_clause", "switch_case",
+            "if_statement", "switch_case",
             "for_statement", "for_in_statement", "for_of_statement",
             "while_statement", "do_statement",
             "catch_clause",

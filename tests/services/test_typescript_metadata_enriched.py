@@ -87,7 +87,7 @@ function complexFunction(x: number): number {
     metadata = await extractor.extract_metadata(source_code, function_node, tree)
 
     assert "complexity" in metadata
-    # Cyclomatic = 1 (base) + 1 (if) + 1 (else if) + 1 (else clause) + 1 (for) + possibly others = 6
-    # The actual calculation includes else_clause as a decision point
-    assert metadata["complexity"]["cyclomatic"] >= 4
+    # Cyclomatic = 1 (base) + 1 (if) + 1 (else if) + 1 (for) = 4
+    # Note: else clause is not a decision point (it's the default path)
+    assert metadata["complexity"]["cyclomatic"] == 4
     assert metadata["complexity"]["lines_of_code"] > 0
