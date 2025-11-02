@@ -620,11 +620,12 @@ class TypeScriptMetadataExtractor:
         tree: Tree
     ) -> dict[str, Any]:
         """
-        Extract all metadata from TypeScript/JavaScript code.
+        Extract ALL metadata including enriched context and metrics.
 
         EPIC-28: This method MUST receive full file source code, not chunk source.
         Tree-sitter byte offsets are absolute and require the complete source context.
         EPIC-29: Adds re-export extraction.
+        Rich Metadata (v2.0): Adds call_contexts, signature, complexity.
 
         Args:
             source_code: FULL FILE source code (CRITICAL: not chunk source!)
@@ -632,7 +633,15 @@ class TypeScriptMetadataExtractor:
             tree: Full file AST tree (parsed from source_code)
 
         Returns:
-            Metadata dict with imports, calls, and re_exports.
+            Metadata dict with:
+            {
+                "imports": [...],
+                "calls": [...],
+                "re_exports": [...],
+                "call_contexts": [{call_name, line, scope, is_conditional, ...}],
+                "signature": {function_name, parameters, return_type, is_async, ...},
+                "complexity": {cyclomatic, lines_of_code}
+            }
 
         Example:
             {
@@ -640,7 +649,33 @@ class TypeScriptMetadataExtractor:
                 "calls": ["validateEmail", "createSuccess"],
                 "re_exports": [
                     {"symbol": "Success", "source": "./types", "is_type": False}
-                ]
+                ],
+                "call_contexts": [
+                    {
+                        "call_name": "validateEmail",
+                        "line_number": 5,
+                        "scope_type": "function",
+                        "scope_name": "createUser",
+                        "is_conditional": True,
+                        "is_loop": False,
+                        "is_try_catch": False,
+                        "arguments_count": 1
+                    }
+                ],
+                "signature": {
+                    "function_name": "createUser",
+                    "parameters": [
+                        {"name": "email", "type": "string", "is_optional": False}
+                    ],
+                    "return_type": "Promise<User>",
+                    "is_async": True,
+                    "is_generator": False,
+                    "decorators": []
+                },
+                "complexity": {
+                    "cyclomatic": 3,
+                    "lines_of_code": 25
+                }
             }
 
         Note:
@@ -649,26 +684,247 @@ class TypeScriptMetadataExtractor:
             and truncated call names.
         """
         try:
-            # Extract imports from full tree
+            # Extract basic metadata (existing)
             imports = await self.extract_imports(tree, source_code)
-
-            # Extract calls from specific node
             calls = await self.extract_calls(node, source_code)
-
-            # EPIC-29: Extract re-exports
             re_exports = await self.extract_re_exports(node, source_code)
+
+            # Extract enriched metadata (NEW)
+            # Determine scope name
+            scope_name = None
+            for child in node.children:
+                if child.type == "identifier":
+                    source_bytes = source_code.encode('utf-8')
+                    name_bytes = source_bytes[child.start_byte:child.end_byte]
+                    scope_name = name_bytes.decode('utf-8')
+                    break
+
+            call_contexts = await self.extract_call_contexts(node, source_code, scope_name)
+            signature = await self.extract_function_signature(node, source_code)
+
+            # Calculate complexity
+            cyclomatic = self.calculate_cyclomatic_complexity(node)
+            source_bytes = source_code.encode('utf-8')
+            node_source = source_bytes[node.start_byte:node.end_byte].decode('utf-8')
+            lines_of_code = len([l for l in node_source.split('\n') if l.strip()])
 
             return {
                 "imports": imports,
                 "calls": calls,
-                "re_exports": re_exports
+                "re_exports": re_exports,
+                "call_contexts": call_contexts,
+                "signature": signature,
+                "complexity": {
+                    "cyclomatic": cyclomatic,
+                    "lines_of_code": lines_of_code
+                }
             }
 
         except Exception as e:
-            self.logger.error(f"Failed to extract metadata: {e}", exc_info=True)
+            self.logger.error(f"Failed to extract enriched metadata: {e}", exc_info=True)
             # Graceful degradation: return empty metadata
             return {
                 "imports": [],
                 "calls": [],
-                "re_exports": []
+                "re_exports": [],
+                "call_contexts": [],
+                "signature": {},
+                "complexity": {"cyclomatic": 0, "lines_of_code": 0}
             }
+
+    async def extract_call_contexts(
+        self,
+        node: Node,
+        source_code: str,
+        scope_name: str = None
+    ) -> list[dict]:
+        """
+        Extract detailed context for each function call.
+
+        Returns list of call contexts with:
+        - call_name: Function/method name
+        - line_number: Line where call occurs
+        - scope_type: 'function', 'class', 'method', 'global'
+        - scope_name: Name of containing scope
+        - is_conditional: Inside if/switch/ternary
+        - is_loop: Inside for/while/do-while
+        - is_try_catch: Inside try-catch block
+        - arguments_count: Number of arguments passed
+        """
+        contexts = []
+
+        # Extract all call expressions
+        cursor = QueryCursor(self.call_expression_query)
+        matches = cursor.matches(node)
+
+        for pattern_index, captures_dict in matches:
+            call_nodes = captures_dict.get('call', [])
+
+            for call_node in call_nodes:
+                call_name = self._extract_call_expression(call_node, source_code)
+
+                if not call_name or self._is_blacklisted(call_name):
+                    continue
+
+                # Determine context by walking up parent nodes
+                context = {
+                    "call_name": call_name,
+                    "line_number": call_node.start_point[0] + 1,
+                    "scope_type": self._determine_scope_type(node),
+                    "scope_name": scope_name,
+                    "is_conditional": self._is_inside_conditional(call_node),
+                    "is_loop": self._is_inside_loop(call_node),
+                    "is_try_catch": self._is_inside_try_catch(call_node),
+                    "arguments_count": self._count_arguments(call_node)
+                }
+
+                contexts.append(context)
+
+        return contexts
+
+    def _determine_scope_type(self, node: Node) -> str:
+        """Determine scope type from node type."""
+        if node.type in ("function_declaration", "arrow_function", "function"):
+            return "function"
+        elif node.type in ("method_definition", "method"):
+            return "method"
+        elif node.type in ("class_declaration", "class"):
+            return "class"
+        else:
+            return "global"
+
+    def _is_inside_conditional(self, node: Node) -> bool:
+        """Check if node is inside if/switch/ternary."""
+        current = node.parent
+        while current:
+            if current.type in ("if_statement", "switch_statement", "ternary_expression"):
+                return True
+            current = current.parent
+        return False
+
+    def _is_inside_loop(self, node: Node) -> bool:
+        """Check if node is inside for/while/do-while."""
+        current = node.parent
+        while current:
+            if current.type in ("for_statement", "for_in_statement", "for_of_statement",
+                               "while_statement", "do_statement"):
+                return True
+            current = current.parent
+        return False
+
+    def _is_inside_try_catch(self, node: Node) -> bool:
+        """Check if node is inside try-catch block."""
+        current = node.parent
+        while current:
+            if current.type == "try_statement":
+                return True
+            current = current.parent
+        return False
+
+    def _count_arguments(self, call_node: Node) -> int:
+        """Count number of arguments in a call expression."""
+        for child in call_node.children:
+            if child.type == "arguments":
+                # Count non-punctuation children (commas, parens)
+                return len([c for c in child.children if c.type not in (",", "(", ")")])
+        return 0
+
+    async def extract_function_signature(
+        self,
+        node: Node,
+        source_code: str
+    ) -> dict:
+        """
+        Extract detailed function signature.
+
+        Returns:
+        - function_name: Name of function
+        - parameters: List of {name, type, is_optional, default_value}
+        - return_type: Return type annotation
+        - is_async: Whether function is async
+        - is_generator: Whether function is generator
+        - decorators: List of decorators (TypeScript/ES7)
+        """
+        signature = {
+            "function_name": None,
+            "parameters": [],
+            "return_type": None,
+            "is_async": False,
+            "is_generator": False,
+            "decorators": []
+        }
+
+        # Check if async
+        for child in node.children:
+            if child.type == "async":
+                signature["is_async"] = True
+            elif child.type == "*":
+                signature["is_generator"] = True
+            elif child.type == "identifier":
+                # Function name
+                source_bytes = source_code.encode('utf-8')
+                name_bytes = source_bytes[child.start_byte:child.end_byte]
+                signature["function_name"] = name_bytes.decode('utf-8')
+            elif child.type == "formal_parameters":
+                # Extract parameters
+                signature["parameters"] = self._extract_parameters(child, source_code)
+            elif child.type == "type_annotation":
+                # Return type
+                source_bytes = source_code.encode('utf-8')
+                type_bytes = source_bytes[child.start_byte:child.end_byte]
+                signature["return_type"] = type_bytes.decode('utf-8').lstrip(': ')
+
+        return signature
+
+    def _extract_parameters(self, params_node: Node, source_code: str) -> list[dict]:
+        """Extract parameter details from formal_parameters node."""
+        parameters = []
+        source_bytes = source_code.encode('utf-8')
+
+        for child in params_node.children:
+            if child.type == "required_parameter" or child.type == "optional_parameter":
+                param = {
+                    "name": None,
+                    "type": None,
+                    "is_optional": child.type == "optional_parameter",
+                    "default_value": None
+                }
+
+                for subchild in child.children:
+                    if subchild.type == "identifier":
+                        name_bytes = source_bytes[subchild.start_byte:subchild.end_byte]
+                        param["name"] = name_bytes.decode('utf-8')
+                    elif subchild.type == "type_annotation":
+                        type_bytes = source_bytes[subchild.start_byte:subchild.end_byte]
+                        param["type"] = type_bytes.decode('utf-8').lstrip(': ')
+
+                parameters.append(param)
+
+        return parameters
+
+    def calculate_cyclomatic_complexity(self, node: Node) -> int:
+        """
+        Calculate cyclomatic complexity for a function/method.
+
+        CC = 1 (base) + number of decision points
+        Decision points: if, else if, for, while, case, catch, &&, ||, ?:
+        """
+        complexity = 1  # Base complexity
+
+        # Decision point node types
+        decision_nodes = {
+            "if_statement", "else_clause", "switch_case",
+            "for_statement", "for_in_statement", "for_of_statement",
+            "while_statement", "do_statement",
+            "catch_clause",
+            "&&", "||",
+            "ternary_expression"
+        }
+
+        def count_decisions(n: Node) -> int:
+            count = 1 if n.type in decision_nodes else 0
+            for child in n.children:
+                count += count_decisions(child)
+            return count
+
+        return complexity + count_decisions(node)
