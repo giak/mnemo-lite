@@ -304,7 +304,15 @@ class GraphConstructionService:
             # 3. Update computed_metrics with coupling and PageRank
             self.logger.info("Updating computed_metrics table...")
             for chunk_id, node in chunk_to_node.items():
-                coupling = coupling_metrics.get(node.node_id, {"afferent": 0, "efferent": 0})
+                # DEFENSIVE: Ensure coupling is a dict with required keys
+                coupling = coupling_metrics.get(node.node_id)
+                if coupling is None or not isinstance(coupling, dict):
+                    coupling = {"afferent": 0, "efferent": 0}
+
+                # DEFENSIVE: Ensure coupling has required keys
+                if "afferent" not in coupling or "efferent" not in coupling:
+                    coupling = {"afferent": coupling.get("afferent", 0), "efferent": coupling.get("efferent", 0)}
+
                 pagerank = pagerank_scores.get(node.node_id, 0.0)
 
                 try:
