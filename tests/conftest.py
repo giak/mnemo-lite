@@ -103,6 +103,16 @@ async def clean_db(test_engine):
                 IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'memories') THEN
                     TRUNCATE TABLE memories CASCADE;
                 END IF;
+                -- Rich metadata tables (EPIC-27)
+                IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'detailed_metadata') THEN
+                    TRUNCATE TABLE detailed_metadata CASCADE;
+                END IF;
+                IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'computed_metrics') THEN
+                    TRUNCATE TABLE computed_metrics CASCADE;
+                END IF;
+                IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'edge_weights') THEN
+                    TRUNCATE TABLE edge_weights CASCADE;
+                END IF;
             END $$;
         """))
         await conn.commit()

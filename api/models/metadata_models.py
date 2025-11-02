@@ -4,7 +4,7 @@ Data models for rich metadata and metrics.
 from datetime import datetime
 from typing import Any, Dict, Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DetailedMetadata(BaseModel):
@@ -17,8 +17,7 @@ class DetailedMetadata(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ComputedMetrics(BaseModel):
@@ -41,8 +40,7 @@ class ComputedMetrics(BaseModel):
     version: int = 1
     computed_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EdgeWeight(BaseModel):
@@ -57,5 +55,4 @@ class EdgeWeight(BaseModel):
     version: int = 1
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
