@@ -669,6 +669,47 @@ async def phase3_metadata_extraction(
     return (success_count, error_count)
 
 
+async def build_graph_phase(repository: str, engine) -> dict:
+    """
+    Phase 4: Build graph from indexed chunks.
+
+    Steps:
+    1. Create nodes from chunks
+    2. Resolve edges (calls, imports)
+    3. Calculate metrics (PageRank, coupling)
+    4. Store everything
+
+    Returns:
+        Dict with stats: total_nodes, total_edges
+    """
+    from services.graph_construction_service import GraphConstructionService
+
+    print("\n" + "=" * 80)
+    print("🕸️  Phase 4: Graph Construction")
+    print("=" * 80)
+
+    graph_service = GraphConstructionService(engine)
+
+    # Build graph for repository
+    stats = await graph_service.build_graph_for_repository(
+        repository=repository,
+        languages=["typescript", "javascript"]
+    )
+
+    print(f"\n✅ Graph construction complete:")
+    print(f"   - Nodes: {stats.total_nodes}")
+    print(f"   - Edges: {stats.total_edges}")
+    print(f"   - Nodes by type: {stats.nodes_by_type}")
+    print(f"   - Edges by type: {stats.edges_by_type}")
+
+    return {
+        "total_nodes": stats.total_nodes,
+        "total_edges": stats.total_edges,
+        "nodes_by_type": stats.nodes_by_type,
+        "edges_by_type": stats.edges_by_type
+    }
+
+
 async def phase4_graph_construction(repository: str, verbose: bool = False):
     """
     Phase 4: Build graph (nodes + edges) from chunks and calculate metrics.
@@ -759,6 +800,9 @@ async def phase4_graph_construction(repository: str, verbose: bool = False):
 
 async def main():
     """Main entry point for directory indexer."""
+    import os
+    from sqlalchemy.ext.asyncio import create_async_engine
+
     args = parse_args()
 
     # Validate directory
@@ -781,12 +825,24 @@ async def main():
 
     start_time = datetime.now()
 
+    # Create database engine for graph construction
+    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@mnemo-postgres:5432/mnemolite")
+    engine = create_async_engine(db_url, echo=False)
+
     # Run streaming pipeline
     stats = await run_streaming_pipeline(
         directory=directory,
         repository=repository,
-        verbose=args.verbose
+        verbose=args.verbose,
+        engine=engine
     )
+
+    # Run Phase 4: Graph Construction
+    if stats['success_files'] > 0:
+        graph_stats = await build_graph_phase(repository, engine)
+        stats['graph'] = graph_stats
+
+    await engine.dispose()
 
     elapsed = (datetime.now() - start_time).total_seconds()
 
@@ -799,15 +855,14 @@ async def main():
     print(f"   - Success: {stats['success_files']}")
     print(f"   - Errors: {stats['error_files']}")
     print(f"   - Total chunks: {stats['total_chunks']}")
+    print(f"   - Graph nodes: {stats.get('graph', {}).get('total_nodes', 0)}")
+    print(f"   - Graph edges: {stats.get('graph', {}).get('total_edges', 0)}")
     print(f"   - Time: {elapsed:.1f}s ({elapsed/60:.1f}m)")
 
     if stats['errors']:
         print(f"\n❌ Failed files:")
         for error in stats['errors'][:10]:  # Show first 10
             print(f"   - {error['file']}: {error['error']}")
-
-    # TODO: Run Phase 4 (Graph Construction) here
-    print("\n⚠️  Note: Graph construction (Phase 4) not yet implemented in streaming mode")
 
 
 if __name__ == "__main__":

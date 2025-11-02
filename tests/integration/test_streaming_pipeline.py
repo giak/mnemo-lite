@@ -154,3 +154,43 @@ async def test_streaming_pipeline_continues_on_error(tmp_path, clean_db):
     assert stats['success_files'] == 3  # All files processed successfully
     assert stats['error_files'] == 0  # No errors (0 chunks is not an error)
     assert stats['total_chunks'] == 2  # Only 2 chunks created
+
+
+@pytest.mark.asyncio
+async def test_graph_construction_after_streaming(tmp_path, clean_db):
+    """Test that graph construction works after streaming pipeline."""
+    # Create test files with function calls
+    file1 = tmp_path / "utils.ts"
+    file1.write_text("""
+    export function helper() {
+        return "help";
+    }
+    """)
+
+    file2 = tmp_path / "main.ts"
+    file2.write_text("""
+    import { helper } from './utils';
+
+    export function main() {
+        const result = helper();
+        return result;
+    }
+    """)
+
+    # Run streaming pipeline (creates chunks)
+    from scripts.index_directory import run_streaming_pipeline
+    await run_streaming_pipeline(tmp_path, "test_graph", verbose=False, engine=clean_db)
+
+    # Run graph construction
+    from scripts.index_directory import build_graph_phase
+    graph_stats = await build_graph_phase("test_graph", clean_db)
+
+    # Verify nodes created
+    assert graph_stats['total_nodes'] == 2  # helper + main
+    assert graph_stats['total_edges'] >= 1  # main calls helper
+
+    # Verify in database
+    from db.repositories.node_repository import NodeRepository
+    node_repo = NodeRepository(clean_db)
+    nodes = await node_repo.get_by_repository("test_graph")
+    assert len(nodes) == 2
