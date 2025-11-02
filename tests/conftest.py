@@ -20,6 +20,21 @@ def anyio_backend():
     return "asyncio"
 
 
+@pytest.fixture(scope="session")
+def test_db_url():
+    """
+    Get TEST_DATABASE_URL for subprocess tests.
+
+    Returns the test database URL from environment variable.
+    """
+    test_db_url = os.getenv("TEST_DATABASE_URL")
+
+    if not test_db_url:
+        raise ValueError("TEST_DATABASE_URL environment variable not set")
+
+    return test_db_url
+
+
 @pytest_asyncio.fixture(scope="function")
 async def test_engine() -> AsyncEngine:
     """
@@ -270,3 +285,33 @@ async def test_client_with_real_embeddings(clean_db):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+
+@pytest_asyncio.fixture
+async def redis_client():
+    """
+    Provide a real Redis client for integration tests.
+
+    Requires Redis server running at redis://redis:6379/0
+    Cleans up test keys after each test.
+    """
+    import redis.asyncio as redis
+
+    client = await redis.from_url(
+        "redis://redis:6379/0",
+        decode_responses=True
+    )
+
+    yield client
+
+    # Cleanup: delete all test keys
+    test_patterns = [
+        "indexing:jobs:test*",
+        "indexing:status:test*"
+    ]
+
+    for pattern in test_patterns:
+        async for key in client.scan_iter(match=pattern):
+            await client.delete(key)
+
+    await client.aclose()
