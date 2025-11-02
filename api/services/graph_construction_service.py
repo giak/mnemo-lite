@@ -259,7 +259,96 @@ class GraphConstructionService:
                         f"{stats.resolution_accuracy:.1f}% resolution accuracy, "
                         f"{stats.construction_time_seconds:.2f}s")
 
+        # Calculate metrics (NEW - Task 5.2)
+        await self.calculate_and_store_metrics(repository, chunk_to_node)
+
         return stats
+
+    async def calculate_and_store_metrics(
+        self,
+        repository: str,
+        chunk_to_node: Dict[uuid.UUID, NodeModel]
+    ) -> None:
+        """
+        Calculate and store graph metrics after construction.
+
+        Steps:
+        1. Calculate coupling metrics for all nodes
+        2. Calculate PageRank scores
+        3. Update computed_metrics table with coupling and PageRank
+        4. Calculate and store edge weights
+
+        Args:
+            repository: Repository name
+            chunk_to_node: Mapping from chunk IDs to node models
+        """
+        from services.metrics_calculation_service import MetricsCalculationService
+        from db.repositories.computed_metrics_repository import ComputedMetricsRepository
+        from db.repositories.edge_weights_repository import EdgeWeightsRepository
+
+        self.logger.info(f"Calculating metrics for repository '{repository}'...")
+
+        metrics_service = MetricsCalculationService(self.engine)
+        metrics_repo = ComputedMetricsRepository(self.engine)
+        weights_repo = EdgeWeightsRepository(self.engine)
+
+        try:
+            # 1. Calculate coupling for all nodes
+            self.logger.info("Calculating coupling metrics...")
+            coupling_metrics = await metrics_service.calculate_coupling_for_repository(repository)
+
+            # 2. Calculate PageRank
+            self.logger.info("Calculating PageRank scores...")
+            pagerank_scores = await metrics_service.calculate_pagerank(repository)
+
+            # 3. Update computed_metrics with coupling and PageRank
+            self.logger.info("Updating computed_metrics table...")
+            for chunk_id, node in chunk_to_node.items():
+                coupling = coupling_metrics.get(node.node_id, {"afferent": 0, "efferent": 0})
+                pagerank = pagerank_scores.get(node.node_id, 0.0)
+
+                try:
+                    await metrics_repo.update_coupling(
+                        node_id=node.node_id,
+                        afferent_coupling=coupling["afferent"],
+                        efferent_coupling=coupling["efferent"],
+                        version=1
+                    )
+
+                    # Update PageRank score
+                    await metrics_repo.update_pagerank(
+                        node_id=node.node_id,
+                        pagerank_score=pagerank,
+                        version=1
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Failed to update metrics for node {node.node_id}: {e}")
+                    continue
+
+            # 4. Calculate and store edge weights
+            self.logger.info("Calculating edge weights...")
+            edge_weights = await metrics_service.calculate_edge_weights(repository, pagerank_scores)
+
+            for edge_id, importance in edge_weights.items():
+                try:
+                    await weights_repo.create_or_update(
+                        edge_id=edge_id,
+                        importance_score=importance,
+                        version=1
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Failed to store edge weight for edge {edge_id}: {e}")
+                    continue
+
+            self.logger.info(
+                f"✅ Metrics calculated: {len(coupling_metrics)} nodes, "
+                f"{len(edge_weights)} edges weighted"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Failed to calculate metrics for repository '{repository}': {e}", exc_info=True)
+            # Don't raise - metrics are supplementary, graph construction still succeeded
+            self.logger.warning("Continuing without metrics - graph construction completed successfully")
 
     async def _detect_languages_in_repository(
         self,

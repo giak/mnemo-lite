@@ -396,7 +396,13 @@ async def phase3_metadata_extraction(
 
 async def phase4_graph_construction(repository: str, verbose: bool = False):
     """
-    Phase 4: Build graph (nodes + edges) from chunks.
+    Phase 4: Build graph (nodes + edges) from chunks and calculate metrics.
+
+    Steps:
+    1. Build graph (nodes + edges)
+    2. Calculate coupling metrics (afferent/efferent)
+    3. Calculate PageRank scores
+    4. Calculate edge weights
 
     Uses GraphConstructionService with EPIC-30 anonymous filtering.
 
@@ -410,7 +416,7 @@ async def phase4_graph_construction(repository: str, verbose: bool = False):
     from sqlalchemy.ext.asyncio import create_async_engine
 
     print("\n" + "=" * 80)
-    print("🔗 Phase 4/4: Graph Construction")
+    print("🔗 Phase 4/4: Graph Construction & Metrics")
     print("=" * 80)
 
     # Create database engine
@@ -419,16 +425,16 @@ async def phase4_graph_construction(repository: str, verbose: bool = False):
 
     graph_service = GraphConstructionService(engine)
 
-    print(f"\nBuilding graph for repository: {repository}")
+    print(f"\nBuilding graph and calculating metrics for repository: {repository}")
 
     start_time = datetime.now()
 
-    # Build graph (includes EPIC-30 anonymous filtering)
+    # Build graph (includes EPIC-30 anonymous filtering + metrics calculation)
     stats = await graph_service.build_graph_for_repository(repository=repository)
 
     elapsed = (datetime.now() - start_time).total_seconds()
 
-    print(f"\n✅ Graph constructed in {elapsed:.1f}s")
+    print(f"\n✅ Graph constructed and metrics calculated in {elapsed:.1f}s")
     print(f"   - Nodes: {stats.total_nodes}")
     print(f"   - Edges: {stats.total_edges}")
 

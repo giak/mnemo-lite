@@ -121,6 +121,47 @@ class ComputedMetricsRepository:
             computed_at=row[12]
         )
 
+    async def update_pagerank(
+        self,
+        node_id: UUID,
+        pagerank_score: float,
+        version: int = 1
+    ) -> ComputedMetrics:
+        """Update PageRank score after graph analysis."""
+        query = text("""
+            UPDATE computed_metrics
+            SET pagerank_score = :pagerank,
+                computed_at = NOW()
+            WHERE node_id = :node_id AND version = :version
+            RETURNING metric_id, node_id, chunk_id, repository, cyclomatic_complexity,
+                      cognitive_complexity, lines_of_code, afferent_coupling, efferent_coupling,
+                      pagerank_score, betweenness_centrality, version, computed_at
+        """)
+
+        async with self.engine.begin() as conn:
+            result = await conn.execute(query, {
+                "node_id": str(node_id),
+                "pagerank": pagerank_score,
+                "version": version
+            })
+            row = result.fetchone()
+
+        return ComputedMetrics(
+            metric_id=row[0],
+            node_id=row[1],
+            chunk_id=row[2],
+            repository=row[3],
+            cyclomatic_complexity=row[4],
+            cognitive_complexity=row[5],
+            lines_of_code=row[6],
+            afferent_coupling=row[7],
+            efferent_coupling=row[8],
+            pagerank_score=row[9],
+            betweenness_centrality=row[10],
+            version=row[11],
+            computed_at=row[12]
+        )
+
     async def get_by_repository(self, repository: str, version: int = 1) -> List[ComputedMetrics]:
         """Get all metrics for a repository."""
         query = text("""
