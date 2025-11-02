@@ -5,7 +5,6 @@ EPIC-27: Batch Processing with Redis Streams
 """
 
 from enum import Enum
-from typing import Dict
 
 
 class ErrorType(Enum):
