@@ -586,4 +586,4 @@ pnpm preview      # Preview build
 **Support**: Claude Code
 
 **Dernière mise à jour**: 2025-11-01
-**Version**: 2.1 (Phase 1 Complete - 8/23 pts)
+**Version**: 2.1 (Phase 1 Complete - 8/23 pts)ok, i

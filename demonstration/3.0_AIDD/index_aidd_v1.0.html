@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MnemoLite - AIDD Live 30min</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/black.min.css">
+    <style>
+        /* Base Reveal.js overrides - Condensed for 30 min pace */
+        .reveal {
+            font-size: 24px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .reveal h1 {
+            font-size: 2.2em;
+            margin-bottom: 0.3em;
+            text-transform: none;
+            font-weight: bold;
+        }
+
+        .reveal h2 {
+            font-size: 1.5em;
+            margin-bottom: 0.4em;
+            text-transform: none;
+        }
+
+        .reveal h3 {
+            font-size: 1.2em;
+            margin-bottom: 0.4em;
+            text-transform: none;
+        }
+
+        .reveal p, .reveal li {
+            line-height: 1.4;
+            margin-bottom: 0.3em;
+        }
+
+        .reveal ul {
+            margin-top: 0.5em;
+        }
+
+        .reveal strong {
+            color: #42affa;
+        }
+
+        /* Spacing utilities */
+        .spacer {
+            height: 0.5em;
+        }
+
+        .spacer-large {
+            height: 1em;
+        }
+
+        /* Metrics Grid */
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.6em;
+            margin: 0.5em 0;
+            font-size: 0.7em;
+        }
+
+        .metric-item {
+            background: rgba(66, 175, 250, 0.1);
+            border: 2px solid #42affa;
+            border-radius: 8px;
+            padding: 0.6em;
+            text-align: center;
+        }
+
+        .metric-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #42affa;
+            display: block;
+            margin-bottom: 0.2em;
+        }
+
+        /* Box styling */
+        .box {
+            border: 2px solid currentColor;
+            border-radius: 8px;
+            padding: 0.8em;
+            margin: 0.5em auto;
+            font-size: 0.85em;
+            line-height: 1.5;
+            max-width: 90%;
+        }
+
+        .box-success {
+            border-color: #4caf50;
+            background: rgba(76, 175, 80, 0.1);
+        }
+
+        .box-warning {
+            border-color: #ff9800;
+            background: rgba(255, 152, 0, 0.1);
+        }
+
+        .box-error {
+            border-color: #f44336;
+            background: rgba(244, 67, 54, 0.1);
+        }
+
+        .box-info {
+            border-color: #42affa;
+            background: rgba(66, 175, 250, 0.1);
+        }
+
+        /* Comparison layout */
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1em;
+            margin: 0.5em 0;
+            font-size: 0.7em;
+        }
+
+        .comparison > div {
+            border-radius: 8px;
+            padding: 0.7em;
+        }
+
+        /* Flow diagram */
+        .flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5em;
+            margin: 0.8em 0;
+            font-size: 0.75em;
+            flex-wrap: wrap;
+        }
+
+        .flow-box {
+            background: rgba(66, 175, 250, 0.2);
+            border: 2px solid #42affa;
+            border-radius: 8px;
+            padding: 0.6em 1em;
+            font-weight: bold;
+        }
+
+        .flow-arrow {
+            font-size: 1.5em;
+            color: #42affa;
+        }
+
+        /* ASCII box for demo visuals */
+        .ascii-box {
+            font-family: 'Courier New', monospace;
+            font-size: 0.5em;
+            line-height: 1.1;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.6em;
+            border-radius: 4px;
+            margin: 0.5em auto;
+            text-align: left;
+            max-width: 95%;
+            overflow-x: auto;
+        }
+
+        /* Highlight boxes for call-to-action */
+        .cta {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1em;
+            border-radius: 12px;
+            margin: 1em auto;
+            font-size: 0.9em;
+            max-width: 80%;
+        }
+
+        /* Links styling */
+        .reveal a {
+            color: #42affa;
+            text-decoration: underline;
+        }
+
+        .reveal a:hover {
+            color: #64b5f6;
+        }
+
+        /* Tables */
+        .reveal table {
+            font-size: 0.6em;
+            margin: 0.5em auto;
+            border-collapse: collapse;
+        }
+
+        .reveal table th {
+            background: rgba(66, 175, 250, 0.3);
+            padding: 0.3em 0.5em;
+        }
+
+        .reveal table td {
+            padding: 0.3em 0.5em;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        /* Logo/badge */
+        .badge {
+            display: inline-block;
+            background: rgba(66, 175, 250, 0.2);
+            border: 2px solid #42affa;
+            border-radius: 20px;
+            padding: 0.3em 0.8em;
+            font-size: 0.7em;
+            font-weight: bold;
+            margin: 0.2em;
+        }
+
+        /* Community/collaboration focus */
+        .collab-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.8em;
+            margin: 1em 0;
+            font-size: 0.75em;
+        }
+
+        .collab-item {
+            background: rgba(102, 126, 234, 0.1);
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            padding: 0.8em;
+        }
+
+        /* Demo screenshot placeholder */
+        .demo-placeholder {
+            background: rgba(66, 175, 250, 0.1);
+            border: 3px dashed #42affa;
+            border-radius: 8px;
+            padding: 2em;
+            margin: 1em auto;
+            text-align: center;
+            font-size: 0.8em;
+            max-width: 80%;
+        }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+
+            <!-- ===== SECTION 1: INTRO (5 MIN) ===== -->
+
+            <!-- Slide 1: Titre + Qui je suis (30 sec) -->
+            <section data-background-video="motion01.mp4" data-background-video-loop data-background-video-muted data-background-opacity="0.5">
+                <h1 style="color: #fff; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">🧠 MnemoLite</h1>
+                <div class="spacer-large"></div>
+                <h2 style="color: #fff; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">Donner une Mémoire aux LLMs</h2>
+                <div class="spacer-large"></div>
+                <p style="font-size: 0.8em; color: rgba(255,255,255,0.95); text-shadow: 1px 1px 3px rgba(0,0,0,0.9);">
+                    Live AIDD | 30 minutes | 3 Use Cases + Démos
+                </p>
+                <div class="spacer"></div>
+                <p style="font-size: 0.7em; color: rgba(255,255,255,0.9); text-shadow: 1px 1px 3px rgba(0,0,0,0.9);">
+                    Par Christophe Giacomel | Développeur Solo | Open Source
+                </p>
+            </section>
+
+            <!-- Slide 2: Le Problème - LLMs oublient tout (90 sec) -->
+            <section>
+                <h2>😵 Le Problème qu'on Vit TOUS</h2>
+                <div class="spacer"></div>
+                <h3>"Claude, tu te souviens de ce qu'on avait dit lundi?"</h3>
+                <div class="spacer-large"></div>
+
+                <div class="box box-error">
+                    <h3>LLMs = Amnésiques par Design</h3>
+                    <ul style="text-align: left; margin-top: 0.5em;">
+                        <li>❌ <strong>Stateless</strong> - Zéro mémoire entre sessions</li>
+                        <li>❌ <strong>Context window limité</strong> - 200k tokens max</li>
+                        <li>❌ <strong>Répètent les mêmes questions</strong></li>
+                        <li>❌ <strong>Perdent le contexte projet</strong></li>
+                        <li>❌ <strong>Oublient vos décisions</strong></li>
+                    </ul>
+                </div>
+
+                <div class="spacer"></div>
+                <p style="font-size: 0.75em; color: #ff9800;">
+                    💡 Résultat: Vous répétez 10x les mêmes explications...
+                </p>
+            </section>
+
+            <!-- Slide 3: MnemoLite = Mémoire Persistante (2 min) -->
+            <section>
+                <h2>✅ La Solution: MnemoLite</h2>
+                <div class="spacer"></div>
+                <h3>Mémoire Persistante pour LLMs</h3>
+                <div class="spacer-large"></div>
+
+                <div class="box box-success">
+                    <h3>Ce que ça change:</h3>
+                    <ul style="text-align: left; margin-top: 0.5em;">
+                        <li>✅ <strong>Conversations sauvegardées automatiquement</strong></li>
+                        <li>✅ <strong>Contexte restauré entre sessions</strong></li>
+                        <li>✅ <strong>Recherche sémantique instantanée</strong> (8-12ms)</li>
+                        <li>✅ <strong>Knowledge base qui grandit seule</strong></li>
+                        <li>✅ <strong>Code intelligence avec graph</strong></li>
+                    </ul>
+                </div>
+
+                <div class="spacer"></div>
+                <div class="metrics">
+                    <div class="metric-item">
+                        <span class="metric-number">7,972</span>
+                        Conversations indexées
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-number">8-12ms</span>
+                        Temps de recherche
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-number">+30%</span>
+                        Productivité
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-number">0€</span>
+                        Budget (CPU only)
+                    </div>
+                </div>
+            </section>
+
+            <!-- Slide 4: 3 Use Cases + Où est l'IA (60 sec) -->
+            <section>
+                <h2>🎯 Au Programme: 3 Use Cases</h2>
+                <div class="spacer-large"></div>
+
+                <div style="text-align: left; font-size: 0.8em; max-width: 90%; margin: 0 auto;">
+                    <h3>1️⃣ Assistant qui se Souvient</h3>
+                    <p style="margin-left: 2em;">→ Conversation Lundi + Vendredi = contexte intact</p>
+                    <div class="spacer"></div>
+
+                    <h3>2️⃣ Knowledge Base Auto-Growing</h3>
+                    <p style="margin-left: 2em;">→ 7,972 conversations auto-indexées, recherche sémantique</p>
+                    <div class="spacer"></div>
+
+                    <h3>3️⃣ Code Intelligence avec Graph</h3>
+                    <p style="margin-left: 2em;">→ "Montre-moi les dépendances de X"</p>
+                </div>
+
+                <div class="spacer-large"></div>
+                <div class="box box-info">
+                    <h3>🤖 Où est l'IA?</h3>
+                    <p style="font-size: 0.9em;">
+                        <strong>Claude Desktop</strong> (LLM) → <strong>MCP Protocol</strong> →
+                        <strong>sentence-transformers</strong> (embeddings) →
+                        <strong>pgvector HNSW</strong> (search)
+                    </p>
+                </div>
+            </section>
+
+            <!-- ===== SECTION 2: USE CASE 1 (5 MIN) ===== -->
+
+            <!-- Slide 5: Use Case 1 - Header -->
+            <section data-background-gradient="linear-gradient(135deg, #f093fb 0%, #f5576c 100%)">
+                <h1>1️⃣ Assistant qui se Souvient</h1>
+                <div class="spacer-large"></div>
+                <h2 style="color: #fff;">MCP en Action</h2>
+            </section>
+
+            <!-- Slide 6: Use Case 1 - Le Problème -->
+            <section>
+                <h2>Scénario: Conversation en 2 Sessions</h2>
+                <div class="spacer"></div>
+
+                <div class="comparison">
+                    <div style="background: rgba(244, 67, 54, 0.1); border: 2px solid #f44336; border-radius: 8px;">
+                        <h3>❌ Sans MnemoLite</h3>
+                        <div class="spacer"></div>
+                        <p><strong>Lundi 9h:</strong></p>
+                        <p style="font-size: 0.85em;">"Pourquoi PostgreSQL 18?"</p>
+                        <p style="font-size: 0.85em; color: #4caf50;">→ Vous expliquez tout</p>
+                        <div class="spacer"></div>
+                        <p><strong>Vendredi 14h:</strong></p>
+                        <p style="font-size: 0.85em;">"Pourquoi PostgreSQL 18?"</p>
+                        <p style="font-size: 0.85em; color: #f44336;">→ Claude: "Je ne sais pas" 😵</p>
+                    </div>
+
+                    <div style="background: rgba(76, 175, 80, 0.1); border: 2px solid #4caf50; border-radius: 8px;">
+                        <h3>✅ Avec MnemoLite</h3>
+                        <div class="spacer"></div>
+                        <p><strong>Lundi 9h:</strong></p>
+                        <p style="font-size: 0.85em;">"Pourquoi PostgreSQL 18?"</p>
+                        <p style="font-size: 0.85em; color: #4caf50;">→ Vous expliquez tout</p>
+                        <div class="spacer"></div>
+                        <p><strong>Vendredi 14h:</strong></p>
+                        <p style="font-size: 0.85em;">"Pourquoi PostgreSQL 18?"</p>
+                        <p style="font-size: 0.85em; color: #4caf50;">→ Claude: "Tu m'avais dit lundi..." ✅</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Slide 7: Use Case 1 - Démo LIVE -->
+            <section>
+                <h2>🎬 Démo LIVE</h2>
+                <div class="spacer"></div>
+
+                <div class="demo-placeholder">
+                    <h3>🎥 Vidéo/Screenshot</h3>
+                    <p>Claude Desktop + MCP en action</p>
+                    <div class="spacer"></div>
+                    <p style="font-size: 0.8em;">
+                        1. Conversation sauvegardée lundi<br>
+                        2. search_conversations() appelé vendredi<br>
+                        3. Contexte restauré automatiquement
+                    </p>
+                </div>
+
+                <div class="spacer"></div>
+                <p style="font-size: 0.7em; color: #42affa;">
+                    💡 Temps de recherche: 8-12ms | Précision: ~85%
+                </p>
+            </section>
+
+            <!-- Slide 8: Use Case 1 - Flow IA -->
+            <section>
+                <h2>🔄 Flow IA: Comment ça marche?</h2>
+                <div class="spacer"></div>
+
+                <div class="flow">
+                    <div class="flow-box">Claude Desktop</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-box">MCP Protocol</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-box">MnemoLite API</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-box">PostgreSQL 18</div>
+                </div>
+
+                <div class="spacer-large"></div>
+
+                <div style="text-align: left; font-size: 0.7em; max-width: 85%; margin: 0 auto;">
+                    <p><strong>1. Auto-save daemon:</strong> Capture conversations en temps réel</p>
+                    <p><strong>2. Embeddings:</strong> sentence-transformers (nomic-embed-text-v1.5, 768D)</p>
+                    <p><strong>3. Storage:</strong> pgvector HNSW index (distance cosine)</p>
+                    <p><strong>4. Search:</strong> Claude appelle search_conversations() via MCP</p>
+                    <p><strong>5. Context injection:</strong> Résultats ajoutés au prompt automatiquement</p>
+                </div>
+
+                <div class="spacer"></div>
+                <div class="box box-info">
+                    <p>🎯 <strong>Résultat:</strong> Claude "se souvient" de tout ce que vous lui avez dit!</p>
+                </div>
+            </section>
+
+            <!-- ===== SECTION 3: USE CASE 2 (5 MIN) ===== -->
+
+            <!-- Slide 9: Use Case 2 - Header -->
+            <section data-background-gradient="linear-gradient(135deg, #fa709a 0%, #fee140 100%)">
+                <h1>2️⃣ Knowledge Base Auto-Growing</h1>
+                <div class="spacer-large"></div>
+                <h2 style="color: #fff;">0 Effort de Documentation</h2>
+            </section>
+
+            <!-- Slide 10: Use Case 2 - Le Problème -->
+            <section>
+                <h2>Problème: Documenter = Pénible</h2>
+                <div class="spacer"></div>
+
+                <div class="box box-warning">
+                    <h3>Documentation Traditionnelle:</h3>
+                    <ul style="text-align: left; margin-top: 0.5em;">
+                        <li>📝 Écrire manuellement (temps perdu)</li>
+                        <li>📅 Maintenir à jour (toujours obsolète)</li>
+                        <li>🔍 Retrouver l'info (où j'avais mis ça?)</li>
+                        <li>🤔 Se rappeler du contexte (c'était quand?)</li>
+                    </ul>
+                </div>
+
+                <div class="spacer-large"></div>
+
+                <div class="box box-success">
+                    <h3>MnemoLite Auto-Save:</h3>
+                    <ul style="text-align: left; margin-top: 0.5em;">
+                        <li>✅ <strong>Capture automatique</strong> - 0 effort</li>
+                        <li>✅ <strong>Indexation auto</strong> - embeddings en background</li>
+                        <li>✅ <strong>Recherche sémantique</strong> - "projet embedding"</li>
+                        <li>✅ <strong>Contexte préservé</strong> - date, fichiers, décisions</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Slide 11: Use Case 2 - Démo LIVE -->
+            <section>
+                <h2>🎬 Démo LIVE: Dashboard</h2>
+                <div class="spacer"></div>
+
+                <div class="demo-placeholder">
+                    <h3>🎥 Screenshot Dashboard</h3>
+                    <p>http://localhost:8001/ui/autosave</p>
+                    <div class="spacer"></div>
+                    <div class="metrics">
+                        <div class="metric-item">
+                            <span class="metric-number">7,972</span>
+                            Conversations
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-number">8-12ms</span>
+                            Search time
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-number">~85%</span>
+                            Précision
+                        </div>
+                    </div>
+                </div>
+
+                <div class="spacer"></div>
+                <p style="font-size: 0.75em; color: #42affa;">
+                    💡 Recherche: "pourquoi postgres 18" → 12 résultats en 10ms
+                </p>
+            </section>
+
+            <!-- Slide 12: Use Case 2 - Flow IA -->
+            <section>
+                <h2>🔄 Flow IA: Auto-Save Pipeline</h2>
+                <div class="spacer"></div>
+
+                <div class="flow">
+                    <div class="flow-box">Claude Conversation</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-box">Auto-save Daemon</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-box">Embedding Model</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-box">pgvector HNSW</div>
+                </div>
+
+                <div class="spacer-large"></div>
+
+                <div style="text-align: left; font-size: 0.7em; max-width: 85%; margin: 0 auto;">
+                    <p><strong>1. Monitoring:</strong> Surveille ~/.claude/conversations/</p>
+                    <p><strong>2. Parsing:</strong> Extrait messages + métadonnées (date, projet, etc.)</p>
+                    <p><strong>3. Embeddings:</strong> sentence-transformers (CPU, 120ms/doc)</p>
+                    <p><strong>4. Indexation:</strong> INSERT + CREATE INDEX USING hnsw</p>
+                    <p><strong>5. Search:</strong> Cosine similarity query (8-12ms)</p>
+                </div>
+
+                <div class="spacer"></div>
+                <div class="box box-success">
+                    <p>🎯 <strong>Résultat:</strong> KB vivante qui grandit automatiquement!</p>
+                </div>
+            </section>
+
+            <!-- ===== SECTION 4: USE CASE 3 (5 MIN) ===== -->
+
+            <!-- Slide 13: Use Case 3 - Header -->
+            <section data-background-gradient="linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)">
+                <h1 style="color: #333;">3️⃣ Code Intelligence</h1>
+                <div class="spacer-large"></div>
+                <h2 style="color: #333;">Graph de Dépendances</h2>
+            </section>
+
+            <!-- Slide 14: Use Case 3 - Le Problème -->
+            <section>
+                <h2>Problème: Comprendre les Dépendances</h2>
+                <div class="spacer"></div>
+
+                <div class="box box-error">
+                    <h3>Questions Difficiles sans Tools:</h3>
+                    <ul style="text-align: left; margin-top: 0.5em;">
+                        <li>🤔 "Quels fichiers dépendent de X?"</li>
+                        <li>🤔 "Si je change Y, qu'est-ce qui casse?"</li>
+                        <li>🤔 "Quelle est l'architecture du projet?"</li>
+                        <li>🤔 "Où est utilisée cette fonction?"</li>
+                    </ul>
+                </div>
+
+                <div class="spacer-large"></div>
+
+                <div class="box box-success">
+                    <h3>MnemoLite Code Graph:</h3>
+                    <ul style="text-align: left; margin-top: 0.5em;">
+                        <li>✅ <strong>AST parsing</strong> - analyse imports/exports</li>
+                        <li>✅ <strong>Dependency graph</strong> - visualisation interactive</li>
+                        <li>✅ <strong>Traversal queries</strong> - "dependencies of X"</li>
+                        <li>✅ <strong>Impact analysis</strong> - "what breaks if I change Y"</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Slide 15: Use Case 3 - Démo LIVE -->
+            <section>
+                <h2>🎬 Démo LIVE: Code Graph</h2>
+                <div class="spacer"></div>
+
+                <div class="demo-placeholder">
+                    <h3>🎥 Screenshot Graph Visualization</h3>
+                    <p>http://localhost:8001/ui/code_graph</p>
+                    <div class="spacer"></div>
+                    <p style="font-size: 0.8em;">
+                        Query: "Show dependencies of services/code_indexing_service.py"
+                    </p>
+                    <div class="spacer"></div>
+                    <p style="font-size: 0.75em; color: #4caf50;">
+                        → Affiche: routes/code_search_routes.py → dependencies.py → main.py
+                    </p>
+                </div>
+
+                <div class="spacer"></div>
+                <p style="font-size: 0.7em; color: #42affa;">
+                    💡 Graph stocké en PostgreSQL, queries via API REST
+                </p>
+            </section>
+
+            <!-- Slide 16: Use Case 3 - Flow IA -->
+            <section>
+                <h2>🔄 Flow IA: Code Intelligence</h2>
+                <div class="spacer"></div>
+
+                <div class="flow">
+                    <div class="flow-box">Codebase</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-box">AST Parser</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-box">Dependency Graph</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-box">Claude Queries</div>
+                </div>
+
+                <div class="spacer-large"></div>
+
+                <div style="text-align: left; font-size: 0.7em; max-width: 85%; margin: 0 auto;">
+                    <p><strong>1. Parsing:</strong> AST analysis (Python, JS, etc.)</p>
+                    <p><strong>2. Graph construction:</strong> Nodes = files, Edges = imports</p>
+                    <p><strong>3. Storage:</strong> PostgreSQL graph tables</p>
+                    <p><strong>4. Traversal:</strong> Recursive CTEs pour dépendances</p>
+                    <p><strong>5. Visualization:</strong> D3.js interactive graph</p>
+                </div>
+
+                <div class="spacer"></div>
+                <div class="box box-info">
+                    <p>🎯 <strong>Résultat:</strong> "Montre-moi X" = réponse visuelle instantanée!</p>
+                </div>
+            </section>
+
+            <!-- ===== SECTION 5: IMPACT + OPEN SOURCE (3 MIN) ===== -->
+
+            <!-- Slide 17: Métriques Impact (2 min) -->
+            <section>
+                <h2>📊 Impact Mesuré</h2>
+                <div class="spacer"></div>
+
+                <div class="metrics">
+                    <div class="metric-item">
+                        <span class="metric-number">7,972</span>
+                        Conversations indexées
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-number">8-12ms</span>
+                        Search time
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-number">+30%</span>
+                        Productivité mesurée
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-number">32h</span>
+                        Économisées (4 mois)
+                    </div>
+                </div>
+
+                <div class="spacer-large"></div>
+
+                <div class="metrics">
+                    <div class="metric-item">
+                        <span class="metric-number">0€</span>
+                        Budget (CPU only)
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-number">355/355</span>
+                        Tests MCP passing
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-number">46</span>
+                        EPIC completions
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-number">100%</span>
+                        Open Source
+                    </div>
+                </div>
+
+                <div class="spacer-large"></div>
+                <p style="font-size: 0.75em; color: #4caf50;">
+                    ✅ Production-ready | Multi-platform | Dockerisé
+                </p>
+            </section>
+
+            <!-- Slide 18: Open Source + Liens (2 min) -->
+            <section>
+                <h2>🔓 100% Open Source</h2>
+                <div class="spacer"></div>
+
+                <div class="box box-info">
+                    <h3>GitHub</h3>
+                    <p style="font-size: 0.9em;">
+                        <strong>Repo:</strong> github.com/Giak/mnemolite<br>
+                        <strong>License:</strong> MIT<br>
+                        <strong>Stars:</strong> En développement actif
+                    </p>
+                </div>
+
+                <div class="spacer"></div>
+
+                <div style="text-align: left; font-size: 0.7em; max-width: 85%; margin: 0 auto;">
+                    <p><strong>📚 Documentation:</strong></p>
+                    <ul style="margin-left: 2em;">
+                        <li>README: Installation guide</li>
+                        <li>MCP Guide: docs/MCP_INTEGRATION_GUIDE.md</li>
+                        <li>46 Completion Reports: docs/agile/serena-evolution/03_EPICS/</li>
+                    </ul>
+
+                    <div class="spacer"></div>
+
+                    <p><strong>🎮 Démo Live:</strong></p>
+                    <ul style="margin-left: 2em;">
+                        <li>Dashboard: http://localhost:8001/ui/code_search</li>
+                        <li>Monitoring: http://localhost:8001/ui/monitoring/advanced</li>
+                        <li>Graph: http://localhost:8001/ui/code_graph</li>
+                    </ul>
+
+                    <div class="spacer"></div>
+
+                    <p><strong>📞 Contact:</strong></p>
+                    <ul style="margin-left: 2em;">
+                        <li>Discord: @Giak</li>
+                        <li>Email: christophe.giacomel@proton.me</li>
+                        <li>Twitter/X: @Giak</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- ===== SECTION 6: ROADMAP + COLLAB (2 MIN) ===== -->
+
+            <!-- Slide 19: Roadmap + Besoin de Collaborateurs (2 min) -->
+            <section data-background-gradient="linear-gradient(135deg, #667eea 0%, #764ba2 100%)">
+                <h2 style="color: #fff;">🚀 Roadmap & Collaboration</h2>
+                <div class="spacer"></div>
+
+                <div style="text-align: left; font-size: 0.75em; max-width: 90%; margin: 0 auto; color: #fff;">
+                    <h3>✅ Déjà Fait (4 mois de dev)</h3>
+                    <ul>
+                        <li>✅ <strong>MCP Protocol intégré</strong> - 355/355 tests passing</li>
+                        <li>✅ <strong>Parsing Python</strong> - AST complet + imports</li>
+                        <li>✅ <strong>Embeddings CPU</strong> - sentence-transformers</li>
+                        <li>✅ <strong>Auto-save conversations</strong> - 7,972 indexées</li>
+                    </ul>
+
+                    <div class="spacer"></div>
+
+                    <h3>🔜 Prochaines Étapes</h3>
+                    <ul>
+                        <li>🧪 <strong>Tests approfondis</strong> - Load testing, edge cases, multi-user</li>
+                        <li>💻 <strong>Support multi-langages</strong> - JavaScript, TypeScript, Go, Rust, Java</li>
+                        <li>🔌 <strong>Intégration MCP étendue</strong> - Claude Code, VSCode, autres éditeurs</li>
+                        <li>📊 <strong>Monitoring avancé</strong> - Métriques temps réel, alertes</li>
+                    </ul>
+                </div>
+
+                <div class="spacer-large"></div>
+                <div class="cta">
+                    <h3>💪 J'ai Besoin de VOUS!</h3>
+                    <p style="font-size: 0.85em;">
+                        Projet expérimental solo.<br>
+                        <strong>Ensemble, on peut aller plus loin!</strong>
+                    </p>
+                </div>
+            </section>
+
+            <!-- ===== SECTION 7: Q&A (5 MIN) ===== -->
+
+            <!-- Slide 20: Q&A + Merci -->
+            <section data-background-gradient="linear-gradient(135deg, #667eea 0%, #764ba2 100%)">
+                <h1 style="color: #fff;">❓ Questions?</h1>
+                <div class="spacer-large"></div>
+
+                <div style="font-size: 0.8em; color: #fff;">
+                    <p><strong>GitHub:</strong> github.com/Giak/mnemolite</p>
+                    <p><strong>Discord:</strong> @Giak</p>
+                    <p><strong>Email:</strong> christophe.giacomel@proton.me</p>
+                </div>
+
+                <div class="spacer-large"></div>
+                <div class="spacer-large"></div>
+
+                <h2 style="color: #fff;">🙏 Merci AIDD!</h2>
+                <p style="font-size: 0.9em; color: #fff;">
+                    Rejoignez l'aventure MnemoLite 🚀
+                </p>
+
+                <div class="spacer-large"></div>
+                <p style="font-size: 0.7em; color: rgba(255,255,255,0.8);">
+                    🧠 Donner une mémoire aux LLMs | 💯 Open Source | 🤝 Collaboration
+                </p>
+            </section>
+
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.js"></script>
+    <script>
+        Reveal.initialize({
+            width: 1280,
+            height: 720,
+            margin: 0.04,
+            minScale: 0.2,
+            maxScale: 2.0,
+            controls: true,
+            progress: true,
+            center: true,
+            hash: true,
+            transition: 'slide',
+            backgroundTransition: 'fade',
+            slideNumber: 'c/t',
+            showSlideNumber: 'all'
+        });
+    </script>
+</body>
+</html>

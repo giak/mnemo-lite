@@ -405,6 +405,12 @@ class GraphConstructionService:
                                        "interface", "arrow_function", "async_function"]:
                 continue
 
+            # EPIC-30: Filter anonymous functions to reduce graph noise
+            # Filters 413/581 nodes (71%) in CVGenerator: anonymous_arrow_function, anonymous_method_definition
+            if chunk.name and chunk.name.startswith("anonymous"):
+                self.logger.debug(f"Skipping anonymous function: {chunk.name} in {chunk.file_path}:{chunk.start_line}")
+                continue
+
             # Create node dict using helper
             node_dict = await self._create_node_from_chunk(chunk)
 

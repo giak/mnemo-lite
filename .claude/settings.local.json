@@ -86,7 +86,29 @@
       "Bash(\"docs/agile/serena-evolution/03_EPICS/EPIC-24_ARCHITECTURE_ULTRATHINK.md\" )",
       "Bash(\"docs/agile/serena-evolution/03_EPICS/EPIC-24_MONITORING_ULTRATHINK.md\" )",
       "Bash(\"docs/agile/serena-evolution/03_EPICS/EPIC-24_SOLUTIONS_COMPARISON_ULTRATHINK.md\" )",
-      "Bash(\"docs/agile/serena-evolution/03_EPICS/EPIC-24_SIMULATION_DEEP_ANALYSIS.md\")"
+      "Bash(\"docs/agile/serena-evolution/03_EPICS/EPIC-24_SIMULATION_DEEP_ANALYSIS.md\")",
+      "Skill(epic-workflow)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(pnpm create:*)",
+      "Bash(pnpm install)",
+      "Bash(pnpm add:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(pnpm dlx tailwindcss:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm dev)",
+      "WebFetch(domain:giak.gitlab.io)",
+      "Bash(pnpm list:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm remove:*)",
+      "Bash(psql:*)",
+      "Bash(echo:*)",
+      "Skill(superpowers:brainstorming)",
+      "Skill(superpowers:writing-plans)",
+      "Skill(superpowers:subagent-driven-development)",
+      "Bash(git rev-parse:*)",
+      "Bash(git show:*)",
+      "Bash(python -m pytest:*)"
     ],
     "deny": [],
     "ask": []
@@ -96,18 +118,6 @@
     "mnemolite"
   ],
   "hooks": {
-    "Stop": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/Stop/auto-save.sh",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
     "UserPromptSubmit": [
       {
         "matcher": "*",
