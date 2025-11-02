@@ -121,8 +121,9 @@ services:
       resources:
         limits:
           cpus: '2'        # Increased for parallel embedding generation
-          memory: 4G       # Increased for dual embeddings (TEXT + CODE) support
-                          # EPIC-06: TEXT=1.25GB + CODE=1.9GB + baseline=0.7GB = ~3.85GB
+          memory: 16G      # Increased for parallel indexing (4 workers × 3GB = 12GB)
+        reservations:
+          memory: 12G      # Reserve memory for parallel workers
     networks:
       backend:
       frontend:
