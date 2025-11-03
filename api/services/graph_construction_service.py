@@ -11,7 +11,7 @@ import time
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -444,7 +444,7 @@ class GraphConstructionService:
 
         return [CodeChunkModel.from_db_record(row) for row in rows]
 
-    def _infer_hierarchy_metadata(self, file_path: str, chunk_type: str) -> Dict[str, any]:
+    def _infer_hierarchy_metadata(self, file_path: str, chunk_type: str) -> Dict[str, Any]:
         """
         Infer parent package and module from file path.
 
@@ -460,7 +460,7 @@ class GraphConstructionService:
         Returns:
             Dictionary with parent_package, parent_module, parent_folder
         """
-        metadata: Dict[str, any] = {}
+        metadata: Dict[str, Any] = {}
 
         if not file_path:
             return metadata
@@ -481,14 +481,23 @@ class GraphConstructionService:
             if src_idx + 1 < len(parts):
                 metadata["parent_module"] = parts[src_idx + 1]
         except ValueError:
-            # Fallback: use first directory as module
-            if len(parts) > 1:
-                metadata["parent_module"] = parts[0]
+            # Fallback: use first non-package directory as module
+            try:
+                pkg_idx = parts.index("packages")
+                if pkg_idx + 2 < len(parts):
+                    metadata["parent_module"] = parts[pkg_idx + 2]  # First dir after package name
+                elif len(parts) > 1:
+                    metadata["parent_module"] = parts[0]
+            except ValueError:
+                # No "packages/" prefix, use first directory
+                if len(parts) > 1:
+                    metadata["parent_module"] = parts[0]
 
         # Store parent folder for file-level entities
         if chunk_type in ["class", "function", "method"]:
             # Get directory containing the file
-            metadata["parent_folder"] = '/'.join(parts[:-1])
+            parent = '/'.join(parts[:-1])
+            metadata["parent_folder"] = parent if parent else None  # Use None instead of empty string
 
         return metadata
 
