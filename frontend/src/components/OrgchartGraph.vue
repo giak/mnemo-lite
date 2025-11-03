@@ -299,6 +299,11 @@ const initGraph = async () => {
           const item = items[0]
           if (!item) return ''
 
+          const currentViewMode = props.viewMode || 'hierarchy'
+
+          // Get the original node from nodeMap to access full GraphNode data
+          const originalNode = nodeMap.get(item.id)
+
           const typeColors: Record<string, string> = {
             Module: '#06b6d4',
             Class: '#3b82f6',
@@ -309,6 +314,92 @@ const initGraph = async () => {
             default: '#64748b'
           }
           const color = typeColors[item.data.nodeType] || typeColors.default
+
+          // Generate metrics section based on view mode
+          const getMetricsSection = (): string => {
+            if (!originalNode) return ''
+
+            switch (currentViewMode) {
+              case 'complexity': {
+                const complexity = originalNode.cyclomatic_complexity
+                const loc = originalNode.lines_of_code
+                if (complexity === undefined && loc === undefined) return ''
+
+                return `
+                  <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #334155;">
+                    ${complexity !== undefined ? `
+                      <div style="font-size: 10px; color: #94a3b8; margin-bottom: 4px;">
+                        <span style="margin-right: 4px;">📊</span>
+                        <span>Cyclomatic Complexity: <strong style="color: #e2e8f0;">${complexity}</strong></span>
+                      </div>
+                    ` : ''}
+                    ${loc !== undefined ? `
+                      <div style="font-size: 10px; color: #94a3b8;">
+                        <span style="margin-right: 4px;">📏</span>
+                        <span>Lines of Code: <strong style="color: #e2e8f0;">${loc}</strong></span>
+                      </div>
+                    ` : ''}
+                  </div>
+                `
+              }
+
+              case 'hubs': {
+                const incoming = originalNode.incoming_edges
+                const outgoing = originalNode.outgoing_edges
+                const total = originalNode.total_edges
+                if (incoming === undefined && outgoing === undefined && total === undefined) return ''
+
+                return `
+                  <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #334155;">
+                    ${incoming !== undefined ? `
+                      <div style="font-size: 10px; color: #94a3b8; margin-bottom: 4px;">
+                        <span style="margin-right: 4px;">⬇️</span>
+                        <span>Incoming: <strong style="color: #e2e8f0;">${incoming}</strong></span>
+                      </div>
+                    ` : ''}
+                    ${outgoing !== undefined ? `
+                      <div style="font-size: 10px; color: #94a3b8; margin-bottom: 4px;">
+                        <span style="margin-right: 4px;">⬆️</span>
+                        <span>Outgoing: <strong style="color: #e2e8f0;">${outgoing}</strong></span>
+                      </div>
+                    ` : ''}
+                    ${total !== undefined ? `
+                      <div style="font-size: 10px; color: #94a3b8;">
+                        <span style="margin-right: 4px;">🔗</span>
+                        <span>Total: <strong style="color: #e2e8f0;">${total}</strong></span>
+                      </div>
+                    ` : ''}
+                  </div>
+                `
+              }
+
+              case 'hierarchy': {
+                const depth = originalNode.depth
+                const descendants = originalNode.descendants_count
+                if (depth === undefined && descendants === undefined) return ''
+
+                return `
+                  <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #334155;">
+                    ${depth !== undefined ? `
+                      <div style="font-size: 10px; color: #94a3b8; margin-bottom: 4px;">
+                        <span style="margin-right: 4px;">🌳</span>
+                        <span>Depth: <strong style="color: #e2e8f0;">${depth}</strong></span>
+                      </div>
+                    ` : ''}
+                    ${descendants !== undefined ? `
+                      <div style="font-size: 10px; color: #94a3b8;">
+                        <span style="margin-right: 4px;">👥</span>
+                        <span>Descendants: <strong style="color: #e2e8f0;">${descendants}</strong> nodes</span>
+                      </div>
+                    ` : ''}
+                  </div>
+                `
+              }
+
+              default:
+                return ''
+            }
+          }
 
           return `
             <div style="padding: 12px; min-width: 200px; background: #1e293b; border: 1px solid #334155; border-radius: 6px;">
@@ -321,14 +412,12 @@ const initGraph = async () => {
                   ${item.data.nodeType}
                 </span>
               </div>
+              ${getMetricsSection()}
               ${item.data.file_path ? `
                 <div style="font-size: 9px; color: #64748b; font-family: monospace; word-break: break-all; margin-top: 8px; padding-top: 8px; border-top: 1px solid #334155;">
-                  ${item.data.file_path}
+                  📁 ${item.data.file_path}
                 </div>
               ` : ''}
-              <div style="font-size: 9px; color: #64748b; margin-top: 4px;">
-                Depth: ${item.data.depth}
-              </div>
             </div>
           `
         }
