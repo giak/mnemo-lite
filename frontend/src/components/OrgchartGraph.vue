@@ -146,6 +146,22 @@ const initGraph = async () => {
     childrenMap.get(edge.source)!.push(edge.target)
   })
 
+  // Calculate connection metrics from all edges
+  const edgeCounts = new Map<string, { incoming: number; outgoing: number }>()
+  props.edges.forEach(edge => {
+    // Count outgoing edges for source
+    if (!edgeCounts.has(edge.source)) {
+      edgeCounts.set(edge.source, { incoming: 0, outgoing: 0 })
+    }
+    edgeCounts.get(edge.source)!.outgoing++
+
+    // Count incoming edges for target
+    if (!edgeCounts.has(edge.target)) {
+      edgeCounts.set(edge.target, { incoming: 0, outgoing: 0 })
+    }
+    edgeCounts.get(edge.target)!.incoming++
+  })
+
   // Use config from props or defaults
   const maxDepth = props.config?.depth || 6
   const maxChildrenPerNode = props.config?.maxChildren || 25
@@ -165,28 +181,62 @@ const initGraph = async () => {
       .filter(Boolean)
       .slice(0, maxChildrenPerNode)
 
+    // Calculate descendants count recursively
+    const descendantsCount = childNodes.reduce((sum, child) =>
+      sum + 1 + (child.data.descendants_count || 0), 0
+    )
+
+    // Get edge counts for this node
+    const counts = edgeCounts.get(nodeId) || { incoming: 0, outgoing: 0 }
+
     return {
       id: node.id,
       data: {
         label: getModuleLabel(node),
         nodeType: node.type,
         file_path: node.file_path,
-        depth
+        depth,
+        // Complexity metrics from backend
+        cyclomatic_complexity: node.cyclomatic_complexity,
+        lines_of_code: node.lines_of_code,
+        // Connection metrics calculated from edges
+        incoming_edges: counts.incoming,
+        outgoing_edges: counts.outgoing,
+        total_edges: counts.incoming + counts.outgoing,
+        // Hierarchy metrics calculated recursively
+        descendants_count: descendantsCount
       },
       children: childNodes.length > 0 ? childNodes : undefined
     }
   }
 
   // Create virtual root to show all modules
+  const rootChildren = roots.slice(0, maxModulesToShow).map(root => buildNode(root.id, 1)).filter(Boolean)
+
+  // Calculate metrics for virtual root
+  const rootDescendants = rootChildren.reduce((sum, child) =>
+    sum + 1 + (child.data.descendants_count || 0), 0
+  )
+  const rootCounts = edgeCounts.get('__root__') || { incoming: 0, outgoing: 0 }
+
   const virtualRoot = {
     id: '__root__',
     data: {
       label: `${roots[0]?.label || 'Package'} Package`,
       nodeType: 'Root',
       file_path: undefined,
-      depth: 0
+      depth: 0,
+      // Virtual root doesn't have complexity metrics
+      cyclomatic_complexity: undefined,
+      lines_of_code: undefined,
+      // Connection metrics (usually 0 for virtual root)
+      incoming_edges: rootCounts.incoming,
+      outgoing_edges: rootCounts.outgoing,
+      total_edges: rootCounts.incoming + rootCounts.outgoing,
+      // Hierarchy metric aggregated from children
+      descendants_count: rootDescendants
     },
-    children: roots.slice(0, maxModulesToShow).map(root => buildNode(root.id, 1)).filter(Boolean)
+    children: rootChildren
   }
 
   const treeData = virtualRoot
@@ -196,6 +246,22 @@ const initGraph = async () => {
     rootLabel: treeData?.data?.label,
     childrenCount: treeData?.children?.length || 0
   })
+
+  // Debug: Log sample node metrics
+  if (treeData?.children?.[0]) {
+    const sampleNode = treeData.children[0]
+    console.log('[Orgchart] Sample node metrics:', {
+      id: sampleNode.id,
+      label: sampleNode.data.label,
+      depth: sampleNode.data.depth,
+      complexity: sampleNode.data.cyclomatic_complexity,
+      loc: sampleNode.data.lines_of_code,
+      incoming: sampleNode.data.incoming_edges,
+      outgoing: sampleNode.data.outgoing_edges,
+      total_edges: sampleNode.data.total_edges,
+      descendants: sampleNode.data.descendants_count
+    })
+  }
 
   if (!treeData) {
     console.warn('[Orgchart] No tree data generated')
