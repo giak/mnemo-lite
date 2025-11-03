@@ -27,13 +27,18 @@ class BatchIndexingRequest(BaseModel):
         description="File extensions to index",
         examples=[[".ts", ".js"]]
     )
+    include_tests: bool = Field(
+        default=False,
+        description="Include test files (__tests__/, .spec.*, .test.*)"
+    )
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "directory": "/app/code_test",
                 "repository": "code_test",
-                "extensions": [".ts", ".js"]
+                "extensions": [".ts", ".js"],
+                "include_tests": False
             }
         }
     }

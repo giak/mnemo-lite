@@ -109,6 +109,7 @@ async def start_batch_indexing(
                 directory=directory,
                 repository=request.repository,
                 extensions=request.extensions,
+                include_tests=request.include_tests,
             )
         finally:
             await producer.close()
@@ -121,13 +122,18 @@ async def start_batch_indexing(
             )
 
         # Return success response
+        message = f"Batch indexing started. Found {job_info['total_files']} files."
+        if request.include_tests:
+            message += " (including test files)"
+        message += f" Use GET /status/{request.repository} to monitor progress."
+
         return BatchIndexingResponse(
             job_id=job_info["job_id"],
             repository=request.repository,
             total_files=job_info["total_files"],
             total_batches=job_info["total_batches"],
             status=job_info["status"],
-            message=f"Batch indexing started. Use GET /status/{request.repository} to monitor progress.",
+            message=message,
         )
 
     except HTTPException:

@@ -47,27 +47,43 @@ class BatchIndexingProducer:
         if self.redis_client:
             await self.redis_client.aclose()
 
-    def scan_files(self, directory: Path, extensions: List[str]) -> List[Path]:
+    def scan_files(
+        self,
+        directory: Path,
+        extensions: List[str],
+        include_tests: bool = False
+    ) -> List[Path]:
         """
         Scan directory for files with specified extensions.
 
         Args:
             directory: Root directory to scan
             extensions: List of extensions (e.g., [".ts", ".js"])
+            include_tests: Include test files (default: False)
 
         Returns:
-            Sorted list of file paths (excluding node_modules, .git, etc.)
+            Sorted list of file paths (excluding node_modules, .git, dist, etc.)
         """
         files = []
         excluded_dirs = {"node_modules", ".git", ".svn", ".hg", "__pycache__", "dist", "build", ".next"}
+        test_patterns = {"__tests__", ".spec.", ".test.", "vitest.config", "vitest.setup"}
 
         for ext in extensions:
             for file_path in directory.rglob(f"*{ext}"):
-                # Exclude files in excluded directories
-                if not any(excluded in file_path.parts for excluded in excluded_dirs):
-                    files.append(file_path)
+                # Check excluded directories
+                path_parts = set(file_path.relative_to(directory).parts)
+                if path_parts & excluded_dirs:
+                    continue
 
-        return sorted(files)  # Sort for reproducibility
+                # Check test patterns (skip if include_tests=False)
+                if not include_tests:
+                    file_str = str(file_path)
+                    if any(pattern in file_str for pattern in test_patterns):
+                        continue
+
+                files.append(file_path)
+
+        return sorted(files)
 
     def _create_batches(self, files: List[Path], batch_size: int) -> List[List[Path]]:
         """
@@ -89,7 +105,8 @@ class BatchIndexingProducer:
         self,
         directory: Path,
         repository: str,
-        extensions: List[str] = [".ts", ".js"]
+        extensions: List[str] = [".ts", ".js"],
+        include_tests: bool = False
     ) -> Dict:
         """
         Scan directory, divide into batches, enqueue to Redis Stream.
@@ -98,6 +115,7 @@ class BatchIndexingProducer:
             directory: Directory to scan
             repository: Repository name
             extensions: File extensions to index
+            include_tests: Include test files (default: False)
 
         Returns:
             {
@@ -109,8 +127,8 @@ class BatchIndexingProducer:
         """
         await self.connect()
 
-        # 1. Scan files
-        files = self.scan_files(directory, extensions)
+        # 1. Scan files (with include_tests parameter)
+        files = self.scan_files(directory, extensions, include_tests=include_tests)
         total_files = len(files)
 
         # 2. Divide into batches
