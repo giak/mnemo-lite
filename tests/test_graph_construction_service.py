@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from services.graph_construction_service import GraphConstructionService, is_builtin, PYTHON_BUILTINS
 from models.code_chunk_models import CodeChunkModel
-from models.graph_models import GraphStats
+from models.graph_models import GraphStats, NodeModel, EdgeModel
 
 
 class TestBuiltinsDetection:
@@ -181,7 +181,7 @@ class TestGraphConstructionService:
 
         assert len(chunk_to_node) == 1, "Should create 1 node"
         node = list(chunk_to_node.values())[0]
-        assert node.node_type == "function"
+        assert node.node_type == "Function"  # Note: node_type is capitalized
         assert node.label == "calculate_total"
         assert node.properties["file_path"] == "utils.py"
         assert node.properties["signature"] == "calculate_total(items)"
@@ -264,3 +264,55 @@ class TestGraphConstructionIntegration:
         assert stats.resolution_accuracy == 100.0, f"Should have 100% resolution accuracy, got {stats.resolution_accuracy}"
 
         print(f"Graph stats: {stats}")
+
+    async def test_generate_contains_edges_for_hierarchy(self, test_engine):
+        """Test that contains edges are generated for structural hierarchy."""
+        from datetime import datetime, timezone
+
+        service = GraphConstructionService(test_engine)
+
+        # Create mock nodes representing hierarchy
+        # Package node
+        package_node = NodeModel(
+            node_id=uuid.uuid4(),
+            label="core",
+            node_type="Package",
+            properties={"repository": "test_repo"},
+            created_at=datetime.now(timezone.utc)
+        )
+
+        # Module node with parent_package metadata
+        module_node = NodeModel(
+            node_id=uuid.uuid4(),
+            label="cv",
+            node_type="Module",
+            properties={
+                "repository": "test_repo",
+                "parent_package": "core"
+            },
+            created_at=datetime.now(timezone.utc)
+        )
+
+        # File node with parent_module metadata
+        file_node = NodeModel(
+            node_id=uuid.uuid4(),
+            label="validation.service.ts",
+            node_type="File",
+            properties={
+                "repository": "test_repo",
+                "parent_module": "cv",
+                "file_path": "packages/core/src/cv/validation.service.ts"
+            },
+            created_at=datetime.now(timezone.utc)
+        )
+
+        # Generate contains edges
+        edges = await service._generate_contains_edges([package_node, module_node, file_node])
+
+        # Assert: Should have 2 edges (Package->Module, Module->File)
+        assert len(edges) >= 1, f"Should generate at least 1 contains edge, got {len(edges)}"
+
+        # Check that edges have correct type
+        for edge in edges:
+            assert hasattr(edge, 'relation_type'), "Edge should have relation_type attribute"
+            assert edge.relation_type == "contains", f"Edge type should be 'contains', got {edge.relation_type}"

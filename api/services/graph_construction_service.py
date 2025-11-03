@@ -10,6 +10,7 @@ import logging
 import time
 import uuid
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set
 
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -195,6 +196,29 @@ class GraphConstructionService:
                             )
                             reexport_edges.append(edge)
 
+                    # Generate structural hierarchy (contains) edges
+                    self.logger.info("Generating structural hierarchy (contains edges)...")
+                    nodes_list = list(chunk_to_node.values())
+                    contains_edge_models = await self._generate_contains_edges(nodes_list)
+
+                    # Persist contains edges to database
+                    contains_edges = []
+                    for edge_model in contains_edge_models:
+                        try:
+                            edge = await self.edge_repo.create_dependency_edge(
+                                source_node=edge_model.source_node_id,
+                                target_node=edge_model.target_node_id,
+                                relationship=edge_model.relation_type,
+                                metadata=edge_model.properties,
+                                connection=conn,
+                            )
+                            contains_edges.append(edge)
+                        except Exception as e:
+                            self.logger.warning(f"Failed to create contains edge: {e}")
+                            continue
+
+                    self.logger.info(f"Created {len(contains_edges)} contains edges")
+
                 except TimeoutError as e:
                     self.logger.error(
                         f"Edge creation timed out for repository '{repository}' after {get_timeout('graph_construction')}s",
@@ -205,7 +229,7 @@ class GraphConstructionService:
                 # Transaction auto-commits on successful context exit
                 self.logger.info(
                     f"✅ EPIC-12: Graph construction transaction committed - "
-                    f"{len(chunk_to_node)} nodes and {len(call_edges) + len(import_edges) + len(reexport_edges)} edges stored atomically"
+                    f"{len(chunk_to_node)} nodes and {len(call_edges) + len(import_edges) + len(reexport_edges) + len(contains_edges)} edges stored atomically"
                 )
 
         except Exception as e:
@@ -216,10 +240,10 @@ class GraphConstructionService:
             )
             raise
 
-        total_edges = len(call_edges) + len(import_edges) + len(reexport_edges)
+        total_edges = len(call_edges) + len(import_edges) + len(reexport_edges) + len(contains_edges)
         self.logger.info(
             f"Created {len(call_edges)} call edges, {len(import_edges)} import edges, "
-            f"and {len(reexport_edges)} re-export edges"
+            f"{len(reexport_edges)} re-export edges, and {len(contains_edges)} contains edges"
         )
 
         # Step 5: Compute statistics
@@ -235,6 +259,7 @@ class GraphConstructionService:
             "calls": len(call_edges),
             "imports": len(import_edges),
             "re_exports": len(reexport_edges),
+            "contains": len(contains_edges),
         }
 
         # Compute resolution accuracy (calls resolved / total calls)
@@ -719,11 +744,245 @@ class GraphConstructionService:
         edges: List[EdgeModel] = []
         imports = chunk.metadata.get("imports", []) if chunk.metadata else []
 
-        # TODO: Implement import resolution
-        # For now, skip import edges (Phase 1 MVP focuses on call graph)
-        # Can be added in Phase 2 if needed
+        for import_spec in imports:
+            # Parse import spec (format: "package.symbol" or "symbol")
+            # Examples: "@cv-generator/shared.ValidationLayerType", "vue.ref", "../service.BaseService"
+
+            # Skip external package imports (not in our repository)
+            if self._is_external_import(import_spec):
+                self.logger.debug(f"Skipping external import '{import_spec}' from chunk {chunk.id}")
+                continue
+
+            # Extract symbol from import spec
+            symbol = self._extract_symbol_from_import(import_spec)
+            if not symbol:
+                self.logger.debug(f"Could not extract symbol from import '{import_spec}'")
+                continue
+
+            # Resolve import target
+            target_chunk_id = await self._resolve_import_target(symbol, import_spec, chunk, all_chunks)
+
+            if not target_chunk_id:
+                self.logger.debug(f"Could not resolve import '{import_spec}' (symbol: {symbol}) from chunk {chunk.id}")
+                continue
+
+            # Get target node
+            target_node = chunk_to_node.get(target_chunk_id)
+            if not target_node:
+                self.logger.debug(f"No node found for target chunk {target_chunk_id}")
+                continue
+
+            # Create edge
+            try:
+                edge = await self.edge_repo.create_dependency_edge(
+                    source_node=node.node_id,
+                    target_node=target_node.node_id,
+                    relationship="imports",
+                    metadata={
+                        "import_spec": import_spec,
+                        "symbol": symbol,
+                        "source_file": chunk.file_path,
+                        "target_file": target_node.properties.get("file_path", ""),
+                    },
+                    connection=connection,
+                )
+                edges.append(edge)
+                self.logger.debug(f"Created import edge: {node.label} -> {target_node.label} ({symbol})")
+            except Exception as e:
+                self.logger.error(f"Failed to create import edge: {e}")
 
         return edges
+
+    def _is_external_import(self, import_spec: str) -> bool:
+        """
+        Check if import is external (not in our repository).
+
+        External imports include:
+        - Standard library (no dots, e.g., "os", "sys")
+        - Third-party packages (e.g., "vue.ref", "pinia.defineStore", "uuid.v4")
+        - NOT internal packages (e.g., "@cv-generator/shared.ValidationLayerType")
+
+        Args:
+            import_spec: Import specification (e.g., "vue.ref", "@cv-generator/shared.Error")
+
+        Returns:
+            True if external, False if internal
+        """
+        # Internal imports start with repository-specific prefixes or relative paths
+        internal_prefixes = ["@cv-generator/", "../", "./", "/tmp/code_test/"]
+
+        for prefix in internal_prefixes:
+            if import_spec.startswith(prefix):
+                return False
+
+        # External packages: vue, pinia, uuid, etc.
+        external_packages = [
+            "vue.", "pinia.", "uuid.", "axios.", "lodash.", "moment.",
+            "react.", "angular.", "@vue/", "@angular/", "@react/"
+        ]
+
+        for pkg in external_packages:
+            if import_spec.startswith(pkg):
+                return True
+
+        # If it's a relative path pattern, it's internal
+        if "/" in import_spec:
+            return False
+
+        # Default: treat as external if it has a dot (package.symbol pattern)
+        # but no recognized internal prefix
+        return "." in import_spec
+
+    def _extract_symbol_from_import(self, import_spec: str) -> Optional[str]:
+        """
+        Extract symbol name from import specification.
+
+        Examples:
+            "@cv-generator/shared.ValidationLayerType" → "ValidationLayerType"
+            "vue.ref" → "ref"
+            "../service.BaseService" → "BaseService"
+            "./validation.service.BaseValidationService" → "BaseValidationService"
+
+        Args:
+            import_spec: Import specification
+
+        Returns:
+            Symbol name or None
+        """
+        if not import_spec:
+            return None
+
+        # Split by dot and take the last part
+        parts = import_spec.split(".")
+        if len(parts) >= 2:
+            symbol = parts[-1]
+            # Clean up any trailing characters
+            return symbol.strip()
+
+        return None
+
+    async def _resolve_import_target(
+        self,
+        symbol: str,
+        import_spec: str,
+        current_chunk: CodeChunkModel,
+        all_chunks: List[CodeChunkModel]
+    ) -> Optional[uuid.UUID]:
+        """
+        Resolve import target to chunk_id.
+
+        Strategy (priority order):
+        1. name_path exact match → highest accuracy
+        2. name exact match + file proximity
+        3. name match anywhere
+
+        Args:
+            symbol: Symbol being imported (e.g., "ValidationLayerType")
+            import_spec: Full import spec (e.g., "@cv-generator/shared.ValidationLayerType")
+            current_chunk: Chunk making the import
+            all_chunks: All chunks in repository
+
+        Returns:
+            chunk_id of target, or None if not found
+        """
+        # Strategy 1: name_path exact match
+        # Examples: "shared.types.ValidationLayerType" matches symbol "ValidationLayerType"
+        name_path_candidates = []
+        for chunk in all_chunks:
+            if chunk.name_path:
+                # Match if name_path ends with symbol
+                if chunk.name_path == symbol or chunk.name_path.endswith(f".{symbol}"):
+                    name_path_candidates.append(chunk)
+
+        if len(name_path_candidates) == 1:
+            self.logger.debug(
+                f"Resolved import '{symbol}' via name_path: {name_path_candidates[0].name_path}"
+            )
+            return name_path_candidates[0].id
+
+        # If multiple matches, prefer same package (based on file path)
+        if len(name_path_candidates) > 1:
+            # Extract package hint from import_spec
+            # E.g., "@cv-generator/shared.ValidationLayerType" → "shared"
+            package_hint = self._extract_package_hint(import_spec)
+
+            if package_hint:
+                package_candidates = [
+                    c for c in name_path_candidates
+                    if package_hint in c.file_path
+                ]
+                if len(package_candidates) == 1:
+                    self.logger.debug(
+                        f"Resolved import '{symbol}' via package hint '{package_hint}': "
+                        f"{package_candidates[0].name_path}"
+                    )
+                    return package_candidates[0].id
+                if package_candidates:
+                    # Return first match
+                    return package_candidates[0].id
+
+            # Otherwise, return first candidate
+            return name_path_candidates[0].id
+
+        # Strategy 2: name exact match
+        name_candidates = []
+        for chunk in all_chunks:
+            if chunk.name == symbol:
+                name_candidates.append(chunk)
+
+        if len(name_candidates) == 1:
+            self.logger.debug(f"Resolved import '{symbol}' via name match")
+            return name_candidates[0].id
+
+        # If multiple matches, prefer file proximity
+        if len(name_candidates) > 1:
+            # Prefer same directory
+            current_dir = "/".join(current_chunk.file_path.split("/")[:-1])
+            same_dir_candidates = [
+                c for c in name_candidates
+                if c.file_path.startswith(current_dir)
+            ]
+            if same_dir_candidates:
+                return same_dir_candidates[0].id
+
+            # Otherwise, return first
+            return name_candidates[0].id
+
+        # Not found
+        return None
+
+    def _extract_package_hint(self, import_spec: str) -> Optional[str]:
+        """
+        Extract package hint from import specification.
+
+        Examples:
+            "@cv-generator/shared.ValidationLayerType" → "shared"
+            "@cv-generator/core.User" → "core"
+            "../../../shared/i18n/domain-i18n.port.DomainI18nPort" → "shared"
+
+        Args:
+            import_spec: Import specification
+
+        Returns:
+            Package hint or None
+        """
+        # Handle @cv-generator/ packages
+        if "@cv-generator/" in import_spec:
+            # Extract package name after @cv-generator/
+            parts = import_spec.split("@cv-generator/")
+            if len(parts) > 1:
+                package_part = parts[1].split(".")[0]  # "shared", "core", etc.
+                return package_part
+
+        # Handle relative paths with directory hints
+        if "/" in import_spec:
+            # Extract directory name before last /
+            parts = import_spec.split("/")
+            for part in reversed(parts):
+                if part and part not in ["..", ".", "src", "dist"]:
+                    return part.split(".")[0]
+
+        return None
 
     async def _create_reexport_edges(
         self,
@@ -802,6 +1061,95 @@ class GraphConstructionService:
                     f"Could not find target for re-export: {symbol} "
                     f"from {source_path} (barrel: {barrel_chunk.file_path})"
                 )
+
+        return edges
+
+    async def _generate_contains_edges(
+        self,
+        nodes: List[NodeModel]
+    ) -> List[EdgeModel]:
+        """
+        Generate 'contains' edges to represent structural hierarchy.
+
+        Hierarchy levels:
+        - Package contains Module
+        - Module contains File
+        - File contains Class/Function
+
+        Args:
+            nodes: All nodes in the graph
+
+        Returns:
+            List of EdgeModel with relation_type="contains"
+        """
+        edges: List[EdgeModel] = []
+
+        # Group nodes by type for efficient lookup
+        nodes_by_type: Dict[str, List[NodeModel]] = {}
+        for node in nodes:
+            if node.node_type not in nodes_by_type:
+                nodes_by_type[node.node_type] = []
+            nodes_by_type[node.node_type].append(node)
+
+        # Create Package → Module edges
+        packages = nodes_by_type.get("Package", [])
+        modules = nodes_by_type.get("Module", [])
+
+        for module in modules:
+            parent_package = module.properties.get("parent_package") if module.properties else None
+            if parent_package:
+                # Find matching package by label
+                package = next((p for p in packages if p.label == parent_package), None)
+                if package:
+                    # Create EdgeModel directly (without DB persistence)
+                    edge = EdgeModel(
+                        edge_id=uuid.uuid4(),
+                        source_node_id=package.node_id,
+                        target_node_id=module.node_id,
+                        relation_type="contains",
+                        properties={"hierarchy_level": "package_to_module"},
+                        created_at=datetime.now(timezone.utc)
+                    )
+                    edges.append(edge)
+
+        # Create Module → File edges
+        files = nodes_by_type.get("File", [])
+
+        for file_node in files:
+            parent_module = file_node.properties.get("parent_module") if file_node.properties else None
+            if parent_module:
+                module = next((m for m in modules if m.label == parent_module), None)
+                if module:
+                    edge = EdgeModel(
+                        edge_id=uuid.uuid4(),
+                        source_node_id=module.node_id,
+                        target_node_id=file_node.node_id,
+                        relation_type="contains",
+                        properties={"hierarchy_level": "module_to_file"},
+                        created_at=datetime.now(timezone.utc)
+                    )
+                    edges.append(edge)
+
+        # Create File → Class/Function edges
+        classes = nodes_by_type.get("Class", [])
+        functions = nodes_by_type.get("Function", [])
+        methods = nodes_by_type.get("Method", [])
+
+        for entity in classes + functions + methods:
+            parent_file = entity.properties.get("file_path") if entity.properties else None
+            if parent_file:
+                # Find file node by file_path
+                file_node = next((f for f in files if f.properties.get("file_path") == parent_file), None)
+                if file_node:
+                    edge = EdgeModel(
+                        edge_id=uuid.uuid4(),
+                        source_node_id=file_node.node_id,
+                        target_node_id=entity.node_id,
+                        relation_type="contains",
+                        properties={"hierarchy_level": "file_to_entity"},
+                        created_at=datetime.now(timezone.utc)
+                    )
+                    edges.append(edge)
 
         return edges
 

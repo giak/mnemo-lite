@@ -43,14 +43,23 @@ class NodeCreate(BaseModel):
 
 
 class EdgeModel(BaseModel):
-    """Edge representing code dependency."""
+    """Edge representing code dependency.
+
+    Supported relation_type values:
+    - "calls": Function/method call relationship
+    - "imports": Module import relationship
+    - "re_exports": Barrel file re-export relationship
+    - "contains": Structural hierarchy (Package→Module→File→Entity)
+    - "extends": Class inheritance (future use)
+    - "uses": Generic usage relationship (future use)
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     edge_id: uuid.UUID
     source_node_id: uuid.UUID
     target_node_id: uuid.UUID
-    relation_type: str  # "calls", "imports", "extends", "uses"
+    relation_type: str  # See docstring for supported types
     properties: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
 
