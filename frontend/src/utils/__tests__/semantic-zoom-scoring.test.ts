@@ -65,8 +65,11 @@ describe('semantic-zoom-scoring', () => {
         createNode({ id: '4', cyclomatic_complexity: 5, lines_of_code: 50 }),   // Very Low
       ]
 
+      const edges = [] // No edges = no ancestors added (flat filtering)
+
       const filtered = filterNodesByScore(
         nodes,
+        edges,
         30,
         'complexity',
         { complexity: 0.5, loc: 0.5, connections: 0 }
@@ -85,14 +88,46 @@ describe('semantic-zoom-scoring', () => {
         createNode({ id: '3' })
       ]
 
+      const edges = []
+
       const filtered = filterNodesByScore(
         nodes,
+        edges,
         100,
         'complexity',
         { complexity: 1, loc: 0, connections: 0 }
       )
 
       expect(filtered).toHaveLength(3)
+    })
+
+    it('includes ancestors to maintain tree paths', () => {
+      // Tree: Module (root) -> Class (parent) -> Function (high score leaf)
+      const nodes: GraphNode[] = [
+        createNode({ id: 'module', type: 'Module', cyclomatic_complexity: 0, lines_of_code: 0 }),
+        createNode({ id: 'class', type: 'Class', cyclomatic_complexity: 20, lines_of_code: 100 }),
+        createNode({ id: 'func', type: 'Function', cyclomatic_complexity: 80, lines_of_code: 300 }),
+      ]
+
+      const edges = [
+        { id: 'e1', source: 'module', target: 'class', type: 'imports' },
+        { id: 'e2', source: 'class', target: 'func', type: 'contains' }
+      ]
+
+      // 33% zoom = 1 node (the Function with highest score)
+      // But should also include Module and Class ancestors
+      const filtered = filterNodesByScore(
+        nodes,
+        edges,
+        33,
+        'complexity',
+        { complexity: 1, loc: 0, connections: 0 }
+      )
+
+      expect(filtered.length).toBe(3) // All 3 nodes (func + ancestors)
+      expect(filtered.map(n => n.id)).toContain('module') // Ancestor included
+      expect(filtered.map(n => n.id)).toContain('class')  // Ancestor included
+      expect(filtered.map(n => n.id)).toContain('func')   // Original high-score node
     })
   })
 })
