@@ -316,3 +316,36 @@ class TestGraphConstructionIntegration:
         for edge in edges:
             assert hasattr(edge, 'relation_type'), "Edge should have relation_type attribute"
             assert edge.relation_type == "contains", f"Edge type should be 'contains', got {edge.relation_type}"
+
+    async def test_infer_parent_metadata_from_file_path(self, test_engine):
+        """Test that parent relationships are inferred from file_path."""
+        service = GraphConstructionService(test_engine)
+
+        # Create mock chunk with structured file path
+        chunk = CodeChunkModel(
+            id=uuid.uuid4(),
+            file_path="packages/core/src/cv/application/services/validation.service.ts",
+            language="typescript",
+            chunk_type="class",
+            name="BaseValidationService",
+            source_code="class BaseValidationService {}",
+            start_line=1,
+            end_line=3,
+            embedding_text=None,
+            embedding_code=None,
+            metadata={},
+            indexed_at=datetime.now(timezone.utc),
+            last_modified=None,
+            node_id=None,
+            repository="code_test",
+            commit_hash=None
+        )
+
+        # Create node
+        node_dict = await service._create_node_from_chunk(chunk)
+
+        # Assert parent metadata inferred
+        properties = node_dict["properties"]
+        assert properties.get("parent_module") == "cv", f"Expected parent_module='cv', got {properties.get('parent_module')}"
+        assert properties.get("parent_package") == "core", f"Expected parent_package='core', got {properties.get('parent_package')}"
+        assert node_dict["node_type"] == "Class"

@@ -444,6 +444,54 @@ class GraphConstructionService:
 
         return [CodeChunkModel.from_db_record(row) for row in rows]
 
+    def _infer_hierarchy_metadata(self, file_path: str, chunk_type: str) -> Dict[str, any]:
+        """
+        Infer parent package and module from file path.
+
+        Expected patterns:
+        - packages/{package}/src/{module}/...
+        - src/{module}/...
+        - {module}/...
+
+        Args:
+            file_path: Full file path
+            chunk_type: Type of chunk (for determining node type)
+
+        Returns:
+            Dictionary with parent_package, parent_module, parent_folder
+        """
+        metadata: Dict[str, any] = {}
+
+        if not file_path:
+            return metadata
+
+        parts = file_path.split('/')
+
+        # Try to find package (after "packages/")
+        try:
+            packages_idx = parts.index("packages")
+            if packages_idx + 1 < len(parts):
+                metadata["parent_package"] = parts[packages_idx + 1]
+        except ValueError:
+            pass
+
+        # Try to find module (after "src/" or "packages/{pkg}/src/")
+        try:
+            src_idx = parts.index("src")
+            if src_idx + 1 < len(parts):
+                metadata["parent_module"] = parts[src_idx + 1]
+        except ValueError:
+            # Fallback: use first directory as module
+            if len(parts) > 1:
+                metadata["parent_module"] = parts[0]
+
+        # Store parent folder for file-level entities
+        if chunk_type in ["class", "function", "method"]:
+            # Get directory containing the file
+            metadata["parent_folder"] = '/'.join(parts[:-1])
+
+        return metadata
+
     async def _create_node_from_chunk(self, chunk: CodeChunkModel) -> dict:
         """
         Create node dictionary from code chunk.
@@ -487,6 +535,9 @@ class GraphConstructionService:
         if len(label) > 100:  # Reasonable limit
             label = label[:97] + "..."
 
+        # Infer hierarchy metadata from file path
+        hierarchy_metadata = self._infer_hierarchy_metadata(chunk.file_path, chunk.chunk_type)
+
         # Build properties
         properties = {
             # Semantic type: class/function/method/interface (from chunk metadata)
@@ -504,6 +555,9 @@ class GraphConstructionService:
             "end_line": chunk.end_line,
             "chunk_id": str(chunk.id),
         }
+
+        # Merge hierarchy metadata into properties
+        properties.update(hierarchy_metadata)
 
         # Add complexity if available
         if 'complexity' in metadata:
