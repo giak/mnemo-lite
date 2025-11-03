@@ -1,8 +1,13 @@
 import type { ViewMode } from '@/types/orgchart-types'
+import type { GraphNode } from '@/composables/useCodeGraph'
 
 export interface NodeVisualStyle {
   fill: string
   size: [number, number]
+}
+
+export interface OrgChartNode {
+  data: GraphNode
 }
 
 // Complexity Mode: Green → Yellow → Orange → Red based on cyclomatic complexity
@@ -22,7 +27,7 @@ export function getComplexitySize(loc: number = 0): [number, number] {
 }
 
 // Hubs Mode: Blue (many incoming) → Violet (balanced) → Orange (many outgoing)
-export function getHubsColor(incomingRatio: number): string {
+export function getHubsColor(incomingRatio: number = 0.5): string {
   // incomingRatio = incoming / total (0 to 1)
   // 0.0-0.3: Orange (depends on others)
   // 0.3-0.7: Violet (balanced)
@@ -51,7 +56,7 @@ export function getHubsSize(totalConnections: number = 0): [number, number] {
 }
 
 // Hierarchy Mode: Color gradient based on depth (lighter at top, darker at bottom)
-export function getHierarchyColor(depth: number = 0, nodeType: string): string {
+export function getHierarchyColor(depth: number = 0): string {
   if (depth === 0) return '#8b5cf6'  // Root: Purple
   if (depth === 1) return '#06b6d4'  // Level 1 (Modules): Cyan
 
@@ -60,8 +65,8 @@ export function getHierarchyColor(depth: number = 0, nodeType: string): string {
   // Level 3: #2563eb (medium blue)
   // Level 4+: #1e40af (darker blue)
   const blueLevels = ['#3b82f6', '#2563eb', '#1e40af', '#1e3a8a']
-  const index = Math.min(depth - 2, blueLevels.length - 1)
-  return blueLevels[index]
+  const index = Math.max(0, Math.min(depth - 2, blueLevels.length - 1))
+  return blueLevels[index]!
 }
 
 // Hierarchy Mode: Size based on descendants count (min 100, max 250)
@@ -74,7 +79,7 @@ export function getHierarchySize(descendantsCount: number = 0): [number, number]
 
 // Main function: Calculate visual style based on view mode
 export function calculateNodeStyle(
-  node: any,
+  node: OrgChartNode,
   viewMode: ViewMode
 ): NodeVisualStyle {
   switch (viewMode) {
@@ -94,7 +99,7 @@ export function calculateNodeStyle(
 
     case 'hierarchy':
       return {
-        fill: getHierarchyColor(node.data.depth, node.data.nodeType),
+        fill: getHierarchyColor(node.data.depth),
         size: getHierarchySize(node.data.descendants_count)
       }
 

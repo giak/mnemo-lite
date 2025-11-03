@@ -41,11 +41,11 @@ describe('orgchart-visual-encoding', () => {
 
   describe('Hierarchy Mode', () => {
     it('returns purple for root', () => {
-      expect(getHierarchyColor(0, 'Root')).toBe('#8b5cf6')
+      expect(getHierarchyColor(0)).toBe('#8b5cf6')
     })
 
     it('returns cyan for level 1', () => {
-      expect(getHierarchyColor(1, 'Module')).toBe('#06b6d4')
+      expect(getHierarchyColor(1)).toBe('#06b6d4')
     })
   })
 })
