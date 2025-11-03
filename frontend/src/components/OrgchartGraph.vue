@@ -238,6 +238,10 @@ const initGraph = async () => {
     width: containerRef.value.offsetWidth,
     height: 1200,  // Increased from 800 for larger tree
     data: flatData,
+    animation: {
+      duration: 500,
+      easing: 'ease-in-out'
+    },
     node: {
       type: 'rect',
       style: {
@@ -347,24 +351,66 @@ const initGraph = async () => {
 }
 
 // Watch for data changes and viewMode changes
-watch(() => [props.nodes, props.edges, props.viewMode], async () => {
-  if (graph) {
-    try {
-      graph.destroy()
-      graph = null
+watch(() => [props.nodes, props.edges, props.viewMode] as const, async (newVal, oldVal) => {
+  const [newNodes, newEdges, newViewMode] = newVal
+  const [oldNodes, oldEdges, oldViewMode] = oldVal
 
-      await nextTick()
+  // Check if only viewMode changed (not data)
+  const onlyViewModeChanged = newViewMode !== oldViewMode &&
+    newNodes === oldNodes &&
+    newEdges === oldEdges
 
-      if (containerRef.value) {
-        containerRef.value.innerHTML = ''
+  if (onlyViewModeChanged && graph) {
+    // Smooth transition: update node styles without destroying graph
+    console.log('[Orgchart] ViewMode changed, updating styles with animation...')
+
+    const nodeMap = new Map(props.nodes.map(n => [n.id, n]))
+    const graphNodes = graph.getNodeData()
+    const nodesToUpdate = graphNodes.map((graphNode: any) => {
+      const originalNode = nodeMap.get(graphNode.id)
+      if (!originalNode) return null
+
+      const newStyle = calculateNodeStyle({ data: originalNode }, newViewMode || 'hierarchy')
+
+      return {
+        id: graphNode.id,
+        style: {
+          size: newStyle.size,
+          fill: newStyle.fill
+        }
       }
-    } catch (e) {
-      console.error('[Orgchart] Error destroying graph:', e)
-    }
-  }
+    }).filter(Boolean)
 
-  await new Promise(resolve => setTimeout(resolve, 50))
-  initGraph()
+    if (nodesToUpdate.length > 0) {
+      // Update all nodes at once
+      nodesToUpdate.forEach((nodeUpdate: any) => {
+        graph!.updateNodeData([nodeUpdate])
+      })
+
+      // Trigger animated redraw
+      await graph.draw()
+      console.log('[Orgchart] Styles updated with animation')
+    }
+  } else {
+    // Data changed or first render: full rebuild
+    if (graph) {
+      try {
+        graph.destroy()
+        graph = null
+
+        await nextTick()
+
+        if (containerRef.value) {
+          containerRef.value.innerHTML = ''
+        }
+      } catch (e) {
+        console.error('[Orgchart] Error destroying graph:', e)
+      }
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 50))
+    initGraph()
+  }
 }, { deep: true })
 
 // Initialize on mount
