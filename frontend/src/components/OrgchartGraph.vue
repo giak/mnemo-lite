@@ -8,6 +8,8 @@
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { Graph } from '@antv/g6'
 import type { GraphNode, GraphEdge } from '@/composables/useCodeGraph'
+import type { ViewMode } from '@/types/orgchart-types'
+import { calculateNodeStyle } from '@/utils/orgchart-visual-encoding'
 
 interface OrgchartConfig {
   depth: number
@@ -19,6 +21,7 @@ interface Props {
   nodes: GraphNode[]
   edges: GraphEdge[]
   config?: OrgchartConfig
+  viewMode?: ViewMode
 }
 
 const props = defineProps<Props>()
@@ -238,7 +241,15 @@ const initGraph = async () => {
     node: {
       type: 'rect',
       style: {
-        size: [140, 40],
+        size: (d: any) => {
+          const currentViewMode = props.viewMode || 'hierarchy'
+          // Get the original node from nodeMap to access full GraphNode data
+          const originalNode = nodeMap.get(d.id)
+          if (!originalNode) return [140, 40]
+
+          const style = calculateNodeStyle({ data: originalNode }, currentViewMode)
+          return style.size
+        },
         radius: 4,
         labelText: (d: any) => {
           const label = d.data.label || ''
@@ -248,7 +259,15 @@ const initGraph = async () => {
         labelFontSize: 11,
         labelFontWeight: 500,
         labelPlacement: 'center',
-        fill: (d: any) => getNodeColor(d.data.nodeType),
+        fill: (d: any) => {
+          const currentViewMode = props.viewMode || 'hierarchy'
+          // Get the original node from nodeMap to access full GraphNode data
+          const originalNode = nodeMap.get(d.id)
+          if (!originalNode) return getNodeColor(d.data.nodeType)
+
+          const style = calculateNodeStyle({ data: originalNode }, currentViewMode)
+          return style.fill
+        },
         stroke: '#ffffff',
         lineWidth: 2
       }
@@ -327,8 +346,8 @@ const initGraph = async () => {
   }
 }
 
-// Watch for data changes
-watch(() => [props.nodes, props.edges], async () => {
+// Watch for data changes and viewMode changes
+watch(() => [props.nodes, props.edges, props.viewMode], async () => {
   if (graph) {
     try {
       graph.destroy()
