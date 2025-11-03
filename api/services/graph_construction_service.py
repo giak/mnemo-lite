@@ -437,12 +437,10 @@ class GraphConstructionService:
         chunk_type = chunk.chunk_type  # class, method, function, interface
 
         # Get name from metadata (priority order)
-        name = (
-            metadata.get('name') or
-            (metadata.get('signature', {}) or {}).get('function_name') or
-            chunk.name or
-            f"{chunk_type}_{chunk.chunk_index}"
-        )
+        # Use safer signature access to handle None values
+        signature = metadata.get('signature')
+        function_name = signature.get('function_name') if isinstance(signature, dict) else None
+        name = metadata.get('name') or function_name or chunk.name or f"{chunk_type}_{str(chunk.id)[:8]}"
 
         # Get type (use chunk_type or metadata.type)
         node_type_from_metadata = metadata.get('type') or chunk_type
@@ -466,10 +464,12 @@ class GraphConstructionService:
 
         # Build properties
         properties = {
-            "type": node_type_from_metadata,  # Add type from metadata (class/function/method/interface)
+            # Semantic type: class/function/method/interface (from chunk metadata)
+            "type": node_type_from_metadata,
+            # Graph node category: Class/Function/Module (for graph queries and visualization)
+            "node_type": node_type,
             "name": name,
             "file": chunk.file_path,  # Use 'file' instead of 'file_path' for consistency
-            "node_type": node_type,
             "file_path": chunk.file_path,
             "language": chunk.language,
             "repository": chunk.repository,

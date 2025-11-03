@@ -173,3 +173,54 @@ async def test_graph_node_labels_not_truncated():
     # Either full name or truncated with ellipsis (not corrupt)
     assert long_name in node_data.label or node_data.label.endswith('...'), \
         f"Label should contain full name or ellipsis, got: {node_data.label}"
+
+
+@pytest.mark.asyncio
+async def test_graph_nodes_handle_missing_metadata():
+    """Test fallback when chunk has no metadata or missing name."""
+    db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    engine = create_async_engine(db_url)
+    test_repo = "test_missing_metadata"
+
+    # Cleanup
+    async with engine.begin() as conn:
+        await conn.execute(text("DELETE FROM code_chunks WHERE repository = :repo"), {"repo": test_repo})
+        await conn.execute(text("DELETE FROM nodes WHERE properties->>'repository' = :repo"), {"repo": test_repo})
+
+    # Create chunk with empty metadata
+    chunk = CodeChunkCreate(
+        repository=test_repo,
+        file_path="/test/noname.ts",
+        chunk_index=0,
+        chunk_type="function",
+        language="typescript",
+        source_code="function() {}",
+        start_line=1,
+        end_line=1,
+        embedding_code=[0.1] * 768,
+        metadata={}  # Empty metadata - should fallback to generated name
+    )
+
+    async with engine.begin() as conn:
+        chunk_repo = CodeChunkRepository(engine, connection=conn)
+        await chunk_repo.add(chunk)
+
+    # Build graph
+    graph_service = GraphConstructionService(engine)
+    await graph_service.build_graph_for_repository(test_repo, languages=["typescript"])
+
+    # Verify node created with fallback name
+    async with engine.begin() as conn:
+        node = await conn.execute(text("""
+            SELECT label, properties
+            FROM nodes
+            WHERE properties->>'repository' = :repo
+        """), {"repo": test_repo})
+        node_data = node.fetchone()
+
+    await engine.dispose()
+
+    assert node_data is not None, "Node should be created even with empty metadata"
+    # Should have fallback name like "function_0"
+    assert node_data.properties.get('name') is not None
+    assert node_data.properties.get('type') == 'function'
