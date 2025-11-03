@@ -28,6 +28,12 @@ export function calculateNodeScore(
   viewMode: ViewMode,
   weights: ScoringWeights
 ): number {
+  // Entry points (Modules) are always prioritized - they have no metrics themselves
+  // but are essential as roots of the dependency tree
+  if (node.type === 'Module') {
+    return 1.0
+  }
+
   const normalizedComplexity = normalize(node.cyclomatic_complexity, 100)
   const normalizedLoc = normalize(node.lines_of_code, 500)
   const normalizedConnections = normalize(node.total_edges, 100)

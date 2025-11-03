@@ -75,6 +75,17 @@ const initGraph = async () => {
     return
   }
 
+  // Destroy existing graph to prevent duplicates
+  if (graph) {
+    console.log('[Orgchart] Destroying existing graph')
+    graph.destroy()
+    graph = null
+    // Clear container to remove any leftover DOM elements
+    if (containerRef.value) {
+      containerRef.value.innerHTML = ''
+    }
+  }
+
   console.log('[Orgchart] Initializing with:', {
     nodes: props.nodes.length,
     edges: props.edges.length
