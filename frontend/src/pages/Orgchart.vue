@@ -20,68 +20,14 @@ const {
 
 const repository = ref('CVgenerator')
 
-// Preset configurations
-interface OrgchartConfig {
-  depth: number
-  maxChildren: number
-  maxModules: number
-}
-
-const ORGCHART_PRESETS: Record<string, OrgchartConfig> = {
-  'overview': { depth: 3, maxChildren: 10, maxModules: 3 },
-  'detailed': { depth: 6, maxChildren: 25, maxModules: 5 },
-  'deep-dive': { depth: 10, maxChildren: 50, maxModules: 15 },
-  'custom': { depth: 6, maxChildren: 25, maxModules: 5 }
-}
-
-// State
-const selectedPreset = ref<string>('detailed')
-const customDepth = ref(6)
-const customMaxChildren = ref(25)
-const customMaxModules = ref(5)
-
 // View mode state
 const viewMode = ref<ViewMode>('hierarchy')
 
 // Legend state
 const legendExpanded = ref(true)
 
-// Computed config based on preset
-const orgchartConfig = computed((): OrgchartConfig => {
-  if (selectedPreset.value === 'custom') {
-    return {
-      depth: customDepth.value,
-      maxChildren: customMaxChildren.value,
-      maxModules: customMaxModules.value
-    }
-  }
-  const preset = ORGCHART_PRESETS[selectedPreset.value]
-  if (!preset) {
-    return ORGCHART_PRESETS.detailed
-  }
-  return preset
-})
-
-// Force graph to use new config
+// Force graph to recreate on data changes
 const graphKey = ref(0)
-const applyConfig = () => {
-  graphKey.value++
-}
-
-
-// Save preset to localStorage
-watch(selectedPreset, (newPreset) => {
-  localStorage.setItem('orgchart_preset', newPreset)
-})
-
-// Save custom config to localStorage
-watch([customDepth, customMaxChildren, customMaxModules], () => {
-  localStorage.setItem('orgchart_custom_config', JSON.stringify({
-    depth: customDepth.value,
-    maxChildren: customMaxChildren.value,
-    maxModules: customMaxModules.value
-  }))
-})
 
 // Save view mode to localStorage
 watch(viewMode, (newMode) => {
@@ -158,24 +104,6 @@ onMounted(async () => {
   const savedViewMode = localStorage.getItem('orgchart_view_mode')
   if (savedViewMode && (savedViewMode === 'complexity' || savedViewMode === 'hubs' || savedViewMode === 'hierarchy')) {
     viewMode.value = savedViewMode as ViewMode
-  }
-
-  // Load saved preset from localStorage
-  const savedPreset = localStorage.getItem('orgchart_preset')
-  if (savedPreset && ORGCHART_PRESETS[savedPreset]) {
-    selectedPreset.value = savedPreset
-  }
-
-  const savedCustom = localStorage.getItem('orgchart_custom_config')
-  if (savedCustom) {
-    try {
-      const config = JSON.parse(savedCustom)
-      customDepth.value = config.depth
-      customMaxChildren.value = config.maxChildren
-      customMaxModules.value = config.maxModules
-    } catch (e) {
-      console.error('Failed to load custom config:', e)
-    }
   }
 
   console.log('[Orgchart] Mounting...')
@@ -259,22 +187,6 @@ const handleBuildGraph = async () => {
 
         <div class="h-4 w-px bg-slate-600"></div>
 
-        <!-- Preset Selector -->
-        <div class="flex items-center gap-2">
-          <span class="text-gray-400">Preset:</span>
-          <select
-            v-model="selectedPreset"
-            class="bg-slate-700 text-gray-200 border border-slate-600 rounded px-3 py-1 text-xs"
-          >
-            <option value="overview">Overview</option>
-            <option value="detailed">Detailed</option>
-            <option value="deep-dive">Deep Dive</option>
-            <option value="custom">Custom</option>
-          </select>
-        </div>
-
-        <div class="h-4 w-px bg-slate-600"></div>
-
         <!-- View Mode Selector -->
         <div class="flex items-center gap-2">
           <span class="text-gray-400">Vue:</span>
@@ -295,49 +207,6 @@ const handleBuildGraph = async () => {
             </button>
           </div>
         </div>
-
-        <!-- Custom Controls (only show when Custom preset is selected) -->
-        <template v-if="selectedPreset === 'custom'">
-          <div class="flex items-center gap-2">
-            <span class="text-gray-400">D:</span>
-            <input
-              v-model.number="customDepth"
-              type="range"
-              min="1"
-              max="15"
-              class="w-20 h-1"
-            />
-            <span class="font-mono text-cyan-400">{{ customDepth }}</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-gray-400">C:</span>
-            <input
-              v-model.number="customMaxChildren"
-              type="range"
-              min="5"
-              max="100"
-              class="w-20 h-1"
-            />
-            <span class="font-mono text-cyan-400">{{ customMaxChildren }}</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-gray-400">M:</span>
-            <input
-              v-model.number="customMaxModules"
-              type="range"
-              min="1"
-              max="20"
-              class="w-20 h-1"
-            />
-            <span class="font-mono text-cyan-400">{{ customMaxModules }}</span>
-          </div>
-          <button
-            @click="applyConfig"
-            class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs transition-colors"
-          >
-            Apply
-          </button>
-        </template>
 
         <div class="flex-1"></div>
 
@@ -394,7 +263,7 @@ const handleBuildGraph = async () => {
 
         <!-- Orgchart Component -->
         <div class="relative">
-          <OrgchartGraph :key="graphKey" :nodes="nodes" :edges="edges" :config="orgchartConfig" :view-mode="viewMode" />
+          <OrgchartGraph :key="graphKey" :nodes="nodes" :edges="edges" :view-mode="viewMode" />
 
           <!-- Legend Panel -->
           <div class="absolute bottom-4 right-4 bg-slate-800/95 rounded-lg shadow-xl border border-slate-700 text-xs">
