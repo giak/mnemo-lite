@@ -23,6 +23,20 @@ const repository = ref('CVgenerator')
 // View mode state
 const viewMode = ref<ViewMode>('hierarchy')
 
+// Semantic zoom state (0-100%)
+const zoomLevel = ref(30) // Default to 30% (Architecture zone)
+
+// Advanced weights for scoring (default: adaptive)
+const weights = ref({
+  complexity: 0.4,
+  loc: 0.3,
+  connections: 0.3
+})
+
+// Modal state
+// @ts-expect-error - Will be used in Task 6 (modal UI)
+const showWeightsModal = ref(false)
+
 // Legend state
 const legendExpanded = ref(true)
 
@@ -33,6 +47,16 @@ const graphKey = ref(0)
 watch(viewMode, (newMode) => {
   localStorage.setItem('orgchart_view_mode', newMode)
 })
+
+// Save zoom level to localStorage
+watch(zoomLevel, (newLevel) => {
+  localStorage.setItem('orgchart_zoom_level', String(newLevel))
+})
+
+// Save weights to localStorage
+watch(weights, (newWeights) => {
+  localStorage.setItem('orgchart_weights', JSON.stringify(newWeights))
+}, { deep: true })
 
 // Save legend expanded state to localStorage
 watch(legendExpanded, (val) => {
@@ -104,6 +128,28 @@ onMounted(async () => {
   const savedViewMode = localStorage.getItem('orgchart_view_mode')
   if (savedViewMode && (savedViewMode === 'complexity' || savedViewMode === 'hubs' || savedViewMode === 'hierarchy')) {
     viewMode.value = savedViewMode as ViewMode
+  }
+
+  // Load saved zoom level
+  const savedZoom = localStorage.getItem('orgchart_zoom_level')
+  if (savedZoom !== null) {
+    const parsed = parseInt(savedZoom, 10)
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+      zoomLevel.value = parsed
+    }
+  }
+
+  // Load saved weights
+  const savedWeights = localStorage.getItem('orgchart_weights')
+  if (savedWeights) {
+    try {
+      const parsed = JSON.parse(savedWeights)
+      if (parsed.complexity !== undefined && parsed.loc !== undefined && parsed.connections !== undefined) {
+        weights.value = parsed
+      }
+    } catch (e) {
+      console.error('Failed to load weights:', e)
+    }
   }
 
   console.log('[Orgchart] Mounting...')
