@@ -19,9 +19,7 @@ The organizational chart visualization in MnemoLite supports three distinct view
 
 ### Accessing the Feature
 
-1. Navigate to the orgchart page: `http://localhost:8001/orgchart`
-2. Select a repository from the dropdown (default: MnemoLite)
-3. The graph will load with the last-used view mode (default: Hierarchy)
+Navigate to the Orgchart page via the main navigation menu (Graph → Organigramme).
 
 ### View Modes
 
@@ -122,41 +120,39 @@ The organizational chart visualization in MnemoLite supports three distinct view
 
 ### Using the Interface
 
-#### Switching View Modes
+The toolbar contains:
 
-1. Locate the view mode selector in the toolbar (right side)
-2. Click one of three buttons: **📊 Complexité**, **🔗 Hubs**, or **🌳 Hiérarchie**
-3. Watch the graph animate smoothly to the new visual encoding (0.5s transition)
-4. Your selection persists across page refreshes
+1. **Repository Selector** - Choose which codebase to visualize
+2. **View Mode Buttons** - Switch between Hierarchy 🌳, Complexity 📊, and Hubs 🔗
+3. **Semantic Zoom Slider** - Control how many nodes to display (0-100%)
+   - **0-25% (Red/Orange)**: Macro view - Top 10% most important nodes
+   - **25-50% (Yellow)**: Architecture view - Top 30% of nodes
+   - **50-75% (Light Green)**: Details view - Top 70% of nodes
+   - **75-100% (Green)**: Complete view - All nodes
+4. **⚙️ Advanced Settings** - Configure custom scoring weights
+5. **Build Button** - Rebuild the code graph
 
-#### Reading Tooltips
+### Semantic Zoom Explained
 
-1. Hover over any node to see detailed metrics
-2. Tooltip content adapts to the current view mode:
-   - **Header**: Node name and type (color-coded)
-   - **Metrics section**: View-mode-specific metrics
-   - **Footer**: File path (if available)
+The zoom slider uses **intelligent filtering** based on node importance:
 
-Example tooltip structure:
-```
-┌─────────────────────────────┐
-│ 🟣 MyService               │ ← Name + type badge
-├─────────────────────────────┤
-│ 📊 Complexité: 25 (Élevé)  │ ← Mode-specific
-│ 📏 Lines: 450               │ ← metrics
-│ ⚠️ Refactoring recommended  │
-├─────────────────────────────┤
-│ 📁 src/services/my.py       │ ← File path
-└─────────────────────────────┘
-```
+- **In Complexity Mode**: Shows nodes with highest cyclomatic complexity and lines of code
+- **In Hubs Mode**: Shows nodes with most connections (incoming + outgoing edges)
+- **In Hierarchy Mode**: Shows nodes with largest subtrees (most descendants)
 
-#### Using the Legend
+The scoring is **adaptive** - nodes are ranked differently in each mode to reveal the most relevant information.
 
-The legend (left sidebar, below stats) updates automatically when switching modes:
+### Advanced Weight Configuration
 
-- **Color scale**: Shows gradient thresholds and categories
-- **Size encoding**: Explains what node size represents
-- **Quick reference**: Helps interpret the visualization at a glance
+Click the ⚙️ icon to customize how nodes are scored:
+
+- **Complexity Weight** (default 40%): How much cyclomatic complexity matters
+- **LOC Weight** (default 30%): How much lines of code matters
+- **Connections Weight** (default 30%): How much edge count matters
+
+Example: If you only care about complexity, set Complexity to 100% and others to 0%.
+
+**Note**: Weights are relative, they don't need to sum to 100%.
 
 ---
 
@@ -285,37 +281,47 @@ getHierarchySize(descendantsCount: number): [number, number]
 
 ---
 
-#### Metrics Calculation
+#### Semantic Zoom Implementation
 
-**Complexity Metrics** (from backend):
-- Computed during graph building by code analysis service
-- Stored in `graph_nodes` table
-- Properties: `cyclomatic_complexity`, `lines_of_code`
+**Scoring Algorithm** (`frontend/src/utils/semantic-zoom-scoring.ts`):
 
-**Connection Metrics** (calculated in frontend):
 ```typescript
-// Location: OrgchartGraph.vue:152-165
-const edgeCounts = new Map<string, { incoming: number; outgoing: number }>()
-props.edges.forEach(edge => {
-  // Count outgoing for source
-  edgeCounts.get(edge.source)!.outgoing++
-  // Count incoming for target
-  edgeCounts.get(edge.target)!.incoming++
-})
+function calculateNodeScore(node, viewMode, weights) {
+  // Normalize metrics to 0-1 range
+  const normComplexity = min(complexity / 100, 1)
+  const normLoc = min(loc / 500, 1)
+  const normConnections = min(total_edges / 100, 1)
+
+  // Weighted composite score
+  return (normComplexity * weights.complexity) +
+         (normLoc * weights.loc) +
+         (normConnections * weights.connections)
+}
 ```
 
-**Hierarchy Metrics** (calculated recursively):
-```typescript
-// Location: OrgchartGraph.vue:186-189
-const descendantsCount = childNodes.reduce((sum, child) =>
-  sum + 1 + (child.data.descendants_count || 0), 0
-)
-```
+**Normalization Scales**:
+- Complexity: 0-100 (max realistic cyclomatic complexity)
+- LOC: 0-500 (max realistic lines in a single chunk)
+- Connections: 0-100 (max realistic edge count for a node)
 
-**Why Frontend Calculation?**
-- Connection metrics depend on edge filtering (imports only vs all edges)
-- Hierarchy metrics depend on graph traversal depth limits
-- Avoids backend computation that may not match filtered frontend view
+**Percentile Filtering**:
+- Top 10% = ~72 nodes (for CVgenerator with 724 nodes)
+- Top 30% = ~217 nodes
+- Top 70% = ~507 nodes
+- 100% = all 724 nodes
+
+**Animation System**:
+- Nodes fading out: opacity 1→0 + scale 1.0→0.5 (150ms)
+- Layout reorganization (automatic via G6)
+- Nodes fading in: opacity 0→1 + scale 0.5→1.0 (150ms)
+- Total transition: ~450ms smooth animation
+
+**State Persistence**:
+All user preferences saved to localStorage:
+- `orgchart_zoom_level`: Current zoom percentage (0-100)
+- `orgchart_weights`: Custom scoring weights object
+- `orgchart_view_mode`: Active view mode
+- `orgchart_legend_expanded`: Legend panel state
 
 ---
 
