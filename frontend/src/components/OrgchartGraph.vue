@@ -7,30 +7,7 @@
 
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { Graph } from '@antv/g6'
-
-interface GraphNode {
-  id: string
-  label: string
-  type: string
-  file_path?: string
-  // Complexity metrics
-  cyclomatic_complexity?: number
-  lines_of_code?: number
-  // Connection metrics (computed on backend or frontend)
-  incoming_edges?: number
-  outgoing_edges?: number
-  total_edges?: number
-  // Hierarchy metrics
-  depth?: number
-  descendants_count?: number
-}
-
-interface GraphEdge {
-  id: string
-  source: string
-  target: string
-  type: string
-}
+import type { GraphNode, GraphEdge } from '@/composables/useCodeGraph'
 
 interface OrgchartConfig {
   depth: number
