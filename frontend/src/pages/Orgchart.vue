@@ -209,6 +209,29 @@ const handleBuildGraph = async () => {
           </select>
         </div>
 
+        <div class="h-4 w-px bg-slate-600"></div>
+
+        <!-- View Mode Selector -->
+        <div class="flex items-center gap-2">
+          <span class="text-gray-400">Vue:</span>
+          <div class="flex bg-slate-700 rounded overflow-hidden">
+            <button
+              v-for="(config, mode) in VIEW_MODES"
+              :key="mode"
+              @click="viewMode = mode as ViewMode"
+              :class="[
+                'px-3 py-1 text-xs transition-colors',
+                viewMode === mode
+                  ? 'bg-cyan-600 text-white'
+                  : 'text-gray-300 hover:bg-slate-600'
+              ]"
+              :title="config.description"
+            >
+              {{ config.icon }} {{ config.name }}
+            </button>
+          </div>
+        </div>
+
         <!-- Custom Controls (only show when Custom preset is selected) -->
         <template v-if="selectedPreset === 'custom'">
           <div class="flex items-center gap-2">
