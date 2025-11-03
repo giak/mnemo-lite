@@ -329,7 +329,7 @@ const handleBuildGraph = async () => {
         </div>
 
         <!-- Orgchart Component -->
-        <OrgchartGraph :key="graphKey" :nodes="nodes" :edges="edges" :config="orgchartConfig" />
+        <OrgchartGraph :key="graphKey" :nodes="nodes" :edges="edges" :config="orgchartConfig" :view-mode="viewMode" />
       </div>
 
       <!-- No Data State -->
