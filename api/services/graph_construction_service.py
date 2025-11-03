@@ -424,6 +424,7 @@ class GraphConstructionService:
         Create node dictionary from code chunk.
 
         EPIC-29 Task 5: Extracts node creation logic for testability and barrel support.
+        Extracts type, name, and file path from chunk metadata.
 
         Args:
             chunk: Code chunk to convert to node
@@ -431,7 +432,22 @@ class GraphConstructionService:
         Returns:
             Dictionary with 'label', 'node_type', and 'properties' keys
         """
-        # Determine node type based on chunk_type
+        # Extract metadata
+        metadata = chunk.metadata or {}
+        chunk_type = chunk.chunk_type  # class, method, function, interface
+
+        # Get name from metadata (priority order)
+        name = (
+            metadata.get('name') or
+            (metadata.get('signature', {}) or {}).get('function_name') or
+            chunk.name or
+            f"{chunk_type}_{chunk.chunk_index}"
+        )
+
+        # Get type (use chunk_type or metadata.type)
+        node_type_from_metadata = metadata.get('type') or chunk_type
+
+        # Determine node type based on chunk_type (for backwards compatibility with graph structure)
         if chunk.chunk_type == "barrel":
             node_type = "Module"  # Barrels are Module nodes
         elif chunk.chunk_type == "config_module":
@@ -443,13 +459,16 @@ class GraphConstructionService:
         else:
             node_type = chunk.chunk_type  # Use chunk type as-is for others
 
-        # Use chunk name as label (fallback to "anonymous")
-        label = chunk.name if chunk.name else "anonymous"
+        # Create label (use full name, truncate only if absolutely necessary)
+        label = name
+        if len(label) > 100:  # Reasonable limit
+            label = label[:97] + "..."
 
-        # Build base properties
+        # Build properties
         properties = {
-            "chunk_id": str(chunk.id),
-            "name": chunk.name,
+            "type": node_type_from_metadata,  # Add type from metadata (class/function/method/interface)
+            "name": name,
+            "file": chunk.file_path,  # Use 'file' instead of 'file_path' for consistency
             "node_type": node_type,
             "file_path": chunk.file_path,
             "language": chunk.language,
@@ -458,7 +477,15 @@ class GraphConstructionService:
             "is_stdlib": False,
             "start_line": chunk.start_line,
             "end_line": chunk.end_line,
+            "chunk_id": str(chunk.id),
         }
+
+        # Add complexity if available
+        if 'complexity' in metadata:
+            complexity = metadata['complexity']
+            if isinstance(complexity, dict):
+                properties['cyclomatic_complexity'] = complexity.get('cyclomatic', 0)
+                properties['lines_of_code'] = complexity.get('lines_of_code', 0)
 
         # EPIC-29: Add barrel-specific properties
         if chunk.chunk_type == "barrel":
@@ -470,7 +497,8 @@ class GraphConstructionService:
         # Add function/method metadata
         if node_type == "Function":
             properties["signature"] = chunk.metadata.get("signature", "")
-            properties["complexity"] = chunk.metadata.get("complexity", {})
+            if "complexity" not in properties:
+                properties["complexity"] = chunk.metadata.get("complexity", {})
 
         return {
             "label": label,
