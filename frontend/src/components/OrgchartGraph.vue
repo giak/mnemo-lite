@@ -178,16 +178,22 @@ const initGraph = async () => {
 
   // Transform to G6 tree format
   const nodeMap = new Map(filteredNodes.map(n => [n.id, n]))
+  const filteredNodeIds = new Set(filteredNodes.map(n => n.id))
   const childrenMap = new Map<string, string[]>()
 
-  // Build parent-child relationships from ALL edges (imports, calls, re_exports)
-  // This allows descending from Modules into Classes/Functions
+  // Build parent-child relationships from edges, but ONLY between filtered nodes
+  // This ensures we don't try to render nodes that were filtered out
   props.edges.forEach(edge => {
-    if (!childrenMap.has(edge.source)) {
-      childrenMap.set(edge.source, [])
+    // Only include edge if BOTH source and target are in filtered nodes
+    if (filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target)) {
+      if (!childrenMap.has(edge.source)) {
+        childrenMap.set(edge.source, [])
+      }
+      childrenMap.get(edge.source)!.push(edge.target)
     }
-    childrenMap.get(edge.source)!.push(edge.target)
   })
+
+  console.log('[Orgchart] ChildrenMap edges (filtered):', Array.from(childrenMap.entries()).reduce((sum, [_, children]) => sum + children.length, 0))
 
   // Calculate connection metrics from all edges
   const edgeCounts = new Map<string, { incoming: number; outgoing: number }>()
@@ -205,10 +211,10 @@ const initGraph = async () => {
     edgeCounts.get(edge.target)!.incoming++
   })
 
-  // Use config from props or defaults
-  const maxDepth = props.config?.depth || 6
-  const maxChildrenPerNode = props.config?.maxChildren || 25
-  const maxModulesToShow = props.config?.maxModules || 5
+  // Removed config-based limits - semantic zoom now controls visibility
+  const maxDepth = 50 // Allow deep trees (semantic zoom filters at leaves)
+  const maxChildrenPerNode = 1000 // No arbitrary limit (semantic zoom filters at leaves)
+  const maxModulesToShow = 100 // Show all entry points
   const visited = new Set<string>()
 
   const buildNode = (nodeId: string, depth: number): any => {
