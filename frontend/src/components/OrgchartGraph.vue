@@ -293,8 +293,23 @@ const initGraph = async () => {
   console.log('[Orgchart] Tree data:', {
     hasData: !!treeData,
     rootLabel: treeData?.data?.label,
-    childrenCount: treeData?.children?.length || 0
+    childrenCount: treeData?.children?.length || 0,
+    nodesInTree: visited.size,
+    filteredNodesTotal: filteredNodes.length,
+    coverage: `${(visited.size / filteredNodes.length * 100).toFixed(1)}%`
   })
+
+  if (visited.size < filteredNodes.length) {
+    const unvisitedNodes = filteredNodes.filter(n => !visited.has(n.id))
+    console.warn('[Orgchart] Unvisited nodes (not connected to tree):', {
+      count: unvisitedNodes.length,
+      types: unvisitedNodes.map(n => n.type).reduce((acc, type) => {
+        acc[type] = (acc[type] || 0) + 1
+        return acc
+      }, {} as Record<string, number>),
+      sample: unvisitedNodes.slice(0, 5).map(n => ({ id: n.id, label: n.label, type: n.type }))
+    })
+  }
 
   // Debug: Log sample node metrics
   if (treeData?.children?.[0]) {
