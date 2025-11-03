@@ -1,4 +1,4 @@
-import type { GraphNode } from '@/composables/useCodeGraph'
+import type { GraphNode, GraphEdge } from '@/composables/useCodeGraph'
 import type { ViewMode } from '@/types/orgchart-types'
 
 export interface ScoringWeights {
@@ -47,16 +47,18 @@ export function calculateNodeScore(
 }
 
 /**
- * Filter nodes to keep only top N% by score
+ * Filter nodes to keep only top N% by score, PLUS all ancestors to maintain tree paths
  *
  * @param nodes - All available nodes
+ * @param edges - All edges (needed to determine parent-child relationships)
  * @param zoomLevel - Percentage (0-100) of nodes to keep
  * @param viewMode - Current view mode (affects default weights if needed)
  * @param weights - Custom scoring weights
- * @returns Filtered nodes sorted by score (highest first)
+ * @returns Filtered nodes with complete tree paths preserved
  */
 export function filterNodesByScore(
   nodes: GraphNode[],
+  edges: GraphEdge[],
   zoomLevel: number,
   viewMode: ViewMode,
   weights: ScoringWeights
@@ -70,12 +72,64 @@ export function filterNodesByScore(
   // Sort by score descending
   nodesWithScores.sort((a, b) => b.score - a.score)
 
-  // Calculate how many nodes to keep
+  // DEBUG: Log top 10 and bottom 10 scores
+  console.log('[SemanticZoom] Top 10 scores:', nodesWithScores.slice(0, 10).map(n => ({
+    type: n.node.type,
+    label: n.node.label,
+    score: n.score.toFixed(3)
+  })))
+
+  // Calculate how many nodes to keep based on score
   const percentile = zoomLevel / 100
   const countToKeep = Math.ceil(nodes.length * percentile)
 
-  // Return top N nodes
-  return nodesWithScores
+  // Get top N nodes by score
+  const topNodes = nodesWithScores
     .slice(0, countToKeep)
     .map(item => item.node)
+
+  console.log(`[SemanticZoom] Top ${countToKeep} nodes selected (${zoomLevel}%)`)
+
+  // Build parent map from edges (child -> parent relationship)
+  const parentMap = new Map<string, string>()
+  edges.forEach(edge => {
+    // edge.source is parent, edge.target is child (for imports/calls/contains edges)
+    parentMap.set(edge.target, edge.source)
+  })
+
+  // For each selected node, add all its ancestors to maintain tree paths
+  const nodesToInclude = new Set<string>()
+
+  topNodes.forEach(node => {
+    // Add the node itself
+    nodesToInclude.add(node.id)
+
+    // Walk up the tree to add all ancestors
+    let currentId = node.id
+    let depth = 0
+    const maxDepth = 50 // Prevent infinite loops
+
+    while (parentMap.has(currentId) && depth < maxDepth) {
+      const parentId = parentMap.get(currentId)!
+      nodesToInclude.add(parentId)
+      currentId = parentId
+      depth++
+    }
+  })
+
+  // Filter nodes to only those included (maintaining order from original array)
+  const filtered = nodes.filter(node => nodesToInclude.has(node.id))
+
+  console.log('[SemanticZoom] After ancestor inclusion:', {
+    topNodesCount: topNodes.length,
+    withAncestorsCount: filtered.length,
+    ancestorsAdded: filtered.length - topNodes.length
+  })
+
+  console.log('[SemanticZoom] Filtered node types:', filtered.map(n => n.type).reduce((acc, type) => {
+    acc[type] = (acc[type] || 0) + 1
+    return acc
+  }, {} as Record<string, number>))
+
+  return filtered
 }

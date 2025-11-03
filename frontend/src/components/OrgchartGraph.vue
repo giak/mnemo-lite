@@ -118,7 +118,7 @@ const initGraph = async () => {
 
   const filteredNodes = currentZoom === 100
     ? props.nodes
-    : filterNodesByScore(props.nodes, currentZoom, currentViewMode, currentWeights)
+    : filterNodesByScore(props.nodes, props.edges, currentZoom, currentViewMode, currentWeights)
 
   console.log('[Orgchart] Filtered nodes:', {
     original: props.nodes.length,
@@ -551,7 +551,7 @@ const initGraph = async () => {
 
     const initialFilteredNodes = currentZoom === 100
       ? props.nodes
-      : filterNodesByScore(props.nodes, currentZoom, currentViewMode, currentWeights)
+      : filterNodesByScore(props.nodes, props.edges, currentZoom, currentViewMode, currentWeights)
 
     previousNodeIds.value = new Set(initialFilteredNodes.map(n => n.id))
   } catch (error) {
@@ -592,7 +592,7 @@ watch(() => [props.nodes, props.edges, props.viewMode, props.zoomLevel, props.we
 
       const filteredNodes = currentZoom === 100
         ? props.nodes
-        : filterNodesByScore(props.nodes, currentZoom, currentViewMode, currentWeights)
+        : filterNodesByScore(props.nodes, props.edges, currentZoom, currentViewMode, currentWeights)
 
       const newNodeIds = new Set(filteredNodes.map(n => n.id))
 
