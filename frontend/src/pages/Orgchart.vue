@@ -62,6 +62,15 @@ watch(legendExpanded, (val) => {
   localStorage.setItem('orgchart_legend_expanded', String(val))
 })
 
+// Reset weights to adaptive defaults
+const resetWeights = () => {
+  weights.value = {
+    complexity: 0.4,
+    loc: 0.3,
+    connections: 0.3
+  }
+}
+
 // Computed nodes and edges from graphData
 const nodes = computed(() => graphData.value?.nodes || [])
 const edges = computed(() => graphData.value?.edges || [])
@@ -413,6 +422,112 @@ const handleBuildGraph = async () => {
         </div>
       </div>
     </div>
+
+    <!-- Advanced Weights Modal -->
+    <Teleport to="body">
+      <div
+        v-if="showWeightsModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        @click.self="showWeightsModal = false"
+      >
+        <div class="bg-slate-800 rounded-lg shadow-2xl border border-slate-700 p-6 w-96">
+          <!-- Header -->
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-200">Réglages Avancés</h3>
+            <button
+              @click="showWeightsModal = false"
+              class="text-gray-400 hover:text-white transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+
+          <!-- Weight Sliders -->
+          <div class="space-y-4">
+            <div>
+              <div class="flex justify-between mb-1">
+                <label class="text-sm text-gray-400">Complexité</label>
+                <span class="text-xs font-mono text-cyan-400">{{ (weights.complexity * 100).toFixed(0) }}%</span>
+              </div>
+              <input
+                v-model.number="weights.complexity"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                class="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700"
+              />
+            </div>
+
+            <div>
+              <div class="flex justify-between mb-1">
+                <label class="text-sm text-gray-400">Lignes de code</label>
+                <span class="text-xs font-mono text-cyan-400">{{ (weights.loc * 100).toFixed(0) }}%</span>
+              </div>
+              <input
+                v-model.number="weights.loc"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                class="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700"
+              />
+            </div>
+
+            <div>
+              <div class="flex justify-between mb-1">
+                <label class="text-sm text-gray-400">Connections</label>
+                <span class="text-xs font-mono text-cyan-400">{{ (weights.connections * 100).toFixed(0) }}%</span>
+              </div>
+              <input
+                v-model.number="weights.connections"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                class="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700"
+              />
+            </div>
+
+            <!-- Total indicator -->
+            <div class="pt-2 border-t border-slate-700">
+              <div class="flex justify-between text-xs">
+                <span class="text-gray-500">Total:</span>
+                <span
+                  :class="[
+                    'font-mono',
+                    Math.abs((weights.complexity + weights.loc + weights.connections) - 1) < 0.01
+                      ? 'text-green-400'
+                      : 'text-orange-400'
+                  ]"
+                >
+                  {{ ((weights.complexity + weights.loc + weights.connections) * 100).toFixed(0) }}%
+                </span>
+              </div>
+              <p class="text-[10px] text-gray-500 mt-1">
+                Note: Le total n'a pas besoin d'être 100%, les poids sont relatifs.
+              </p>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex gap-2 mt-6">
+            <button
+              @click="resetWeights"
+              class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm transition-colors"
+            >
+              Reset Défauts
+            </button>
+            <button
+              @click="showWeightsModal = false"
+              class="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-sm transition-colors"
+            >
+              Appliquer
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
