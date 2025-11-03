@@ -20,6 +20,16 @@ export interface GraphNode {
   type: string
   file_path?: string
   metadata?: Record<string, any>
+  // Complexity metrics
+  cyclomatic_complexity?: number
+  lines_of_code?: number
+  // Connection metrics
+  incoming_edges?: number
+  outgoing_edges?: number
+  total_edges?: number
+  // Hierarchy metrics
+  depth?: number
+  descendants_count?: number
 }
 
 export interface GraphEdge {

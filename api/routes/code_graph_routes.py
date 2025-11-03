@@ -369,7 +369,9 @@ async def get_graph_data(
                     "type": node_type,
                     "file_path": properties.get("file_path"),
                     "start_line": properties.get("start_line"),
-                    "end_line": properties.get("end_line")
+                    "end_line": properties.get("end_line"),
+                    "cyclomatic_complexity": properties.get("cyclomatic_complexity"),
+                    "lines_of_code": properties.get("lines_of_code")
                 })
 
             # Get node IDs for edge filtering
