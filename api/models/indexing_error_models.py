@@ -10,8 +10,13 @@ Error types:
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Literal
 from datetime import datetime
+
+
+# Define valid error types for Pydantic validation
+ErrorType = Literal['parsing_error', 'encoding_error', 'chunking_error',
+                    'embedding_error', 'persistence_error']
 
 
 class IndexingErrorCreate(BaseModel):
@@ -19,7 +24,7 @@ class IndexingErrorCreate(BaseModel):
 
     repository: str = Field(..., description="Repository name")
     file_path: str = Field(..., description="Full path to file that failed")
-    error_type: str = Field(
+    error_type: ErrorType = Field(
         ...,
         description="Error category: parsing_error, encoding_error, chunking_error, embedding_error, persistence_error"
     )
@@ -35,7 +40,7 @@ class IndexingErrorResponse(BaseModel):
     error_id: int
     repository: str
     file_path: str
-    error_type: str
+    error_type: ErrorType
     error_message: str
     error_traceback: Optional[str] = None
     chunk_type: Optional[str] = None
