@@ -37,6 +37,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const containerRef = ref<HTMLElement | null>(null)
 let graph: Graph | null = null
+const previousNodeIds = ref<Set<string>>(new Set())
 
 const getNodeColor = (type?: string): string => {
   const colors: Record<string, string> = {
@@ -531,6 +532,17 @@ const initGraph = async () => {
     console.log('[Orgchart] Fitted to view')
 
     console.log('[Orgchart] Tree initialized with root:', roots[0]?.label || 'unknown')
+
+    // Track initial node IDs for animation
+    const currentZoom = props.zoomLevel ?? 100
+    const currentWeights = props.weights ?? { complexity: 0.4, loc: 0.3, connections: 0.3 }
+    const currentViewMode = props.viewMode || 'hierarchy'
+
+    const initialFilteredNodes = currentZoom === 100
+      ? props.nodes
+      : filterNodesByScore(props.nodes, currentZoom, currentViewMode, currentWeights)
+
+    previousNodeIds.value = new Set(initialFilteredNodes.map(n => n.id))
   } catch (error) {
     console.error('[Orgchart] Error rendering graph:', error)
   }
@@ -539,66 +551,145 @@ const initGraph = async () => {
 // Watch for data changes and viewMode changes
 watch(() => [props.nodes, props.edges, props.viewMode, props.zoomLevel, props.weights] as const, async (newVal, oldVal) => {
   const [newNodes, newEdges, newViewMode, newZoomLevel, newWeights] = newVal
-  const [oldNodes, oldEdges, oldViewMode, oldZoomLevel, oldWeights] = oldVal
+  const [oldNodes, oldEdges, oldViewMode, oldZoomLevel, oldWeights] = oldVal || [null, null, null, null, null]
 
-  // Check if only viewMode changed (not data)
+  // Detect if only zoom level changed
+  const onlyZoomChanged = newZoomLevel !== oldZoomLevel &&
+    newNodes === oldNodes &&
+    newEdges === oldEdges &&
+    newViewMode === oldViewMode &&
+    newWeights === oldWeights
+
+  // Detect if only viewMode changed (for existing animation)
   const onlyViewModeChanged = newViewMode !== oldViewMode &&
     newNodes === oldNodes &&
     newEdges === oldEdges &&
     newZoomLevel === oldZoomLevel &&
     newWeights === oldWeights
 
-  if (onlyViewModeChanged && graph) {
-    // Smooth transition: update node styles without destroying graph
+  if ((onlyViewModeChanged || onlyZoomChanged) && graph) {
     try {
-      console.log('[Orgchart] ViewMode changed, updating styles with animation...')
+      console.log('[Orgchart] ViewMode or Zoom changed, updating styles with animation...')
 
       const nodeMap = new Map(props.nodes.map(n => [n.id, n]))
       const graphNodes = graph.getNodeData()
-      const nodesToUpdate = graphNodes.map((graphNode: any) => {
-        // Handle virtual root specially
-        if (graphNode.id === '__root__') {
+
+      // Calculate which nodes to show/hide based on new zoom
+      const currentZoom = props.zoomLevel ?? 100
+      const currentWeights = props.weights ?? { complexity: 0.4, loc: 0.3, connections: 0.3 }
+      const currentViewMode = props.viewMode || 'hierarchy'
+
+      const filteredNodes = currentZoom === 100
+        ? props.nodes
+        : filterNodesByScore(props.nodes, currentZoom, currentViewMode, currentWeights)
+
+      const newNodeIds = new Set(filteredNodes.map(n => n.id))
+
+      // Nodes to fade out (were visible, now hidden)
+      const nodesToHide = Array.from(previousNodeIds.value).filter(id => !newNodeIds.has(id))
+
+      // Nodes to fade in (were hidden, now visible)
+      const nodesToShow = Array.from(newNodeIds).filter(id => !previousNodeIds.value.has(id))
+
+      console.log('[Orgchart] Animation:', {
+        toHide: nodesToHide.length,
+        toShow: nodesToShow.length,
+        total: newNodeIds.size
+      })
+
+      // Phase 1: Fade out nodes that should be hidden (150ms)
+      if (nodesToHide.length > 0) {
+        nodesToHide.forEach(nodeId => {
+          graph!.updateNodeData([{
+            id: nodeId,
+            style: {
+              opacity: 0,
+              size: [100, 30]  // Shrink slightly
+            }
+          }])
+        })
+        await graph.draw()
+        await new Promise(resolve => setTimeout(resolve, 150))
+      }
+
+      // Phase 2: Update visible nodes styles (for viewMode changes)
+      const nodesToUpdate = graphNodes
+        .filter((gn: any) => newNodeIds.has(gn.id))
+        .map((graphNode: any) => {
+          if (graphNode.id === '__root__') {
+            return {
+              id: graphNode.id,
+              style: {
+                size: [140, 40],
+                fill: '#8b5cf6',
+                opacity: 1
+              }
+            }
+          }
+
+          const originalNode = nodeMap.get(graphNode.id)
+          if (!originalNode) return null
+
+          const newStyle = calculateNodeStyle({ data: originalNode }, currentViewMode)
           return {
             id: graphNode.id,
             style: {
-              size: [140, 40],  // Default size
-              fill: '#8b5cf6'   // Purple for root (matches existing getNodeColor)
+              size: newStyle.size,
+              fill: newStyle.fill,
+              opacity: 1
             }
           }
-        }
-
-        const originalNode = nodeMap.get(graphNode.id)
-        if (!originalNode) return null
-
-        const newStyle = calculateNodeStyle({ data: originalNode }, newViewMode || 'hierarchy')
-
-        return {
-          id: graphNode.id,
-          style: {
-            size: newStyle.size,
-            fill: newStyle.fill
-          }
-        }
-      }).filter(Boolean)
+        })
+        .filter(Boolean)
 
       if (nodesToUpdate.length > 0) {
-        // Batch all updates into single call for smooth animation
         graph!.updateNodeData(nodesToUpdate as any[])
         await graph.draw()
-        console.log('[Orgchart] Styles updated with animation')
       }
+
+      // Phase 3: Fade in new nodes (150ms)
+      if (nodesToShow.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, 150))
+        // New nodes should already be visible from Phase 2, just ensure opacity
+        const nodesToFadeIn = nodesToShow
+          .map(nodeId => {
+            const originalNode = nodeMap.get(nodeId)
+            if (!originalNode) return null
+            const style = calculateNodeStyle({ data: originalNode }, currentViewMode)
+            return {
+              id: nodeId,
+              style: {
+                ...style,
+                opacity: 1
+              }
+            }
+          })
+          .filter(Boolean)
+
+        if (nodesToFadeIn.length > 0) {
+          graph!.updateNodeData(nodesToFadeIn as any[])
+          await graph.draw()
+        }
+      }
+
+      // Update tracking
+      previousNodeIds.value = newNodeIds
+
+      console.log('[Orgchart] Styles updated with animation')
     } catch (e) {
-      console.error('[Orgchart] Error during view mode transition:', e)
+      console.error('[Orgchart] Error during animation:', e)
+      // Fallback to full rebuild
       console.log('[Orgchart] Falling back to full rebuild')
-      // Fall back to full rebuild
-      graph.destroy()
-      graph = null
-      await nextTick()
-      if (containerRef.value) {
-        containerRef.value.innerHTML = ''
+      if (graph) {
+        graph.destroy()
+        graph = null
+        await nextTick()
+        if (containerRef.value) {
+          containerRef.value.innerHTML = ''
+        }
+        await new Promise(resolve => setTimeout(resolve, 50))
+        initGraph()
       }
-      await new Promise(resolve => setTimeout(resolve, 50))
-      initGraph()
     }
   } else {
     // Data changed or first render: full rebuild
