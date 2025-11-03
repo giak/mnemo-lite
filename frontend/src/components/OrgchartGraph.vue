@@ -537,14 +537,16 @@ const initGraph = async () => {
 }
 
 // Watch for data changes and viewMode changes
-watch(() => [props.nodes, props.edges, props.viewMode] as const, async (newVal, oldVal) => {
-  const [newNodes, newEdges, newViewMode] = newVal
-  const [oldNodes, oldEdges, oldViewMode] = oldVal
+watch(() => [props.nodes, props.edges, props.viewMode, props.zoomLevel, props.weights] as const, async (newVal, oldVal) => {
+  const [newNodes, newEdges, newViewMode, newZoomLevel, newWeights] = newVal
+  const [oldNodes, oldEdges, oldViewMode, oldZoomLevel, oldWeights] = oldVal
 
   // Check if only viewMode changed (not data)
   const onlyViewModeChanged = newViewMode !== oldViewMode &&
     newNodes === oldNodes &&
-    newEdges === oldEdges
+    newEdges === oldEdges &&
+    newZoomLevel === oldZoomLevel &&
+    newWeights === oldWeights
 
   if (onlyViewModeChanged && graph) {
     // Smooth transition: update node styles without destroying graph

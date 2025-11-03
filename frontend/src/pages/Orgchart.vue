@@ -34,7 +34,6 @@ const weights = ref({
 })
 
 // Modal state
-// @ts-expect-error - Will be used in Task 6 (modal UI)
 const showWeightsModal = ref(false)
 
 // Legend state
@@ -254,6 +253,49 @@ const handleBuildGraph = async () => {
           </div>
         </div>
 
+        <div class="h-4 w-px bg-slate-600"></div>
+
+        <!-- Semantic Zoom Slider -->
+        <div class="flex items-center gap-3">
+          <span class="text-gray-400">Zoom:</span>
+          <div class="flex flex-col gap-1 w-48">
+            <!-- Slider with visual zones -->
+            <input
+              v-model.number="zoomLevel"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              class="w-full h-2 rounded-lg appearance-none cursor-pointer zoom-slider"
+              :style="{
+                background: `linear-gradient(to right,
+                  #ef4444 0%, #f97316 25%,
+                  #fbbf24 25%, #fbbf24 50%,
+                  #86efac 50%, #86efac 75%,
+                  #22c55e 75%, #22c55e 100%)`
+              }"
+            />
+            <!-- Zone labels -->
+            <div class="flex justify-between text-[9px] text-gray-500">
+              <span>Macro</span>
+              <span>Archi</span>
+              <span>Détails</span>
+              <span>Complet</span>
+            </div>
+          </div>
+          <!-- Current value -->
+          <span class="font-mono text-cyan-400 text-xs min-w-[3rem]">{{ zoomLevel }}%</span>
+
+          <!-- Advanced settings button -->
+          <button
+            @click="showWeightsModal = true"
+            class="p-1 text-gray-400 hover:text-cyan-400 transition-colors"
+            title="Réglages avancés"
+          >
+            ⚙️
+          </button>
+        </div>
+
         <div class="flex-1"></div>
 
         <!-- Build Graph Button -->
@@ -309,7 +351,14 @@ const handleBuildGraph = async () => {
 
         <!-- Orgchart Component -->
         <div class="relative">
-          <OrgchartGraph :key="graphKey" :nodes="nodes" :edges="edges" :view-mode="viewMode" />
+          <OrgchartGraph
+            :key="graphKey"
+            :nodes="nodes"
+            :edges="edges"
+            :view-mode="viewMode"
+            :zoom-level="zoomLevel"
+            :weights="weights"
+          />
 
           <!-- Legend Panel -->
           <div class="absolute bottom-4 right-4 bg-slate-800/95 rounded-lg shadow-xl border border-slate-700 text-xs">
@@ -366,3 +415,27 @@ const handleBuildGraph = async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Semantic zoom slider styling */
+.zoom-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #06b6d4;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.zoom-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #06b6d4;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+</style>
