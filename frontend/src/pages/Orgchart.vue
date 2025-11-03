@@ -43,6 +43,9 @@ const customMaxModules = ref(5)
 // View mode state
 const viewMode = ref<ViewMode>('hierarchy')
 
+// Legend state
+const legendExpanded = ref(true)
+
 // Computed config based on preset
 const orgchartConfig = computed((): OrgchartConfig => {
   if (selectedPreset.value === 'custom') {
@@ -85,11 +88,72 @@ watch(viewMode, (newMode) => {
   localStorage.setItem('orgchart_view_mode', newMode)
 })
 
+// Save legend expanded state to localStorage
+watch(legendExpanded, (val) => {
+  localStorage.setItem('orgchart_legend_expanded', String(val))
+})
+
 // Computed nodes and edges from graphData
 const nodes = computed(() => graphData.value?.nodes || [])
 const edges = computed(() => graphData.value?.edges || [])
 
+// Legend content based on view mode
+interface LegendColorItem {
+  dot: string
+  label: string
+}
+
+interface LegendContent {
+  title: string
+  colors: LegendColorItem[]
+  size: string
+}
+
+const legendContent = computed((): LegendContent => {
+  switch (viewMode.value) {
+    case 'complexity':
+      return {
+        title: '📊 Complexity View',
+        colors: [
+          { dot: '#10b981', label: 'Low (≤10)' },
+          { dot: '#fbbf24', label: 'Medium (11-20)' },
+          { dot: '#f97316', label: 'High (21-30)' },
+          { dot: '#ef4444', label: 'Very High (>30)' }
+        ],
+        size: 'Based on lines of code'
+      }
+    case 'hubs':
+      return {
+        title: '🔗 Hubs View',
+        colors: [
+          { dot: '#3b82f6', label: 'Depended Upon (many incoming)' },
+          { dot: '#8b5cf6', label: 'Balanced' },
+          { dot: '#f97316', label: 'Depends On Others (many outgoing)' }
+        ],
+        size: 'Based on total connections'
+      }
+    case 'hierarchy':
+    default:
+      return {
+        title: '🌳 Hierarchy View',
+        colors: [
+          { dot: '#a855f7', label: 'Root (depth 0)' },
+          { dot: '#06b6d4', label: 'Level 1' },
+          { dot: '#3b82f6', label: 'Level 2' },
+          { dot: '#6366f1', label: 'Deeper levels' }
+        ],
+        size: 'Based on descendants count'
+      }
+  }
+})
+
 onMounted(async () => {
+  // Load saved legend state from localStorage
+  const savedLegendState = localStorage.getItem('orgchart_legend_expanded')
+  if (savedLegendState !== null) {
+    legendExpanded.value = savedLegendState === 'true'
+  }
+
   // Load saved view mode from localStorage
   const savedViewMode = localStorage.getItem('orgchart_view_mode')
   if (savedViewMode && (savedViewMode === 'complexity' || savedViewMode === 'hubs' || savedViewMode === 'hierarchy')) {
@@ -329,7 +393,47 @@ const handleBuildGraph = async () => {
         </div>
 
         <!-- Orgchart Component -->
-        <OrgchartGraph :key="graphKey" :nodes="nodes" :edges="edges" :config="orgchartConfig" :view-mode="viewMode" />
+        <div class="relative">
+          <OrgchartGraph :key="graphKey" :nodes="nodes" :edges="edges" :config="orgchartConfig" :view-mode="viewMode" />
+
+          <!-- Legend Panel -->
+          <div class="absolute bottom-4 right-4 bg-slate-800/95 rounded-lg shadow-xl border border-slate-700 text-xs">
+            <!-- Header with collapse button -->
+            <div
+              class="flex items-center justify-between px-3 py-2 border-b border-slate-700 cursor-pointer hover:bg-slate-750 transition-colors"
+              @click="legendExpanded = !legendExpanded"
+            >
+              <span class="font-semibold text-gray-200">{{ legendContent.title }}</span>
+              <svg
+                class="w-4 h-4 text-gray-400 transition-transform"
+                :class="{ 'rotate-180': !legendExpanded }"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+
+            <!-- Collapsible content -->
+            <div v-if="legendExpanded" class="px-3 py-2">
+              <div class="mb-2">
+                <div class="text-gray-400 mb-1 font-semibold">Colors:</div>
+                <div
+                  v-for="color in legendContent.colors"
+                  :key="color.label"
+                  class="flex items-center gap-2 py-1"
+                >
+                  <div class="w-3 h-3 rounded-full flex-shrink-0" :style="{ backgroundColor: color.dot }"></div>
+                  <span class="text-gray-300">{{ color.label }}</span>
+                </div>
+              </div>
+              <div class="text-gray-400 border-t border-slate-700 pt-2 mt-2">
+                <span class="font-semibold">Size:</span> <span class="text-gray-300">{{ legendContent.size }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- No Data State -->
