@@ -362,34 +362,55 @@ watch(() => [props.nodes, props.edges, props.viewMode] as const, async (newVal, 
 
   if (onlyViewModeChanged && graph) {
     // Smooth transition: update node styles without destroying graph
-    console.log('[Orgchart] ViewMode changed, updating styles with animation...')
+    try {
+      console.log('[Orgchart] ViewMode changed, updating styles with animation...')
 
-    const nodeMap = new Map(props.nodes.map(n => [n.id, n]))
-    const graphNodes = graph.getNodeData()
-    const nodesToUpdate = graphNodes.map((graphNode: any) => {
-      const originalNode = nodeMap.get(graphNode.id)
-      if (!originalNode) return null
-
-      const newStyle = calculateNodeStyle({ data: originalNode }, newViewMode || 'hierarchy')
-
-      return {
-        id: graphNode.id,
-        style: {
-          size: newStyle.size,
-          fill: newStyle.fill
+      const nodeMap = new Map(props.nodes.map(n => [n.id, n]))
+      const graphNodes = graph.getNodeData()
+      const nodesToUpdate = graphNodes.map((graphNode: any) => {
+        // Handle virtual root specially
+        if (graphNode.id === '__root__') {
+          return {
+            id: graphNode.id,
+            style: {
+              size: [140, 40],  // Default size
+              fill: '#8b5cf6'   // Purple for root (matches existing getNodeColor)
+            }
+          }
         }
+
+        const originalNode = nodeMap.get(graphNode.id)
+        if (!originalNode) return null
+
+        const newStyle = calculateNodeStyle({ data: originalNode }, newViewMode || 'hierarchy')
+
+        return {
+          id: graphNode.id,
+          style: {
+            size: newStyle.size,
+            fill: newStyle.fill
+          }
+        }
+      }).filter(Boolean)
+
+      if (nodesToUpdate.length > 0) {
+        // Batch all updates into single call for smooth animation
+        graph!.updateNodeData(nodesToUpdate as any[])
+        await graph.draw()
+        console.log('[Orgchart] Styles updated with animation')
       }
-    }).filter(Boolean)
-
-    if (nodesToUpdate.length > 0) {
-      // Update all nodes at once
-      nodesToUpdate.forEach((nodeUpdate: any) => {
-        graph!.updateNodeData([nodeUpdate])
-      })
-
-      // Trigger animated redraw
-      await graph.draw()
-      console.log('[Orgchart] Styles updated with animation')
+    } catch (e) {
+      console.error('[Orgchart] Error during view mode transition:', e)
+      console.log('[Orgchart] Falling back to full rebuild')
+      // Fall back to full rebuild
+      graph.destroy()
+      graph = null
+      await nextTick()
+      if (containerRef.value) {
+        containerRef.value.innerHTML = ''
+      }
+      await new Promise(resolve => setTimeout(resolve, 50))
+      initGraph()
     }
   } else {
     // Data changed or first render: full rebuild
