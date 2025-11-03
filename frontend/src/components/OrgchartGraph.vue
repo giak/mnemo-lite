@@ -10,6 +10,7 @@ import { Graph } from '@antv/g6'
 import type { GraphNode, GraphEdge } from '@/composables/useCodeGraph'
 import type { ViewMode } from '@/types/orgchart-types'
 import { calculateNodeStyle } from '@/utils/orgchart-visual-encoding'
+import { filterNodesByScore } from '@/utils/semantic-zoom-scoring'
 
 interface OrgchartConfig {
   depth: number
@@ -22,9 +23,17 @@ interface Props {
   edges: GraphEdge[]
   config?: OrgchartConfig
   viewMode?: ViewMode
+  zoomLevel?: number        // NEW: 0-100%
+  weights?: {               // NEW: Scoring weights
+    complexity: number
+    loc: number
+    connections: number
+  }
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  viewMode: 'hierarchy'
+})
 
 const containerRef = ref<HTMLElement | null>(null)
 let graph: Graph | null = null
@@ -40,7 +49,7 @@ const getNodeColor = (type?: string): string => {
     Config: '#ec4899',      // Pink
     default: '#64748b'      // Gray
   }
-  return colors[type || 'default'] || colors.default
+  return colors[type ?? 'default'] ?? colors.default
 }
 
 const getModuleLabel = (node: GraphNode): string => {
@@ -84,16 +93,37 @@ const initGraph = async () => {
   console.log('[Orgchart] Available node types:', Array.from(nodeTypes))
   console.log('[Orgchart] Sample nodes:', props.nodes.slice(0, 3))
 
+  // Apply semantic zoom filtering
+  const currentZoom = props.zoomLevel ?? 100  // Default to 100% (show all)
+  const currentWeights = props.weights ?? { complexity: 0.4, loc: 0.3, connections: 0.3 }
+  const currentViewMode = props.viewMode || 'hierarchy'
+
+  console.log('[Orgchart] Applying semantic zoom:', {
+    zoomLevel: currentZoom,
+    weights: currentWeights,
+    totalNodes: props.nodes.length
+  })
+
+  const filteredNodes = currentZoom === 100
+    ? props.nodes
+    : filterNodesByScore(props.nodes, currentZoom, currentViewMode, currentWeights)
+
+  console.log('[Orgchart] Filtered nodes:', {
+    original: props.nodes.length,
+    filtered: filteredNodes.length,
+    percentage: (filteredNodes.length / props.nodes.length * 100).toFixed(1) + '%'
+  })
+
   // Find entry points (modules)
   const entryPointIds = new Set(
-    props.nodes.filter(n => n.type === 'Module').map(n => n.id)
+    filteredNodes.filter(n => n.type === 'Module').map(n => n.id)
   )
   console.log('[Orgchart] Entry points (Modules):', entryPointIds.size)
 
   // Build tree data structure from entry points
   const buildTree = () => {
     // Start with entry points
-    const roots = props.nodes.filter(n => entryPointIds.has(n.id))
+    const roots = filteredNodes.filter(n => entryPointIds.has(n.id))
 
     if (roots.length === 0) {
       console.log('[Orgchart] No modules found, finding most connected nodes...')
@@ -117,7 +147,7 @@ const initGraph = async () => {
 
       const topRootId = sorted[0]?.[0]
       if (topRootId) {
-        const topRoot = props.nodes.find(n => n.id === topRootId)
+        const topRoot = filteredNodes.find(n => n.id === topRootId)
         if (topRoot) {
           console.log('[Orgchart] Using top connected node as root:', topRoot.label)
           return [topRoot]
@@ -125,7 +155,7 @@ const initGraph = async () => {
       }
 
       console.log('[Orgchart] Falling back to first node')
-      return props.nodes.slice(0, 1) // Fallback to first node
+      return filteredNodes.slice(0, 1) // Fallback to first node
     }
 
     console.log('[Orgchart] Found module roots:', roots.map(r => r.label))
@@ -135,11 +165,12 @@ const initGraph = async () => {
   const roots = buildTree()
 
   // Transform to G6 tree format
-  const nodeMap = new Map(props.nodes.map(n => [n.id, n]))
+  const nodeMap = new Map(filteredNodes.map(n => [n.id, n]))
   const childrenMap = new Map<string, string[]>()
 
-  // Build parent-child relationships from import edges
-  importEdges.forEach(edge => {
+  // Build parent-child relationships from ALL edges (imports, calls, re_exports)
+  // This allows descending from Modules into Classes/Functions
+  props.edges.forEach(edge => {
     if (!childrenMap.has(edge.source)) {
       childrenMap.set(edge.source, [])
     }
