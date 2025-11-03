@@ -405,9 +405,12 @@ class TypeScriptMetadataExtractor:
         imports_seen = set()  # Track to avoid duplicates from side-effect query
 
         try:
+            # Handle both Tree and Node objects (defensive programming)
+            root_node = tree.root_node if hasattr(tree, 'root_node') else tree
+
             # 1. Extract named imports
             cursor = QueryCursor(self.named_imports_query)
-            matches = cursor.matches(tree.root_node)
+            matches = cursor.matches(root_node)
 
             for pattern_index, captures_dict in matches:
                 source_nodes = captures_dict.get('import_source', [])
@@ -427,7 +430,7 @@ class TypeScriptMetadataExtractor:
 
             # 2. Extract namespace imports
             cursor = QueryCursor(self.namespace_imports_query)
-            matches = cursor.matches(tree.root_node)
+            matches = cursor.matches(root_node)
 
             for pattern_index, captures_dict in matches:
                 source_nodes = captures_dict.get('import_source', [])
@@ -440,7 +443,7 @@ class TypeScriptMetadataExtractor:
 
             # 3. Extract default imports
             cursor = QueryCursor(self.default_imports_query)
-            matches = cursor.matches(tree.root_node)
+            matches = cursor.matches(root_node)
 
             for pattern_index, captures_dict in matches:
                 source_nodes = captures_dict.get('import_source', [])
@@ -453,7 +456,7 @@ class TypeScriptMetadataExtractor:
 
             # 4. Extract re-exports
             cursor = QueryCursor(self.re_exports_query)
-            matches = cursor.matches(tree.root_node)
+            matches = cursor.matches(root_node)
 
             for pattern_index, captures_dict in matches:
                 source_nodes = captures_dict.get('export_source', [])
@@ -613,6 +616,30 @@ class TypeScriptMetadataExtractor:
 
         return calls
 
+    def _get_lsp_type(self, node_type: str) -> str:
+        """
+        Map tree-sitter node type to LSP-compliant type.
+
+        Args:
+            node_type: The tree-sitter node type (class_declaration, method_definition, etc.)
+
+        Returns:
+            LSP type string (class, method, function, interface, enum, type, module, unknown)
+        """
+        # Direct mapping for TypeScript/JavaScript node types
+        lsp_mapping = {
+            "class_declaration": "class",
+            "method_definition": "method",
+            "function_declaration": "function",
+            "arrow_function": "function",
+            "interface_declaration": "interface",
+            "enum_declaration": "enum",
+            "type_alias_declaration": "type",
+            "module": "module",
+        }
+
+        return lsp_mapping.get(node_type, "unknown")
+
     async def extract_metadata(
         self,
         source_code: str,
@@ -709,6 +736,7 @@ class TypeScriptMetadataExtractor:
             lines_of_code = len([l for l in node_source.split('\n') if l.strip()])
 
             return {
+                "lsp_type": self._get_lsp_type(node.type),
                 "imports": imports,
                 "calls": calls,
                 "re_exports": re_exports,
@@ -724,6 +752,7 @@ class TypeScriptMetadataExtractor:
             self.logger.error(f"Failed to extract enriched metadata: {e}", exc_info=True)
             # Graceful degradation: return empty metadata
             return {
+                "lsp_type": self._get_lsp_type(node.type) if node else "unknown",
                 "imports": [],
                 "calls": [],
                 "re_exports": [],
