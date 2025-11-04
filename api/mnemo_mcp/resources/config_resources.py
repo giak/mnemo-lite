@@ -81,7 +81,7 @@ class ListProjectsResource(BaseMCPComponent):
                     repository,
                     COUNT(DISTINCT file_path) as indexed_files,
                     COUNT(*) as total_chunks,
-                    MAX(created_at) as last_indexed,
+                    MAX(indexed_at) as last_indexed,
                     ARRAY_AGG(DISTINCT language) FILTER (WHERE language IS NOT NULL) as languages
                 FROM code_chunks
                 GROUP BY repository

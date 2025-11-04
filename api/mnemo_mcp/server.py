@@ -152,16 +152,45 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         # Embedding service is optional - graceful degradation to lexical-only
         services["embedding_service"] = None
 
+    # Create SQLAlchemy engine FIRST (needed by multiple services)
+    sqlalchemy_engine = None
+    try:
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        sqlalchemy_url = config.database_url.replace("postgresql://", "postgresql+asyncpg://")
+        sqlalchemy_engine = create_async_engine(
+            sqlalchemy_url,
+            pool_size=10,
+            max_overflow=20,
+            echo=False,
+        )
+        services["engine"] = sqlalchemy_engine
+        logger.info("mcp.sqlalchemy_engine.initialized")
+    except Exception as e:
+        logger.warning("mcp.sqlalchemy_engine.initialization_failed", error=str(e))
+        services["engine"] = None
+
     # Story 23.5: Initialize CodeIndexingService
     try:
         from services.code_indexing_service import CodeIndexingService
-        from services.chunk_cache import CascadeCache
+        from services.caches.cascade_cache import CascadeCache
+        from services.caches.code_chunk_cache import CodeChunkCache
+        from services.caches.redis_cache import RedisCache
 
-        # Create cascade cache (L1 = Redis, L2 = in-memory LRU)
+        # Create L1 cache (in-memory LRU)
+        l1_cache = CodeChunkCache(max_size_mb=100)
+
+        # Create L2 cache (Redis) if Redis is available
+        l2_cache = None
+        if services.get("redis"):
+            l2_cache = RedisCache(redis_url=config.redis_url)
+            # Connect the Redis cache
+            await l2_cache.connect()
+
+        # Create cascade cache with L1 and L2
         chunk_cache = CascadeCache(
-            l1_redis=services.get("redis"),  # Can be None
-            l2_maxsize=1000,  # Keep 1000 chunks in memory
-            ttl_seconds=3600  # 1-hour TTL
+            l1_cache=l1_cache,
+            l2_cache=l2_cache
         )
         services["chunk_cache"] = chunk_cache
 
@@ -181,7 +210,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("mcp.code_indexing_service.initialization_failed", error=str(e))
         services["code_indexing_service"] = None
-        services["chunk_cache"] = None
+        # Note: Don't set chunk_cache to None - it was successfully initialized above
 
     # Story 23.6: Initialize MetricsCollector (EPIC-22)
     # Note: MetricsCollector initialization deferred to after sqlalchemy_engine creation
@@ -200,18 +229,11 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
 
     # Story 23.3: Initialize MemoryRepository (requires SQLAlchemy engine)
     try:
-        from sqlalchemy.ext.asyncio import create_async_engine
         from db.repositories.memory_repository import MemoryRepository
 
-        # Create SQLAlchemy async engine for MemoryRepository
-        # Convert asyncpg URL to SQLAlchemy format
-        sqlalchemy_url = config.database_url.replace("postgresql://", "postgresql+asyncpg://")
-        sqlalchemy_engine = create_async_engine(
-            sqlalchemy_url,
-            pool_size=10,
-            max_overflow=20,
-            echo=False,  # Set to True for SQL debugging
-        )
+        # Use already-created SQLAlchemy engine
+        if not sqlalchemy_engine:
+            raise RuntimeError("SQLAlchemy engine not initialized")
 
         memory_repository = MemoryRepository(sqlalchemy_engine)
         services["memory_repository"] = memory_repository

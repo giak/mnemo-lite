@@ -150,6 +150,16 @@ class BaseMCPComponent(ABC):
         """Access Redis L2 cache client."""
         return self._services.get("redis") if self._services else None
 
+    @property
+    def engine(self):
+        """Access SQLAlchemy async engine."""
+        return self._services.get("engine") if self._services else None
+
+    @property
+    def db(self):
+        """Access database connection pool (asyncpg)."""
+        return self._services.get("db") if self._services else None
+
     def _parse_query_params(self, uri: str) -> Dict[str, str]:
         """
         Parse query parameters from URI.

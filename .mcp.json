@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "mnemolite": {
+      "command": "bash",
+      "args": ["/home/giak/Work/MnemoLite/scripts/mcp_server.sh"],
+      "description": "MnemoLite MCP Server - Code intelligence with hybrid search, graph traversal, and semantic memories"
+    }
+  }
+}

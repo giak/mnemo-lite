@@ -188,10 +188,14 @@ class SearchCodeTool(BaseMCPComponent):
 
         # Execute hybrid search
         try:
-            async with db_pool.acquire() as conn:
-                hybrid_service = HybridCodeSearchService(conn, redis_client)
+            # Get SQLAlchemy engine from services (not asyncpg pool)
+            engine = self._services.get("engine")
+            if not engine:
+                raise RuntimeError("SQLAlchemy engine not available")
 
-                hybrid_response: HybridSearchResponse = await hybrid_service.search(
+            hybrid_service = HybridCodeSearchService(engine=engine)
+
+            hybrid_response: HybridSearchResponse = await hybrid_service.search(
                     query=query,
                     embedding_text=embedding_text,
                     embedding_code=embedding_code,
