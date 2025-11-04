@@ -259,19 +259,26 @@ def scan_files(directory: Path) -> list[Path]:
     for ext in ["*.ts", "*.js"]:
         files.extend(directory.rglob(ext))
 
-    # Filter out tests, node_modules, declarations
+    # Filter out tests, node_modules, declarations, and build artifacts
+    # CRITICAL: Exclude dist/build directories to prevent OOM from minified files
+    excluded_dirs = ["node_modules", "dist", "build", ".next", "out", "coverage", ".cache"]
+
     filtered = []
     for f in files:
         path_str = str(f)
-        # Check for node_modules
-        if "node_modules" in path_str:
+
+        # Check for excluded directories (prevents indexing minified/compiled files)
+        if any(excluded_dir in path_str for excluded_dir in excluded_dirs):
             continue
+
         # Check for declaration files
         if path_str.endswith(".d.ts"):
             continue
+
         # Check for test files (in file name, not in path)
         if ".test." in f.name or ".spec." in f.name or "__tests__" in path_str:
             continue
+
         filtered.append(f)
 
     return sorted(filtered)
@@ -895,23 +902,38 @@ async def build_graph_phase(repository: str, engine) -> dict:
     try:
         graph_service = GraphConstructionService(engine)
 
-        # Build graph for repository
+        # Build detailed graph for repository
         stats = await graph_service.build_graph_for_repository(
             repository=repository,
             languages=["typescript", "javascript"]
         )
 
-        print(f"\n✅ Graph construction complete:")
+        print(f"\n✅ Detailed graph construction complete:")
         print(f"   - Nodes: {stats.total_nodes}")
         print(f"   - Edges: {stats.total_edges}")
         print(f"   - Nodes by type: {stats.nodes_by_type}")
         print(f"   - Edges by type: {stats.edges_by_type}")
 
+        # Build MODULE-level graph for orgchart (EPIC-26 Story 26.4)
+        print(f"\n🗂️  Building MODULE-level graph for orgchart...")
+        module_stats = await graph_service.build_module_graph(repository=repository)
+
+        print(f"\n✅ MODULE graph construction complete:")
+        print(f"   - Files: {module_stats.get('nodes_created', 0)}")
+        print(f"   - Imports: {module_stats.get('edges_created', 0)}")
+        print(f"   - Isolation: {module_stats.get('isolation_rate', 0)*100:.1f}%")
+        print(f"   - Duration: {module_stats.get('duration_ms', 0)}ms")
+
         return {
             "total_nodes": stats.total_nodes,
             "total_edges": stats.total_edges,
             "nodes_by_type": stats.nodes_by_type,
-            "edges_by_type": stats.edges_by_type
+            "edges_by_type": stats.edges_by_type,
+            "module_graph": {
+                "files": module_stats.get('nodes_created', 0),
+                "imports": module_stats.get('edges_created', 0),
+                "isolation_rate": module_stats.get('isolation_rate', 0)
+            }
         }
 
     except Exception as e:

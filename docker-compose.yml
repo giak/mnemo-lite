@@ -4,8 +4,6 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
-version: '3.8'
-
 services:
   db:
     build:
@@ -121,9 +119,9 @@ services:
       resources:
         limits:
           cpus: '2'        # Increased for parallel embedding generation
-          memory: 12G      # EPIC-26: 2 workers × ~3GB = ~6GB + 6GB buffer
+          memory: 24G      # Increased for large repository indexing with embeddings
         reservations:
-          memory: 8G       # Reserve memory for stable operation
+          memory: 16G      # Reserve memory for stable operation during indexing
     networks:
       backend:
       frontend:
