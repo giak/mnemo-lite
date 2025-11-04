@@ -10,7 +10,7 @@ import { useCodeGraph } from '@/composables/useCodeGraph'
 import type { Nodes, Edges, Configs, Layouts } from 'v-network-graph'
 import G6Graph from '@/components/G6Graph.vue'
 
-const { stats, graphData, loading, error, building, buildError, repositories, metrics, fetchStats, fetchGraphData, buildGraph, fetchRepositories, fetchMetrics } = useCodeGraph()
+const { stats, graphData, loading, error, building, buildError, repositories, fetchStats, fetchGraphData, buildGraph, fetchRepositories } = useCodeGraph()
 
 const repository = ref<string>('')
 const useG6 = ref(true) // Toggle between v-network-graph and G6
@@ -101,7 +101,7 @@ const layouts = computed<Layouts>(() => {
 
   // Position nodes: each file gets a column with zigzag pattern
   let fileIndex = 0
-  for (const [file, nodeIds] of nodesByFile.entries()) {
+  for (const [_file, nodeIds] of nodesByFile.entries()) {
     const fileX = offsetX + fileIndex * fileSpacingX
 
     // Position nodes within this file with zigzag pattern for edge visibility
@@ -124,7 +124,7 @@ const layouts = computed<Layouts>(() => {
 })
 
 // v-network-graph configuration
-const configs = computed<Configs>(() => ({
+const configs: any = computed<Configs>(() => ({
   view: {
     autoPanAndZoomOnLoad: 'fit-content',
     panEnabled: true,
@@ -246,7 +246,6 @@ watch(repository, async (newRepo) => {
     console.log('[Graph] Loading repository:', newRepo)
     await fetchStats(newRepo)
     await fetchGraphData(newRepo, 80)
-    await fetchMetrics(newRepo)
     console.log('[Graph] Graph data loaded:', {
       nodes: graphData.value?.nodes?.length || 0,
       edges: graphData.value?.edges?.length || 0,
@@ -262,12 +261,11 @@ onMounted(async () => {
   console.log('[Graph] Available repositories:', repositories.value)
 
   // Select first repository by default
-  if (repositories.value.length > 0) {
-    repository.value = repositories.value[0]
+  if (repositories.value && repositories.value.length > 0) {
+    repository.value = repositories.value[0] || ''
     // Explicitly load data for first repository
     await fetchStats(repository.value)
     await fetchGraphData(repository.value, 80)
-    await fetchMetrics(repository.value)
     console.log('[Graph] Initial data loaded:', {
       nodes: graphData.value?.nodes?.length || 0,
       edges: graphData.value?.edges?.length || 0,
@@ -280,35 +278,7 @@ onMounted(async () => {
 
 <template>
   <div class="min-h-screen bg-slate-950">
-    <div class="max-w-full mx-auto px-4 py-6">
-      <!-- Header -->
-      <div class="mb-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <h1 class="text-3xl text-heading">Code Graph</h1>
-            <p class="mt-2 text-sm text-gray-400">
-              Visual representation of code dependencies and relationships
-            </p>
-          </div>
-
-          <!-- Repository Selector -->
-          <div class="flex items-center gap-4">
-            <label for="repository-select" class="text-sm font-medium text-gray-300">
-              Repository:
-            </label>
-            <select
-              id="repository-select"
-              v-model="repository"
-              class="bg-slate-800 text-gray-200 border border-slate-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="" disabled>Select repository...</option>
-              <option v-for="repo in repositories" :key="repo" :value="repo">
-                {{ repo }}
-              </option>
-            </select>
-          </div>
-        </div>
-      </div>
+    <div class="max-w-full mx-auto px-4 py-3">
 
       <!-- Loading State -->
       <div v-if="loading" class="section">
@@ -332,106 +302,79 @@ onMounted(async () => {
       </div>
 
       <!-- Graph Stats + Visualization -->
-      <div v-else-if="stats" class="space-y-4">
-        <!-- Stats Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <!-- Total Nodes -->
-          <div class="section">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="label">Total Nodes</p>
-                <p class="text-3xl font-bold text-cyan-400">{{ stats.total_nodes }}</p>
-              </div>
-              <svg class="h-10 w-10 text-cyan-500/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+      <div v-else-if="stats" class="space-y-2">
+        <!-- Ultra-Compact Toolbar: Everything on one line -->
+        <div class="bg-slate-800/50 rounded-lg px-4 py-2 flex items-center gap-4 border border-slate-700 text-xs">
+          <!-- Stats -->
+          <div class="flex items-center gap-3">
+            <span class="text-gray-500 uppercase tracking-wide">Graph</span>
+            <div class="flex items-center gap-2">
+              <span class="text-gray-400">N:</span>
+              <span class="font-mono font-bold text-cyan-400">{{ stats.total_nodes }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-gray-400">E:</span>
+              <span class="font-mono font-bold text-emerald-400">{{ stats.total_edges }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-gray-400">C:</span>
+              <span class="font-mono font-bold text-blue-400">{{ stats.nodes_by_type.Class || 0 }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-gray-400">F:</span>
+              <span class="font-mono font-bold text-purple-400">{{ stats.nodes_by_type.Function || 0 }}</span>
             </div>
           </div>
 
-          <!-- Total Edges -->
-          <div class="section">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="label">Total Edges</p>
-                <p class="text-3xl font-bold text-emerald-400">{{ stats.total_edges }}</p>
-              </div>
-              <svg class="h-10 w-10 text-emerald-500/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
+          <div class="h-4 w-px bg-slate-600"></div>
+
+          <!-- Repository Selector -->
+          <select
+            v-model="repository"
+            class="bg-slate-700 text-gray-200 border border-slate-600 rounded px-3 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="" disabled>Select repository...</option>
+            <option v-for="repo in repositories" :key="repo" :value="repo">
+              {{ repo }}
+            </option>
+          </select>
+
+          <div class="h-4 w-px bg-slate-600"></div>
+
+          <!-- Layout Toggle -->
+          <div class="flex items-center gap-1">
+            <button
+              @click="useG6 = false"
+              class="px-2 py-1 rounded text-xs transition-colors"
+              :class="!useG6 ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
+            >
+              Network
+            </button>
+            <button
+              @click="useG6 = true"
+              class="px-2 py-1 rounded text-xs transition-colors"
+              :class="useG6 ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
+            >
+              G6
+            </button>
           </div>
 
-          <!-- Classes -->
-          <div class="section">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="label">Classes</p>
-                <p class="text-3xl font-bold text-blue-400">{{ stats.nodes_by_type.Class || 0 }}</p>
-              </div>
-              <svg class="h-10 w-10 text-blue-500/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-            </div>
-          </div>
+          <div class="flex-1"></div>
 
-          <!-- Functions -->
-          <div class="section">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="label">Functions</p>
-                <p class="text-3xl font-bold text-purple-400">{{ stats.nodes_by_type.Function || 0 }}</p>
-              </div>
-              <svg class="h-10 w-10 text-purple-500/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-              </svg>
-            </div>
-          </div>
+          <!-- Build Graph Button -->
+          <button
+            @click="handleBuildGraph"
+            :disabled="building || loading"
+            class="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-gray-500 text-white rounded text-xs font-medium transition-colors"
+          >
+            <svg v-if="building" class="animate-spin -ml-1 mr-1 h-3 w-3 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ building ? 'Building...' : 'Build' }}
+          </button>
         </div>
 
-        <!-- Code Quality Metrics Panel -->
-        <div v-if="metrics" class="bg-slate-800 rounded-lg p-6">
-          <h3 class="text-xl font-semibold text-gray-200 mb-4">Code Quality Metrics</h3>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div class="bg-slate-700 rounded p-4">
-              <p class="text-sm text-gray-400">Avg Complexity</p>
-              <p class="text-2xl font-bold text-yellow-400">{{ metrics.avg_complexity }}</p>
-            </div>
-
-            <div class="bg-slate-700 rounded p-4">
-              <p class="text-sm text-gray-400">Max Complexity</p>
-              <p class="text-2xl font-bold text-red-400">{{ metrics.max_complexity }}</p>
-              <p class="text-xs text-gray-500 mt-1">{{ metrics.most_complex_function }}</p>
-            </div>
-
-            <div class="bg-slate-700 rounded p-4">
-              <p class="text-sm text-gray-400">Avg Coupling</p>
-              <p class="text-2xl font-bold text-purple-400">{{ metrics.avg_coupling.toFixed(1) }}</p>
-            </div>
-          </div>
-
-          <div class="bg-slate-700 rounded p-4">
-            <h4 class="text-sm font-semibold text-gray-300 mb-3">Most Important Functions (PageRank)</h4>
-            <div class="space-y-2">
-              <div
-                v-for="(item, idx) in metrics.top_pagerank.slice(0, 5)"
-                :key="idx"
-                class="flex justify-between items-center text-sm"
-              >
-                <span class="text-gray-300">{{ item.name }}</span>
-                <div class="flex items-center">
-                  <div class="w-32 bg-slate-600 rounded-full h-2 mr-2">
-                    <div
-                      class="bg-green-500 h-2 rounded-full"
-                      :style="{ width: `${item.score * 100}%` }"
-                    ></div>
-                  </div>
-                  <span class="text-gray-400 w-12 text-right">{{ (item.score * 100).toFixed(1) }}%</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <!-- Build Error Banner -->
         <div v-if="buildError" class="alert-error">
@@ -448,44 +391,6 @@ onMounted(async () => {
 
         <!-- Graph Visualization -->
         <div class="section">
-          <div class="mb-4 flex items-center justify-between">
-            <div>
-              <h2 class="text-xl font-semibold text-heading">Graph Visualization</h2>
-              <p class="text-sm text-gray-400 mt-1">
-                {{ useG6 ? 'Radial layout with depth effect. Click nodes to refocus.' : 'Hierarchical view grouped by file. Each column represents a file. Hover for details.' }}
-              </p>
-            </div>
-            <div class="flex items-center gap-3">
-              <!-- Toggle between G6 and v-network-graph -->
-              <div class="flex items-center gap-2 text-sm">
-                <button
-                  @click="useG6 = false"
-                  class="px-3 py-1 rounded transition-colors"
-                  :class="!useG6 ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
-                >
-                  v-network-graph
-                </button>
-                <button
-                  @click="useG6 = true"
-                  class="px-3 py-1 rounded transition-colors"
-                  :class="useG6 ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
-                >
-                  G6 (Prototype)
-                </button>
-              </div>
-              <button
-                @click="handleBuildGraph"
-                :disabled="building || loading"
-                class="btn-primary"
-              >
-                <svg v-if="building" class="animate-spin -ml-1 mr-2 h-4 w-4 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                {{ building ? 'Building...' : 'Build Graph' }}
-              </button>
-            </div>
-          </div>
 
           <!-- G6 Graph (Prototype) -->
           <div v-if="useG6">
@@ -500,7 +405,7 @@ onMounted(async () => {
               :edges="graphData.edges || []"
               :loading="loading"
             />
-            <div v-else class="flex flex-col items-center justify-center h-[600px] bg-slate-900 border border-slate-700 rounded text-gray-400">
+            <div v-else class="flex flex-col items-center justify-center h-[calc(100vh-120px)] bg-slate-900 border border-slate-700 rounded text-gray-400">
               <p>No graph data available</p>
               <p class="text-xs mt-2">graphData: {{ graphData ? 'exists' : 'null' }}</p>
               <p class="text-xs">nodes: {{ graphData?.nodes?.length || 0 }}</p>
@@ -508,7 +413,7 @@ onMounted(async () => {
           </div>
 
           <!-- v-network-graph Container -->
-          <div v-else class="w-full h-[600px] bg-slate-900 border border-slate-700 rounded overflow-hidden">
+          <div v-else class="w-full h-[calc(100vh-120px)] bg-slate-900 border border-slate-700 rounded overflow-hidden">
             <v-network-graph
               v-if="Object.keys(nodes).length > 0"
               :nodes="nodes"

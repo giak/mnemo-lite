@@ -9,7 +9,7 @@
  * - Interactive exploration (drag, zoom, pan)
  */
 
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { Graph } from '@antv/g6'
 
 interface GraphNode {
@@ -45,7 +45,8 @@ const selectedNode = ref<GraphNode | null>(null)
 const hoveredNodeId = ref<string | null>(null)
 const searchQuery = ref('')
 const filterByType = ref<string[]>(['Class', 'Function', 'Method']) // All types enabled by default (case-sensitive)
-const showLabels = ref<'all' | 'focus' | 'none'>('all')
+// const showLabels = ref<'all' | 'focus' | 'none'>('all')
+const currentLayout = ref<'dagre' | 'radial' | 'concentric' | 'force'>('dagre') // Default to dagre for code
 
 // Calculate detailed stats for selected node
 const getNodeStats = (nodeId: string) => {
@@ -121,40 +122,86 @@ const getNodeColor = (type: string): string => {
     default: '#64748b'     // gray
   }
 
-  return baseColors[type] || baseColors.default
+  return baseColors[type || 'default'] || baseColors.default
 }
 
-// Extract readable name from label (better extraction logic)
+// Extract readable name from label
 const extractNodeName = (node: GraphNode): string => {
-  // Try to extract from label first - pattern: method_<hash> or function_<name>
-  if (node.label && node.label.includes('_')) {
-    const parts = node.label.split('_')
-    if (parts.length >= 2 && parts[0] !== parts[1]) {
-      // If second part is not a hash, use it
-      const secondPart = parts[1]
-      if (secondPart.length > 8 && !/^[0-9a-f]{8,}$/.test(secondPart)) {
-        return secondPart
+  // FIXED: Use node.label directly - it already contains the function/class name
+  // The previous logic was extracting filename instead, causing duplicates like "sorter" appearing 6 times
+  if (!node.label) return 'Unknown'
+
+  // Shorten very long labels
+  if (node.label.length > 30) {
+    return node.label.substring(0, 27) + '...'
+  }
+
+  return node.label
+}
+
+// Get layout configuration based on selected type
+const getLayoutConfig = (layoutType: 'dagre' | 'radial' | 'concentric' | 'force', focus?: string) => {
+  const baseConfig = {
+    animated: true,
+    animationDuration: 500
+  }
+
+  switch (layoutType) {
+    case 'dagre':
+      // Hierarchical top-down layout - BEST for code dependencies
+      return {
+        ...baseConfig,
+        type: 'dagre',
+        rankdir: 'TB', // Top to Bottom
+        nodesep: 80,   // Horizontal spacing between nodes
+        ranksep: 100,  // Vertical spacing between ranks
+        controlPoints: true
       }
-    }
+
+    case 'radial':
+      // Radial layout with focus - Good for exploration
+      return {
+        ...baseConfig,
+        type: 'radial',
+        unitRadius: 140,
+        linkDistance: 200,
+        nodeSize: 30,
+        focusNode: focus,
+        preventOverlap: true,
+        strictRadial: false,
+        nodeSpacing: 50
+      }
+
+    case 'concentric':
+      // Concentric circles - Shows importance/centrality
+      return {
+        ...baseConfig,
+        type: 'concentric',
+        minNodeSpacing: 80,
+        preventOverlap: true,
+        sweep: Math.PI * 2,
+        equidistant: false,
+        startAngle: Math.PI / 2,
+        clockwise: false,
+        sortBy: 'degree' // Most connected nodes in center
+      }
+
+    case 'force':
+      // Force-directed - Natural clustering
+      return {
+        ...baseConfig,
+        type: 'force',
+        preventOverlap: true,
+        nodeSize: 30,
+        linkDistance: 150,
+        nodeStrength: -30,
+        edgeStrength: 0.6,
+        collideStrength: 0.8
+      }
+
+    default:
+      return { ...baseConfig, type: 'dagre' }
   }
-
-  // Fallback: extract from file path
-  if (!node.file_path) return node.label.substring(0, 20)
-
-  const filename = node.file_path.split('/').pop() || node.label
-  const nameWithoutExt = filename.replace(/\.(ts|tsx|js|jsx|py|java|go|rs)$/, '')
-
-  // Shorten long names intelligently
-  if (nameWithoutExt.length > 25) {
-    // Keep first and last parts for context
-    const words = nameWithoutExt.split('-')
-    if (words.length > 2) {
-      return `${words[0]}-...-${words[words.length - 1]}`
-    }
-    return nameWithoutExt.substring(0, 22) + '...'
-  }
-
-  return nameWithoutExt
 }
 
 // Initialize G6 graph
@@ -178,7 +225,7 @@ const initGraph = async () => {
     complexity: filteredEdges.filter(e => e.source === n.id || e.target === n.id).length
   }))
   const mostComplex = complexities.sort((a, b) => b.complexity - a.complexity)[0]
-  focusNodeId.value = mostComplex?.id || filteredNodes[0].id
+  focusNodeId.value = mostComplex?.id || filteredNodes[0]?.id || 'root'
 
   // Calculate depths for opacity gradient
   const depths = calculateDepths(focusNodeId.value)
@@ -237,11 +284,7 @@ const initGraph = async () => {
           stroke: '#f59e0b',
           strokeOpacity: edgeOpacity,
           lineWidth: 2,
-          endArrow: {
-            path: 'M 0,0 L 8,4 L 8,-4 Z',
-            fill: '#f59e0b',
-            fillOpacity: edgeOpacity
-          }
+          endArrow: true
         }
       }
     })
@@ -267,23 +310,14 @@ const initGraph = async () => {
     edge: {
       type: 'quadratic' // Curved edges for better visibility
     },
-    layout: {
-      type: 'radial',
-      unitRadius: 140, // Increased for more spacing
-      linkDistance: 200, // Increased to reduce overlap
-      nodeSize: 30,
-      focusNode: focusNodeId.value,
-      preventOverlap: true,
-      strictRadial: false,
-      nodeSpacing: 50 // Add spacing between nodes
-    },
+    layout: getLayoutConfig(currentLayout.value, focusNodeId.value),
     behaviors: ['drag-canvas', 'zoom-canvas', 'drag-element', 'click-select'],
     plugins: [
       {
         type: 'tooltip',
         trigger: 'hover',
         enable: (e: any) => e.targetType === 'node',
-        getContent: (e: any, items: any[]) => {
+        getContent: (_e: any, items: any[]) => {
           const item = items[0]
           const stats = getNodeStats(item.id)
           if (!stats) return '<div>No data</div>'
@@ -382,12 +416,12 @@ const initGraph = async () => {
     })
 
     // Update node styles for highlighting
-    const allNodes = graph.getNodeData()
+    const allNodes = graph?.getNodeData() || []
     allNodes.forEach((node: any) => {
       const isConnected = connectedNodes.has(node.id)
       const isHovered = node.id === nodeId
 
-      graph.updateNodeData([{
+      graph?.updateNodeData([{
         id: node.id,
         style: {
           ...node.style,
@@ -398,11 +432,11 @@ const initGraph = async () => {
     })
 
     // Update edge styles for highlighting
-    const allEdges = graph.getEdgeData()
+    const allEdges = graph?.getEdgeData() || []
     allEdges.forEach((edge: any) => {
       const isConnected = connectedEdges.has(edge.id)
 
-      graph.updateEdgeData([{
+      graph?.updateEdgeData([{
         id: edge.id,
         style: {
           ...edge.style,
@@ -413,19 +447,19 @@ const initGraph = async () => {
     })
   })
 
-  graph.on('node:pointerleave', (event: any) => {
+  graph.on('node:pointerleave', (_event: any) => {
     hoveredNodeId.value = null
 
     // Reset all node and edge styles
     const depths = calculateDepths(focusNodeId.value!)
 
-    const allNodes = graph.getNodeData()
+    const allNodes = graph?.getNodeData() || []
     allNodes.forEach((node: any) => {
       const depth = depths.get(node.id) ?? 99
       const isRoot = node.id === focusNodeId.value
       const opacity = isRoot ? 1.0 : Math.max(0.4, 1.0 - (depth * 0.12))
 
-      graph.updateNodeData([{
+      graph?.updateNodeData([{
         id: node.id,
         style: {
           ...node.style,
@@ -435,14 +469,14 @@ const initGraph = async () => {
       }])
     })
 
-    const allEdges = graph.getEdgeData()
+    const allEdges = graph?.getEdgeData() || []
     allEdges.forEach((edge: any) => {
       const sourceDepth = depths.get(edge.source) ?? 99
       const targetDepth = depths.get(edge.target) ?? 99
       const avgDepth = (sourceDepth + targetDepth) / 2
       const edgeOpacity = Math.max(0.25, 1.0 - (avgDepth * 0.15))
 
-      graph.updateEdgeData([{
+      graph?.updateEdgeData([{
         id: edge.id,
         style: {
           ...edge.style,
@@ -470,7 +504,7 @@ const refocusGraph = async (newFocusId: string) => {
     const isRoot = node.id === newFocusId
     const complexity = calculateComplexity(node.id)
 
-    graph.updateNodeData([{
+    graph?.updateNodeData([{
       id: node.id,
       style: {
         fill: getNodeColor(node.data.nodeType),
@@ -482,17 +516,7 @@ const refocusGraph = async (newFocusId: string) => {
   })
 
   // Update layout with new focus
-  graph.setLayout({
-    type: 'radial',
-    unitRadius: 140,
-    linkDistance: 200,
-    nodeSize: 30,
-    focusNode: newFocusId,
-    preventOverlap: true,
-    strictRadial: false,
-    nodeSpacing: 50,
-    animated: true
-  })
+  graph.setLayout(getLayoutConfig(currentLayout.value, newFocusId))
 
   await graph.layout()
 
@@ -535,8 +559,26 @@ const zoomOut = () => {
 
 const resetView = () => {
   if (graph) {
-    graph.fitView({ padding: 20, duration: 500 })
+    graph.fitView({ duration: 500 } as any)
   }
+}
+
+// Change layout algorithm
+const changeLayout = async (layoutType: 'dagre' | 'radial' | 'concentric' | 'force') => {
+  if (!graph) return
+
+  currentLayout.value = layoutType
+
+  // Apply new layout
+  graph.setLayout(getLayoutConfig(layoutType, focusNodeId.value || undefined))
+  await graph.layout()
+
+  // Fit view after layout
+  setTimeout(() => {
+    graph?.fitView({ duration: 500 } as any)
+  }, 600)
+
+  console.log('[G6] Layout changed to:', layoutType)
 }
 
 // Cleanup
@@ -548,10 +590,29 @@ onUnmounted(() => {
 })
 
 // Watch for data changes
-watch(() => [props.nodes, props.edges], () => {
+watch(() => [props.nodes, props.edges], async () => {
+  // Properly destroy existing graph before creating new one
   if (graph) {
-    graph.destroy()
+    try {
+      graph.destroy()
+      graph = null
+
+      // Wait a tick for DOM cleanup
+      await nextTick()
+
+      // Clear the container
+      if (containerRef.value) {
+        containerRef.value.innerHTML = ''
+      }
+    } catch (e) {
+      console.error('[G6] Error destroying graph:', e)
+    }
   }
+
+  // Small delay to ensure cleanup is complete
+  await new Promise(resolve => setTimeout(resolve, 50))
+
+  // Initialize new graph
   initGraph()
 }, { deep: true })
 
@@ -563,93 +624,126 @@ onMounted(() => {
 
 <template>
   <div class="g6-graph-wrapper">
-    <!-- Header with Controls -->
-    <div class="mb-4 space-y-3">
-      <div class="flex items-center justify-between">
-        <div>
-          <h3 class="text-lg font-semibold text-gray-200">G6 Radial Graph - Interactive Visualization</h3>
-          <p class="text-sm text-gray-400 mt-1">
-            Hover to highlight connections. Click to refocus. Search or filter nodes.
-          </p>
-        </div>
-        <div v-if="focusNodeId" class="text-xs text-gray-500">
-          Focus: <span class="text-amber-400 font-mono">{{ focusNodeId.slice(0, 8) }}...</span>
+    <!-- Ultra-Compact Controls Bar -->
+    <div class="mb-2 bg-slate-800/30 rounded px-3 py-1.5 flex items-center gap-3 border border-slate-700/50">
+      <!-- Search (compact) -->
+      <div class="flex-1 max-w-xs">
+        <div class="relative">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search..."
+            class="w-full px-2 py-1 pl-7 text-xs bg-slate-700 border-0 rounded text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+          />
+          <svg class="absolute left-2 top-1.5 w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
         </div>
       </div>
 
-      <!-- Controls Bar -->
-      <div class="flex items-center gap-3 flex-wrap">
-        <!-- Search -->
-        <div class="flex-1 min-w-[200px] max-w-md">
-          <div class="relative">
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="Search nodes by name..."
-              class="w-full px-3 py-1.5 pl-9 text-sm bg-slate-800 border border-slate-600 rounded text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-            />
-            <svg class="absolute left-3 top-2 w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-        </div>
+      <!-- Type Filters (ultra-compact) -->
+      <div class="flex items-center gap-1">
+        <button
+          @click="toggleFilter('Class')"
+          class="px-1.5 py-0.5 text-[10px] rounded transition-colors font-medium"
+          :class="filterByType.includes('Class') ? 'bg-blue-500 text-white' : 'bg-slate-700 text-gray-400'"
+          title="Toggle Classes"
+        >
+          C
+        </button>
+        <button
+          @click="toggleFilter('Function')"
+          class="px-1.5 py-0.5 text-[10px] rounded transition-colors font-medium"
+          :class="filterByType.includes('Function') ? 'bg-green-500 text-white' : 'bg-slate-700 text-gray-400'"
+          title="Toggle Functions"
+        >
+          F
+        </button>
+        <button
+          @click="toggleFilter('Method')"
+          class="px-1.5 py-0.5 text-[10px] rounded transition-colors font-medium"
+          :class="filterByType.includes('Method') ? 'bg-purple-500 text-white' : 'bg-slate-700 text-gray-400'"
+          title="Toggle Methods"
+        >
+          M
+        </button>
+      </div>
 
-        <!-- Type Filters -->
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-gray-500">Show:</span>
-          <button
-            @click="toggleFilter('Class')"
-            class="px-2 py-1 text-xs rounded transition-colors"
-            :class="filterByType.includes('Class') ? 'bg-blue-500 text-white' : 'bg-slate-700 text-gray-400'"
-          >
-            Classes ({{ props.nodes.filter(n => n.type === 'Class').length }})
-          </button>
-          <button
-            @click="toggleFilter('Function')"
-            class="px-2 py-1 text-xs rounded transition-colors"
-            :class="filterByType.includes('Function') ? 'bg-green-500 text-white' : 'bg-slate-700 text-gray-400'"
-          >
-            Functions ({{ props.nodes.filter(n => n.type === 'Function').length }})
-          </button>
-          <button
-            @click="toggleFilter('Method')"
-            class="px-2 py-1 text-xs rounded transition-colors"
-            :class="filterByType.includes('Method') ? 'bg-purple-500 text-white' : 'bg-slate-700 text-gray-400'"
-          >
-            Methods ({{ props.nodes.filter(n => n.type === 'Method').length }})
-          </button>
-        </div>
+      <div class="h-4 w-px bg-slate-600"></div>
 
-        <!-- Zoom Controls -->
-        <div class="flex items-center gap-1 ml-auto">
-          <button
-            @click="zoomIn"
-            class="p-1.5 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded transition-colors"
-            title="Zoom In"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
-            </svg>
-          </button>
-          <button
-            @click="zoomOut"
-            class="p-1.5 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded transition-colors"
-            title="Zoom Out"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM7 10h6" />
-            </svg>
-          </button>
-          <button
-            @click="resetView"
-            class="p-1.5 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded transition-colors"
-            title="Reset View"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
-        </div>
+      <!-- Layout Switcher (NEW) -->
+      <div class="flex items-center gap-1">
+        <span class="text-[10px] text-gray-500 mr-1">Layout:</span>
+        <button
+          @click="changeLayout('dagre')"
+          class="px-2 py-0.5 text-[10px] rounded transition-colors font-medium"
+          :class="currentLayout === 'dagre' ? 'bg-cyan-500 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
+          title="Hierarchical tree layout (best for code)"
+        >
+          Tree
+        </button>
+        <button
+          @click="changeLayout('radial')"
+          class="px-2 py-0.5 text-[10px] rounded transition-colors font-medium"
+          :class="currentLayout === 'radial' ? 'bg-cyan-500 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
+          title="Radial layout with focus"
+        >
+          Radial
+        </button>
+        <button
+          @click="changeLayout('concentric')"
+          class="px-2 py-0.5 text-[10px] rounded transition-colors font-medium"
+          :class="currentLayout === 'concentric' ? 'bg-cyan-500 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
+          title="Concentric circles (shows importance)"
+        >
+          Circle
+        </button>
+        <button
+          @click="changeLayout('force')"
+          class="px-2 py-0.5 text-[10px] rounded transition-colors font-medium"
+          :class="currentLayout === 'force' ? 'bg-cyan-500 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
+          title="Force-directed (natural clustering)"
+        >
+          Force
+        </button>
+      </div>
+
+      <!-- Focus indicator (if active) -->
+      <div v-if="focusNodeId" class="text-[10px] text-gray-500 px-2 py-0.5 bg-slate-700 rounded">
+        <span class="text-amber-400 font-mono">{{ focusNodeId.slice(0, 6) }}</span>
+      </div>
+
+      <div class="flex-1"></div>
+
+      <!-- Zoom Controls (ultra-compact) -->
+      <div class="flex items-center gap-0.5">
+        <button
+          @click="zoomIn"
+          class="p-1 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded transition-colors"
+          title="Zoom In"
+        >
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
+          </svg>
+        </button>
+        <button
+          @click="zoomOut"
+          class="p-1 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded transition-colors"
+          title="Zoom Out"
+        >
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM7 10h6" />
+          </svg>
+        </button>
+        <button
+          @click="resetView"
+          class="p-1 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded transition-colors"
+          title="Reset View"
+        >
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -785,10 +879,10 @@ onMounted(() => {
               <div v-if="selectedNodeStats.incomingCount > 0" class="space-y-1 max-h-32 overflow-y-auto">
                 <div
                   v-for="node in selectedNodeStats.incomingNodes.slice(0, 5)"
-                  :key="node.id"
+                  :key="node?.id"
                   class="text-xs text-gray-400 pl-6 py-1 hover:text-gray-200 transition-colors font-mono truncate"
                 >
-                  {{ extractNodeName(node) }}
+                  {{ node ? extractNodeName(node) : 'Unknown' }}
                 </div>
                 <div v-if="selectedNodeStats.incomingCount > 5" class="text-xs text-gray-500 pl-6">
                   +{{ selectedNodeStats.incomingCount - 5 }} more...
@@ -807,10 +901,10 @@ onMounted(() => {
               <div v-if="selectedNodeStats.outgoingCount > 0" class="space-y-1 max-h-32 overflow-y-auto">
                 <div
                   v-for="node in selectedNodeStats.outgoingNodes.slice(0, 5)"
-                  :key="node.id"
+                  :key="node?.id"
                   class="text-xs text-gray-400 pl-6 py-1 hover:text-gray-200 transition-colors font-mono truncate"
                 >
-                  {{ extractNodeName(node) }}
+                  {{ node ? extractNodeName(node) : 'Unknown' }}
                 </div>
                 <div v-if="selectedNodeStats.outgoingCount > 5" class="text-xs text-gray-500 pl-6">
                   +{{ selectedNodeStats.outgoingCount - 5 }} more...

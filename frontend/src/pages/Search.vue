@@ -4,7 +4,7 @@
  * Simple code search interface with filters
  */
 
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useCodeSearch } from '@/composables/useCodeSearch'
 
 const { results, loading, error, totalResults, search, clear } = useCodeSearch()

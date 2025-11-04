@@ -66,6 +66,7 @@ interface UseCodeGraphReturn {
   metrics: ReturnType<typeof ref<RepositoryMetrics | null>>
   fetchStats: (repository: string) => Promise<void>
   fetchGraphData: (repository: string, limit?: number) => Promise<void>
+  fetchModuleGraphData: (repository: string, limit?: number) => Promise<void>
   buildGraph: (repository: string, language?: string) => Promise<void>
   fetchRepositories: () => Promise<void>
   fetchMetrics: (repository: string) => Promise<void>
@@ -164,6 +165,31 @@ export function useCodeGraph(): UseCodeGraphReturn {
     }
   }
 
+  const fetchModuleGraphData = async (repository: string = 'MnemoLite', limit: number = 5000) => {
+    loading.value = true
+    error.value = null
+
+    try {
+      const response = await fetch(
+        `http://localhost:8001/v1/code/graph/module/${repository}?limit=${limit}`
+      )
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch module graph data: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      graphData.value = data
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
+      error.value = errorMessage
+      console.error('Module graph data error:', err)
+      graphData.value = null
+    } finally {
+      loading.value = false
+    }
+  }
+
   const fetchRepositories = async () => {
     try {
       const response = await fetch('http://localhost:8001/v1/code/graph/repositories')
@@ -214,6 +240,7 @@ export function useCodeGraph(): UseCodeGraphReturn {
     metrics,
     fetchStats,
     fetchGraphData,
+    fetchModuleGraphData,
     buildGraph,
     fetchRepositories,
     fetchMetrics,

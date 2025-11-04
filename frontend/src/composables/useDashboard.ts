@@ -4,7 +4,7 @@
  */
 
 import { ref, onMounted, onUnmounted } from 'vue'
-import type { HealthStatus, EmbeddingStats, DashboardData, DashboardError } from '@/types/dashboard'
+import type { DashboardData, DashboardError } from '@/types/dashboard'
 
 const API_BASE_URL = 'http://localhost:8001/api/v1/dashboard'
 
