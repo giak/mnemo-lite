@@ -80,6 +80,10 @@ class TypeScriptMetadataExtractor:
             "(import_statement source: (string) @import_source)"
         )
 
+        # NOTE: Type-only imports/exports cannot be captured with Query syntax
+        # because tree-sitter doesn't support matching literal "type" keyword.
+        # We use manual AST traversal instead (see extract_imports method).
+
         self.re_exports_query = Query(
             self.language,
             "(export_statement (export_clause (export_specifier name: (identifier) @export_name)) source: (string) @export_source)"
@@ -118,6 +122,125 @@ class TypeScriptMetadataExtractor:
            (text.startswith('"') and text.endswith('"')):
             return text[1:-1]
         return text
+
+    def _extract_type_imports_exports(
+        self,
+        root_node: Node,
+        source_code: str,
+        imports: list[str],
+        imports_seen: set[str]
+    ):
+        """
+        Extract type-only imports and exports using manual AST traversal.
+
+        CRITICAL FIX 2025-11-04: Resolves 40% isolated nodes bug.
+
+        Handles:
+        - import type { Foo, Bar } from './types'
+        - export type { Baz } from './types'
+
+        Cannot use Query syntax because tree-sitter doesn't support matching
+        literal "type" keyword. Instead, we walk the AST manually and check
+        for child nodes with type="type".
+
+        Args:
+            root_node: Root AST node
+            source_code: Full source code
+            imports: List to append extracted imports to
+            imports_seen: Set to track duplicates
+        """
+        def walk_tree(node: Node):
+            # Check for type imports: import type { ... } from '...'
+            if node.type == "import_statement":
+                has_type = any(child.type == "type" for child in node.children)
+                if has_type:
+                    self._process_type_import(node, source_code, imports, imports_seen)
+
+            # Check for type exports: export type { ... } from '...'
+            elif node.type == "export_statement":
+                has_type = any(child.type == "type" for child in node.children)
+                has_from = any(child.type == "from" for child in node.children)
+                if has_type and has_from:
+                    self._process_type_export(node, source_code, imports, imports_seen)
+
+            # Recurse to children
+            for child in node.children:
+                walk_tree(child)
+
+        walk_tree(root_node)
+
+    def _process_type_import(
+        self,
+        import_node: Node,
+        source_code: str,
+        imports: list[str],
+        imports_seen: set[str]
+    ):
+        """Process a type-only import statement."""
+        source_str = None
+        names = []
+        source_bytes = source_code.encode('utf-8')
+
+        # Extract source and named imports
+        for child in import_node.children:
+            if child.type == "string":
+                source_str = self._extract_string_literal(child, source_code)
+            elif child.type == "import_clause":
+                # Look for named_imports
+                for subchild in child.children:
+                    if subchild.type == "named_imports":
+                        # Extract import_specifier identifiers
+                        for specifier in subchild.children:
+                            if specifier.type == "import_specifier":
+                                for id_node in specifier.children:
+                                    if id_node.type == "identifier":
+                                        name_bytes = source_bytes[id_node.start_byte:id_node.end_byte]
+                                        name = name_bytes.decode('utf-8')
+                                        names.append(name)
+
+        # Add to imports list
+        if source_str and names:
+            for name in names:
+                import_ref = f"{source_str}.{name}"
+                if import_ref not in imports_seen:
+                    imports.append(import_ref)
+                    imports_seen.add(import_ref)
+                    self.logger.debug(f"Extracted type import: {import_ref}")
+
+    def _process_type_export(
+        self,
+        export_node: Node,
+        source_code: str,
+        imports: list[str],
+        imports_seen: set[str]
+    ):
+        """Process a type-only export statement."""
+        source_str = None
+        names = []
+        source_bytes = source_code.encode('utf-8')
+
+        # Extract source and named exports
+        for child in export_node.children:
+            if child.type == "string":
+                source_str = self._extract_string_literal(child, source_code)
+            elif child.type == "export_clause":
+                # Extract export_specifier identifiers
+                for specifier in child.children:
+                    if specifier.type == "export_specifier":
+                        for id_node in specifier.children:
+                            if id_node.type == "identifier":
+                                name_bytes = source_bytes[id_node.start_byte:id_node.end_byte]
+                                name = name_bytes.decode('utf-8')
+                                names.append(name)
+
+        # Add to imports list (exports create edges too)
+        if source_str and names:
+            for name in names:
+                import_ref = f"{source_str}.{name}"
+                if import_ref not in imports_seen:
+                    imports.append(import_ref)
+                    imports_seen.add(import_ref)
+                    self.logger.debug(f"Extracted type export: {import_ref}")
 
     def _is_blacklisted(self, call_name: str) -> bool:
         """
@@ -379,6 +502,8 @@ class TypeScriptMetadataExtractor:
         - Default imports: import React from 'react'
         - Side-effect imports: import './styles.css'
         - Re-exports: export { MyService } from './services'
+        - Type-only imports: import type { Interface } from './types' (TypeScript)
+        - Type-only exports: export type { Type } from './types' (TypeScript)
 
         Args:
             tree: tree-sitter AST tree
@@ -391,15 +516,18 @@ class TypeScriptMetadataExtractor:
             - Named import: 'module.ImportName' (e.g., './models.MyClass')
             - Namespace/default: 'module' (e.g., 'lodash')
             - Side-effect: 'module' (e.g., './styles.css')
+            - Type import: 'module.TypeName' (e.g., './types.Interface')
 
         Example:
             ```typescript
             import { MyClass } from './models'
+            import type { MyInterface } from './types'
             import * as utils from 'lodash'
             export { MyService } from './services'
+            export type { MyType } from './types'
             ```
 
-            Returns: ['./models.MyClass', 'lodash', './services.MyService']
+            Returns: ['./models.MyClass', './types.MyInterface', 'lodash', './services.MyService', './types.MyType']
         """
         imports = []
         imports_seen = set()  # Track to avoid duplicates from side-effect query
@@ -479,6 +607,11 @@ class TypeScriptMetadataExtractor:
             # TODO: Find a way to distinguish pure side-effect imports from imports with clauses
             # They will be added in a future iteration once we have a better query
             pass
+
+            # 6. Extract type-only imports/exports (TypeScript)
+            # CRITICAL FIX 2025-11-04: This resolves 40% isolated nodes bug
+            # Uses manual AST traversal because Query syntax cannot match "type" keyword
+            self._extract_type_imports_exports(root_node, source_code, imports, imports_seen)
 
         except Exception as e:
             self.logger.error(f"Failed to extract imports: {e}", exc_info=True)
