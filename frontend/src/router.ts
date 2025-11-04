@@ -23,9 +23,19 @@ const router = createRouter({
       component: () => import('@/pages/Graph.vue')
     },
     {
+      path: '/orgchart',
+      name: 'orgchart',
+      component: () => import('@/pages/Orgchart.vue')
+    },
+    {
       path: '/logs',
       name: 'logs',
       component: () => import('@/pages/Logs.vue')
+    },
+    {
+      path: '/memories',
+      name: 'memories',
+      component: () => import('@/pages/Memories.vue')
     }
   ]
 })
