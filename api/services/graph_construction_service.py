@@ -19,7 +19,7 @@ from db.repositories.node_repository import NodeRepository
 from db.repositories.edge_repository import EdgeRepository
 from db.repositories.code_chunk_repository import CodeChunkRepository
 from models.code_chunk_models import CodeChunkModel
-from models.graph_models import GraphStats, NodeModel, EdgeModel
+from models.graph_models import GraphStats, NodeModel, EdgeModel, NodeCreate, EdgeCreate
 from utils.timeout import with_timeout, TimeoutError
 from config.timeouts import get_timeout
 
@@ -1305,3 +1305,419 @@ class GraphConstructionService:
 
         # 5. Not found
         return None
+
+    # =========================================================================
+    # MODULE-LEVEL GRAPH CONSTRUCTION (File-based dependencies for orgchart)
+    # =========================================================================
+
+    async def build_module_graph(self, repository: str) -> Dict[str, Any]:
+        """
+        Build MODULE-level dependency graph from existing chunks.
+
+        PUBLIC API for creating file-based dependency visualization.
+        This is the entry point called by the indexing pipeline.
+
+        Process:
+        1. Group chunks by file → file_path : [chunks]
+        2. Create Module nodes → one per file with aggregated metadata
+        3. Extract file-level edges → resolve imports to target files
+        4. Validate graph quality → check isolation rate
+        5. Save to database → commit Module nodes + edges
+
+        Args:
+            repository: Repository name (e.g., 'code_test', 'CVgenerator')
+
+        Returns:
+            {
+                'nodes_created': 123,
+                'edges_created': 250,
+                'isolation_rate': 0.04,  # 4%
+                'isolated_files': ['config/vite.config.ts'],
+                'duration_ms': 234
+            }
+
+        EPIC-26 Story 26.4: MODULE-level graph for orgchart visualization
+        """
+        import hashlib
+        import os
+
+        start_time = time.time()
+
+        self.logger.info(f"Building MODULE graph for repository: {repository}")
+
+        # Step 1: Group chunks by file
+        self.logger.info("Step 1/5: Grouping chunks by file...")
+        chunks_by_file = await self._group_chunks_by_file(repository)
+        self.logger.info(f"  → Found {len(chunks_by_file)} files")
+
+        # Step 2: Create Module nodes
+        self.logger.info("Step 2/5: Creating Module nodes...")
+        module_nodes = []
+        for file_path, chunks in chunks_by_file.items():
+            node = self._create_module_node(file_path, chunks, repository)
+            module_nodes.append(node)
+        self.logger.info(f"  → Created {len(module_nodes)} Module nodes")
+
+        # Step 3: Extract module edges
+        self.logger.info("Step 3/5: Extracting file-level edges...")
+        module_edges = self._extract_module_edges(chunks_by_file)
+        self.logger.info(f"  → Extracted {len(module_edges)} import edges")
+
+        # Step 4: Validate graph quality
+        self.logger.info("Step 4/5: Validating graph quality...")
+        validation = self._validate_module_edges(module_edges, chunks_by_file)
+        self.logger.info(
+            f"  → Isolation rate: {validation['isolation_rate']*100:.1f}% "
+            f"({validation['isolated_files']}/{validation['total_files']} files)"
+        )
+
+        # Step 5: Save to database
+        self.logger.info("Step 5/5: Saving Module graph to database...")
+        save_stats = await self._save_module_graph(module_nodes, module_edges, repository)
+
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        result = {
+            **save_stats,
+            **validation,
+            'duration_ms': duration_ms
+        }
+
+        self.logger.info(
+            f"✅ MODULE graph built successfully in {duration_ms}ms: "
+            f"{result['nodes_created']} nodes, {result['edges_created']} edges, "
+            f"{result['isolation_rate']*100:.1f}% isolation"
+        )
+
+        return result
+
+    async def _group_chunks_by_file(self, repository: str) -> Dict[str, List[CodeChunkModel]]:
+        """
+        Group existing chunks by their source file path.
+
+        Args:
+            repository: Repository name to filter chunks
+
+        Returns:
+            {
+                '/app/src/services/validation.ts': [chunk1, chunk2, chunk3],
+                '/app/src/models/user.ts': [chunk4, chunk5],
+                ...
+            }
+        """
+        # Fetch all chunks for this repository
+        chunks = await self.chunk_repo.get_by_repository(repository)
+
+        # Group by file_path
+        chunks_by_file = defaultdict(list)
+        for chunk in chunks:
+            file_path = chunk.file_path
+            if file_path:
+                chunks_by_file[file_path].append(chunk)
+
+        return dict(chunks_by_file)
+
+    def _create_module_node(
+        self,
+        file_path: str,
+        chunks: List[CodeChunkModel],
+        repository: str
+    ) -> Dict[str, Any]:
+        """
+        Create a Module node from file chunks.
+
+        Aggregates metadata from all chunks in the file:
+        - Count exports (classes, functions exported)
+        - Sum lines of code
+        - Extract all imports
+        - Calculate file hash for node_id
+
+        Args:
+            file_path: Absolute path to source file
+            chunks: List of chunks from this file
+            repository: Repository name
+
+        Returns:
+            Module node dict ready to save to database
+        """
+        import hashlib
+
+        # Aggregate imports from all chunks
+        all_imports = set()
+        for chunk in chunks:
+            chunk_metadata = chunk.metadata if chunk.metadata else {}
+            for imp in chunk_metadata.get('imports', []):
+                # imp is a string like "./types/result.Result"
+                if imp:
+                    all_imports.add(imp)
+
+        # Count exports (chunks with 'exported': true)
+        exports_count = sum(
+            1 for c in chunks
+            if (c.metadata and c.metadata.get('exported', False))
+        )
+
+        # Sum lines of code
+        total_loc = sum(
+            c.metadata.get('loc', 0) if c.metadata else 0
+            for c in chunks
+        )
+
+        # Generate UUID for node_id
+        node_id = uuid.uuid4()
+
+        # Get relative path for display name
+        relative_path = self._get_relative_path(file_path)
+
+        # Get language from first chunk
+        language = chunks[0].language if chunks else 'unknown'
+
+        return {
+            'node_id': node_id,
+            'node_type': 'Module',
+            'properties': {
+                'name': relative_path,
+                'file_path': file_path,
+                'repository': repository,
+                'imports': list(all_imports),
+                'exports_count': exports_count,
+                'loc': total_loc,
+                'chunk_count': len(chunks),
+                'language': language
+            }
+        }
+
+    def _get_relative_path(self, absolute_path: str) -> str:
+        """
+        Convert absolute path to repository-relative path.
+
+        Examples:
+            /app/src/services/validation.ts → src/services/validation.ts
+            /app/packages/core/user.ts → packages/core/user.ts
+
+        Args:
+            absolute_path: Full filesystem path
+
+        Returns:
+            Relative path from repository root
+        """
+        import os
+
+        # Remove /app/ prefix (Docker container path)
+        if absolute_path.startswith('/app/'):
+            return absolute_path[5:]  # Remove '/app/'
+
+        # Fallback: use basename if path doesn't match expected format
+        return os.path.basename(absolute_path)
+
+    def _extract_module_edges(
+        self,
+        chunks_by_file: Dict[str, List[CodeChunkModel]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Convert chunk-level imports to file-level edges.
+
+        Example:
+            File: src/services/validation.ts
+            Chunk imports: ['./types/result.Result', '../utils/helpers.validateEmail']
+            → Edges: [
+                (validation.ts → types/result.ts),
+                (validation.ts → utils/helpers.ts)
+            ]
+        """
+        edges = []
+
+        for source_file, chunks in chunks_by_file.items():
+            # Aggregate all imports from all chunks in this file
+            all_imports = set()
+            for chunk in chunks:
+                chunk_metadata = chunk.metadata if chunk.metadata else {}
+                for imp in chunk_metadata.get('imports', []):
+                    if imp:
+                        # Extract import path (before the dot for symbols)
+                        # E.g., "./types/result.Result" → "./types/result"
+                        import_path = imp.rsplit('.', 1)[0] if '.' in imp else imp
+                        all_imports.add(import_path)
+
+            # Resolve each import to target file path
+            for import_path in all_imports:
+                target_file = self._resolve_import_to_file(
+                    import_path=import_path,
+                    source_file=source_file,
+                    chunks_by_file=chunks_by_file
+                )
+
+                if target_file and target_file in chunks_by_file:
+                    edges.append({
+                        'source': source_file,
+                        'target': target_file,
+                        'relation_type': 'imports'
+                    })
+
+        return edges
+
+    def _resolve_import_to_file(
+        self,
+        import_path: str,
+        source_file: str,
+        chunks_by_file: Dict[str, List[CodeChunkModel]]
+    ) -> Optional[str]:
+        """
+        Resolve import statement to actual file path.
+
+        Cases handled:
+        1. Relative imports: './user' → 'src/models/user.ts'
+        2. Absolute imports: '@/services/api' → 'src/services/api.ts'
+        3. Index files: './models' → 'src/models/index.ts'
+        4. Extensions: './user.ts' → 'src/models/user.ts'
+
+        Args:
+            import_path: Import string from code (e.g., './types/result')
+            source_file: Absolute path of importing file
+            chunks_by_file: Map of file paths to chunks (for existence check)
+
+        Returns:
+            Absolute path of target file, or None if not found
+        """
+        import os
+
+        # Case 1: Node modules (skip)
+        if not import_path.startswith('.') and not import_path.startswith('@'):
+            return None  # External package, not in our codebase
+
+        # Case 2: Path alias (@/ → /app/src/)
+        if import_path.startswith('@/'):
+            import_path = import_path.replace('@/', '/app/src/')
+
+        # Case 3: Relative path resolution
+        if import_path.startswith('.'):
+            source_dir = os.path.dirname(source_file)
+            resolved = os.path.normpath(
+                os.path.join(source_dir, import_path)
+            )
+        else:
+            resolved = import_path
+
+        # Case 4: Try file extensions (.ts, .tsx, .js, .py, etc.)
+        candidates = [
+            f"{resolved}.ts",
+            f"{resolved}.tsx",
+            f"{resolved}.js",
+            f"{resolved}.jsx",
+            f"{resolved}.py",
+            f"{resolved}/index.ts",
+            f"{resolved}/index.tsx",
+            f"{resolved}/index.js",
+            f"{resolved}/index.jsx",
+            resolved  # Already has extension
+        ]
+
+        # Check which candidate exists in our chunks
+        for candidate in candidates:
+            if candidate in chunks_by_file:
+                return candidate
+
+        return None  # Import target not found (external or missing)
+
+    def _validate_module_edges(
+        self,
+        edges: List[Dict[str, Any]],
+        chunks_by_file: Dict[str, List[CodeChunkModel]]
+    ) -> Dict[str, Any]:
+        """
+        Validate module graph quality metrics.
+
+        Returns:
+            {
+                'total_files': 123,
+                'total_edges': 250,
+                'isolated_files': 5,
+                'isolation_rate': 0.04,  # 4% - excellent!
+                'unresolved_imports': 12
+            }
+        """
+        file_ids = set(chunks_by_file.keys())
+        files_with_edges = set()
+
+        for edge in edges:
+            files_with_edges.add(edge['source'])
+            files_with_edges.add(edge['target'])
+
+        isolated = file_ids - files_with_edges
+
+        return {
+            'total_files': len(file_ids),
+            'total_edges': len(edges),
+            'isolated_files': len(isolated),
+            'isolation_rate': len(isolated) / len(file_ids) if file_ids else 0,
+            'isolated_file_list': list(isolated)[:10]  # First 10 for debugging
+        }
+
+    async def _save_module_graph(
+        self,
+        module_nodes: List[Dict[str, Any]],
+        module_edges: List[Dict[str, Any]],
+        repository: str
+    ) -> Dict[str, Any]:
+        """
+        Save Module nodes and edges to database.
+
+        IMPORTANT: Uses node_type='Module' to distinguish from detailed nodes.
+        Frontend will query: WHERE node_type = 'Module'
+
+        Args:
+            module_nodes: List of Module node dicts
+            module_edges: List of edge dicts
+            repository: Repository name
+
+        Returns:
+            Statistics dict with counts
+        """
+        # 1. Create and save nodes one by one
+        node_lookup = {}  # file_path → node_id
+        nodes_created = 0
+
+        for node_data in module_nodes:
+            # Create NodeCreate instance
+            node_create = NodeCreate(
+                node_type=node_data['node_type'],
+                label=node_data['properties'].get('name', 'unknown'),
+                properties=node_data['properties']
+            )
+
+            # Save to database
+            created_node = await self.node_repo.create(node_create)
+
+            # Add to lookup
+            file_path = node_data['properties']['file_path']
+            node_lookup[file_path] = created_node.node_id
+            nodes_created += 1
+
+        # 2. Create and save edges one by one
+        edges_created = 0
+
+        for edge_data in module_edges:
+            source_path = edge_data['source']
+            target_path = edge_data['target']
+
+            source_id = node_lookup.get(source_path)
+            target_id = node_lookup.get(target_path)
+
+            if source_id and target_id:
+                # Create EdgeCreate instance
+                edge_create = EdgeCreate(
+                    source_node_id=source_id,
+                    target_node_id=target_id,
+                    relation_type=edge_data['relation_type'],
+                    properties={}
+                )
+
+                # Save to database
+                await self.edge_repo.create(edge_create)
+                edges_created += 1
+
+        return {
+            'nodes_created': nodes_created,
+            'edges_created': edges_created,
+            'repository': repository
+        }

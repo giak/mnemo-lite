@@ -349,3 +349,53 @@ class TestGraphConstructionIntegration:
         assert properties.get("parent_module") == "cv", f"Expected parent_module='cv', got {properties.get('parent_module')}"
         assert properties.get("parent_package") == "core", f"Expected parent_package='core', got {properties.get('parent_package')}"
         assert node_dict["node_type"] == "Class"
+
+    async def test_create_virtual_package_and_module_nodes(self, test_engine):
+        """Test creation of virtual Package and Module nodes."""
+        from datetime import datetime, timezone
+
+        service = GraphConstructionService(test_engine)
+
+        # Create mock file nodes with parent metadata
+        file_nodes = [
+            NodeModel(
+                node_id=uuid.uuid4(),
+                label="validation.service.ts",
+                node_type="File",
+                properties={
+                    "repository": "code_test",
+                    "parent_package": "core",
+                    "parent_module": "cv"
+                },
+                created_at=datetime.now(timezone.utc)
+            ),
+            NodeModel(
+                node_id=uuid.uuid4(),
+                label="user.service.ts",
+                node_type="File",
+                properties={
+                    "repository": "code_test",
+                    "parent_package": "core",
+                    "parent_module": "user"
+                },
+                created_at=datetime.now(timezone.utc)
+            )
+        ]
+
+        # Create virtual nodes
+        virtual_nodes = await service._create_virtual_hierarchy_nodes(file_nodes)
+
+        # Assert: Should create 1 Package (core) and 2 Modules (cv, user)
+        packages = [n for n in virtual_nodes if n.node_type == "Package"]
+        modules = [n for n in virtual_nodes if n.node_type == "Module"]
+
+        assert len(packages) == 1, f"Expected 1 Package node, got {len(packages)}"
+        assert packages[0].label == "core", f"Expected Package label='core', got {packages[0].label}"
+        assert len(modules) == 2, f"Expected 2 Module nodes, got {len(modules)}"
+        assert set(m.label for m in modules) == {"cv", "user"}, f"Expected modules ['cv', 'user'], got {[m.label for m in modules]}"
+
+        # Assert: Virtual nodes should have is_virtual metadata
+        for pkg in packages:
+            assert pkg.properties.get("is_virtual") is True, "Package should have is_virtual=True"
+        for mod in modules:
+            assert mod.properties.get("is_virtual") is True, "Module should have is_virtual=True"

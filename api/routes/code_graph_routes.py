@@ -505,3 +505,156 @@ async def get_repository_metrics(
     except Exception as e:
         logger.error(f"Failed to get metrics for {repository}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get metrics: {str(e)}")
+
+
+@router.get("/module/{repository}")
+async def get_module_graph(
+    repository: str = Path(..., description="Repository name"),
+    limit: int = Query(1000, ge=1, le=5000, description="Maximum number of module nodes to return"),
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """
+    Get MODULE-level graph for orgchart visualization.
+
+    Returns file-based dependency graph (not class/function level).
+    Uses node_type='Module' to distinguish from detailed graph nodes.
+
+    Example:
+        GET /v1/code/graph/module/code_test?limit=1000
+
+    Returns:
+        {
+            "nodes": [
+                {
+                    "id": "module_code_test_abc123",
+                    "label": "src/services/validation.ts",
+                    "type": "Module",
+                    "file_path": "/app/src/services/validation.ts",
+                    "imports": ["./types/result", "../utils/helpers"],
+                    "exports_count": 5,
+                    "loc": 234,
+                    "chunk_count": 3,
+                    "language": "typescript"
+                },
+                ...
+            ],
+            "edges": [
+                {
+                    "id": "uuid",
+                    "source": "module_id_1",
+                    "target": "module_id_2",
+                    "type": "imports"
+                },
+                ...
+            ],
+            "stats": {
+                "total_files": 123,
+                "total_imports": 250,
+                "isolation_rate": 0.04
+            }
+        }
+
+    EPIC-26 Story 26.4: MODULE-level graph for orgchart visualization
+    """
+    try:
+        from sqlalchemy.sql import text
+
+        async with engine.connect() as conn:
+            # Fetch Module nodes only
+            nodes_query = text("""
+                SELECT
+                    node_id::text,
+                    node_type,
+                    properties
+                FROM nodes
+                WHERE node_type = 'Module'
+                  AND properties->>'repository' = :repository
+                ORDER BY properties->>'name'
+                LIMIT :limit
+            """)
+
+            nodes_result = await conn.execute(
+                nodes_query,
+                {"repository": repository, "limit": limit}
+            )
+            nodes_rows = nodes_result.fetchall()
+
+            nodes = []
+            for row in nodes_rows:
+                node_id, node_type, properties = row
+                nodes.append({
+                    "id": node_id,
+                    "label": properties.get("name", f"module_{node_id[:8]}"),
+                    "type": node_type,
+                    "file_path": properties.get("file_path"),
+                    "imports": properties.get("imports", []),
+                    "exports_count": properties.get("exports_count", 0),
+                    "loc": properties.get("loc", 0),
+                    "chunk_count": properties.get("chunk_count", 0),
+                    "language": properties.get("language", "unknown")
+                })
+
+            # Get node IDs for edge filtering
+            node_ids = [n["id"] for n in nodes]
+
+            # Fetch edges (only between Module nodes)
+            if node_ids:
+                edges_query = text("""
+                    SELECT
+                        edge_id::text,
+                        source_node_id::text,
+                        target_node_id::text,
+                        relation_type
+                    FROM edges
+                    WHERE source_node_id::text = ANY(:node_ids)
+                      AND target_node_id::text = ANY(:node_ids)
+                    LIMIT :edge_limit
+                """)
+
+                edges_result = await conn.execute(
+                    edges_query,
+                    {"node_ids": node_ids, "edge_limit": limit * 3}
+                )
+                edges_rows = edges_result.fetchall()
+
+                edges = []
+                for row in edges_rows:
+                    edge_id, source_id, target_id, relation_type = row
+                    edges.append({
+                        "id": edge_id,
+                        "source": source_id,
+                        "target": target_id,
+                        "type": relation_type
+                    })
+            else:
+                edges = []
+
+            # Calculate isolation stats
+            files_with_edges = set()
+            for edge in edges:
+                files_with_edges.add(edge["source"])
+                files_with_edges.add(edge["target"])
+
+            isolated_count = len(nodes) - len(files_with_edges)
+            isolation_rate = isolated_count / len(nodes) if nodes else 0
+
+        logger.info(
+            f"Retrieved MODULE graph for {repository}: "
+            f"{len(nodes)} files, {len(edges)} imports, "
+            f"{isolation_rate*100:.1f}% isolated"
+        )
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "stats": {
+                "total_files": len(nodes),
+                "total_imports": len(edges),
+                "isolated_files": isolated_count,
+                "isolation_rate": round(isolation_rate, 4)
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get module graph for {repository}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get module graph: {str(e)}")
