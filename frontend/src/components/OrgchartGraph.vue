@@ -195,6 +195,14 @@ const initGraph = async () => {
 
   console.log('[Orgchart] ChildrenMap edges (filtered):', Array.from(childrenMap.entries()).reduce((sum, [_, children]) => sum + children.length, 0))
 
+  // Debug: Check how many unique nodes appear in edges
+  const nodesInEdges = new Set<string>()
+  props.edges.forEach(edge => {
+    if (filteredNodeIds.has(edge.source)) nodesInEdges.add(edge.source)
+    if (filteredNodeIds.has(edge.target)) nodesInEdges.add(edge.target)
+  })
+  console.log('[Orgchart] Nodes appearing in edges:', nodesInEdges.size, '/', filteredNodes.length)
+
   // Calculate connection metrics from all edges
   const edgeCounts = new Map<string, { incoming: number; outgoing: number }>()
   props.edges.forEach(edge => {
@@ -301,13 +309,30 @@ const initGraph = async () => {
 
   if (visited.size < filteredNodes.length) {
     const unvisitedNodes = filteredNodes.filter(n => !visited.has(n.id))
+
+    // Debug: Check if unvisited nodes have incoming/outgoing edges
+    const unvisitedWithEdges = unvisitedNodes.filter(n => {
+      const counts = edgeCounts.get(n.id)
+      return counts && (counts.incoming > 0 || counts.outgoing > 0)
+    })
+
     console.warn('[Orgchart] Unvisited nodes (not connected to tree):', {
       count: unvisitedNodes.length,
+      withEdges: unvisitedWithEdges.length,
+      withoutEdges: unvisitedNodes.length - unvisitedWithEdges.length,
       types: unvisitedNodes.map(n => n.type).reduce((acc, type) => {
         acc[type] = (acc[type] || 0) + 1
         return acc
       }, {} as Record<string, number>),
-      sample: unvisitedNodes.slice(0, 5).map(n => ({ id: n.id, label: n.label, type: n.type }))
+      sample: unvisitedNodes.slice(0, 5).map(n => {
+        const counts = edgeCounts.get(n.id) || { incoming: 0, outgoing: 0 }
+        return {
+          id: n.id,
+          label: n.label,
+          type: n.type,
+          edges: { in: counts.incoming, out: counts.outgoing }
+        }
+      })
     })
   }
 

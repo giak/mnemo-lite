@@ -25,7 +25,7 @@ function normalize(value: number | undefined, max: number): number {
  */
 export function calculateNodeScore(
   node: GraphNode,
-  viewMode: ViewMode,
+  _viewMode: ViewMode,
   weights: ScoringWeights
 ): number {
   // Entry points (Modules) are always prioritized - they have no metrics themselves

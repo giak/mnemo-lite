@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { calculateNodeScore, filterNodesByScore } from '../semantic-zoom-scoring'
 import type { GraphNode } from '@/composables/useCodeGraph'
-import type { ViewMode } from '@/types/orgchart-types'
 
 describe('semantic-zoom-scoring', () => {
   const createNode = (overrides: Partial<GraphNode> = {}): GraphNode => ({
@@ -65,7 +64,7 @@ describe('semantic-zoom-scoring', () => {
         createNode({ id: '4', cyclomatic_complexity: 5, lines_of_code: 50 }),   // Very Low
       ]
 
-      const edges = [] // No edges = no ancestors added (flat filtering)
+      const edges: any[] = [] // No edges = no ancestors added (flat filtering)
 
       const filtered = filterNodesByScore(
         nodes,
@@ -78,7 +77,7 @@ describe('semantic-zoom-scoring', () => {
       // 30% of 4 nodes = ~1 node (rounded up to 2)
       expect(filtered.length).toBeGreaterThanOrEqual(1)
       expect(filtered.length).toBeLessThanOrEqual(2)
-      expect(filtered[0].id).toBe('1') // Highest score
+      expect(filtered[0]?.id).toBe('1') // Highest score
     })
 
     it('returns all nodes when zoomLevel is 100', () => {
@@ -88,7 +87,7 @@ describe('semantic-zoom-scoring', () => {
         createNode({ id: '3' })
       ]
 
-      const edges = []
+      const edges: any[] = []
 
       const filtered = filterNodesByScore(
         nodes,

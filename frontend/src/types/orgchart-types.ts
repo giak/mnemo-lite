@@ -1,4 +1,4 @@
-export type ViewMode = 'complexity' | 'hubs' | 'hierarchy'
+export type ViewMode = 'complexity' | 'hubs' | 'hierarchy' | 'force' | 'matrix'
 
 export interface ViewModeConfig {
   name: string
@@ -21,5 +21,15 @@ export const VIEW_MODES: Record<ViewMode, ViewModeConfig> = {
     name: 'Hiérarchie',
     description: 'Structure & depth',
     icon: '🌳'
+  },
+  force: {
+    name: 'Architecture',
+    description: 'Force-directed clusters',
+    icon: '🌐'
+  },
+  matrix: {
+    name: 'Matrice',
+    description: 'Dependency heatmap',
+    icon: '📋'
   }
 }

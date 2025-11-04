@@ -2,6 +2,8 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useCodeGraph } from '@/composables/useCodeGraph'
 import OrgchartGraph from '@/components/OrgchartGraph.vue'
+import ForceDirectedGraph from '@/components/ForceDirectedGraph.vue'
+import DependencyMatrix from '@/components/DependencyMatrix.vue'
 import type { ViewMode } from '@/types/orgchart-types'
 import { VIEW_MODES } from '@/types/orgchart-types'
 
@@ -14,7 +16,7 @@ const {
   building,
   fetchRepositories,
   fetchStats,
-  fetchGraphData,
+  fetchModuleGraphData,
   buildGraph
 } = useCodeGraph()
 
@@ -110,6 +112,25 @@ const legendContent = computed((): LegendContent => {
         ],
         size: 'Based on total connections'
       }
+    case 'force':
+      return {
+        title: '🌐 Architecture View',
+        colors: [
+          { dot: '#3b82f6', label: 'Cluster by folder' },
+          { dot: '#10b981', label: 'Automatic grouping' }
+        ],
+        size: 'Based on chunk count'
+      }
+    case 'matrix':
+      return {
+        title: '📋 Matrix View',
+        colors: [
+          { dot: '#3b82f6', label: 'Dependency' },
+          { dot: '#ef4444', label: 'Circular' },
+          { dot: '#fbbf24', label: 'Self-reference' }
+        ],
+        size: 'Heatmap visualization'
+      }
     case 'hierarchy':
     default:
       return {
@@ -134,7 +155,7 @@ onMounted(async () => {
 
   // Load saved view mode from localStorage
   const savedViewMode = localStorage.getItem('orgchart_view_mode')
-  if (savedViewMode && (savedViewMode === 'complexity' || savedViewMode === 'hubs' || savedViewMode === 'hierarchy')) {
+  if (savedViewMode && (savedViewMode === 'complexity' || savedViewMode === 'hubs' || savedViewMode === 'hierarchy' || savedViewMode === 'force' || savedViewMode === 'matrix')) {
     viewMode.value = savedViewMode as ViewMode
   }
 
@@ -175,7 +196,7 @@ onMounted(async () => {
       console.log('[Orgchart] Loading repository:', repository.value)
       await Promise.all([
         fetchStats(repository.value),
-        fetchGraphData(repository.value)
+        fetchModuleGraphData(repository.value)
       ])
       console.log('[Orgchart] Initial data loaded:', {
         nodes: nodes.value.length,
@@ -189,7 +210,7 @@ const handleRepositoryChange = async () => {
   console.log('[Orgchart] Repository changed to:', repository.value)
   await Promise.all([
     fetchStats(repository.value),
-    fetchGraphData(repository.value)
+    fetchModuleGraphData(repository.value)
   ])
   console.log('[Orgchart] Graph data loaded:', {
     nodes: nodes.value.length,
@@ -201,7 +222,7 @@ const handleBuildGraph = async () => {
   await buildGraph(repository.value)
   await Promise.all([
     fetchStats(repository.value),
-    fetchGraphData(repository.value)
+    fetchModuleGraphData(repository.value)
   ])
 }
 </script>
@@ -358,9 +379,11 @@ const handleBuildGraph = async () => {
           </div>
         </div>
 
-        <!-- Orgchart Component -->
+        <!-- Visualization Components -->
         <div class="relative">
+          <!-- Orgchart (Hierarchy, Complexity, Hubs views) -->
           <OrgchartGraph
+            v-if="viewMode === 'hierarchy' || viewMode === 'complexity' || viewMode === 'hubs'"
             :key="graphKey"
             :nodes="nodes"
             :edges="edges"
@@ -369,8 +392,25 @@ const handleBuildGraph = async () => {
             :weights="weights"
           />
 
-          <!-- Legend Panel -->
-          <div class="absolute bottom-4 right-4 bg-slate-800/95 rounded-lg shadow-xl border border-slate-700 text-xs">
+          <!-- Force-Directed Graph (Architecture view) -->
+          <ForceDirectedGraph
+            v-else-if="viewMode === 'force'"
+            :nodes="nodes"
+            :edges="edges"
+          />
+
+          <!-- Dependency Matrix (Matrix view) -->
+          <DependencyMatrix
+            v-else-if="viewMode === 'matrix'"
+            :nodes="nodes"
+            :edges="edges"
+          />
+
+          <!-- Legend Panel (only for Orgchart views) -->
+          <div
+            v-if="viewMode === 'hierarchy' || viewMode === 'complexity' || viewMode === 'hubs'"
+            class="absolute bottom-4 right-4 bg-slate-800/95 rounded-lg shadow-xl border border-slate-700 text-xs"
+          >
             <!-- Header with collapse button -->
             <div
               class="flex items-center justify-between px-3 py-2 border-b border-slate-700 cursor-pointer hover:bg-slate-750 transition-colors"
