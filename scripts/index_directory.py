@@ -226,13 +226,24 @@ async def process_file_atomically(
                 await chunk_repo.add(chunk_create)
                 chunks_created += 1
 
-        return FileProcessingResult(
+        result = FileProcessingResult(
             file_path=file_path,
             success=True,
             chunks_created=chunks_created
         )
 
+        # Force memory cleanup after each file
+        embedding_service.force_memory_cleanup()
+
+        return result
+
     except Exception as e:
+        # Force memory cleanup even on error
+        try:
+            embedding_service.force_memory_cleanup()
+        except Exception:
+            pass  # Ignore cleanup errors
+
         return FileProcessingResult(
             file_path=file_path,
             success=False,
@@ -336,7 +347,8 @@ async def run_streaming_pipeline_sequential(
                 if verbose:
                     print(f"\n   ⚠️  Failed: {file_path.name} - {result.error_message}")
 
-            # Force memory cleanup
+            # Force comprehensive memory cleanup
+            embedding_service.force_memory_cleanup()
             gc.collect()
             pbar.update(1)
 
