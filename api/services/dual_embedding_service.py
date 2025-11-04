@@ -673,11 +673,10 @@ class DualEmbeddingService:
             loop = asyncio.get_running_loop()
             encode_coro = loop.run_in_executor(
                 None,
-                lambda: self._text_model.encode(
-                    valid_texts,
-                    show_progress_bar=show_progress_bar,
-                    convert_to_numpy=True
-                )
+                self._encode_batch_with_no_grad,
+                self._text_model,
+                valid_texts,
+                show_progress_bar
             )
 
             try:
@@ -710,11 +709,10 @@ class DualEmbeddingService:
             loop = asyncio.get_running_loop()
             encode_coro = loop.run_in_executor(
                 None,
-                lambda: self._code_model.encode(
-                    valid_texts,
-                    show_progress_bar=show_progress_bar,
-                    convert_to_numpy=True
-                )
+                self._encode_batch_with_no_grad,
+                self._code_model,
+                valid_texts,
+                show_progress_bar
             )
 
             try:
