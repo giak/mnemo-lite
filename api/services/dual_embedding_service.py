@@ -545,7 +545,8 @@ class DualEmbeddingService:
             loop = asyncio.get_running_loop()
             encode_coro = loop.run_in_executor(
                 None,
-                self._text_model.encode,
+                self._encode_single_with_no_grad,
+                self._text_model,
                 text
             )
 
@@ -574,7 +575,8 @@ class DualEmbeddingService:
             loop = asyncio.get_running_loop()
             encode_coro = loop.run_in_executor(
                 None,
-                self._code_model.encode,
+                self._encode_single_with_no_grad,
+                self._code_model,
                 text
             )
 
