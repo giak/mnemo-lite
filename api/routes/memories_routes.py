@@ -3,6 +3,7 @@ EPIC-26: Memories Monitor Backend API
 Endpoints for Memories Monitor page displaying conversations, code, embeddings.
 """
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
@@ -15,6 +16,10 @@ from dependencies import get_db_engine
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/memories", tags=["memories"])
+
+# Read embedding model names from environment variables
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5")
+CODE_EMBEDDING_MODEL = os.getenv("CODE_EMBEDDING_MODEL", "jinaai/jina-embeddings-v2-base-code")
 
 
 @router.get("/stats")
@@ -74,9 +79,10 @@ async def get_memories_stats(engine: AsyncEngine = Depends(get_db_engine)) -> Di
         }
     except Exception as e:
         logger.error(f"Failed to get memories stats: {e}", exc_info=True)
+        # Don't expose internal errors to clients
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to get memories stats: {str(e)}"
+            detail="Failed to retrieve memories statistics. Please try again later."
         )
 
 
@@ -131,9 +137,10 @@ async def get_recent_memories(
             return memories
     except Exception as e:
         logger.error(f"Failed to get recent memories: {e}", exc_info=True)
+        # Don't expose internal errors to clients
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to get recent memories: {str(e)}"
+            detail="Failed to retrieve recent memories. Please try again later."
         )
 
 
@@ -208,9 +215,10 @@ async def get_recent_code_chunks(
             }
     except Exception as e:
         logger.error(f"Failed to get recent code chunks: {e}", exc_info=True)
+        # Don't expose internal errors to clients
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to get recent code chunks: {str(e)}"
+            detail="Failed to retrieve recent code chunks. Please try again later."
         )
 
 
@@ -259,18 +267,19 @@ async def get_embeddings_health(engine: AsyncEngine = Depends(get_db_engine)) ->
                 "total": text_stats.total,
                 "with_embeddings": text_stats.with_emb,
                 "success_rate": round(text_success_rate, 1),
-                "model": "nomic-ai/nomic-embed-text-v1.5"
+                "model": EMBEDDING_MODEL
             },
             "code_embeddings": {
                 "total": code_count,
-                "model": "jinaai/jina-embeddings-v2-base-code"
+                "model": CODE_EMBEDDING_MODEL
             },
             "alerts": alerts,
             "status": "healthy" if text_success_rate > 90 else "degraded"
         }
     except Exception as e:
         logger.error(f"Failed to get embeddings health: {e}", exc_info=True)
+        # Don't expose internal errors to clients
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to get embeddings health: {str(e)}"
+            detail="Failed to retrieve embeddings health. Please try again later."
         )
