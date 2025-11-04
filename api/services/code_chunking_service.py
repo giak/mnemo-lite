@@ -240,13 +240,37 @@ class TypeScriptParser(LanguageParser):
         - type_identifier (class names, interface names)
         - identifier (function/method names)
         - Async functions (async keyword)
+        - Arrow functions (name from parent variable_declarator)
+
+        CRITICAL FIX 2025-11-04: Arrow functions have their name in the parent
+        variable_declarator node, not as a direct child. This was causing 40%
+        isolated nodes due to extracting parameter names instead of function names.
         """
         # Get name from identifier/type_identifier
         name = None
-        for child in node.children:
-            if child.type in ["identifier", "type_identifier"]:
-                name = source_code[child.start_byte:child.end_byte]
-                break
+
+        # SPECIAL CASE: Arrow functions
+        # For arrow functions, the name is in the parent variable_declarator node
+        # Example AST structure:
+        #   variable_declarator
+        #     identifier "functionName"  ← NAME IS HERE
+        #     arrow_function
+        #       formal_parameters "(param: Type)"  ← NOT HERE
+        if node.type == "arrow_function" and node.parent:
+            # Look for identifier in parent variable_declarator
+            if node.parent.type == "variable_declarator":
+                for sibling in node.parent.children:
+                    if sibling.type == "identifier":
+                        name = source_code[sibling.start_byte:sibling.end_byte]
+                        break
+
+        # REGULAR CASE: Function declarations, classes, interfaces
+        # The name is a direct child of the node
+        if not name:
+            for child in node.children:
+                if child.type in ["identifier", "type_identifier"]:
+                    name = source_code[child.start_byte:child.end_byte]
+                    break
 
         if not name:
             name = f"anonymous_{node.type}"
