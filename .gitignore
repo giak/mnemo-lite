@@ -60,3 +60,20 @@ backups/
 code_test/
 
 serena-main/
+
+# Temporary test/debug scripts
+api/*_test_*.py
+api/cleanup_*.py
+api/validate_*.py
+api/verify_*.py
+api/build_*.py
+scripts/profile_*.py
+
+# Debug sessions
+docs/sessions/
+
+# External projects (not part of MnemoLite)
+api/cv/
+
+# Old static files (using frontend/ now)
+static/
