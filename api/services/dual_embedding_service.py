@@ -26,6 +26,13 @@ from sentence_transformers import SentenceTransformer
 import psutil
 import numpy as np
 
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
+
 from utils.timeout import with_timeout, TimeoutError
 from config.timeouts import get_timeout
 from utils.circuit_breaker import CircuitBreaker
@@ -216,6 +223,73 @@ class DualEmbeddingService:
             f"✅ CODE model loaded: {self.code_model_name} ({self.dimension}D)"
         )
         return model
+
+    def _encode_single_with_no_grad(self, model: SentenceTransformer, text: str):
+        """
+        Encode single text with torch.no_grad() to prevent memory accumulation.
+
+        PyTorch accumulates gradient tracking state during forward passes even
+        for inference. Using no_grad() disables this completely.
+
+        Args:
+            model: Loaded SentenceTransformer model
+            text: Text or code to encode
+
+        Returns:
+            Embedding vector (numpy array)
+        """
+        if TORCH_AVAILABLE and torch is not None:
+            with torch.no_grad():
+                embedding = model.encode(text, convert_to_numpy=True)
+
+            # Clear CUDA cache if using GPU
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            return embedding
+        else:
+            # Fallback without torch.no_grad() (shouldn't happen)
+            return model.encode(text, convert_to_numpy=True)
+
+    def _encode_batch_with_no_grad(
+        self,
+        model: SentenceTransformer,
+        texts: List[str],
+        show_progress_bar: bool = True
+    ):
+        """
+        Encode batch of texts with torch.no_grad() to prevent memory accumulation.
+
+        Critical for large batches where memory can accumulate significantly.
+
+        Args:
+            model: Loaded SentenceTransformer model
+            texts: List of texts/code to encode
+            show_progress_bar: Show tqdm progress bar
+
+        Returns:
+            Embedding matrix (numpy array)
+        """
+        if TORCH_AVAILABLE and torch is not None:
+            with torch.no_grad():
+                embeddings = model.encode(
+                    texts,
+                    show_progress_bar=show_progress_bar,
+                    convert_to_numpy=True
+                )
+
+            # Clear CUDA cache if using GPU
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            return embeddings
+        else:
+            # Fallback without torch.no_grad()
+            return model.encode(
+                texts,
+                show_progress_bar=show_progress_bar,
+                convert_to_numpy=True
+            )
 
     async def _ensure_text_model(self):
         """
@@ -785,3 +859,19 @@ class DualEmbeddingService:
             "code_model_loaded": self._code_model is not None,
             **ram_usage
         }
+
+    def force_memory_cleanup(self):
+        """
+        Force PyTorch and Python garbage collection.
+
+        Call this after processing each file to ensure memory is released.
+        Particularly important when processing many files sequentially.
+        """
+        import gc
+
+        # Force Python garbage collection
+        gc.collect()
+
+        # Clear CUDA cache if using GPU
+        if TORCH_AVAILABLE and torch is not None and torch.cuda.is_available():
+            torch.cuda.empty_cache()
