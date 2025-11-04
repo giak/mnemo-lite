@@ -20,6 +20,12 @@ export interface Memory {
   author: string | null
 }
 
+export interface MemoryDetail extends Memory {
+  content: string
+  updated_at: string | null
+  project_id: string | null
+}
+
 export interface CodeChunk {
   id: string
   file_path: string

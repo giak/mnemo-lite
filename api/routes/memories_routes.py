@@ -222,6 +222,71 @@ async def get_recent_code_chunks(
         )
 
 
+@router.get("/{memory_id}")
+async def get_memory_by_id(
+    memory_id: str,
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """
+    Get full memory details by ID.
+
+    Args:
+        memory_id: UUID of the memory
+
+    Returns:
+        Full memory object with content, metadata, tags, etc.
+    """
+    try:
+        async with engine.begin() as conn:
+            result = await conn.execute(
+                text("""
+                    SELECT
+                        id,
+                        title,
+                        content,
+                        memory_type,
+                        tags,
+                        author,
+                        created_at,
+                        updated_at,
+                        project_id,
+                        (embedding IS NOT NULL) as has_embedding
+                    FROM memories
+                    WHERE id = :memory_id
+                    AND deleted_at IS NULL
+                """),
+                {"memory_id": memory_id}
+            )
+            row = result.fetchone()
+
+            if not row:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Memory not found or has been deleted."
+                )
+
+            return {
+                "id": str(row.id),
+                "title": row.title,
+                "content": row.content,
+                "memory_type": row.memory_type,
+                "tags": row.tags or [],
+                "author": row.author,
+                "created_at": row.created_at.isoformat(),
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                "project_id": str(row.project_id) if row.project_id else None,
+                "has_embedding": row.has_embedding
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get memory by ID: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve memory. Please try again later."
+        )
+
+
 @router.get("/embeddings/health")
 async def get_embeddings_health(engine: AsyncEngine = Depends(get_db_engine)) -> Dict[str, Any]:
     """

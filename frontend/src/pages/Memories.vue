@@ -3,22 +3,36 @@
  * EPIC-26: Memories Monitor Page
  * Main dashboard for monitoring conversations, code chunks, and embeddings
  */
+import { ref } from 'vue'
 import { useMemories } from '@/composables/useMemories'
 import MemoriesStatsBar from '@/components/MemoriesStatsBar.vue'
 import ConversationsWidget from '@/components/ConversationsWidget.vue'
 import CodeChunksWidget from '@/components/CodeChunksWidget.vue'
 import EmbeddingsWidget from '@/components/EmbeddingsWidget.vue'
+import ConversationDetailModal from '@/components/ConversationDetailModal.vue'
 
 // Use memories composable with 30-second refresh
 const { data, loading, errors, lastUpdated, refresh } = useMemories({
   refreshInterval: 30000
 })
 
-// Handle view detail (future: open modal)
+// Modal state
+const selectedMemoryId = ref<string | null>(null)
+const isModalOpen = ref(false)
+
+// Handle view detail - open modal
 function handleViewDetail(memoryId: string) {
-  console.log('View memory detail:', memoryId)
-  // TODO: Implement modal in future iteration
-  alert(`Memory detail modal coming soon!\nID: ${memoryId}`)
+  selectedMemoryId.value = memoryId
+  isModalOpen.value = true
+}
+
+// Handle modal close
+function handleCloseModal() {
+  isModalOpen.value = false
+  // Clear selected memory after animation completes
+  setTimeout(() => {
+    selectedMemoryId.value = null
+  }, 300)
 }
 </script>
 
@@ -73,5 +87,12 @@ function handleViewDetail(memoryId: string) {
         <EmbeddingsWidget :health="data.embeddingsHealth" />
       </div>
     </div>
+
+    <!-- Conversation Detail Modal -->
+    <ConversationDetailModal
+      :memory-id="selectedMemoryId"
+      :is-open="isModalOpen"
+      @close="handleCloseModal"
+    />
   </div>
 </template>
