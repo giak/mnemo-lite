@@ -3,7 +3,6 @@
  * EPIC-26: Memories Monitor Page
  * Main dashboard for monitoring conversations, code chunks, and embeddings
  */
-import { computed } from 'vue'
 import { useMemories } from '@/composables/useMemories'
 import MemoriesStatsBar from '@/components/MemoriesStatsBar.vue'
 import ConversationsWidget from '@/components/ConversationsWidget.vue'

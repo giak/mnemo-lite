@@ -6,11 +6,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import type {
   MemoriesData,
-  MemoriesError,
-  MemoriesStats,
-  Memory,
-  CodeChunksResponse,
-  EmbeddingsHealth
+  MemoriesError
 } from '@/types/memories'
 
 const API_BASE_URL = 'http://localhost:8001/api/v1/memories'
