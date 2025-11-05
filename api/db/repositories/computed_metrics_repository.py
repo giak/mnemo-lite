@@ -80,17 +80,22 @@ class ComputedMetricsRepository:
     async def update_coupling(
         self,
         node_id: UUID,
+        chunk_id: UUID,
+        repository: str,
         afferent_coupling: int,
         efferent_coupling: int,
         version: int = 1
     ) -> ComputedMetrics:
-        """Update coupling metrics after graph construction."""
+        """Update or create coupling metrics after graph construction (UPSERT)."""
         query = text("""
-            UPDATE computed_metrics
-            SET afferent_coupling = :ac,
-                efferent_coupling = :ec,
+            INSERT INTO computed_metrics
+            (node_id, chunk_id, repository, afferent_coupling, efferent_coupling, version)
+            VALUES (:node_id, :chunk_id, :repository, :ac, :ec, :version)
+            ON CONFLICT (node_id, version)
+            DO UPDATE SET
+                afferent_coupling = EXCLUDED.afferent_coupling,
+                efferent_coupling = EXCLUDED.efferent_coupling,
                 computed_at = NOW()
-            WHERE node_id = :node_id AND version = :version
             RETURNING metric_id, node_id, chunk_id, repository, cyclomatic_complexity,
                       cognitive_complexity, lines_of_code, afferent_coupling, efferent_coupling,
                       pagerank_score, betweenness_centrality, version, computed_at
@@ -99,6 +104,8 @@ class ComputedMetricsRepository:
         async with self.engine.begin() as conn:
             result = await conn.execute(query, {
                 "node_id": str(node_id),
+                "chunk_id": str(chunk_id),
+                "repository": repository,
                 "ac": afferent_coupling,
                 "ec": efferent_coupling,
                 "version": version
@@ -124,15 +131,20 @@ class ComputedMetricsRepository:
     async def update_pagerank(
         self,
         node_id: UUID,
+        chunk_id: UUID,
+        repository: str,
         pagerank_score: float,
         version: int = 1
     ) -> ComputedMetrics:
-        """Update PageRank score after graph analysis."""
+        """Update or create PageRank score after graph analysis (UPSERT)."""
         query = text("""
-            UPDATE computed_metrics
-            SET pagerank_score = :pagerank,
+            INSERT INTO computed_metrics
+            (node_id, chunk_id, repository, pagerank_score, version)
+            VALUES (:node_id, :chunk_id, :repository, :pagerank, :version)
+            ON CONFLICT (node_id, version)
+            DO UPDATE SET
+                pagerank_score = EXCLUDED.pagerank_score,
                 computed_at = NOW()
-            WHERE node_id = :node_id AND version = :version
             RETURNING metric_id, node_id, chunk_id, repository, cyclomatic_complexity,
                       cognitive_complexity, lines_of_code, afferent_coupling, efferent_coupling,
                       pagerank_score, betweenness_centrality, version, computed_at
@@ -141,6 +153,8 @@ class ComputedMetricsRepository:
         async with self.engine.begin() as conn:
             result = await conn.execute(query, {
                 "node_id": str(node_id),
+                "chunk_id": str(chunk_id),
+                "repository": repository,
                 "pagerank": pagerank_score,
                 "version": version
             })

@@ -343,6 +343,8 @@ class GraphConstructionService:
                 try:
                     await metrics_repo.update_coupling(
                         node_id=node.node_id,
+                        chunk_id=chunk_id,
+                        repository=repository,
                         afferent_coupling=coupling["afferent"],
                         efferent_coupling=coupling["efferent"],
                         version=1
@@ -351,6 +353,8 @@ class GraphConstructionService:
                     # Update PageRank score
                     await metrics_repo.update_pagerank(
                         node_id=node.node_id,
+                        chunk_id=chunk_id,
+                        repository=repository,
                         pagerank_score=pagerank,
                         version=1
                     )
