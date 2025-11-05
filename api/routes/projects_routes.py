@@ -260,3 +260,86 @@ async def reindex_project(
             status_code=500,
             detail="Failed to trigger reindexing. Please try again later."
         )
+
+
+@router.delete("/{repository}")
+async def delete_project(
+    repository: str,
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """
+    Delete all data for a project.
+
+    WARNING: This is destructive and cannot be undone!
+
+    Args:
+        repository: Name of the repository to delete
+
+    Returns:
+        {
+            "repository": "code_test",
+            "deleted_chunks": 1234,
+            "deleted_nodes": 567,
+            "message": "Project code_test deleted successfully"
+        }
+    """
+    try:
+        async with engine.begin() as conn:
+            # Delete code chunks
+            result = await conn.execute(
+                text("""
+                    DELETE FROM code_chunks
+                    WHERE repository = :repository
+                    RETURNING id
+                """),
+                {"repository": repository}
+            )
+            deleted_chunks = len(result.fetchall())
+
+            # Delete nodes
+            result = await conn.execute(
+                text("""
+                    DELETE FROM nodes
+                    WHERE properties->>'repository' = :repository
+                    RETURNING node_id
+                """),
+                {"repository": repository}
+            )
+            deleted_nodes = len(result.fetchall())
+
+            # Delete edges (cascade should handle this, but be explicit)
+            await conn.execute(
+                text("""
+                    DELETE FROM edges
+                    WHERE source_node_id IN (
+                        SELECT node_id FROM nodes WHERE properties->>'repository' = :repository
+                    ) OR target_node_id IN (
+                        SELECT node_id FROM nodes WHERE properties->>'repository' = :repository
+                    )
+                """),
+                {"repository": repository}
+            )
+
+            if deleted_chunks == 0 and deleted_nodes == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Project '{repository}' not found or already deleted."
+                )
+
+        logger.info(f"Deleted project {repository}: {deleted_chunks} chunks, {deleted_nodes} nodes")
+
+        return {
+            "repository": repository,
+            "deleted_chunks": deleted_chunks,
+            "deleted_nodes": deleted_nodes,
+            "message": f"Project {repository} deleted successfully"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete project: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete project. Please try again later."
+        )

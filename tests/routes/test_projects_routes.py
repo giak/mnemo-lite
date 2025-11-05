@@ -96,3 +96,42 @@ async def test_reindex_project_triggers_indexing(test_client):
     assert "repository" in data
     assert "status" in data
     assert data["status"] == "reindexing"
+
+
+@pytest.mark.anyio
+async def test_delete_project_removes_all_data(test_client):
+    """Test DELETE /api/v1/projects/{repository} removes all project data."""
+    # Create a separate 'test_delete' project to avoid affecting other tests
+    async with test_client._transport.app.state.db_engine.begin() as conn:
+        # Insert code chunks for test_delete project
+        await conn.execute(
+            text("""
+                INSERT INTO code_chunks (file_path, language, chunk_type, source_code, repository, metadata)
+                VALUES
+                    ('/test/test_delete/file1.py', 'python', 'function', 'def foo(): pass', 'test_delete', '{"loc": 10}'),
+                    ('/test/test_delete/file2.py', 'python', 'class', 'class Bar: pass', 'test_delete', '{"loc": 20}')
+            """)
+        )
+
+        # Insert nodes for test_delete project (using UUIDs)
+        await conn.execute(
+            text("""
+                INSERT INTO nodes (node_id, node_type, label, properties)
+                VALUES
+                    ('00000000-0000-0000-0000-000000000001'::uuid, 'Module', 'test_module', '{"repository": "test_delete", "file_path": "/test/test_delete/file1.py"}'),
+                    ('00000000-0000-0000-0000-000000000002'::uuid, 'Module', 'test_class', '{"repository": "test_delete", "file_path": "/test/test_delete/file2.py"}')
+            """)
+        )
+
+    # Delete the project
+    response = await test_client.delete("/api/v1/projects/test_delete")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "repository" in data
+    assert data["repository"] == "test_delete"
+    assert "deleted_chunks" in data
+    assert "deleted_nodes" in data
+    assert data["deleted_chunks"] == 2
+    assert data["deleted_nodes"] == 2
