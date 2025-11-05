@@ -85,9 +85,9 @@ async def list_projects(
                             COUNT(DISTINCT n.node_id) as total
                         FROM nodes n
                         WHERE n.node_type = 'Module'
-                          AND n.properties->>'file_path' LIKE :repository_pattern
+                          AND n.properties->>'repository' = :repository
                     """),
-                    {"repository_pattern": f"{row.repository}/%"}
+                    {"repository": row.repository}
                 )
                 coverage_row = coverage_result.fetchone()
                 graph_coverage = (coverage_row.connected / coverage_row.total) if coverage_row.total > 0 else 0
