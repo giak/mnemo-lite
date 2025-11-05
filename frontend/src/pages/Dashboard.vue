@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * EPIC-25 Story 25.3: Dashboard Page
+ * EPIC-27: Dashboard Page - SCADA Industrial Style
  * Main dashboard displaying system health and embedding statistics
  */
 
@@ -55,13 +55,13 @@ const codeEmbeddingsSubtitle = computed(() => {
 })
 
 const lastUpdatedText = computed(() => {
-  if (!lastUpdated.value) return 'Never'
+  if (!lastUpdated.value) return 'NEVER'
   const now = new Date()
   const diff = Math.floor((now.getTime() - lastUpdated.value.getTime()) / 1000)
 
-  if (diff < 60) return `${diff}s ago`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  return `${Math.floor(diff / 3600)}h ago`
+  if (diff < 60) return `${diff}S AGO`
+  if (diff < 3600) return `${Math.floor(diff / 60)}MIN AGO`
+  return `${Math.floor(diff / 3600)}H AGO`
 })
 
 const hasErrors = computed(() => errors.value.length > 0)
@@ -70,24 +70,27 @@ const hasErrors = computed(() => errors.value.length > 0)
 <template>
   <div class="min-h-screen bg-slate-950">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <!-- Header -->
-      <div class="flex justify-between items-center mb-8">
-        <div>
-          <h1 class="text-3xl font-bold text-gray-100 uppercase tracking-wide">Dashboard</h1>
-          <p class="mt-2 text-sm text-gray-400">
-            System health and embedding statistics
-          </p>
+      <!-- Header avec style SCADA -->
+      <div class="flex items-center justify-between mb-8">
+        <div class="flex items-center gap-4">
+          <span class="scada-led scada-led-cyan"></span>
+          <div>
+            <h1 class="text-3xl font-bold font-mono text-cyan-400 uppercase tracking-wider">Dashboard</h1>
+            <p class="mt-2 text-sm text-gray-400 font-mono uppercase tracking-wide">
+              System Health & Embedding Statistics
+            </p>
+          </div>
         </div>
         <div class="text-right">
           <button
             @click="refresh"
             :disabled="loading"
-            class="px-4 py-2 bg-slate-700 text-gray-100 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-slate-600"
+            class="scada-btn scada-btn-primary"
           >
-            {{ loading ? 'Refreshing...' : 'Refresh' }}
+            {{ loading ? 'REFRESHING...' : 'REFRESH' }}
           </button>
-          <p class="mt-2 text-xs text-gray-500">
-            Last updated: {{ lastUpdatedText }}
+          <p class="mt-2 text-xs text-gray-500 font-mono uppercase">
+            Last Updated: {{ lastUpdatedText }}
           </p>
         </div>
       </div>
@@ -99,24 +102,14 @@ const hasErrors = computed(() => errors.value.length > 0)
       >
         <div class="flex">
           <div class="flex-shrink-0">
-            <svg
-              class="h-5 w-5 text-red-400"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fill-rule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                clip-rule="evenodd"
-              />
-            </svg>
+            <span class="scada-led scada-led-red"></span>
           </div>
           <div class="ml-3">
-            <h3 class="text-sm font-medium text-red-300 uppercase">
-              Failed to load some data
+            <h3 class="text-sm scada-status-danger">
+              Failed to Load Some Data
             </h3>
             <div class="mt-2 text-sm text-red-400">
-              <ul class="list-disc list-inside space-y-1">
+              <ul class="list-disc list-inside space-y-1 font-mono">
                 <li v-for="error in errors" :key="error.timestamp">
                   {{ error.endpoint }}: {{ error.message }}
                 </li>
@@ -126,9 +119,8 @@ const hasErrors = computed(() => errors.value.length > 0)
         </div>
       </div>
 
-      <!-- Dashboard Cards Grid -->
+      <!-- Dashboard Cards Grid (utilise les DashboardCard SCADA déjà migrés) -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <!-- System Health Card -->
         <DashboardCard
           title="System Health"
           :value="healthValue"
@@ -137,7 +129,6 @@ const hasErrors = computed(() => errors.value.length > 0)
           :loading="loading && !data.health"
         />
 
-        <!-- TEXT Embeddings Card -->
         <DashboardCard
           title="TEXT Embeddings"
           :value="textEmbeddingsValue"
@@ -146,7 +137,6 @@ const hasErrors = computed(() => errors.value.length > 0)
           :loading="loading && !data.textEmbeddings"
         />
 
-        <!-- CODE Embeddings Card -->
         <DashboardCard
           title="CODE Embeddings"
           :value="codeEmbeddingsValue"
@@ -156,42 +146,42 @@ const hasErrors = computed(() => errors.value.length > 0)
         />
       </div>
 
-      <!-- Details Section -->
+      <!-- Details Section avec style SCADA -->
       <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- TEXT Embeddings Details -->
         <div
           v-if="data.textEmbeddings"
-          class="bg-slate-900 border border-slate-800 p-6"
+          class="scada-panel"
         >
-          <h2 class="text-lg font-semibold text-gray-100 mb-4 uppercase tracking-wide">
+          <h2 class="text-lg scada-label text-cyan-400 mb-4 pb-3 border-b-2 border-slate-700">
             TEXT Embeddings Details
           </h2>
           <dl class="space-y-3">
-            <div class="flex justify-between">
-              <dt class="text-sm font-medium text-gray-400">Model</dt>
-              <dd class="text-sm text-gray-200">
+            <div class="flex justify-between border-b border-slate-700 pb-2">
+              <dt class="scada-label">Model</dt>
+              <dd class="text-sm text-gray-200 font-mono">
                 {{ data.textEmbeddings.model }}
               </dd>
             </div>
-            <div class="flex justify-between">
-              <dt class="text-sm font-medium text-gray-400">Count</dt>
-              <dd class="text-sm text-gray-200">
+            <div class="flex justify-between border-b border-slate-700 pb-2">
+              <dt class="scada-label">Count</dt>
+              <dd class="scada-data text-base">
                 {{ data.textEmbeddings.count.toLocaleString() }}
               </dd>
             </div>
-            <div class="flex justify-between">
-              <dt class="text-sm font-medium text-gray-400">Dimension</dt>
-              <dd class="text-sm text-gray-200">
+            <div class="flex justify-between border-b border-slate-700 pb-2">
+              <dt class="scada-label">Dimension</dt>
+              <dd class="scada-data text-base">
                 {{ data.textEmbeddings.dimension }}
               </dd>
             </div>
             <div class="flex justify-between">
-              <dt class="text-sm font-medium text-gray-400">Last Indexed</dt>
-              <dd class="text-sm text-gray-200">
+              <dt class="scada-label">Last Indexed</dt>
+              <dd class="text-sm text-gray-200 font-mono uppercase">
                 {{
                   data.textEmbeddings.lastIndexed
                     ? new Date(data.textEmbeddings.lastIndexed).toLocaleString()
-                    : 'Never'
+                    : 'NEVER'
                 }}
               </dd>
             </div>
@@ -201,37 +191,37 @@ const hasErrors = computed(() => errors.value.length > 0)
         <!-- CODE Embeddings Details -->
         <div
           v-if="data.codeEmbeddings"
-          class="bg-slate-900 border border-slate-800 p-6"
+          class="scada-panel"
         >
-          <h2 class="text-lg font-semibold text-gray-100 mb-4 uppercase tracking-wide">
+          <h2 class="text-lg scada-label text-cyan-400 mb-4 pb-3 border-b-2 border-slate-700">
             CODE Embeddings Details
           </h2>
           <dl class="space-y-3">
-            <div class="flex justify-between">
-              <dt class="text-sm font-medium text-gray-400">Model</dt>
-              <dd class="text-sm text-gray-200">
+            <div class="flex justify-between border-b border-slate-700 pb-2">
+              <dt class="scada-label">Model</dt>
+              <dd class="text-sm text-gray-200 font-mono">
                 {{ data.codeEmbeddings.model }}
               </dd>
             </div>
-            <div class="flex justify-between">
-              <dt class="text-sm font-medium text-gray-400">Count</dt>
-              <dd class="text-sm text-gray-200">
+            <div class="flex justify-between border-b border-slate-700 pb-2">
+              <dt class="scada-label">Count</dt>
+              <dd class="scada-data text-base">
                 {{ data.codeEmbeddings.count.toLocaleString() }}
               </dd>
             </div>
-            <div class="flex justify-between">
-              <dt class="text-sm font-medium text-gray-400">Dimension</dt>
-              <dd class="text-sm text-gray-200">
+            <div class="flex justify-between border-b border-slate-700 pb-2">
+              <dt class="scada-label">Dimension</dt>
+              <dd class="scada-data text-base">
                 {{ data.codeEmbeddings.dimension }}
               </dd>
             </div>
             <div class="flex justify-between">
-              <dt class="text-sm font-medium text-gray-400">Last Indexed</dt>
-              <dd class="text-sm text-gray-200">
+              <dt class="scada-label">Last Indexed</dt>
+              <dd class="text-sm text-gray-200 font-mono uppercase">
                 {{
                   data.codeEmbeddings.lastIndexed
                     ? new Date(data.codeEmbeddings.lastIndexed).toLocaleString()
-                    : 'Never'
+                    : 'NEVER'
                 }}
               </dd>
             </div>
@@ -240,15 +230,15 @@ const hasErrors = computed(() => errors.value.length > 0)
       </div>
 
       <!-- Info Footer -->
-      <div class="mt-8 text-center text-sm text-gray-500">
+      <div class="mt-8 text-center text-sm text-gray-500 font-mono">
         <p>
-          Auto-refresh enabled (30s interval) |
+          AUTO-REFRESH ENABLED (30S INTERVAL) |
           <a
             href="http://localhost:8001/docs"
             target="_blank"
             class="text-cyan-400 hover:text-cyan-300 underline"
           >
-            API Documentation
+            API DOCUMENTATION
           </a>
         </p>
       </div>

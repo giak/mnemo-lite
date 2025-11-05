@@ -95,12 +95,15 @@ const getChunkTypeBadge = (chunkType: string) => {
 <template>
   <div class="min-h-screen bg-slate-950">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <!-- Header -->
-      <div class="mb-8">
-        <h1 class="text-3xl text-heading">Code Search</h1>
-        <p class="mt-2 text-sm text-gray-400">
-          Hybrid search combining lexical (keywords) and semantic (meaning) search
-        </p>
+      <!-- Header avec LED SCADA -->
+      <div class="mb-8 flex items-center gap-4">
+        <span class="scada-led scada-led-cyan"></span>
+        <div>
+          <h1 class="text-3xl font-bold font-mono text-cyan-400 uppercase tracking-wider">Code Search</h1>
+          <p class="mt-2 text-sm text-gray-400 font-mono uppercase tracking-wide">
+            Hybrid Search: Lexical + Semantic
+          </p>
+        </div>
       </div>
 
       <!-- Search Bar -->

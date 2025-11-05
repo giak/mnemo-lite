@@ -290,13 +290,11 @@ onMounted(async () => {
 
       <!-- Error State -->
       <div v-else-if="error" class="alert-error">
-        <div class="flex items-start">
-          <svg class="h-5 w-5 text-red-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-          </svg>
-          <div class="ml-3">
-            <h3 class="text-sm font-medium text-red-300 uppercase">Graph Error</h3>
-            <p class="mt-1 text-sm text-red-400">{{ error }}</p>
+        <div class="flex items-start gap-3">
+          <span class="scada-led scada-led-red"></span>
+          <div>
+            <h3 class="text-sm font-medium text-red-300 uppercase font-mono">Graph Error</h3>
+            <p class="mt-1 text-sm text-red-400 font-mono">{{ error }}</p>
           </div>
         </div>
       </div>
@@ -304,25 +302,28 @@ onMounted(async () => {
       <!-- Graph Stats + Visualization -->
       <div v-else-if="stats" class="space-y-2">
         <!-- Ultra-Compact Toolbar: Everything on one line -->
-        <div class="bg-slate-800/50 rounded-lg px-4 py-2 flex items-center gap-4 border border-slate-700 text-xs">
+        <div class="bg-slate-800/50 rounded-lg px-4 py-2 flex items-center gap-4 border-2 border-slate-700 text-xs">
           <!-- Stats -->
           <div class="flex items-center gap-3">
-            <span class="text-gray-500 uppercase tracking-wide">Graph</span>
             <div class="flex items-center gap-2">
-              <span class="text-gray-400">N:</span>
-              <span class="font-mono font-bold text-cyan-400">{{ stats.total_nodes }}</span>
+              <span class="scada-led scada-led-cyan"></span>
+              <span class="text-gray-500 uppercase tracking-wide font-mono">Graph</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-gray-400">E:</span>
-              <span class="font-mono font-bold text-emerald-400">{{ stats.total_edges }}</span>
+              <span class="scada-label">N:</span>
+              <span class="scada-data text-cyan-400">{{ stats.total_nodes }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-gray-400">C:</span>
-              <span class="font-mono font-bold text-blue-400">{{ stats.nodes_by_type.Class || 0 }}</span>
+              <span class="scada-label">E:</span>
+              <span class="scada-data text-emerald-400">{{ stats.total_edges }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-gray-400">F:</span>
-              <span class="font-mono font-bold text-purple-400">{{ stats.nodes_by_type.Function || 0 }}</span>
+              <span class="scada-label">C:</span>
+              <span class="scada-data text-blue-400">{{ stats.nodes_by_type.Class || 0 }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="scada-label">F:</span>
+              <span class="scada-data text-purple-400">{{ stats.nodes_by_type.Function || 0 }}</span>
             </div>
           </div>
 
@@ -343,16 +344,17 @@ onMounted(async () => {
 
           <!-- Layout Toggle -->
           <div class="flex items-center gap-1">
+            <span class="scada-label mr-1">View:</span>
             <button
               @click="useG6 = false"
-              class="px-2 py-1 rounded text-xs transition-colors"
+              class="px-2 py-1 rounded text-xs transition-colors font-mono uppercase"
               :class="!useG6 ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
             >
               Network
             </button>
             <button
               @click="useG6 = true"
-              class="px-2 py-1 rounded text-xs transition-colors"
+              class="px-2 py-1 rounded text-xs transition-colors font-mono uppercase"
               :class="useG6 ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
             >
               G6
@@ -365,26 +367,24 @@ onMounted(async () => {
           <button
             @click="handleBuildGraph"
             :disabled="building || loading"
-            class="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-gray-500 text-white rounded text-xs font-medium transition-colors"
+            class="scada-btn scada-btn-primary text-xs"
           >
             <svg v-if="building" class="animate-spin -ml-1 mr-1 h-3 w-3 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            {{ building ? 'Building...' : 'Build' }}
+            {{ building ? 'BUILDING...' : 'BUILD' }}
           </button>
         </div>
 
 
         <!-- Build Error Banner -->
         <div v-if="buildError" class="alert-error">
-          <div class="flex items-start">
-            <svg class="h-5 w-5 text-red-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-            </svg>
-            <div class="ml-3">
-              <h3 class="text-sm font-medium text-red-300 uppercase">Build Error</h3>
-              <p class="mt-1 text-sm text-red-400">{{ buildError }}</p>
+          <div class="flex items-start gap-3">
+            <span class="scada-led scada-led-red"></span>
+            <div>
+              <h3 class="text-sm font-medium text-red-300 uppercase font-mono">Build Error</h3>
+              <p class="mt-1 text-sm text-red-400 font-mono">{{ buildError }}</p>
             </div>
           </div>
         </div>
@@ -429,56 +429,53 @@ onMounted(async () => {
 
           <!-- Legend (v-network-graph only) -->
           <div v-if="!useG6" class="mt-4 space-y-3">
-            <div class="flex items-center gap-6 text-sm text-gray-400">
+            <div class="flex items-center gap-6 text-sm font-mono">
               <div class="flex items-center gap-2">
                 <div class="w-8 h-8 rounded bg-blue-500 border-2 border-white"></div>
-                <span>Classes</span>
+                <span class="uppercase">Classes</span>
               </div>
               <div class="flex items-center gap-2">
                 <div class="w-8 h-8 rounded-full bg-green-500 border-2 border-white"></div>
-                <span>Functions</span>
+                <span class="uppercase">Functions</span>
               </div>
               <div class="flex items-center gap-2">
                 <div class="w-8 h-8 rounded-full bg-purple-500 border-2 border-white"></div>
-                <span>Methods</span>
+                <span class="uppercase">Methods</span>
               </div>
               <div class="flex items-center gap-2">
                 <svg class="w-8 h-1" viewBox="0 0 32 4">
                   <line x1="0" y1="2" x2="32" y2="2" stroke="#475569" stroke-width="2" />
                   <polygon points="28,0 32,2 28,4" fill="#475569" />
                 </svg>
-                <span>Function calls</span>
+                <span class="uppercase">Function Calls</span>
               </div>
             </div>
-            <div class="text-xs text-gray-500">
-              💡 Tip: Nodes are grouped vertically by file. Labels show filename:line. Hover for full details. Drag to pan, scroll to zoom.
+            <div class="flex items-center gap-2 text-xs text-gray-500">
+              <span class="scada-led scada-led-cyan"></span>
+              <span class="font-mono uppercase">Tip: Nodes Grouped by File • Labels Show Filename:Line • Hover for Details • Drag to Pan, Scroll to Zoom</span>
             </div>
           </div>
 
           <!-- Info Message -->
-          <div v-if="stats.total_nodes === 0" class="mt-4 p-4 bg-amber-900/20 border border-amber-700/30 rounded">
-            <div class="flex items-start">
-              <svg class="h-5 w-5 text-amber-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-              </svg>
-              <div class="ml-3">
-                <h3 class="text-sm font-medium text-amber-300">Graph Not Built</h3>
-                <p class="mt-1 text-sm text-amber-400/80">
-                  The code graph has not been built yet. Click the <strong>"Build Graph"</strong> button above to analyze code dependencies and generate the graph.
+          <div v-if="stats.total_nodes === 0" class="mt-4 p-4 bg-amber-900/20 border-2 border-amber-700/30 rounded">
+            <div class="flex items-start gap-3">
+              <span class="scada-led scada-led-yellow"></span>
+              <div>
+                <h3 class="text-sm font-medium text-amber-300 font-mono uppercase">Graph Not Built</h3>
+                <p class="mt-1 text-sm text-amber-400/80 font-mono">
+                  The code graph has not been built yet. Click the <strong>"BUILD GRAPH"</strong> button above to analyze code dependencies and generate the graph.
                 </p>
               </div>
             </div>
           </div>
 
           <!-- No Edges Warning -->
-          <div v-else-if="stats.total_nodes > 0 && stats.total_edges === 0" class="mt-4 p-4 bg-blue-900/20 border border-blue-700/30 rounded">
-            <div class="flex items-start">
-              <svg class="h-5 w-5 text-blue-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-              </svg>
-              <div class="ml-3">
-                <h3 class="text-sm font-medium text-blue-300">No Dependencies Detected</h3>
-                <p class="mt-1 text-sm text-blue-400/80">
+          <div v-else-if="stats.total_nodes > 0 && stats.total_edges === 0" class="mt-4 p-4 bg-blue-900/20 border-2 border-blue-700/30 rounded">
+            <div class="flex items-start gap-3">
+              <span class="scada-led scada-led-cyan"></span>
+              <div>
+                <h3 class="text-sm font-medium text-blue-300 font-mono uppercase">No Dependencies Detected</h3>
+                <p class="mt-1 text-sm text-blue-400/80 font-mono">
                   Graph shows {{ stats.total_nodes }} nodes but no edges. This means no code dependencies (imports/calls) were detected between functions and classes.
                 </p>
               </div>

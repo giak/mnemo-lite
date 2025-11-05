@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * EPIC-25 Story 25.3: Dashboard Card Component
- * Reusable card component for displaying dashboard statistics - Dark Theme Design System
+ * EPIC-27: Dashboard Card Component - SCADA Industrial Style
+ * Reusable card component with LED indicators and monospace data
  */
 
 interface Props {
@@ -17,54 +17,51 @@ const props = withDefaults(defineProps<Props>(), {
   loading: false,
 })
 
-const cardClasses = {
-  success: 'card-success',
-  warning: 'card-warning',
-  error: 'card-error',
-  info: 'card-info',
+// LED indicator classes
+const ledClasses = {
+  success: 'scada-led scada-led-green',
+  warning: 'scada-led scada-led-yellow',
+  error: 'scada-led scada-led-red',
+  info: 'scada-led scada-led-cyan',
 }
 
-const statusTextClasses = {
-  success: 'text-emerald-400',
-  warning: 'text-amber-400',
-  error: 'text-red-400',
-  info: 'text-cyan-400',
-}
-
-const statusValueClasses = {
-  success: 'text-emerald-300',
-  warning: 'text-amber-300',
-  error: 'text-red-300',
-  info: 'text-cyan-200',
+// SCADA status text classes
+const statusClasses = {
+  success: 'scada-status-healthy',
+  warning: 'scada-status-warning',
+  error: 'scada-status-danger',
+  info: 'scada-status-info',
 }
 </script>
 
 <template>
-  <div :class="cardClasses[props.status]">
-    <h3
-      class="text-subheading"
-      :class="statusTextClasses[props.status]"
-    >
-      {{ props.title }}
-    </h3>
+  <div class="scada-panel">
+    <!-- Header avec LED et titre -->
+    <div class="flex items-center gap-3 mb-4">
+      <!-- LED Status Indicator -->
+      <span :class="ledClasses[props.status]"></span>
+      <h3 class="scada-label" :class="statusClasses[props.status]">
+        {{ props.title }}
+      </h3>
+    </div>
 
     <div v-if="props.loading" class="mt-4">
       <div class="animate-pulse">
-        <div class="h-8 bg-slate-700 w-24"></div>
-        <div class="h-4 bg-slate-800 w-32 mt-2"></div>
+        <div class="h-8 bg-slate-700 w-24 rounded"></div>
+        <div class="h-4 bg-slate-800 w-32 mt-2 rounded"></div>
       </div>
     </div>
 
     <div v-else class="mt-4">
-      <p
-        class="text-4xl font-bold"
-        :class="statusValueClasses[props.status]"
-      >
+      <!-- Valeur principale avec style SCADA monospace -->
+      <p class="text-4xl scada-data">
         {{ props.value ?? '-' }}
       </p>
+
+      <!-- Subtitle avec font monospace -->
       <p
         v-if="props.subtitle"
-        class="mt-2 text-sm text-gray-400"
+        class="mt-2 text-sm text-gray-400 font-mono"
       >
         {{ props.subtitle }}
       </p>

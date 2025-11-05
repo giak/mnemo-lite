@@ -209,7 +209,10 @@ watch(() => [props.nodes, props.edges], () => {
 
     <!-- Cluster Legend -->
     <div v-if="preparedData.clusters.size > 0" class="cluster-legend">
-      <div class="legend-title">📁 Clusters by Folder</div>
+      <div class="legend-title flex items-center gap-2">
+        <span class="scada-led scada-led-cyan"></span>
+        <span class="font-mono uppercase">Clusters by Folder</span>
+      </div>
       <div class="legend-items">
         <div
           v-for="[folder, index] in Array.from(preparedData.clusters.entries()).slice(0, 8)"
@@ -220,10 +223,10 @@ watch(() => [props.nodes, props.edges], () => {
             class="legend-dot"
             :style="{ backgroundColor: clusterColors[index % clusterColors.length] }"
           ></div>
-          <span class="legend-label">{{ folder }}</span>
+          <span class="legend-label font-mono">{{ folder }}</span>
         </div>
         <div v-if="preparedData.clusters.size > 8" class="legend-item">
-          <span class="legend-label text-gray-500">+{{ preparedData.clusters.size - 8 }} more...</span>
+          <span class="legend-label text-gray-500 font-mono">+{{ preparedData.clusters.size - 8 }} more...</span>
         </div>
       </div>
     </div>
@@ -231,16 +234,16 @@ watch(() => [props.nodes, props.edges], () => {
     <!-- Stats Overlay -->
     <div class="stats-overlay">
       <div class="stat-item">
-        <span class="stat-label">Nodes:</span>
-        <span class="stat-value">{{ preparedData.nodes.length }}</span>
+        <span class="stat-label scada-label">Nodes:</span>
+        <span class="stat-value scada-data text-cyan-400">{{ preparedData.nodes.length }}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">Edges:</span>
-        <span class="stat-value">{{ preparedData.edges.length }}</span>
+        <span class="stat-label scada-label">Edges:</span>
+        <span class="stat-value scada-data text-cyan-400">{{ preparedData.edges.length }}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">Clusters:</span>
-        <span class="stat-value">{{ preparedData.clusters.size }}</span>
+        <span class="stat-label scada-label">Clusters:</span>
+        <span class="stat-value scada-data text-cyan-400">{{ preparedData.clusters.size }}</span>
       </div>
     </div>
   </div>
@@ -266,7 +269,7 @@ watch(() => [props.nodes, props.edges], () => {
   top: 16px;
   right: 16px;
   background: rgba(30, 41, 59, 0.95);
-  border: 1px solid #475569;
+  border: 2px solid #475569;
   border-radius: 8px;
   padding: 12px;
   max-width: 250px;
@@ -313,7 +316,7 @@ watch(() => [props.nodes, props.edges], () => {
   display: flex;
   gap: 16px;
   background: rgba(30, 41, 59, 0.95);
-  border: 1px solid #475569;
+  border: 2px solid #475569;
   border-radius: 8px;
   padding: 8px 12px;
 }

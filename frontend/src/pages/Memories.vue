@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * EPIC-26: Memories Monitor Page
- * Main dashboard for monitoring conversations, code chunks, and embeddings
+ * EPIC-27: Memories Monitor Page - SCADA Industrial Style
+ * Main dashboard for monitoring conversations, code chunks, and embeddings with LED indicators
  */
 import { ref } from 'vue'
 import { useMemories } from '@/composables/useMemories'
@@ -38,29 +38,35 @@ function handleCloseModal() {
 
 <template>
   <div class="container mx-auto px-4 py-6">
-    <!-- Page Header -->
+    <!-- Page Header avec LED SCADA -->
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-3xl font-bold text-cyan-400">🧠 Memories Monitor</h1>
+      <div class="flex items-center gap-4">
+        <span class="scada-led scada-led-cyan"></span>
+        <h1 class="text-3xl font-bold font-mono text-cyan-400 uppercase tracking-wider">Memories Monitor</h1>
+      </div>
 
       <button
         @click="refresh"
         :disabled="loading"
-        class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        class="scada-btn scada-btn-primary flex items-center gap-2"
       >
         <span v-if="loading">⏳</span>
         <span v-else>🔄</span>
-        Refresh
+        {{ loading ? 'LOADING...' : 'REFRESH' }}
       </button>
     </div>
 
-    <!-- Error Display -->
+    <!-- Error Display avec LED -->
     <div v-if="errors.length > 0" class="mb-4 space-y-2">
       <div
         v-for="error in errors"
         :key="error.timestamp"
-        class="bg-red-900/50 border border-red-600 text-red-300 px-4 py-2 rounded-lg text-sm"
+        class="bg-red-900/50 border-2 border-red-600 text-red-300 px-4 py-3 rounded flex items-start gap-3"
       >
-        ⚠️ {{ error.endpoint }}: {{ error.message }}
+        <span class="scada-led scada-led-red"></span>
+        <span class="text-sm font-mono">
+          <span class="scada-status-danger">{{ error.endpoint }}</span>: {{ error.message }}
+        </span>
       </div>
     </div>
 

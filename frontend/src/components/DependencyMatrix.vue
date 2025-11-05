@@ -177,7 +177,7 @@ console.log('[DependencyMatrix] Data:', {
     <!-- Controls -->
     <div class="controls">
       <div class="control-group">
-        <label class="control-label">Recherche:</label>
+        <label class="control-label scada-label">Recherche:</label>
         <input
           v-model="searchFilter"
           type="text"
@@ -187,7 +187,7 @@ console.log('[DependencyMatrix] Data:', {
       </div>
 
       <div class="control-group">
-        <label class="control-label">Dossier:</label>
+        <label class="control-label scada-label">Dossier:</label>
         <select v-model="folderFilter" class="folder-select">
           <option value="all">Tous</option>
           <option v-for="folder in folders" :key="folder" :value="folder">
@@ -200,20 +200,20 @@ console.log('[DependencyMatrix] Data:', {
     <!-- Stats -->
     <div class="stats-bar">
       <div class="stat-item">
-        <span class="stat-label">Modules:</span>
-        <span class="stat-value">{{ matrixData.nodes.length }}</span>
+        <span class="stat-label scada-label">Modules:</span>
+        <span class="stat-value scada-data text-cyan-400">{{ matrixData.nodes.length }}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">Dependencies:</span>
-        <span class="stat-value">{{ matrixData.totalDeps }}</span>
+        <span class="stat-label scada-label">Dependencies:</span>
+        <span class="stat-value scada-data text-cyan-400">{{ matrixData.totalDeps }}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">Circular:</span>
-        <span class="stat-value text-red-400">{{ matrixData.circularDeps }}</span>
+        <span class="stat-label scada-label">Circular:</span>
+        <span class="stat-value scada-data text-red-400">{{ matrixData.circularDeps }}</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">Avg Coupling:</span>
-        <span class="stat-value">
+        <span class="stat-label scada-label">Avg Coupling:</span>
+        <span class="stat-value scada-data text-cyan-400">
           {{ matrixData.nodes.length > 0 ? (matrixData.totalDeps * 2 / matrixData.nodes.length).toFixed(1) : 0 }}
         </span>
       </div>
@@ -222,20 +222,20 @@ console.log('[DependencyMatrix] Data:', {
     <!-- Legend -->
     <div class="legend">
       <div class="legend-item">
-        <div class="legend-box" style="background: #3b82f6;"></div>
-        <span>Dependency</span>
+        <span class="scada-led" style="background: #3b82f6;"></span>
+        <span class="font-mono uppercase">Dependency</span>
       </div>
       <div class="legend-item">
-        <div class="legend-box" style="background: #ef4444;"></div>
-        <span>Circular</span>
+        <span class="scada-led scada-led-red"></span>
+        <span class="font-mono uppercase">Circular</span>
       </div>
       <div class="legend-item">
-        <div class="legend-box" style="background: #fbbf24;"></div>
-        <span>Self-ref</span>
+        <span class="scada-led scada-led-yellow"></span>
+        <span class="font-mono uppercase">Self-Ref</span>
       </div>
       <div class="legend-item">
-        <div class="legend-box" style="background: #1e293b;"></div>
-        <span>None</span>
+        <span class="scada-led" style="background: #1e293b; border: 1px solid #475569;"></span>
+        <span class="font-mono uppercase">None</span>
       </div>
     </div>
 
@@ -311,8 +311,11 @@ console.log('[DependencyMatrix] Data:', {
 
     <!-- Info note -->
     <div class="info-note">
-      <p>💡 Rows = Source | Columns = Target | Hover to highlight dependencies</p>
-      <p class="text-xs text-gray-500">Limited to 100 modules for performance. Use filters to focus on specific areas.</p>
+      <div class="flex items-center gap-2">
+        <span class="scada-led scada-led-cyan"></span>
+        <p class="font-mono uppercase text-xs">Rows = Source | Columns = Target | Hover to Highlight Dependencies</p>
+      </div>
+      <p class="text-xs text-gray-500 font-mono uppercase">Limited to 100 Modules for Performance. Use Filters to Focus on Specific Areas.</p>
     </div>
   </div>
 </template>
@@ -334,6 +337,7 @@ console.log('[DependencyMatrix] Data:', {
   flex-wrap: wrap;
   padding: 12px;
   background: rgba(30, 41, 59, 0.5);
+  border: 2px solid #334155;
   border-radius: 6px;
 }
 
@@ -371,6 +375,7 @@ console.log('[DependencyMatrix] Data:', {
   gap: 24px;
   padding: 12px;
   background: rgba(30, 41, 59, 0.5);
+  border: 2px solid #334155;
   border-radius: 6px;
 }
 
@@ -394,6 +399,7 @@ console.log('[DependencyMatrix] Data:', {
   gap: 16px;
   padding: 8px 12px;
   background: rgba(30, 41, 59, 0.5);
+  border: 2px solid #334155;
   border-radius: 6px;
   font-size: 11px;
 }
@@ -521,7 +527,7 @@ console.log('[DependencyMatrix] Data:', {
 .info-note {
   padding: 8px 12px;
   background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 2px solid rgba(59, 130, 246, 0.3);
   border-radius: 6px;
   font-size: 12px;
   color: #94a3b8;

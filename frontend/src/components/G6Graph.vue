@@ -625,7 +625,7 @@ onMounted(() => {
 <template>
   <div class="g6-graph-wrapper">
     <!-- Ultra-Compact Controls Bar -->
-    <div class="mb-2 bg-slate-800/30 rounded px-3 py-1.5 flex items-center gap-3 border border-slate-700/50">
+    <div class="mb-2 bg-slate-800/30 rounded px-3 py-1.5 flex items-center gap-3 border-2 border-slate-700/50">
       <!-- Search (compact) -->
       <div class="flex-1 max-w-xs">
         <div class="relative">
@@ -673,7 +673,7 @@ onMounted(() => {
 
       <!-- Layout Switcher (NEW) -->
       <div class="flex items-center gap-1">
-        <span class="text-[10px] text-gray-500 mr-1">Layout:</span>
+        <span class="text-[10px] text-gray-500 mr-1 font-mono uppercase">Layout:</span>
         <button
           @click="changeLayout('dagre')"
           class="px-2 py-0.5 text-[10px] rounded transition-colors font-medium"
@@ -709,8 +709,9 @@ onMounted(() => {
       </div>
 
       <!-- Focus indicator (if active) -->
-      <div v-if="focusNodeId" class="text-[10px] text-gray-500 px-2 py-0.5 bg-slate-700 rounded">
-        <span class="text-amber-400 font-mono">{{ focusNodeId.slice(0, 6) }}</span>
+      <div v-if="focusNodeId" class="flex items-center gap-1.5 text-[10px] text-gray-500 px-2 py-0.5 bg-slate-700 rounded">
+        <span class="scada-led scada-led-yellow" style="width: 6px; height: 6px;"></span>
+        <span class="text-amber-400 font-mono uppercase">Focus: {{ focusNodeId.slice(0, 6) }}</span>
       </div>
 
       <div class="flex-1"></div>
@@ -789,30 +790,36 @@ onMounted(() => {
         ></div>
 
         <!-- Legend -->
-        <div class="mt-4 space-y-2 text-xs text-gray-400">
+        <div class="mt-4 space-y-2 text-xs font-mono">
           <div class="flex items-center gap-4">
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded-full bg-blue-500 border-2 border-white"></div>
-              <span>Classes</span>
+              <div class="w-6 h-6 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center">
+                <span class="scada-led" style="width: 10px; height: 10px; background: #3b82f6;"></span>
+              </div>
+              <span class="text-gray-300 uppercase">Classes</span>
             </div>
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded-full bg-green-500 border-2 border-white"></div>
-              <span>Functions</span>
+              <div class="w-6 h-6 rounded-full bg-green-500 border-2 border-white flex items-center justify-center">
+                <span class="scada-led" style="width: 10px; height: 10px; background: #10b981;"></span>
+              </div>
+              <span class="text-gray-300 uppercase">Functions</span>
             </div>
             <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded-full bg-purple-500 border-2 border-white"></div>
-              <span>Methods</span>
+              <div class="w-6 h-6 rounded-full bg-purple-500 border-2 border-white flex items-center justify-center">
+                <span class="scada-led" style="width: 10px; height: 10px; background: #8b5cf6;"></span>
+              </div>
+              <span class="text-gray-300 uppercase">Methods</span>
             </div>
           </div>
-          <div class="text-gray-500">
-            <strong>Size</strong> = Complexity. <strong>Opacity</strong> = Depth. <strong>Gold ring</strong> = Focus. <strong>Curved edges</strong> = Dependencies.
+          <div class="text-gray-500 uppercase">
+            <strong>Size</strong> = Complexity • <strong>Opacity</strong> = Depth • <strong>Gold Ring</strong> = Focus • <strong>Curved Edges</strong> = Dependencies
           </div>
         </div>
       </div>
 
       <!-- Stats Panel -->
       <div v-if="selectedNodeStats" class="w-80 flex-shrink-0">
-        <div class="bg-slate-800 border border-slate-700 rounded-lg p-4 sticky top-4">
+        <div class="scada-panel rounded-lg p-4 sticky top-4">
           <!-- Header with close button -->
           <div class="flex items-start justify-between mb-4">
             <div class="flex items-center gap-3">
@@ -855,13 +862,13 @@ onMounted(() => {
 
           <!-- Metrics Grid -->
           <div class="grid grid-cols-2 gap-3 mb-4">
-            <div class="bg-slate-900 rounded p-3">
-              <div class="text-xs text-gray-500 mb-1">Complexity</div>
-              <div class="text-xl font-bold text-amber-400">{{ selectedNodeStats.complexity }}</div>
+            <div class="bg-slate-900 rounded p-3 border-2 border-slate-700">
+              <div class="scada-label mb-1">Complexity</div>
+              <div class="text-xl scada-data text-amber-400">{{ selectedNodeStats.complexity }}</div>
             </div>
-            <div class="bg-slate-900 rounded p-3">
-              <div class="text-xs text-gray-500 mb-1">Depth</div>
-              <div class="text-xl font-bold text-cyan-400">
+            <div class="bg-slate-900 rounded p-3 border-2 border-slate-700">
+              <div class="scada-label mb-1">Depth</div>
+              <div class="text-xl scada-data text-cyan-400">
                 {{ calculateDepths(focusNodeId!).get(selectedNode!.id) ?? '?' }}
               </div>
             </div>
@@ -874,7 +881,7 @@ onMounted(() => {
                 <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                 </svg>
-                <span class="text-xs font-semibold text-gray-300">Incoming ({{ selectedNodeStats.incomingCount }})</span>
+                <span class="scada-label text-gray-300">Incoming ({{ selectedNodeStats.incomingCount }})</span>
               </div>
               <div v-if="selectedNodeStats.incomingCount > 0" class="space-y-1 max-h-32 overflow-y-auto">
                 <div
@@ -896,7 +903,7 @@ onMounted(() => {
                 <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
                 </svg>
-                <span class="text-xs font-semibold text-gray-300">Outgoing ({{ selectedNodeStats.outgoingCount }})</span>
+                <span class="scada-label text-gray-300">Outgoing ({{ selectedNodeStats.outgoingCount }})</span>
               </div>
               <div v-if="selectedNodeStats.outgoingCount > 0" class="space-y-1 max-h-32 overflow-y-auto">
                 <div
@@ -915,12 +922,12 @@ onMounted(() => {
           </div>
 
           <!-- File Info -->
-          <div v-if="selectedNode?.file_path" class="mt-4 pt-4 border-t border-slate-700">
-            <div class="text-xs text-gray-500 mb-1">File Location</div>
+          <div v-if="selectedNode?.file_path" class="mt-4 pt-4 border-t-2 border-slate-700">
+            <div class="scada-label mb-1">File Location</div>
             <div class="text-xs text-gray-300 font-mono break-all">
               {{ selectedNode.file_path }}
             </div>
-            <div v-if="selectedNode.start_line" class="text-xs text-gray-500 mt-1">
+            <div v-if="selectedNode.start_line" class="text-xs text-gray-500 mt-1 font-mono uppercase">
               Lines {{ selectedNode.start_line }}-{{ selectedNode.end_line || '?' }}
             </div>
           </div>

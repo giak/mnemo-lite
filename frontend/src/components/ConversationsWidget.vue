@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * EPIC-26: Conversations Widget
- * Displays recent conversations in timeline format
+ * EPIC-27: Conversations Widget - SCADA Industrial Style
+ * Displays recent conversations with LED indicators and monospace formatting
  */
 import { computed } from 'vue'
 import type { Memory } from '@/types/memories'
@@ -12,47 +12,58 @@ interface Props {
 
 const props = defineProps<Props>()
 
-// Format relative time
+// Emit events
+defineEmits<{
+  'view-detail': [id: string]
+}>()
+
+// Format relative time in UPPERCASE abbreviated format
 function formatRelativeTime(isoString: string): string {
   const date = new Date(isoString)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffSec = Math.floor(diffMs / 1000)
 
-  if (diffSec < 60) return `${diffSec}s ago`
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}min ago`
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`
-  return `${Math.floor(diffSec / 86400)}d ago`
+  if (diffSec < 60) return `${diffSec}S AGO`
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}MIN AGO`
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}H AGO`
+  return `${Math.floor(diffSec / 86400)}D AGO`
 }
 
 // Extract session ID from tags (format: session:abc123...)
 function extractSessionId(tags: string[]): string {
   const sessionTag = tags.find(tag => tag.startsWith('session:'))
-  if (!sessionTag) return 'Unknown'
-  return sessionTag.replace('session:', '').substring(0, 8)
+  if (!sessionTag) return 'UNKNOWN'
+  return sessionTag.replace('session:', '').substring(0, 8).toUpperCase()
 }
 </script>
 
 <template>
-  <div class="bg-slate-800 border border-slate-700 rounded-lg p-4 h-full">
-    <h2 class="text-lg font-semibold text-cyan-400 mb-4">
-      📝 Recent Conversations
-    </h2>
-
-    <div v-if="memories.length === 0" class="text-gray-400 text-sm text-center py-8">
-      No conversations found
+  <div class="scada-panel h-full">
+    <!-- Header avec LED -->
+    <div class="flex items-center gap-3 mb-4 pb-3 border-b-2 border-slate-700">
+      <span class="scada-led scada-led-cyan"></span>
+      <h2 class="text-lg scada-label text-cyan-400">
+        Recent Conversations
+      </h2>
     </div>
 
+    <!-- Empty State -->
+    <div v-if="memories.length === 0" class="text-gray-400 text-sm text-center py-8 font-mono uppercase">
+      No Conversations Found
+    </div>
+
+    <!-- Conversations List -->
     <div v-else class="space-y-3 overflow-y-auto max-h-[600px]">
       <div
         v-for="memory in memories"
         :key="memory.id"
-        class="border border-slate-600 rounded-lg p-3 hover:bg-slate-700 transition-colors"
+        class="border-2 border-slate-600 rounded p-3 hover:bg-slate-700 transition-colors"
       >
         <!-- Time + Session -->
-        <div class="flex items-center justify-between text-xs text-gray-400 mb-2">
-          <span>🕐 {{ formatRelativeTime(memory.created_at) }}</span>
-          <span>Session: {{ extractSessionId(memory.tags) }}</span>
+        <div class="flex items-center justify-between text-xs text-gray-400 mb-2 font-mono">
+          <span>{{ formatRelativeTime(memory.created_at) }}</span>
+          <span class="uppercase">SESSION: {{ extractSessionId(memory.tags) }}</span>
         </div>
 
         <!-- Title -->
@@ -65,13 +76,13 @@ function extractSessionId(tags: string[]): string {
           <span
             v-for="tag in memory.tags.slice(0, 3)"
             :key="tag"
-            class="text-xs px-2 py-0.5 bg-slate-600 text-gray-300 rounded"
+            class="text-xs px-2 py-0.5 bg-slate-600 text-gray-300 rounded border border-slate-500 font-mono"
           >
             {{ tag }}
           </span>
           <span
             v-if="memory.tags.length > 3"
-            class="text-xs px-2 py-0.5 text-gray-400"
+            class="text-xs px-2 py-0.5 text-gray-400 font-mono"
           >
             +{{ memory.tags.length - 3 }}
           </span>
@@ -79,14 +90,17 @@ function extractSessionId(tags: string[]): string {
 
         <!-- Embedding Status + View Button -->
         <div class="flex items-center justify-between">
-          <span class="text-xs" :class="memory.has_embedding ? 'text-green-400' : 'text-yellow-400'">
-            {{ memory.has_embedding ? '✅ Embedded' : '⚠️ No embedding' }}
-          </span>
+          <div class="flex items-center gap-2">
+            <span class="scada-led" :class="memory.has_embedding ? 'scada-led-green' : 'scada-led-yellow'"></span>
+            <span class="text-xs font-mono uppercase" :class="memory.has_embedding ? 'scada-status-healthy' : 'scada-status-warning'">
+              {{ memory.has_embedding ? 'Embedded' : 'No Embedding' }}
+            </span>
+          </div>
           <button
-            class="text-xs px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded transition-colors"
+            class="scada-btn scada-btn-primary text-xs px-3 py-1"
             @click="$emit('view-detail', memory.id)"
           >
-            👁️ View
+            View
           </button>
         </div>
       </div>

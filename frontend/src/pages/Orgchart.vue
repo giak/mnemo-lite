@@ -231,21 +231,22 @@ const handleBuildGraph = async () => {
   <div class="min-h-screen bg-slate-950">
     <div class="max-w-full mx-auto px-4 py-3">
       <!-- Ultra-Compact Toolbar -->
-      <div class="bg-slate-800/50 rounded-lg px-4 py-2 flex items-center gap-4 border border-slate-700 text-xs">
+      <div class="bg-slate-800/50 rounded-lg px-4 py-2 flex items-center gap-4 border-2 border-slate-700 text-xs">
         <!-- Title -->
         <div class="flex items-center gap-3">
-          <span class="text-gray-400 uppercase tracking-wide">Organigramme</span>
+          <span class="scada-led scada-led-cyan"></span>
+          <span class="text-gray-400 uppercase tracking-wide font-mono">Organigramme</span>
         </div>
 
         <!-- Stats -->
         <div class="flex items-center gap-3">
           <div class="flex items-center gap-2">
-            <span class="text-gray-400">N:</span>
-            <span class="font-mono font-bold text-cyan-400">{{ stats?.total_nodes || 0 }}</span>
+            <span class="scada-label">N:</span>
+            <span class="scada-data text-cyan-400">{{ stats?.total_nodes || 0 }}</span>
           </div>
           <div class="flex items-center gap-2">
-            <span class="text-gray-400">E:</span>
-            <span class="font-mono font-bold text-emerald-400">{{ stats?.total_edges || 0 }}</span>
+            <span class="scada-label">E:</span>
+            <span class="scada-data text-emerald-400">{{ stats?.total_edges || 0 }}</span>
           </div>
         </div>
 
@@ -264,7 +265,7 @@ const handleBuildGraph = async () => {
 
         <!-- View Mode Selector -->
         <div class="flex items-center gap-2">
-          <span class="text-gray-400">Vue:</span>
+          <span class="scada-label">Vue:</span>
           <div class="flex bg-slate-700 rounded overflow-hidden">
             <button
               v-for="(config, mode) in VIEW_MODES"
@@ -287,7 +288,7 @@ const handleBuildGraph = async () => {
 
         <!-- Semantic Zoom Slider -->
         <div class="flex items-center gap-3">
-          <span class="text-gray-400">Zoom:</span>
+          <span class="scada-label">Zoom:</span>
           <div class="flex flex-col gap-1 w-48">
             <!-- Slider with visual zones -->
             <input
@@ -306,7 +307,7 @@ const handleBuildGraph = async () => {
               }"
             />
             <!-- Zone labels -->
-            <div class="flex justify-between text-[9px] text-gray-500">
+            <div class="flex justify-between text-[9px] text-gray-500 font-mono uppercase">
               <span>Macro</span>
               <span>Archi</span>
               <span>Détails</span>
@@ -314,7 +315,7 @@ const handleBuildGraph = async () => {
             </div>
           </div>
           <!-- Current value -->
-          <span class="font-mono text-cyan-400 text-xs min-w-[3rem]">{{ zoomLevel }}%</span>
+          <span class="scada-data text-cyan-400 text-xs min-w-[3rem]">{{ zoomLevel }}%</span>
 
           <!-- Advanced settings button -->
           <button
@@ -332,21 +333,19 @@ const handleBuildGraph = async () => {
         <button
           @click="handleBuildGraph"
           :disabled="building"
-          class="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded text-xs transition-colors"
+          class="scada-btn scada-btn-primary text-xs"
         >
-          {{ building ? 'Building...' : 'Build' }}
+          {{ building ? 'BUILDING...' : 'BUILD' }}
         </button>
       </div>
 
       <!-- Error Message -->
-      <div v-if="error" class="mt-4 bg-red-900/20 border border-red-700 rounded-lg px-4 py-3">
-        <div class="flex items-start">
-          <svg class="h-5 w-5 text-red-400 mt-0.5 mr-3" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-          </svg>
+      <div v-if="error" class="mt-4 bg-red-900/20 border-2 border-red-700 rounded-lg px-4 py-3">
+        <div class="flex items-start gap-3">
+          <span class="scada-led scada-led-red"></span>
           <div>
-            <h3 class="text-sm font-medium text-red-300 uppercase">Error</h3>
-            <p class="mt-1 text-sm text-red-400">{{ error }}</p>
+            <h3 class="text-sm font-medium text-red-300 uppercase font-mono">Graph Error</h3>
+            <p class="mt-1 text-sm text-red-400 font-mono">{{ error }}</p>
           </div>
         </div>
       </div>
@@ -362,19 +361,19 @@ const handleBuildGraph = async () => {
       <!-- Orgchart Visualization -->
       <div v-else-if="nodes.length > 0" class="mt-4">
         <!-- Stats Info Card -->
-        <div class="bg-slate-800/50 rounded-lg border border-slate-700 p-3 mb-4">
+        <div class="bg-slate-800/50 rounded-lg border-2 border-slate-700 p-3 mb-4">
           <div class="flex items-center justify-center gap-6 text-xs">
             <div class="flex items-center gap-2">
-              <span class="text-cyan-400 font-mono">→</span>
-              <span class="text-gray-400">Entry points: <span class="text-cyan-400 font-semibold">{{ stats?.nodes_by_type?.Module || 0 }}</span></span>
+              <span class="scada-label">Entry Points:</span>
+              <span class="scada-data text-cyan-400">{{ stats?.nodes_by_type?.Module || 0 }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-emerald-400 font-mono">→</span>
-              <span class="text-gray-400">Import edges: <span class="text-emerald-400 font-semibold">{{ stats?.edges_by_type?.imports || 0 }}</span></span>
+              <span class="scada-label">Import Edges:</span>
+              <span class="scada-data text-emerald-400">{{ stats?.edges_by_type?.imports || 0 }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-purple-400 font-mono">→</span>
-              <span class="text-gray-400">Total nodes: <span class="text-purple-400 font-semibold">{{ stats?.total_nodes || 0 }}</span></span>
+              <span class="scada-label">Total Nodes:</span>
+              <span class="scada-data text-purple-400">{{ stats?.total_nodes || 0 }}</span>
             </div>
           </div>
         </div>
@@ -409,14 +408,17 @@ const handleBuildGraph = async () => {
           <!-- Legend Panel (only for Orgchart views) -->
           <div
             v-if="viewMode === 'hierarchy' || viewMode === 'complexity' || viewMode === 'hubs'"
-            class="absolute bottom-4 right-4 bg-slate-800/95 rounded-lg shadow-xl border border-slate-700 text-xs"
+            class="absolute bottom-4 right-4 bg-slate-800/95 rounded-lg shadow-xl border-2 border-slate-700 text-xs"
           >
             <!-- Header with collapse button -->
             <div
-              class="flex items-center justify-between px-3 py-2 border-b border-slate-700 cursor-pointer hover:bg-slate-750 transition-colors"
+              class="flex items-center justify-between px-3 py-2 border-b-2 border-slate-700 cursor-pointer hover:bg-slate-750 transition-colors"
               @click="legendExpanded = !legendExpanded"
             >
-              <span class="font-semibold text-gray-200">{{ legendContent.title }}</span>
+              <div class="flex items-center gap-2">
+                <span class="scada-led scada-led-cyan"></span>
+                <span class="font-semibold text-gray-200 font-mono uppercase">{{ legendContent.title }}</span>
+              </div>
               <svg
                 class="w-4 h-4 text-gray-400 transition-transform"
                 :class="{ 'rotate-180': !legendExpanded }"
@@ -431,18 +433,18 @@ const handleBuildGraph = async () => {
             <!-- Collapsible content -->
             <div v-if="legendExpanded" class="px-3 py-2">
               <div class="mb-2">
-                <div class="text-gray-400 mb-1 font-semibold">Colors:</div>
+                <div class="scada-label mb-1">Colors:</div>
                 <div
                   v-for="color in legendContent.colors"
                   :key="color.label"
                   class="flex items-center gap-2 py-1"
                 >
                   <div class="w-3 h-3 rounded-full flex-shrink-0" :style="{ backgroundColor: color.dot }"></div>
-                  <span class="text-gray-300">{{ color.label }}</span>
+                  <span class="text-gray-300 font-mono text-[11px]">{{ color.label }}</span>
                 </div>
               </div>
-              <div class="text-gray-400 border-t border-slate-700 pt-2 mt-2">
-                <span class="font-semibold">Size:</span> <span class="text-gray-300">{{ legendContent.size }}</span>
+              <div class="text-gray-400 border-t-2 border-slate-700 pt-2 mt-2">
+                <span class="scada-label">Size:</span> <span class="text-gray-300 font-mono text-[11px]">{{ legendContent.size }}</span>
               </div>
             </div>
           </div>
@@ -450,13 +452,13 @@ const handleBuildGraph = async () => {
       </div>
 
       <!-- No Data State -->
-      <div v-else class="mt-6 bg-slate-800/50 rounded-lg p-8 border border-slate-700">
+      <div v-else class="mt-6 bg-slate-800/50 rounded-lg p-8 border-2 border-slate-700">
         <div class="text-center">
-          <svg class="mx-auto h-12 w-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-          </svg>
-          <h3 class="mt-4 text-lg font-medium text-gray-300 uppercase">No Data Available</h3>
-          <p class="mt-2 text-sm text-gray-500">
+          <div class="flex justify-center mb-4">
+            <span class="scada-led scada-led-yellow" style="width: 24px; height: 24px;"></span>
+          </div>
+          <h3 class="mt-4 text-lg font-medium text-gray-300 uppercase font-mono">No Data Available</h3>
+          <p class="mt-2 text-sm text-gray-500 font-mono">
             Build the graph first to see the organizational chart
           </p>
         </div>
@@ -470,10 +472,13 @@ const handleBuildGraph = async () => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
         @click.self="showWeightsModal = false"
       >
-        <div class="bg-slate-800 rounded-lg shadow-2xl border border-slate-700 p-6 w-96">
+        <div class="bg-slate-800 rounded-lg shadow-2xl border-2 border-slate-700 p-6 w-96">
           <!-- Header -->
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-200">Réglages Avancés</h3>
+            <div class="flex items-center gap-2">
+              <span class="scada-led scada-led-cyan"></span>
+              <h3 class="text-lg font-semibold text-gray-200 font-mono uppercase">Réglages Avancés</h3>
+            </div>
             <button
               @click="showWeightsModal = false"
               class="text-gray-400 hover:text-white transition-colors"
@@ -486,8 +491,8 @@ const handleBuildGraph = async () => {
           <div class="space-y-4">
             <div>
               <div class="flex justify-between mb-1">
-                <label class="text-sm text-gray-400">Complexité</label>
-                <span class="text-xs font-mono text-cyan-400">{{ (weights.complexity * 100).toFixed(0) }}%</span>
+                <label class="scada-label text-sm">Complexité</label>
+                <span class="scada-data text-cyan-400 text-xs">{{ (weights.complexity * 100).toFixed(0) }}%</span>
               </div>
               <input
                 v-model.number="weights.complexity"
@@ -501,8 +506,8 @@ const handleBuildGraph = async () => {
 
             <div>
               <div class="flex justify-between mb-1">
-                <label class="text-sm text-gray-400">Lignes de code</label>
-                <span class="text-xs font-mono text-cyan-400">{{ (weights.loc * 100).toFixed(0) }}%</span>
+                <label class="scada-label text-sm">Lignes de Code</label>
+                <span class="scada-data text-cyan-400 text-xs">{{ (weights.loc * 100).toFixed(0) }}%</span>
               </div>
               <input
                 v-model.number="weights.loc"
@@ -516,8 +521,8 @@ const handleBuildGraph = async () => {
 
             <div>
               <div class="flex justify-between mb-1">
-                <label class="text-sm text-gray-400">Connections</label>
-                <span class="text-xs font-mono text-cyan-400">{{ (weights.connections * 100).toFixed(0) }}%</span>
+                <label class="scada-label text-sm">Connections</label>
+                <span class="scada-data text-cyan-400 text-xs">{{ (weights.connections * 100).toFixed(0) }}%</span>
               </div>
               <input
                 v-model.number="weights.connections"
@@ -530,12 +535,12 @@ const handleBuildGraph = async () => {
             </div>
 
             <!-- Total indicator -->
-            <div class="pt-2 border-t border-slate-700">
+            <div class="pt-2 border-t-2 border-slate-700">
               <div class="flex justify-between text-xs">
-                <span class="text-gray-500">Total:</span>
+                <span class="scada-label">Total:</span>
                 <span
                   :class="[
-                    'font-mono',
+                    'scada-data',
                     Math.abs((weights.complexity + weights.loc + weights.connections) - 1) < 0.01
                       ? 'text-green-400'
                       : 'text-orange-400'
@@ -544,7 +549,7 @@ const handleBuildGraph = async () => {
                   {{ ((weights.complexity + weights.loc + weights.connections) * 100).toFixed(0) }}%
                 </span>
               </div>
-              <p class="text-[10px] text-gray-500 mt-1">
+              <p class="text-[10px] text-gray-500 mt-1 font-mono">
                 Note: Le total n'a pas besoin d'être 100%, les poids sont relatifs.
               </p>
             </div>
@@ -554,15 +559,15 @@ const handleBuildGraph = async () => {
           <div class="flex gap-2 mt-6">
             <button
               @click="resetWeights"
-              class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm transition-colors"
+              class="flex-1 scada-btn bg-slate-700 hover:bg-slate-600 text-white text-sm"
             >
-              Reset Défauts
+              RESET DÉFAUTS
             </button>
             <button
               @click="showWeightsModal = false"
-              class="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-sm transition-colors"
+              class="flex-1 scada-btn scada-btn-primary text-sm"
             >
-              Appliquer
+              APPLIQUER
             </button>
           </div>
         </div>
