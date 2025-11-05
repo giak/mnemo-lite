@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict, Any, List
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -15,6 +16,14 @@ from dependencies import get_db_engine
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
+
+
+class SetActiveProjectRequest(BaseModel):
+    repository: str
+
+
+# Simple in-memory store for active project (will be enhanced with Redis later)
+_active_project = {"repository": "default"}
 
 
 @router.get("")
@@ -113,4 +122,71 @@ async def list_projects(
         raise HTTPException(
             status_code=500,
             detail="Failed to retrieve projects list. Please try again later."
+        )
+
+
+@router.get("/active")
+async def get_active_project() -> Dict[str, str]:
+    """
+    Get the currently active project.
+
+    Returns:
+        {
+            "repository": "code_test"
+        }
+    """
+    return _active_project
+
+
+@router.post("/active")
+async def set_active_project(
+    request: SetActiveProjectRequest,
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """
+    Set the active project for search and navigation.
+
+    Args:
+        request: {"repository": "project_name"}
+
+    Returns:
+        {
+            "repository": "project_name",
+            "message": "Active project switched to project_name"
+        }
+    """
+    try:
+        # Verify project exists
+        async with engine.begin() as conn:
+            result = await conn.execute(
+                text("""
+                    SELECT COUNT(*) as count
+                    FROM code_chunks
+                    WHERE repository = :repository
+                """),
+                {"repository": request.repository}
+            )
+            count = result.scalar()
+
+            if count == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Project '{request.repository}' not found or has no indexed files."
+                )
+
+        # Update active project
+        _active_project["repository"] = request.repository
+
+        return {
+            "repository": request.repository,
+            "message": f"Active project switched to {request.repository}"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to set active project: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to set active project. Please try again later."
         )
