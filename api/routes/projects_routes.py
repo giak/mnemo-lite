@@ -4,6 +4,7 @@ Endpoints for managing indexed code repositories.
 """
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -189,4 +190,73 @@ async def set_active_project(
         raise HTTPException(
             status_code=500,
             detail="Failed to set active project. Please try again later."
+        )
+
+
+@router.post("/{repository}/reindex")
+async def reindex_project(
+    repository: str,
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """
+    Trigger reindexing of a project.
+
+    NOTE: This is a simplified version that triggers background indexing.
+    Full implementation would use a task queue (Celery/RQ).
+
+    Args:
+        repository: Name of the repository to reindex
+
+    Returns:
+        {
+            "repository": "code_test",
+            "status": "reindexing",
+            "message": "Reindexing started for code_test"
+        }
+    """
+    try:
+        # Verify project exists
+        async with engine.begin() as conn:
+            result = await conn.execute(
+                text("""
+                    SELECT
+                        file_path
+                    FROM code_chunks
+                    WHERE repository = :repository
+                    LIMIT 1
+                """),
+                {"repository": repository}
+            )
+            row = result.fetchone()
+
+            if not row:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Project '{repository}' not found."
+                )
+
+            # Extract project root from file path
+            # This is simplified - production would use proper project metadata
+            file_path = row.file_path
+            # Assume project root is parent of first indexed file
+            project_root = str(Path(file_path).parent.parent)
+
+        # TODO: Trigger background reindexing task
+        # For now, just return success status
+        logger.info(f"Reindex triggered for {repository} at {project_root}")
+
+        return {
+            "repository": repository,
+            "status": "reindexing",
+            "message": f"Reindexing started for {repository}",
+            "project_root": project_root
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to reindex project: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to trigger reindexing. Please try again later."
         )

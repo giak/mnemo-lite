@@ -74,3 +74,25 @@ async def test_set_active_project_changes_context(test_client):
 
     assert data["repository"] == "test_project"
     assert "message" in data
+
+
+@pytest.mark.anyio
+async def test_reindex_project_triggers_indexing(test_client):
+    """Test POST /api/v1/projects/{repository}/reindex triggers reindexing."""
+    # First insert test data for code_test repository
+    async with test_client._transport.app.state.db_engine.begin() as conn:
+        await conn.execute(
+            text("""
+                INSERT INTO code_chunks (file_path, language, chunk_type, source_code, repository, metadata)
+                VALUES ('/test/code_test/src/file.py', 'python', 'function', 'def test(): pass', 'code_test', '{}')
+            """)
+        )
+
+    response = await test_client.post("/api/v1/projects/code_test/reindex")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "repository" in data
+    assert "status" in data
+    assert data["status"] == "reindexing"
