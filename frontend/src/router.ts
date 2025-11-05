@@ -36,6 +36,11 @@ const router = createRouter({
       path: '/memories',
       name: 'memories',
       component: () => import('@/pages/Memories.vue')
+    },
+    {
+      path: '/projects',
+      name: 'projects',
+      component: () => import('@/pages/Projects.vue')
     }
   ]
 })

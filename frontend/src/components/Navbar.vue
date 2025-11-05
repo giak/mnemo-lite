@@ -44,6 +44,7 @@ const links: MenuItem[] = [
   { name: 'Dashboard', path: '/dashboard' },
   { name: 'Search', path: '/search' },
   { name: 'Memories', path: '/memories' },
+  { name: 'Projects', path: '/projects' },
   {
     name: 'Graph',
     children: [
