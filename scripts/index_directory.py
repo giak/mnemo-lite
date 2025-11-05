@@ -978,14 +978,33 @@ async def main():
     db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
     engine = create_async_engine(db_url, echo=False)
 
-    # Run pipeline (parallel by default, sequential if --sequential flag)
+    # EPIC-26: Auto-detection logic for sequential vs parallel mode
+    # Scan files first to get count for auto-detection
+    files = scan_files(directory)
+    num_files = len(files)
+
+    # Read threshold from environment (default: 50 files based on A/B testing)
+    threshold = int(os.getenv('PARALLEL_INDEXING_THRESHOLD', '50'))
+
+    # Determine mode: explicit flag takes priority, otherwise auto-detect
     if args.sequential:
-        print("🐌 Running in SEQUENTIAL mode")
+        use_sequential = True
+        mode_reason = "user-specified via --sequential flag"
+    elif num_files < threshold:
+        use_sequential = True
+        mode_reason = f"auto-detected: {num_files} files < {threshold} threshold"
+    else:
+        use_sequential = False
+        mode_reason = f"auto-detected: {num_files} files >= {threshold} threshold"
+
+    # Run appropriate pipeline
+    if use_sequential:
+        print(f"🐌 Running in SEQUENTIAL mode ({mode_reason})")
         stats = await run_streaming_pipeline_sequential(
             directory, repository, verbose=args.verbose, engine=engine
         )
     else:
-        print(f"⚡ Running in PARALLEL mode with {args.workers} workers")
+        print(f"⚡ Running in PARALLEL mode with {args.workers} workers ({mode_reason})")
         stats = await run_parallel_pipeline(
             directory, repository, n_jobs=args.workers, verbose=args.verbose, engine=engine
         )
