@@ -48,6 +48,38 @@ class PythonMetadataExtractor:
             "(import_from_statement module_name: (dotted_name) @module_name name: (aliased_import name: (dotted_name) @import_name))"
         )
 
+    def _extract_module_imports(
+        self,
+        query: Query,
+        root_node: Node,
+        source_bytes: bytes
+    ) -> list[str]:
+        """
+        Extract from imports using a tree-sitter query.
+
+        Args:
+            query: Tree-sitter query for from imports
+            root_node: Root AST node
+            source_bytes: Source code as bytes
+
+        Returns:
+            List of qualified import references (e.g., ['pathlib.Path'])
+        """
+        imports = []
+        cursor = QueryCursor(query)
+        matches = cursor.matches(root_node)
+
+        for pattern_index, captures_dict in matches:
+            module_nodes = captures_dict.get('module_name', [])
+            import_nodes = captures_dict.get('import_name', [])
+
+            for module_node, import_node in zip(module_nodes, import_nodes):
+                module_name = source_bytes[module_node.start_byte:module_node.end_byte].decode("utf8")
+                import_name = source_bytes[import_node.start_byte:import_node.end_byte].decode("utf8")
+                imports.append(f"{module_name}.{import_name}")
+
+        return imports
+
     async def extract_imports(self, tree: Tree, source_code: str) -> list[str]:
         """
         Extract import statements from Python code.
@@ -59,8 +91,19 @@ class PythonMetadataExtractor:
         Returns:
             List of import references (e.g., ['os', 'pathlib.Path'])
         """
+        # Input validation
+        if not tree or not source_code:
+            self.logger.warning("Empty tree or source_code provided to extract_imports")
+            return []
+
         imports = []
-        source_bytes = bytes(source_code, "utf8")
+
+        try:
+            source_bytes = bytes(source_code, "utf8")
+        except UnicodeDecodeError as e:
+            self.logger.error(f"Failed to encode source code as UTF-8: {e}")
+            return []
+
         root_node = tree.root_node
 
         # Extract basic imports (import X)
@@ -73,28 +116,18 @@ class PythonMetadataExtractor:
                 imports.append(import_text)
 
         # Extract from imports (from X import Y)
-        cursor = QueryCursor(self.from_import_query)
-        matches = cursor.matches(root_node)
-        for pattern_index, captures_dict in matches:
-            module_nodes = captures_dict.get('module_name', [])
-            import_nodes = captures_dict.get('import_name', [])
-
-            for module_node, import_node in zip(module_nodes, import_nodes):
-                module_name = source_bytes[module_node.start_byte:module_node.end_byte].decode("utf8")
-                import_name = source_bytes[import_node.start_byte:import_node.end_byte].decode("utf8")
-                imports.append(f"{module_name}.{import_name}")
+        imports.extend(self._extract_module_imports(
+            self.from_import_query,
+            root_node,
+            source_bytes
+        ))
 
         # Extract from imports with aliases (from X import Y as Z)
-        cursor = QueryCursor(self.from_import_alias_query)
-        matches = cursor.matches(root_node)
-        for pattern_index, captures_dict in matches:
-            module_nodes = captures_dict.get('module_name', [])
-            import_nodes = captures_dict.get('import_name', [])
-
-            for module_node, import_node in zip(module_nodes, import_nodes):
-                module_name = source_bytes[module_node.start_byte:module_node.end_byte].decode("utf8")
-                import_name = source_bytes[import_node.start_byte:import_node.end_byte].decode("utf8")
-                imports.append(f"{module_name}.{import_name}")
+        imports.extend(self._extract_module_imports(
+            self.from_import_alias_query,
+            root_node,
+            source_bytes
+        ))
 
         return imports
 
@@ -109,7 +142,7 @@ class PythonMetadataExtractor:
         Returns:
             List of call references (e.g., ['calculate_total', 'service.fetch_data'])
         """
-        # TODO: Implement in next step
+        # TODO: Story 29.1 Part 2 - Implement call extraction in next task
         return []
 
     async def extract_metadata(
