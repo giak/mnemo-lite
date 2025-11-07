@@ -109,3 +109,57 @@ def my_function():
     calls = await python_extractor.extract_calls(function_node, source_code)
 
     assert "database.session.query" in calls
+
+
+@pytest.mark.asyncio
+async def test_extract_metadata_with_decorator(python_extractor, python_parser):
+    """Test metadata extraction includes decorator information."""
+    source_code = """
+@dataclass
+class User:
+    name: str
+    age: int
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    class_node = tree.root_node.children[0]  # decorated_definition
+
+    metadata = await python_extractor.extract_metadata(source_code, class_node, tree)
+
+    assert "decorators" in metadata
+    assert "dataclass" in metadata["decorators"]
+
+
+@pytest.mark.asyncio
+async def test_extract_metadata_with_property_decorator(python_extractor, python_parser):
+    """Test extraction of @property decorator."""
+    source_code = """
+class MyClass:
+    @property
+    def value(self):
+        return self._value
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    class_node = tree.root_node.children[0]
+
+    metadata = await python_extractor.extract_metadata(source_code, class_node, tree)
+
+    assert "decorators" in metadata
+    assert "property" in metadata["decorators"]
+
+
+@pytest.mark.asyncio
+async def test_extract_metadata_with_async_decorator(python_extractor, python_parser):
+    """Test extraction of custom async decorator."""
+    source_code = """
+@async_cached
+async def fetch_data():
+    return await database.query()
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    function_node = tree.root_node.children[0]
+
+    metadata = await python_extractor.extract_metadata(source_code, function_node, tree)
+
+    assert "decorators" in metadata
+    assert "async_cached" in metadata["decorators"]
+    assert metadata.get("is_async") is True

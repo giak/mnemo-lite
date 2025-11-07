@@ -54,6 +54,15 @@ class PythonMetadataExtractor:
             "(call function: (_) @call_function)"
         )
 
+        # Decorator extraction query
+        self.decorator_query = Query(
+            self.language,
+            """
+            (decorated_definition
+              (decorator) @decorator)
+            """
+        )
+
     def _extract_module_imports(
         self,
         query: Query,
@@ -205,6 +214,61 @@ class PythonMetadataExtractor:
 
         return ""
 
+    async def extract_decorators(self, node: Node, source_code: str) -> list[str]:
+        """
+        Extract decorator names from a node.
+
+        Args:
+            node: tree-sitter AST node
+            source_code: Full source code
+
+        Returns:
+            List of decorator names (e.g., ['dataclass', 'property'])
+        """
+        decorators = []
+        source_bytes = bytes(source_code, "utf8")
+        cursor = QueryCursor(self.decorator_query)
+
+        # Extract decorators from this node and all descendants
+        matches = cursor.matches(node)
+        for pattern_index, captures_dict in matches:
+            decorator_nodes = captures_dict.get('decorator', [])
+            for decorator_node in decorator_nodes:
+                # Decorator node includes '@', get the name after it
+                decorator_text = source_bytes[decorator_node.start_byte:decorator_node.end_byte].decode("utf8")
+                # Remove '@' and get just the name (handle @decorator and @decorator())
+                decorator_name = decorator_text.lstrip("@").split("(")[0].strip()
+                decorators.append(decorator_name)
+
+        return decorators
+
+    def _is_async_function(self, node: Node) -> bool:
+        """
+        Check if a function node is async.
+
+        Args:
+            node: tree-sitter AST node
+
+        Returns:
+            True if function is async, False otherwise
+        """
+        # Check decorated_definition wrapping async function
+        if node.type == "decorated_definition":
+            definition = node.child_by_field_name("definition")
+            if definition and definition.type == "function_definition":
+                # Check if 'async' keyword is present
+                for child in definition.children:
+                    if child.type == "async":
+                        return True
+
+        # Check direct function_definition
+        elif node.type == "function_definition":
+            for child in node.children:
+                if child.type == "async":
+                    return True
+
+        return False
+
     async def extract_metadata(
         self,
         source_code: str,
@@ -212,7 +276,7 @@ class PythonMetadataExtractor:
         tree: Tree
     ) -> dict[str, Any]:
         """
-        Extract all metadata (imports + calls + other) from a code node.
+        Extract all metadata (imports + calls + decorators + async) from a code node.
 
         Args:
             source_code: Full source code
@@ -220,12 +284,16 @@ class PythonMetadataExtractor:
             tree: Full AST tree
 
         Returns:
-            Metadata dict with: {"imports": [...], "calls": [...]}
+            Metadata dict with: {"imports": [...], "calls": [...], "decorators": [...], "is_async": bool}
         """
         imports = await self.extract_imports(tree, source_code)
         calls = await self.extract_calls(node, source_code)
+        decorators = await self.extract_decorators(node, source_code)
+        is_async = self._is_async_function(node)
 
         return {
             "imports": imports,
-            "calls": calls
+            "calls": calls,
+            "decorators": decorators,
+            "is_async": is_async
         }
