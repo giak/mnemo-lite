@@ -1,0 +1,138 @@
+"""
+Python metadata extractor using tree-sitter.
+
+EPIC-29 Story 29.1: Python import extraction.
+EPIC-29 Story 29.1: Python call extraction.
+"""
+
+import logging
+from typing import Any
+from tree_sitter import Node, Tree, Query, QueryCursor
+from tree_sitter_language_pack import get_language
+
+
+logger = logging.getLogger(__name__)
+
+
+class PythonMetadataExtractor:
+    """
+    Extract metadata from Python using tree-sitter queries.
+
+    Supports:
+    - Import statements (import X, from X import Y)
+    - Function calls
+    - Decorators
+    - Type hints
+    - Async/await patterns
+    """
+
+    def __init__(self):
+        """Initialize Python language and queries."""
+        self.language = get_language("python")
+        self.language_name = "python"
+        self.logger = logging.getLogger(__name__)
+
+        # Import extraction queries
+        self.basic_import_query = Query(
+            self.language,
+            "(import_statement name: (dotted_name) @import_name)"
+        )
+
+        self.from_import_query = Query(
+            self.language,
+            "(import_from_statement module_name: (dotted_name) @module_name name: (dotted_name) @import_name)"
+        )
+
+        self.from_import_alias_query = Query(
+            self.language,
+            "(import_from_statement module_name: (dotted_name) @module_name name: (aliased_import name: (dotted_name) @import_name))"
+        )
+
+    async def extract_imports(self, tree: Tree, source_code: str) -> list[str]:
+        """
+        Extract import statements from Python code.
+
+        Args:
+            tree: tree-sitter AST tree
+            source_code: Full source code (for byte range extraction)
+
+        Returns:
+            List of import references (e.g., ['os', 'pathlib.Path'])
+        """
+        imports = []
+        source_bytes = bytes(source_code, "utf8")
+        root_node = tree.root_node
+
+        # Extract basic imports (import X)
+        cursor = QueryCursor(self.basic_import_query)
+        matches = cursor.matches(root_node)
+        for pattern_index, captures_dict in matches:
+            import_nodes = captures_dict.get('import_name', [])
+            for node in import_nodes:
+                import_text = source_bytes[node.start_byte:node.end_byte].decode("utf8")
+                imports.append(import_text)
+
+        # Extract from imports (from X import Y)
+        cursor = QueryCursor(self.from_import_query)
+        matches = cursor.matches(root_node)
+        for pattern_index, captures_dict in matches:
+            module_nodes = captures_dict.get('module_name', [])
+            import_nodes = captures_dict.get('import_name', [])
+
+            for module_node, import_node in zip(module_nodes, import_nodes):
+                module_name = source_bytes[module_node.start_byte:module_node.end_byte].decode("utf8")
+                import_name = source_bytes[import_node.start_byte:import_node.end_byte].decode("utf8")
+                imports.append(f"{module_name}.{import_name}")
+
+        # Extract from imports with aliases (from X import Y as Z)
+        cursor = QueryCursor(self.from_import_alias_query)
+        matches = cursor.matches(root_node)
+        for pattern_index, captures_dict in matches:
+            module_nodes = captures_dict.get('module_name', [])
+            import_nodes = captures_dict.get('import_name', [])
+
+            for module_node, import_node in zip(module_nodes, import_nodes):
+                module_name = source_bytes[module_node.start_byte:module_node.end_byte].decode("utf8")
+                import_name = source_bytes[import_node.start_byte:import_node.end_byte].decode("utf8")
+                imports.append(f"{module_name}.{import_name}")
+
+        return imports
+
+    async def extract_calls(self, node: Node, source_code: str) -> list[str]:
+        """
+        Extract function/method calls from a code node.
+
+        Args:
+            node: tree-sitter AST node (function, class, method)
+            source_code: Full source code (for byte range extraction)
+
+        Returns:
+            List of call references (e.g., ['calculate_total', 'service.fetch_data'])
+        """
+        # TODO: Implement in next step
+        return []
+
+    async def extract_metadata(
+        self,
+        source_code: str,
+        node: Node,
+        tree: Tree
+    ) -> dict[str, Any]:
+        """
+        Extract all metadata (imports + calls + other) from a code node.
+
+        Args:
+            source_code: Full source code
+            node: tree-sitter AST node
+            tree: Full AST tree
+
+        Returns:
+            Metadata dict with: {"imports": [...], "calls": [...]}
+        """
+        imports = await self.extract_imports(tree, source_code)
+        calls = await self.extract_calls(node, source_code)
+
+        return {
+            "imports": imports,
+            "calls": calls
+        }
