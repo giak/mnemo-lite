@@ -27,80 +27,6 @@ class FileProcessingResult:
     error_message: str = ""
 
 
-def worker_process_file(file_path: Path, repository: str, db_url: str) -> FileProcessingResult:
-    """
-    Worker function for Joblib - processes 1 file atomically.
-    Each worker loads its own embedding model and creates DB connection.
-
-    IMPORTANT: Must be top-level function (required by multiprocessing).
-
-    Args:
-        file_path: Path to source file
-        repository: Repository name
-        db_url: Database connection URL
-
-    Returns:
-        FileProcessingResult with success status and chunk count
-    """
-    import os
-    import gc
-    from sqlalchemy.ext.asyncio import create_async_engine
-    import asyncio
-
-    # Set embedding mode for this worker
-    os.environ["EMBEDDING_MODE"] = "real"
-
-    # Helper function to run async code in worker process
-    async def _process_async():
-        # Create worker-specific resources (NOT shared between workers)
-        from services.dual_embedding_service import DualEmbeddingService
-        embedding_service = DualEmbeddingService()
-        engine = create_async_engine(db_url, echo=False, pool_size=2, max_overflow=0)
-
-        try:
-            # Run async processing
-            result = await process_file_atomically(
-                file_path, repository, embedding_service, engine
-            )
-            return result
-        except Exception as e:
-            # Catch any unhandled errors
-            return FileProcessingResult(
-                file_path=file_path,
-                success=False,
-                chunks_created=0,
-                error_message=str(e)
-            )
-        finally:
-            # Cleanup resources
-            try:
-                await engine.dispose()
-            except Exception as e:
-                # Log cleanup errors but don't fail the worker
-                import logging
-                logging.warning(f"Failed to dispose engine in worker cleanup: {e}")
-            del embedding_service
-            gc.collect()
-
-    # Create new event loop for this worker process
-    # Using ProcessPoolExecutor with 'spawn' gives us a clean process
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            result = loop.run_until_complete(_process_async())
-            return result
-        finally:
-            loop.close()
-    except Exception as e:
-        return FileProcessingResult(
-            file_path=file_path,
-            success=False,
-            chunks_created=0,
-            error_message=str(e)
-        )
-
-
 async def cleanup_repository(repository: str, engine):
     """
     Delete all existing data for a repository before reindexing.
@@ -174,7 +100,7 @@ async def process_file_atomically(
         content = file_path.read_text(encoding="utf-8")
 
         # Detect language
-        language = "typescript" if file_path.suffix in {".ts", ".tsx"} else "javascript"
+        language = detect_language(file_path)
 
         # Chunk code
         chunks = await chunking_service.chunk_code(
@@ -252,16 +178,35 @@ async def process_file_atomically(
         )
 
 
+def detect_language(file_path: Path) -> str:
+    """
+    Detect programming language from file extension.
+
+    Returns:
+        Language string: "typescript", "javascript", or "python"
+    """
+    suffix = file_path.suffix.lower()
+
+    if suffix in [".ts", ".tsx"]:
+        return "typescript"
+    elif suffix in [".js", ".jsx", ".mjs"]:
+        return "javascript"
+    elif suffix == ".py":
+        return "python"
+    else:
+        return "typescript"  # default
+
+
 def scan_files(directory: Path) -> list[Path]:
-    """Scan directory for TypeScript/JavaScript files, applying filters."""
+    """Scan directory for TypeScript/JavaScript/Python files, applying filters."""
     files = []
 
-    for ext in ["*.ts", "*.js"]:
+    for ext in ["*.ts", "*.js", "*.py"]:
         files.extend(directory.rglob(ext))
 
     # Filter out tests, node_modules, declarations, and build artifacts
     # CRITICAL: Exclude dist/build directories to prevent OOM from minified files
-    excluded_dirs = ["node_modules", "dist", "build", ".next", "out", "coverage", ".cache"]
+    excluded_dirs = ["node_modules", "dist", "build", ".next", "out", "coverage", ".cache", "__pycache__", "venv", ".venv"]
 
     filtered = []
     for f in files:
@@ -371,117 +316,10 @@ async def run_streaming_pipeline_sequential(
     }
 
 
-async def run_parallel_pipeline(
-    directory: Path,
-    repository: str,
-    n_jobs: int = 4,
-    verbose: bool = False,
-    engine=None
-) -> dict:
-    """
-    Run parallel indexing pipeline with Joblib.
-
-    Args:
-        directory: Path to codebase
-        repository: Repository name
-        n_jobs: Number of parallel workers (default: 4)
-        verbose: Enable detailed logging
-        engine: Optional pre-created engine for cleanup phase
-
-    Returns:
-        dict with stats: total_files, success_files, error_files, total_chunks, errors
-    """
-    import os
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    # Create engine if not provided
-    if not engine:
-        db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
-        engine = create_async_engine(db_url, echo=False)
-        should_dispose = True
-    else:
-        should_dispose = False
-
-    # Phase 1: Cleanup (sequential)
-    print("\n" + "=" * 80)
-    print("🧹 Phase 1/3: Cleanup")
-    print("=" * 80)
-    await cleanup_repository(repository, engine)
-
-    # Phase 2: Scan files
-    print("\n" + "=" * 80)
-    print("🔍 Phase 2/3: Scanning Files")
-    print("=" * 80)
-    files = scan_files(directory)
-    print(f"📊 Found {len(files)} files to index")
-
-    # Phase 3: Parallel processing with ProcessPoolExecutor
-    print("\n" + "=" * 80)
-    print(f"⚡ Phase 3/3: Parallel Processing ({n_jobs} workers)")
-    print("=" * 80)
-
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
-
-    print(f"🔧 Starting {n_jobs} parallel workers...")
-    print(f"📈 Each worker will load its own embedding model (~2GB)")
-    print(f"💾 Expected memory usage: ~{n_jobs * 3}GB")
-    print()
-
-    # Execute parallel processing
-    # Use ProcessPoolExecutor for proper process isolation (Joblib has event loop conflicts)
-    from concurrent.futures import ProcessPoolExecutor
-    import multiprocessing
-
-    # Set start method to 'spawn' to ensure clean worker processes
-    ctx = multiprocessing.get_context('spawn')
-
-    with ProcessPoolExecutor(max_workers=n_jobs, mp_context=ctx) as executor:
-        # Submit all tasks
-        futures = [
-            executor.submit(worker_process_file, file_path, repository, db_url)
-            for file_path in files
-        ]
-
-        # Collect results with progress indication
-        results = []
-        for i, future in enumerate(futures, 1):
-            if not verbose:
-                print(f"\rProcessing: {i}/{len(files)} files", end='', flush=True)
-            result = future.result()  # Wait for completion
-            results.append(result)
-            if verbose:
-                status = "✓" if result.success else "✗"
-                print(f"{status} {result.file_path.name}: {result.chunks_created} chunks")
-
-        if not verbose:
-            print()  # New line after progress
-
-    # Aggregate results
-    success_count = sum(1 for r in results if r.success)
-    error_count = len(results) - success_count
-    total_chunks = sum(r.chunks_created for r in results)
-    errors = [
-        {"file": str(r.file_path), "error": r.error_message}
-        for r in results if not r.success
-    ]
-
-    # Cleanup engine if we created it
-    if should_dispose:
-        await engine.dispose()
-
-    return {
-        "total_files": len(files),
-        "success_files": success_count,
-        "error_files": error_count,
-        "total_chunks": total_chunks,
-        "errors": errors
-    }
-
-
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Index TypeScript/JavaScript codebase with parallel processing"
+        description="Index TypeScript/JavaScript codebase"
     )
     parser.add_argument(
         "directory",
@@ -493,17 +331,6 @@ def parse_args():
         type=str,
         default=None,
         help="Repository name (default: directory name)"
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=4,
-        help="Number of parallel workers (default: 4)"
-    )
-    parser.add_argument(
-        "--sequential",
-        action="store_true",
-        help="Use sequential mode instead of parallel"
     )
     parser.add_argument(
         "--verbose",
@@ -620,7 +447,7 @@ async def phase1_chunking(files: list[Path], repository: str, verbose: bool = Fa
                 content = file_path.read_text(encoding="utf-8")
 
                 # Detect language
-                language = "typescript" if file_path.suffix in {".ts", ".tsx"} else "javascript"
+                language = detect_language(file_path)
 
                 # Chunk code (note: no 'repository' parameter)
                 chunks = await chunking_service.chunk_code(
@@ -792,6 +619,7 @@ async def phase3_metadata_extraction(
     """
     from collections import defaultdict
     from services.metadata_extractors.typescript_extractor import TypeScriptMetadataExtractor
+    from services.metadata_extractors.python_extractor import PythonMetadataExtractor
     from db.repositories.detailed_metadata_repository import DetailedMetadataRepository
     from db.repositories.computed_metrics_repository import ComputedMetricsRepository
     from tree_sitter_language_pack import get_parser
@@ -812,16 +640,20 @@ async def phase3_metadata_extraction(
     # Group chunks by language
     chunks_by_language = defaultdict(list)
     for chunk in chunks:
-        if chunk.language in ("typescript", "javascript"):
+        if chunk.language in ("typescript", "javascript", "python"):
             # Only process chunks that have corresponding nodes
             if chunk.id in chunk_to_node:
                 chunks_by_language[chunk.language].append(chunk)
 
-    # Process TypeScript/JavaScript chunks
+    # Process chunks by language
     for language, lang_chunks in chunks_by_language.items():
         print(f"\n   Processing {len(lang_chunks)} {language} chunks...")
 
-        extractor = TypeScriptMetadataExtractor(language)
+        # Select appropriate extractor for language
+        if language == "python":
+            extractor = PythonMetadataExtractor()
+        else:
+            extractor = TypeScriptMetadataExtractor(language)
         parser = get_parser(language)
 
         for chunk in tqdm(lang_chunks, desc=f"   Extracting {language} metadata"):
@@ -905,7 +737,7 @@ async def build_graph_phase(repository: str, engine) -> dict:
         # Build detailed graph for repository
         stats = await graph_service.build_graph_for_repository(
             repository=repository,
-            languages=["typescript", "javascript"]
+            languages=["typescript", "javascript", "python"]
         )
 
         print(f"\n✅ Detailed graph construction complete:")
@@ -978,36 +810,11 @@ async def main():
     db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
     engine = create_async_engine(db_url, echo=False)
 
-    # EPIC-26: Auto-detection logic for sequential vs parallel mode
-    # Scan files first to get count for auto-detection
-    files = scan_files(directory)
-    num_files = len(files)
-
-    # Read threshold from environment (default: 50 files based on A/B testing)
-    threshold = int(os.getenv('PARALLEL_INDEXING_THRESHOLD', '50'))
-
-    # Determine mode: explicit flag takes priority, otherwise auto-detect
-    if args.sequential:
-        use_sequential = True
-        mode_reason = "user-specified via --sequential flag"
-    elif num_files < threshold:
-        use_sequential = True
-        mode_reason = f"auto-detected: {num_files} files < {threshold} threshold"
-    else:
-        use_sequential = False
-        mode_reason = f"auto-detected: {num_files} files >= {threshold} threshold"
-
-    # Run appropriate pipeline
-    if use_sequential:
-        print(f"🐌 Running in SEQUENTIAL mode ({mode_reason})")
-        stats = await run_streaming_pipeline_sequential(
-            directory, repository, verbose=args.verbose, engine=engine
-        )
-    else:
-        print(f"⚡ Running in PARALLEL mode with {args.workers} workers ({mode_reason})")
-        stats = await run_parallel_pipeline(
-            directory, repository, n_jobs=args.workers, verbose=args.verbose, engine=engine
-        )
+    # Run sequential indexing pipeline
+    print("\n🐌 Running in SEQUENTIAL mode")
+    stats = await run_streaming_pipeline_sequential(
+        directory, repository, verbose=args.verbose, engine=engine
+    )
 
     # Run Phase 4: Graph Construction
     if stats['success_files'] > 0:
