@@ -163,3 +163,55 @@ async def fetch_data():
     assert "decorators" in metadata
     assert "async_cached" in metadata["decorators"]
     assert metadata.get("is_async") is True
+
+
+@pytest.mark.asyncio
+async def test_extract_type_hints_from_function(python_extractor, python_parser):
+    """Test extraction of function parameter type hints."""
+    source_code = """
+def process_data(items: List[str], count: int) -> Dict[str, int]:
+    return {}
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    function_node = tree.root_node.children[0]
+
+    metadata = await python_extractor.extract_metadata(source_code, function_node, tree)
+
+    assert "type_hints" in metadata
+    type_hints = metadata["type_hints"]
+    assert "parameters" in type_hints
+    assert "return_type" in type_hints
+    assert type_hints["return_type"] == "Dict[str, int]"
+
+
+@pytest.mark.asyncio
+async def test_extract_optional_type_hint(python_extractor, python_parser):
+    """Test extraction of Optional type hint."""
+    source_code = """
+def get_user(user_id: int) -> Optional[User]:
+    return None
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    function_node = tree.root_node.children[0]
+
+    metadata = await python_extractor.extract_metadata(source_code, function_node, tree)
+
+    assert metadata["type_hints"]["return_type"] == "Optional[User]"
+
+
+@pytest.mark.asyncio
+async def test_extract_class_attribute_type_hints(python_extractor, python_parser):
+    """Test extraction of class attribute type hints."""
+    source_code = """
+class User:
+    name: str
+    age: int
+    email: Optional[str] = None
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    class_node = tree.root_node.children[0]
+
+    metadata = await python_extractor.extract_metadata(source_code, class_node, tree)
+
+    assert "type_hints" in metadata
+    assert "attributes" in metadata["type_hints"]

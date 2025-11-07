@@ -63,6 +63,30 @@ class PythonMetadataExtractor:
             """
         )
 
+        # Type hint extraction queries
+        self.function_type_query = Query(
+            self.language,
+            """
+            (function_definition
+              parameters: (parameters
+                (typed_parameter
+                  type: (_) @param_type))
+              return_type: (type) @return_type)
+            """
+        )
+
+        self.class_attribute_type_query = Query(
+            self.language,
+            """
+            (class_definition
+              body: (block
+                (expression_statement
+                  (assignment
+                    left: (identifier) @attr_name
+                    type: (type) @attr_type))))
+            """
+        )
+
     def _extract_module_imports(
         self,
         query: Query,
@@ -269,6 +293,89 @@ class PythonMetadataExtractor:
 
         return False
 
+    async def extract_type_hints(self, node: Node, source_code: str) -> dict[str, Any]:
+        """
+        Extract type hints from function signatures or class attributes.
+
+        Args:
+            node: tree-sitter AST node
+            source_code: Full source code
+
+        Returns:
+            Dict with type hint information:
+            - For functions: {"parameters": [...], "return_type": "..."}
+            - For classes: {"attributes": {"name": "type", ...}}
+        """
+        type_hints = {}
+        source_bytes = bytes(source_code, "utf8")
+
+        # Extract function type hints
+        if node.type == "function_definition" or (node.type == "decorated_definition" and
+           node.child_by_field_name("definition") and
+           node.child_by_field_name("definition").type == "function_definition"):
+
+            func_node = node if node.type == "function_definition" else node.child_by_field_name("definition")
+
+            # Get return type
+            return_type_node = func_node.child_by_field_name("return_type")
+            if return_type_node:
+                return_type_text = source_bytes[return_type_node.start_byte:return_type_node.end_byte].decode("utf8")
+                type_hints["return_type"] = return_type_text.strip()
+
+            # Get parameter types
+            parameters_node = func_node.child_by_field_name("parameters")
+            if parameters_node:
+                param_types = []
+                for child in parameters_node.children:
+                    if child.type == "typed_parameter":
+                        # typed_parameter structure: identifier ":" type
+                        # Get the identifier (first child) and type (last child)
+                        param_name_node = None
+                        param_type_node = None
+
+                        for sub_child in child.children:
+                            if sub_child.type == "identifier":
+                                param_name_node = sub_child
+                            elif sub_child.type == "type":
+                                param_type_node = sub_child
+
+                        if param_name_node and param_type_node:
+                            param_name = source_bytes[param_name_node.start_byte:param_name_node.end_byte].decode("utf8")
+                            param_type = source_bytes[param_type_node.start_byte:param_type_node.end_byte].decode("utf8")
+                            param_types.append({"name": param_name, "type": param_type})
+
+                if param_types:
+                    type_hints["parameters"] = param_types
+
+        # Extract class attribute type hints
+        elif node.type == "class_definition" or (node.type == "decorated_definition" and
+             node.child_by_field_name("definition") and
+             node.child_by_field_name("definition").type == "class_definition"):
+
+            class_node = node if node.type == "class_definition" else node.child_by_field_name("definition")
+            body_node = class_node.child_by_field_name("body")
+
+            if body_node:
+                attributes = {}
+                for child in body_node.children:
+                    # Look for annotated assignments (name: type = value)
+                    if child.type == "expression_statement":
+                        for expr_child in child.children:
+                            if expr_child.type == "assignment":
+                                # Get attribute name and type
+                                left_node = expr_child.child_by_field_name("left")
+                                type_node = expr_child.child_by_field_name("type")
+
+                                if left_node and type_node:
+                                    attr_name = source_bytes[left_node.start_byte:left_node.end_byte].decode("utf8")
+                                    attr_type = source_bytes[type_node.start_byte:type_node.end_byte].decode("utf8")
+                                    attributes[attr_name] = attr_type
+
+                if attributes:
+                    type_hints["attributes"] = attributes
+
+        return type_hints
+
     async def extract_metadata(
         self,
         source_code: str,
@@ -276,7 +383,7 @@ class PythonMetadataExtractor:
         tree: Tree
     ) -> dict[str, Any]:
         """
-        Extract all metadata (imports + calls + decorators + async) from a code node.
+        Extract all metadata from a code node.
 
         Args:
             source_code: Full source code
@@ -284,16 +391,18 @@ class PythonMetadataExtractor:
             tree: Full AST tree
 
         Returns:
-            Metadata dict with: {"imports": [...], "calls": [...], "decorators": [...], "is_async": bool}
+            Metadata dict with: imports, calls, decorators, is_async, type_hints
         """
         imports = await self.extract_imports(tree, source_code)
         calls = await self.extract_calls(node, source_code)
         decorators = await self.extract_decorators(node, source_code)
         is_async = self._is_async_function(node)
+        type_hints = await self.extract_type_hints(node, source_code)
 
         return {
             "imports": imports,
             "calls": calls,
             "decorators": decorators,
-            "is_async": is_async
+            "is_async": is_async,
+            "type_hints": type_hints
         }
