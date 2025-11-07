@@ -48,6 +48,12 @@ class PythonMetadataExtractor:
             "(import_from_statement module_name: (dotted_name) @module_name name: (aliased_import name: (dotted_name) @import_name))"
         )
 
+        # Call extraction query
+        self.call_query = Query(
+            self.language,
+            "(call function: (_) @call_function)"
+        )
+
     def _extract_module_imports(
         self,
         query: Query,
@@ -142,8 +148,53 @@ class PythonMetadataExtractor:
         Returns:
             List of call references (e.g., ['calculate_total', 'service.fetch_data'])
         """
-        # TODO: Story 29.1 Part 2 - Implement call extraction in next task
-        return []
+        calls = []
+        source_bytes = bytes(source_code, "utf8")
+        cursor = QueryCursor(self.call_query)
+
+        # Extract all calls within the node
+        matches = cursor.matches(node)
+        for pattern_index, captures_dict in matches:
+            call_nodes = captures_dict.get('call_function', [])
+            for call_node in call_nodes:
+                call_text = self._extract_call_name(call_node, source_bytes)
+                if call_text:
+                    calls.append(call_text)
+
+        return list(set(calls))  # Deduplicate
+
+    def _extract_call_name(self, node: Node, source_bytes: bytes) -> str:
+        """
+        Extract the full call name from a call node.
+
+        Handles:
+        - Simple calls: function()
+        - Method calls: object.method()
+        - Chained calls: obj.a.b.method()
+        """
+        if node.type == "identifier":
+            return source_bytes[node.start_byte:node.end_byte].decode("utf8")
+
+        elif node.type == "attribute":
+            # For attribute access (obj.method), build full path
+            parts = []
+            current = node
+            while current and current.type == "attribute":
+                # Get the attribute name (rightmost part)
+                attr_node = current.child_by_field_name("attribute")
+                if attr_node:
+                    parts.insert(0, source_bytes[attr_node.start_byte:attr_node.end_byte].decode("utf8"))
+
+                # Move to the object (left side)
+                current = current.child_by_field_name("object")
+
+            # Get the base object name
+            if current and current.type == "identifier":
+                parts.insert(0, source_bytes[current.start_byte:current.end_byte].decode("utf8"))
+
+            return ".".join(parts) if parts else ""
+
+        return ""
 
     async def extract_metadata(
         self,

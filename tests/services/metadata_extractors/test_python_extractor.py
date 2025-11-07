@@ -61,3 +61,51 @@ async def test_extract_from_import_alias(python_extractor, python_parser):
     imports = await python_extractor.extract_imports(tree, source_code)
 
     assert imports == ["datetime.datetime"]
+
+
+@pytest.mark.asyncio
+async def test_extract_basic_call(python_extractor, python_parser):
+    """Test extraction of basic function call."""
+    source_code = """
+def my_function():
+    result = calculate_total()
+    return result
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    function_node = tree.root_node.children[0]  # function_definition
+
+    calls = await python_extractor.extract_calls(function_node, source_code)
+
+    assert "calculate_total" in calls
+
+
+@pytest.mark.asyncio
+async def test_extract_method_call(python_extractor, python_parser):
+    """Test extraction of method call."""
+    source_code = """
+def my_function():
+    result = service.fetch_data()
+    return result
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    function_node = tree.root_node.children[0]
+
+    calls = await python_extractor.extract_calls(function_node, source_code)
+
+    assert "service.fetch_data" in calls
+
+
+@pytest.mark.asyncio
+async def test_extract_chained_call(python_extractor, python_parser):
+    """Test extraction of chained method calls."""
+    source_code = """
+def my_function():
+    result = database.session.query(User).all()
+    return result
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    function_node = tree.root_node.children[0]
+
+    calls = await python_extractor.extract_calls(function_node, source_code)
+
+    assert "database.session.query" in calls
