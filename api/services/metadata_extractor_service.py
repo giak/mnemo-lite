@@ -34,6 +34,14 @@ except ImportError:
     TypeScriptMetadataExtractor = None  # type: ignore
     TYPESCRIPT_EXTRACTOR_AVAILABLE = False
 
+# EPIC-29: Import Python extractor
+try:
+    from services.metadata_extractors.python_extractor import PythonMetadataExtractor
+    PYTHON_EXTRACTOR_AVAILABLE = True
+except ImportError:
+    PythonMetadataExtractor = None  # type: ignore
+    PYTHON_EXTRACTOR_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -42,27 +50,34 @@ class MetadataExtractorService:
     Extract code metadata from AST nodes.
 
     EPIC-26: Multi-language support (Python, TypeScript, JavaScript).
+    EPIC-29: Python metadata extractor using tree-sitter.
 
     Supports:
-    - Python: Using ast module (EPIC-06)
+    - Python: Using tree-sitter (EPIC-29) or ast module fallback (EPIC-06)
     - TypeScript: Using tree-sitter (EPIC-26)
     - JavaScript: Using tree-sitter (EPIC-26, Story 26.4)
 
     Extracts core metadata fields:
-    - signature: Full function/class signature (Python only)
-    - parameters: List of parameter names (Python only)
-    - returns: Return type annotation (Python only)
-    - decorators: List of decorator names (Python only)
-    - docstring: Function/class docstring (Python only)
-    - complexity: Cyclomatic complexity + LOC (Python only)
+    - signature: Full function/class signature (Python ast only)
+    - parameters: List of parameter names (Python ast only)
+    - returns: Return type annotation (Python ast only)
+    - decorators: List of decorator names (all Python)
+    - docstring: Function/class docstring (Python ast only)
+    - complexity: Cyclomatic complexity + LOC (Python ast only)
     - imports: List of imports used in chunk (ALL languages)
     - calls: List of function calls made in chunk (ALL languages)
     """
 
-    def __init__(self):
+    def __init__(self, metadata_extractor=None):
+        """
+        Initialize MetadataExtractorService.
+
+        Args:
+            metadata_extractor: Optional specific extractor (for testing/DI)
+        """
         self.logger = logging.getLogger(__name__)
 
-        # EPIC-26: Initialize language-specific extractors
+        # EPIC-26/29: Initialize language-specific extractors
         self.extractors = {}
 
         # TypeScript/JavaScript extractors (tree-sitter)
@@ -77,8 +92,22 @@ class MetadataExtractorService:
             except Exception as e:
                 self.logger.warning(f"Failed to initialize TypeScript/JavaScript extractors: {e}")
 
-        # Python uses built-in methods (no separate extractor class)
-        self.extractors["python"] = None  # Marker for built-in Python extraction
+        # EPIC-29: Python extractor (tree-sitter)
+        if PYTHON_EXTRACTOR_AVAILABLE:
+            try:
+                python_extractor = PythonMetadataExtractor()
+                self.extractors["python"] = python_extractor
+                self.logger.info("Python metadata extractor initialized")
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize Python extractor: {e}")
+                # Fallback: Python uses built-in methods (no separate extractor class)
+                self.extractors["python"] = None  # Marker for built-in Python extraction
+        else:
+            # Python uses built-in methods (no separate extractor class)
+            self.extractors["python"] = None  # Marker for built-in Python extraction
+
+        # Allow dependency injection for testing
+        self._injected_extractor = metadata_extractor
 
     async def extract_metadata(
         self,
@@ -123,11 +152,21 @@ class MetadataExtractorService:
 
         If extraction fails for any field, returns None or empty list (graceful degradation).
         """
-        # EPIC-26: Route to appropriate extractor based on language
+        # EPIC-26/29: Route to appropriate extractor based on language
         if language in ("typescript", "javascript"):
             return await self._extract_typescript_metadata(source_code, node, tree, language)
         elif language == "python":
-            return await self._extract_python_metadata(source_code, node, tree, module_imports)
+            # EPIC-29: Use tree-sitter Python extractor if available and tree is tree-sitter
+            # Check if we have tree-sitter objects (Tree has root_node attribute)
+            is_tree_sitter = hasattr(tree, 'root_node')
+
+            extractor = self._injected_extractor or self.extractors.get("python")
+            if extractor and is_tree_sitter:
+                # Use PythonMetadataExtractor (tree-sitter)
+                return await extractor.extract_metadata(source_code, node, tree)
+            else:
+                # Fallback to original ast-based extraction
+                return await self._extract_python_metadata(source_code, node, tree, module_imports)
         else:
             # Fallback: basic metadata only for unsupported languages
             self.logger.warning(f"Language '{language}' not supported, returning basic metadata")
