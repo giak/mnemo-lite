@@ -26,6 +26,35 @@ class PythonMetadataExtractor:
     - Async/await patterns
     """
 
+    # EPIC-29 Story 29.3: Framework function blacklist
+    # Common test framework functions to filter out (reduce noise)
+    FRAMEWORK_BLACKLIST = {
+        # pytest
+        "describe", "it", "test", "fixture", "mock", "patch", "monkeypatch",
+        "parametrize", "mark", "raises", "warns", "approx", "capfd", "capsys",
+        "tmpdir", "tmp_path",
+        # pytest assertions (though these are statements, not calls)
+        "assert",
+        # unittest.TestCase methods
+        "setUp", "tearDown", "setUpClass", "tearDownClass",
+        "assertEqual", "assertNotEqual", "assertTrue", "assertFalse",
+        "assertIs", "assertIsNot", "assertIsNone", "assertIsNotNone",
+        "assertIn", "assertNotIn", "assertIsInstance", "assertNotIsInstance",
+        "assertRaises", "assertRaisesRegex", "assertWarns", "assertWarnsRegex",
+        "assertAlmostEqual", "assertNotAlmostEqual", "assertGreater",
+        "assertGreaterEqual", "assertLess", "assertLessEqual",
+        "assertRegex", "assertNotRegex", "assertCountEqual",
+        "assertMultiLineEqual", "assertSequenceEqual", "assertListEqual",
+        "assertTupleEqual", "assertSetEqual", "assertDictEqual",
+        "fail", "skipTest", "subTest",
+        # Mock/patch
+        "MagicMock", "Mock", "create_autospec", "seal",
+        # Common debugging
+        "print", "breakpoint", "pdb", "set_trace",
+        # Logging (too generic, creates noise)
+        "debug", "info", "warning", "error", "critical",
+    }
+
     def __init__(self):
         """Initialize Python language and queries."""
         self.language = get_language("python")
@@ -151,6 +180,8 @@ class PythonMetadataExtractor:
         """
         Extract function/method calls from a code node.
 
+        Filters out framework functions from FRAMEWORK_BLACKLIST.
+
         Args:
             node: tree-sitter AST node (function, class, method)
             source_code: Full source code (for byte range extraction)
@@ -177,7 +208,7 @@ class PythonMetadataExtractor:
             call_nodes = captures_dict.get('call_function', [])
             for call_node in call_nodes:
                 call_text = self._extract_call_name(call_node, source_bytes)
-                if call_text:
+                if call_text and not self._is_blacklisted(call_text):
                     calls.append(call_text)
 
         return list(set(calls))  # Deduplicate
@@ -214,6 +245,24 @@ class PythonMetadataExtractor:
             return ".".join(parts) if parts else ""
 
         return ""
+
+    def _is_blacklisted(self, call_name: str) -> bool:
+        """
+        Check if a call name should be filtered out.
+
+        Args:
+            call_name: Full call name (e.g., 'mock.patch', 'assertEqual')
+
+        Returns:
+            True if blacklisted, False otherwise
+        """
+        # Check both full name and last part (for method calls)
+        # e.g., "self.assertEqual" -> check "assertEqual"
+        parts = call_name.split(".")
+        last_part = parts[-1] if parts else call_name
+
+        return (call_name in self.FRAMEWORK_BLACKLIST or
+                last_part in self.FRAMEWORK_BLACKLIST)
 
     async def extract_decorators(self, node: Node, source_code: str) -> list[str]:
         """

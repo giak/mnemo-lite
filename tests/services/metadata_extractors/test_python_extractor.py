@@ -248,3 +248,67 @@ def process(value: Union[int, str]) -> Union[float, None]:
     assert "type_hints" in metadata
     assert "Union[int, str]" in metadata["type_hints"]["parameters"][0]["type"]
     assert "Union[float, None]" in metadata["type_hints"]["return_type"]
+
+
+@pytest.mark.asyncio
+async def test_framework_blacklist_pytest(python_extractor, python_parser):
+    """Test that pytest framework functions are filtered out."""
+    source_code = """
+def test_user_creation():
+    user = create_user("John")
+    assert user.name == "John"
+    mock.patch("database.save")
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    function_node = tree.root_node.children[0]
+
+    calls = await python_extractor.extract_calls(function_node, source_code)
+
+    # Should include create_user but NOT assert, mock.patch
+    assert "create_user" in calls
+    assert "assert" not in calls
+    assert "mock.patch" not in calls
+
+
+@pytest.mark.asyncio
+async def test_framework_blacklist_unittest(python_extractor, python_parser):
+    """Test that unittest framework methods are filtered out."""
+    source_code = """
+class TestUser(unittest.TestCase):
+    def setUp(self):
+        self.user = User()
+
+    def test_name(self):
+        self.assertEqual(self.user.name, "John")
+        self.assertTrue(self.user.is_active)
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    class_node = tree.root_node.children[0]
+
+    calls = await python_extractor.extract_calls(class_node, source_code)
+
+    # Should NOT include assertEqual, assertTrue, setUp (blacklisted)
+    assert "assertEqual" not in calls
+    assert "assertTrue" not in calls
+    assert "setUp" not in calls
+
+
+@pytest.mark.asyncio
+async def test_print_debug_blacklist(python_extractor, python_parser):
+    """Test that print/debug statements are filtered out."""
+    source_code = """
+def process_data(items):
+    print("Processing items")
+    result = calculate(items)
+    breakpoint()
+    return result
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    function_node = tree.root_node.children[0]
+
+    calls = await python_extractor.extract_calls(function_node, source_code)
+
+    # Should include calculate but NOT print, breakpoint
+    assert "calculate" in calls
+    assert "print" not in calls
+    assert "breakpoint" not in calls
