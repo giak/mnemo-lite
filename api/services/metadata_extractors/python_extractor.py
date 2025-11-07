@@ -63,29 +63,6 @@ class PythonMetadataExtractor:
             """
         )
 
-        # Type hint extraction queries
-        self.function_type_query = Query(
-            self.language,
-            """
-            (function_definition
-              parameters: (parameters
-                (typed_parameter
-                  type: (_) @param_type))
-              return_type: (type) @return_type)
-            """
-        )
-
-        self.class_attribute_type_query = Query(
-            self.language,
-            """
-            (class_definition
-              body: (block
-                (expression_statement
-                  (assignment
-                    left: (identifier) @attr_name
-                    type: (type) @attr_type))))
-            """
-        )
 
     def _extract_module_imports(
         self,

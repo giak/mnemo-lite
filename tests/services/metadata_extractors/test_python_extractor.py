@@ -215,3 +215,36 @@ class User:
 
     assert "type_hints" in metadata
     assert "attributes" in metadata["type_hints"]
+
+
+@pytest.mark.asyncio
+async def test_extract_type_hints_from_decorated_function(python_extractor, python_parser):
+    """Test extraction of type hints from decorated function."""
+    source_code = """
+@cached
+def compute(x: int) -> str:
+    return str(x)
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    function_node = tree.root_node.children[0]
+    metadata = await python_extractor.extract_metadata(source_code, function_node, tree)
+    assert "type_hints" in metadata
+    assert metadata["type_hints"]["return_type"] == "str"
+    assert len(metadata["type_hints"]["parameters"]) == 1
+    assert metadata["type_hints"]["parameters"][0]["name"] == "x"
+    assert metadata["type_hints"]["parameters"][0]["type"] == "int"
+
+
+@pytest.mark.asyncio
+async def test_extract_union_type_hint(python_extractor, python_parser):
+    """Test extraction of Union type hints."""
+    source_code = """
+def process(value: Union[int, str]) -> Union[float, None]:
+    return None
+"""
+    tree = python_parser.parse(bytes(source_code, "utf8"))
+    function_node = tree.root_node.children[0]
+    metadata = await python_extractor.extract_metadata(source_code, function_node, tree)
+    assert "type_hints" in metadata
+    assert "Union[int, str]" in metadata["type_hints"]["parameters"][0]["type"]
+    assert "Union[float, None]" in metadata["type_hints"]["return_type"]
