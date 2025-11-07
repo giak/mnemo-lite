@@ -22,7 +22,8 @@ TIMEOUTS: Dict[str, float] = {
     "embedding_generation_batch": float(os.getenv("TIMEOUT_EMBEDDING_BATCH", "60.0")),
 
     # Graph operations
-    "graph_construction": float(os.getenv("TIMEOUT_GRAPH_CONSTRUCTION", "10.0")),
+    # EPIC-29: Increased from 10s to 300s for large Python repositories (4K+ nodes)
+    "graph_construction": float(os.getenv("TIMEOUT_GRAPH_CONSTRUCTION", "300.0")),
     "graph_traversal": float(os.getenv("TIMEOUT_GRAPH_TRAVERSAL", "5.0")),
 
     # Search operations
@@ -109,7 +110,7 @@ def reset_to_defaults() -> None:
         "tree_sitter_parse": 5.0,
         "embedding_generation_single": 30.0,  # EPIC-26: Increased for large files
         "embedding_generation_batch": 60.0,   # EPIC-26: Increased for large batches
-        "graph_construction": 10.0,
+        "graph_construction": 300.0,          # EPIC-29: Increased for large Python repositories
         "graph_traversal": 5.0,
         "vector_search": 5.0,
         "lexical_search": 3.0,

@@ -62,7 +62,7 @@ async def list_projects(
                         COUNT(*) as chunks_count,
                         MAX(indexed_at) as last_indexed,
                         array_agg(DISTINCT language) FILTER (WHERE language IS NOT NULL) as languages,
-                        SUM(CAST(metadata->>'loc' AS INTEGER)) FILTER (WHERE metadata->>'loc' IS NOT NULL) as total_loc
+                        SUM(end_line - start_line + 1) FILTER (WHERE start_line IS NOT NULL AND end_line IS NOT NULL) as total_loc
                     FROM code_chunks
                     WHERE repository IS NOT NULL
                     GROUP BY repository
