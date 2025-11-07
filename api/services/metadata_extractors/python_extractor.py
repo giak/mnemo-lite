@@ -148,8 +148,17 @@ class PythonMetadataExtractor:
         Returns:
             List of call references (e.g., ['calculate_total', 'service.fetch_data'])
         """
+        # Input validation
+        if not node or not source_code:
+            self.logger.warning("Empty node or source_code provided to extract_calls")
+            return []
+
         calls = []
-        source_bytes = bytes(source_code, "utf8")
+        try:
+            source_bytes = bytes(source_code, "utf8")
+        except UnicodeDecodeError as e:
+            self.logger.error(f"Failed to encode source code as UTF-8: {e}")
+            return []
         cursor = QueryCursor(self.call_query)
 
         # Extract all calls within the node
