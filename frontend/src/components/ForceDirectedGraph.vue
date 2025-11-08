@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount, nextTick } from 'vue'
 import { Graph } from '@antv/g6'
 import type { GraphNode, GraphEdge } from '@/composables/useCodeGraph'
+import { useFullscreenResize } from '@/composables/useFullscreenResize'
 
 const props = defineProps<{
   nodes: GraphNode[]
@@ -10,6 +11,13 @@ const props = defineProps<{
 
 const containerRef = ref<HTMLDivElement>()
 let graphInstance: Graph | null = null
+
+// Setup resize handling with ResizeObserver (modern API)
+const { calculateSize } = useFullscreenResize(containerRef, (width, height) => {
+  if (graphInstance) {
+    graphInstance.changeSize(width, height)
+  }
+})
 
 // Extract folder from file path for clustering
 const getFolder = (node: GraphNode): string => {
@@ -53,7 +61,7 @@ const preparedData = computed(() => {
   })
 
   // Prepare G6 data format
-  const g6Nodes = props.nodes.map((node, index) => {
+  const g6Nodes = props.nodes.map((node) => {
     const clusterId = clusters.get(node.id) || 0
     const color = clusterColors[clusterId % clusterColors.length]
 
@@ -100,13 +108,19 @@ const initGraph = async () => {
     graphInstance.destroy()
   }
 
-  const width = containerRef.value.offsetWidth
-  const height = containerRef.value.offsetHeight
+  // Calculate optimal canvas size using composable
+  const size = calculateSize()
+  if (!size) {
+    console.error('[ForceDirectedGraph] Failed to calculate canvas size')
+    return
+  }
+
+  console.log('[ForceDirectedGraph] Initializing with dimensions:', size)
 
   graphInstance = new Graph({
     container: containerRef.value,
-    width,
-    height,
+    width: size.width,
+    height: size.height,
     data: {
       nodes: preparedData.value.nodes,
       edges: preparedData.value.edges
@@ -176,29 +190,20 @@ const initGraph = async () => {
   await graphInstance.render()
 }
 
+// Initialize on mount - G6 autoResize handles resize events
 onMounted(() => {
   initGraph()
-
-  // Handle window resize
-  const handleResize = () => {
-    if (graphInstance && containerRef.value) {
-      graphInstance.changeSize(
-        containerRef.value.offsetWidth,
-        containerRef.value.offsetHeight
-      )
-    }
-  }
-
-  window.addEventListener('resize', handleResize)
-  onBeforeUnmount(() => {
-    window.removeEventListener('resize', handleResize)
-    if (graphInstance) {
-      graphInstance.destroy()
-    }
-  })
 })
 
-watch(() => [props.nodes, props.edges], () => {
+// Cleanup on unmount
+onBeforeUnmount(() => {
+  if (graphInstance) {
+    graphInstance.destroy()
+  }
+})
+
+watch(() => [props.nodes, props.edges], async () => {
+  await nextTick()
   initGraph()
 }, { deep: true })
 </script>
@@ -253,7 +258,7 @@ watch(() => [props.nodes, props.edges], () => {
 .force-graph-container {
   position: relative;
   width: 100%;
-  height: 800px;
+  height: 100%;
   background: #0f172a;
   border-radius: 8px;
   overflow: hidden;

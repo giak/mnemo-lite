@@ -11,6 +11,7 @@ import type { GraphNode, GraphEdge } from '@/composables/useCodeGraph'
 import type { ViewMode } from '@/types/orgchart-types'
 import { calculateNodeStyle } from '@/utils/orgchart-visual-encoding'
 import { filterNodesByScore } from '@/utils/semantic-zoom-scoring'
+import { useFullscreenResize } from '@/composables/useFullscreenResize'
 
 interface OrgchartConfig {
   depth: number
@@ -38,6 +39,14 @@ const props = withDefaults(defineProps<Props>(), {
 const containerRef = ref<HTMLElement | null>(null)
 let graph: Graph | null = null
 const previousNodeIds = ref<Set<string>>(new Set())
+
+// Setup resize handling with ResizeObserver (modern API)
+const { calculateSize } = useFullscreenResize(containerRef, (width, height) => {
+  if (graph) {
+    graph.setSize(width, height)
+    graph.render()
+  }
+})
 
 const getNodeColor = (type?: string): string => {
   const colors: Record<string, string> = {
@@ -387,11 +396,18 @@ const initGraph = async () => {
     edges: flatData.edges.length
   })
 
+  // Calculate optimal canvas size using composable
+  const size = calculateSize()
+  if (!size) {
+    console.error('[Orgchart] Failed to calculate canvas size')
+    return
+  }
+
   // Create graph with hierarchical layout
   graph = new Graph({
     container: containerRef.value,
-    width: containerRef.value.offsetWidth,
-    height: 1200,  // Increased from 800 for larger tree
+    width: size.width,
+    height: size.height,
     data: flatData,
     animation: {
       duration: 500,
@@ -765,12 +781,12 @@ watch(() => [props.nodes, props.edges, props.viewMode, props.zoomLevel, props.we
       }
     }
 
-    await new Promise(resolve => setTimeout(resolve, 50))
+    await nextTick()
     initGraph()
   }
 }, { deep: true })
 
-// Initialize on mount
+// Initialize on mount - G6 autoResize handles resize events
 onMounted(() => {
   initGraph()
 })
@@ -793,6 +809,7 @@ onUnmounted(() => {
 <style scoped>
 .orgchart-wrapper {
   width: 100%;
+  height: 100%;
   background: #0f172a;
   border-radius: 0.5rem;
   border: 2px solid #334155;
@@ -801,7 +818,7 @@ onUnmounted(() => {
 
 .orgchart-container {
   width: 100%;
-  height: 1200px;  /* Increased from 800px for larger tree */
+  height: 100%;
   position: relative;
 }
 </style>

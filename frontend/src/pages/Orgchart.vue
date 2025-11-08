@@ -44,6 +44,10 @@ const legendExpanded = ref(true)
 // Force graph to recreate on data changes
 const graphKey = ref(0)
 
+// Fullscreen state
+const isFullscreen = ref(false)
+const fullscreenContainer = ref<HTMLElement | null>(null)
+
 // Save view mode to localStorage
 watch(viewMode, (newMode) => {
   localStorage.setItem('orgchart_view_mode', newMode)
@@ -70,6 +74,23 @@ const resetWeights = () => {
     complexity: 0.4,
     loc: 0.3,
     connections: 0.3
+  }
+}
+
+// Toggle fullscreen
+const toggleFullscreen = async () => {
+  if (!fullscreenContainer.value) return
+
+  try {
+    if (!document.fullscreenElement) {
+      await fullscreenContainer.value.requestFullscreen()
+      isFullscreen.value = true
+    } else {
+      await document.exitFullscreen()
+      isFullscreen.value = false
+    }
+  } catch (err) {
+    console.error('Fullscreen error:', err)
   }
 }
 
@@ -204,6 +225,11 @@ onMounted(async () => {
       })
     }
   }
+
+  // Listen for fullscreen changes (e.g., ESC key)
+  document.addEventListener('fullscreenchange', () => {
+    isFullscreen.value = !!document.fullscreenElement
+  })
 })
 
 const handleRepositoryChange = async () => {
@@ -228,8 +254,12 @@ const handleBuildGraph = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-950">
-    <div class="max-w-full mx-auto px-4 py-3">
+  <div
+    ref="fullscreenContainer"
+    class="h-full bg-slate-950 overflow-hidden flex flex-col"
+    :class="{ 'fullscreen-container': isFullscreen }"
+  >
+    <div class="max-w-full mx-auto px-4 py-3 flex-shrink-0">
       <!-- Ultra-Compact Toolbar -->
       <div class="bg-slate-800/50 rounded-lg px-4 py-2 flex items-center gap-4 border-2 border-slate-700 text-xs">
         <!-- Title -->
@@ -337,6 +367,15 @@ const handleBuildGraph = async () => {
         >
           {{ building ? 'BUILDING...' : 'BUILD' }}
         </button>
+
+        <!-- Fullscreen Button -->
+        <button
+          @click="toggleFullscreen"
+          class="scada-btn scada-btn-ghost text-xs"
+          :title="isFullscreen ? 'Quitter plein écran (ESC)' : 'Plein écran'"
+        >
+          {{ isFullscreen ? '🗗' : '⛶' }}
+        </button>
       </div>
 
       <!-- Error Message -->
@@ -359,9 +398,9 @@ const handleBuildGraph = async () => {
       </div>
 
       <!-- Orgchart Visualization -->
-      <div v-else-if="nodes.length > 0" class="mt-4">
+      <div v-else-if="nodes.length > 0" class="mt-4 flex-1 flex flex-col overflow-hidden">
         <!-- Stats Info Card -->
-        <div class="bg-slate-800/50 rounded-lg border-2 border-slate-700 p-3 mb-4">
+        <div class="bg-slate-800/50 rounded-lg border-2 border-slate-700 p-3 mb-4 flex-shrink-0">
           <div class="flex items-center justify-center gap-6 text-xs">
             <div class="flex items-center gap-2">
               <span class="scada-label">Entry Points:</span>
@@ -379,7 +418,7 @@ const handleBuildGraph = async () => {
         </div>
 
         <!-- Visualization Components -->
-        <div class="relative">
+        <div class="relative flex-1 overflow-hidden">
           <!-- Orgchart (Hierarchy, Complexity, Hubs views) -->
           <OrgchartGraph
             v-if="viewMode === 'hierarchy' || viewMode === 'complexity' || viewMode === 'hubs'"
@@ -389,6 +428,7 @@ const handleBuildGraph = async () => {
             :view-mode="viewMode"
             :zoom-level="zoomLevel"
             :weights="weights"
+            class="h-full"
           />
 
           <!-- Force-Directed Graph (Architecture view) -->
@@ -396,6 +436,7 @@ const handleBuildGraph = async () => {
             v-else-if="viewMode === 'force'"
             :nodes="nodes"
             :edges="edges"
+            class="h-full"
           />
 
           <!-- Dependency Matrix (Matrix view) -->
@@ -403,6 +444,7 @@ const handleBuildGraph = async () => {
             v-else-if="viewMode === 'matrix'"
             :nodes="nodes"
             :edges="edges"
+            class="h-full"
           />
 
           <!-- Legend Panel (only for Orgchart views) -->
@@ -597,5 +639,15 @@ const handleBuildGraph = async () => {
   cursor: pointer;
   border: 2px solid #fff;
   box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* Fullscreen styles */
+.fullscreen-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
 }
 </style>
