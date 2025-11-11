@@ -173,6 +173,10 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     # Story 23.5: Initialize CodeIndexingService
     try:
         from services.code_indexing_service import CodeIndexingService
+        from services.code_chunking_service import CodeChunkingService
+        from services.metadata_extractor_service import MetadataExtractorService
+        from services.graph_construction_service import GraphConstructionService
+        from db.repositories.code_chunk_repository import CodeChunkRepository
         from services.caches.cascade_cache import CascadeCache
         from services.caches.code_chunk_cache import CodeChunkCache
         from services.caches.redis_cache import RedisCache
@@ -194,10 +198,20 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         )
         services["chunk_cache"] = chunk_cache
 
-        # Initialize CodeIndexingService
+        # Initialize required dependencies for CodeIndexingService
+        chunking_service = CodeChunkingService(max_workers=4)
+        metadata_service = MetadataExtractorService()
+        graph_service = GraphConstructionService(engine=sqlalchemy_engine)
+        chunk_repository = CodeChunkRepository(engine=sqlalchemy_engine)
+
+        # Initialize CodeIndexingService with all required dependencies
         code_indexing_service = CodeIndexingService(
             engine=sqlalchemy_engine,
+            chunking_service=chunking_service,
+            metadata_service=metadata_service,
             embedding_service=services.get("embedding_service"),
+            graph_service=graph_service,
+            chunk_repository=chunk_repository,
             chunk_cache=chunk_cache
         )
         services["code_indexing_service"] = code_indexing_service
