@@ -70,11 +70,11 @@ class IndexProjectTool(BaseMCPComponent):
         start_time = datetime.utcnow()
 
         # Check services availability
-        if not self.services.get("code_indexing_service"):
+        if not self._services.get("code_indexing_service"):
             return {"success": False, "message": "CodeIndexingService not available"}
 
-        indexing_service = self.services["code_indexing_service"]
-        redis = self.services.get("redis")  # May be None (graceful degradation)
+        indexing_service = self._services["code_indexing_service"]
+        redis = self._services.get("redis")  # May be None (graceful degradation)
 
         try:
             # Step 1: Scan project directory
@@ -337,11 +337,11 @@ class ReindexFileTool(BaseMCPComponent):
             FileIndexResult with statistics
         """
         # Check services
-        if not self.services.get("code_indexing_service"):
+        if not self._services.get("code_indexing_service"):
             return {"success": False, "message": "CodeIndexingService not available"}
 
-        indexing_service = self.services["code_indexing_service"]
-        chunk_cache = self.services.get("chunk_cache")  # CascadeCache L1/L2
+        indexing_service = self._services["code_indexing_service"]
+        chunk_cache = self._services.get("chunk_cache")  # CascadeCache L1/L2
 
         try:
             # Validate file exists
