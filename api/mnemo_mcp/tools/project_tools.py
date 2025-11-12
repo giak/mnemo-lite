@@ -132,18 +132,17 @@ async def get_project_by_name(
     """
     name_lower = name.lower().strip()
 
-    status_filter = "AND status = 'active'" if not include_archived else ""
-
     result = await conn.execute(
-        text(f"""
+        text("""
             SELECT
                 id, name, display_name, description,
                 repository_path, project_type, status,
                 created_at, updated_at
             FROM projects
-            WHERE name = :name {status_filter}
+            WHERE name = :name
+            AND (:include_archived OR status = 'active')
         """),
-        {"name": name_lower}
+        {"name": name_lower, "include_archived": include_archived}
     )
     row = result.fetchone()
 
