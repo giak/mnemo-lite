@@ -105,18 +105,20 @@ async def get_recent_memories(
             result = await conn.execute(
                 text("""
                     SELECT
-                        id,
-                        title,
-                        created_at,
-                        memory_type,
-                        tags,
-                        (embedding IS NOT NULL) as has_embedding,
-                        author,
-                        project_id
-                    FROM memories
-                    WHERE deleted_at IS NULL
-                    AND memory_type = 'conversation'
-                    ORDER BY created_at DESC
+                        m.id,
+                        m.title,
+                        m.created_at,
+                        m.memory_type,
+                        m.tags,
+                        (m.embedding IS NOT NULL) as has_embedding,
+                        m.author,
+                        m.project_id,
+                        p.display_name as project_name
+                    FROM memories m
+                    LEFT JOIN projects p ON m.project_id = p.id
+                    WHERE m.deleted_at IS NULL
+                    AND m.memory_type = 'conversation'
+                    ORDER BY m.created_at DESC
                     LIMIT :limit
                 """),
                 {"limit": limit}
@@ -133,7 +135,8 @@ async def get_recent_memories(
                     "tags": row.tags or [],
                     "has_embedding": row.has_embedding,
                     "author": row.author,
-                    "project_id": row.project_id
+                    "project_id": row.project_id,
+                    "project_name": row.project_name
                 })
 
             return memories
