@@ -277,7 +277,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-950">
+  <div class="bg-slate-950">
     <div class="max-w-full mx-auto px-4 py-3">
 
       <!-- Loading State -->

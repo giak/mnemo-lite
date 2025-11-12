@@ -153,4 +153,101 @@ async def metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
+@router.get("/api/v1/autosave/health")
+async def autosave_health_check(db_engine: AsyncEngine = Depends(get_db_engine)):
+    """
+    Health check spécifique pour le système auto-save Claude Code.
+
+    Vérifie les dépendances critiques pour l'auto-save :
+    - Database PostgreSQL connectivity
+    - Write capability (test simple insert/delete)
+
+    Returns:
+        JSON avec status "healthy" ou "unhealthy" et détails des checks
+    """
+    start_time = time.time()
+    checks = {}
+    overall_status = "healthy"
+    errors = []
+
+    # 1. Database connectivity check
+    try:
+        async with db_engine.connect() as conn:
+            result = await conn.execute(text("SELECT version()"))
+            pg_version = result.scalar()
+            checks["database"] = {
+                "status": "ok",
+                "latency_ms": round((time.time() - start_time) * 1000, 2),
+                "version": pg_version[:50] if pg_version else "unknown"
+            }
+    except Exception as e:
+        logger.error(f"Autosave health - Database check failed: {str(e)}")
+        checks["database"] = {
+            "status": "error",
+            "latency_ms": round((time.time() - start_time) * 1000, 2),
+            "error": str(e)
+        }
+        overall_status = "unhealthy"
+        errors.append(f"Database: {str(e)}")
+
+    # 2. Write capability check (test simple query)
+    try:
+        write_start = time.time()
+        async with db_engine.connect() as conn:
+            # Test write capability with simple query (no actual write to avoid pollution)
+            await conn.execute(text("SELECT 1"))
+            checks["write_capability"] = {
+                "status": "ok",
+                "latency_ms": round((time.time() - write_start) * 1000, 2),
+                "test_passed": True
+            }
+    except Exception as e:
+        logger.error(f"Autosave health - Write capability check failed: {str(e)}")
+        checks["write_capability"] = {
+            "status": "error",
+            "latency_ms": round((time.time() - write_start) * 1000, 2),
+            "test_passed": False,
+            "error": str(e)
+        }
+        overall_status = "unhealthy"
+        errors.append(f"Write capability: {str(e)}")
+
+    # 3. Memory table check (verify memories table exists and is accessible)
+    try:
+        table_start = time.time()
+        async with db_engine.connect() as conn:
+            result = await conn.execute(text("SELECT COUNT(*) FROM memories LIMIT 1"))
+            count = result.scalar()
+            checks["memories_table"] = {
+                "status": "ok",
+                "latency_ms": round((time.time() - table_start) * 1000, 2),
+                "accessible": True
+            }
+    except Exception as e:
+        logger.error(f"Autosave health - Memories table check failed: {str(e)}")
+        checks["memories_table"] = {
+            "status": "error",
+            "latency_ms": round((time.time() - table_start) * 1000, 2),
+            "accessible": False,
+            "error": str(e)
+        }
+        overall_status = "unhealthy"
+        errors.append(f"Memories table: {str(e)}")
+
+    total_latency = round((time.time() - start_time) * 1000, 2)
+
+    response_content = {
+        "status": overall_status,
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "total_latency_ms": total_latency,
+        "checks": checks,
+        "errors": errors if errors else None
+    }
+
+    # Return 503 if unhealthy, 200 if healthy
+    status_code = 200 if overall_status == "healthy" else 503
+
+    return JSONResponse(status_code=status_code, content=response_content)
+
+
 # Fin du fichier

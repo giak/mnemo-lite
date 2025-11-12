@@ -114,7 +114,6 @@ services:
       - ./static:/app/static
       - ./.claude:/app/.claude:ro  # Claude Code hooks for auto-save conversations
       - ${CLAUDE_PROJECTS_DIR:-~/.claude/projects/-home-giak-Work-MnemoLite}:/home/user/.claude/projects:ro  # Claude Code transcripts
-      - /home/giak/projects:/external/projects:ro  # External projects for indexing
       # REMOVED: postgres_data volume (SECURITY: API should NOT access DB files directly)
     deploy:
       resources:

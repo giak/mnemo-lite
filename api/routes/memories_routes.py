@@ -111,7 +111,8 @@ async def get_recent_memories(
                         memory_type,
                         tags,
                         (embedding IS NOT NULL) as has_embedding,
-                        author
+                        author,
+                        project_id
                     FROM memories
                     WHERE deleted_at IS NULL
                     AND memory_type = 'conversation'
@@ -131,7 +132,8 @@ async def get_recent_memories(
                     "memory_type": row.memory_type,
                     "tags": row.tags or [],
                     "has_embedding": row.has_embedding,
-                    "author": row.author
+                    "author": row.author,
+                    "project_id": row.project_id
                 })
 
             return memories

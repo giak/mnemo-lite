@@ -93,7 +93,7 @@ const getChunkTypeBadge = (chunkType: string) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-950">
+  <div class="bg-slate-950">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <!-- Header avec LED SCADA -->
       <div class="mb-8 flex items-center gap-4">

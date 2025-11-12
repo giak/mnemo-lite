@@ -18,12 +18,12 @@ export interface Memory {
   tags: string[]
   has_embedding: boolean
   author: string | null
+  project_id: string | null
 }
 
 export interface MemoryDetail extends Memory {
   content: string
   updated_at: string | null
-  project_id: string | null
 }
 
 export interface CodeChunk {

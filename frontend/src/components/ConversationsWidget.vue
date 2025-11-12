@@ -107,17 +107,17 @@ function getMemoryTypeLabel(type: string): string {
         <!-- Tags + Session -->
         <div class="flex flex-wrap gap-1 mb-2">
           <span
-            v-for="tag in memory.tags.filter(t => !t.startsWith('session:')).slice(0, 3)"
+            v-for="tag in memory.tags.filter(t => !t.startsWith('session:') && !t.startsWith('date:')).slice(0, 3)"
             :key="tag"
             class="text-xs px-2 py-0.5 bg-slate-600 text-gray-300 rounded border border-slate-500 font-mono"
           >
             {{ tag }}
           </span>
           <span
-            v-if="memory.tags.filter(t => !t.startsWith('session:')).length > 3"
+            v-if="memory.tags.filter(t => !t.startsWith('session:') && !t.startsWith('date:')).length > 3"
             class="text-xs px-2 py-0.5 text-gray-400 font-mono"
           >
-            +{{ memory.tags.filter(t => !t.startsWith('session:')).length - 3 }}
+            +{{ memory.tags.filter(t => !t.startsWith('session:') && !t.startsWith('date:')).length - 3 }}
           </span>
           <span class="text-xs px-2 py-0.5 bg-slate-700 text-cyan-400 rounded border border-cyan-700 font-mono uppercase">
             session:{{ extractSessionId(memory.tags) }}

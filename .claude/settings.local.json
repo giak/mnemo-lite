@@ -119,7 +119,16 @@
       "Bash(PYTHONPATH=/home/giak/Work/MnemoLite/api:$PYTHONPATH pytest:*)",
       "Bash(. api/bin/activate)",
       "SlashCommand(/superpowers:brainstorm)",
-      "SlashCommand(/superpowers:write-plan)"
+      "SlashCommand(/superpowers:write-plan)",
+      "Bash(poetry run pytest:*)",
+      "Bash(PYTHONPATH=/home/giak/Work/MnemoLite/api python3:*)",
+      "Bash(pip3 install tree-sitter-language-pack tree-sitter)",
+      "Bash(/home/giak/.local/bin/poetry run pytest tests/unit/services/metadata_extractors/test_python_extractor.py -v)",
+      "Bash(PYTHONPATH=/home/giak/Work/MnemoLite/api:$PYTHONPATH TEST_DATABASE_URL=$TEST_DATABASE_URL:-postgresql+asyncpg://localhost/mnemolite_test EMBEDDING_MODE=mock pytest:*)",
+      "Bash(PYTHONPATH=/home/giak/Work/MnemoLite/api:$PYTHONPATH TEST_DATABASE_URL=\"postgresql+asyncpg://localhost/mnemolite_test\" EMBEDDING_MODE=mock pytest:*)",
+      "Bash(python:*)",
+      "Skill(superpowers:systematic-debugging)",
+      "Bash(pnpm tsc:*)"
     ],
     "deny": [],
     "ask": []

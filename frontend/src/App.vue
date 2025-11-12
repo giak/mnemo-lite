@@ -1,12 +1,9 @@
 <script setup lang="ts">
-import Navbar from '@/components/Navbar.vue'
+import MainLayout from '@/layouts/MainLayout.vue'
 </script>
 
 <template>
-  <div id="app" class="min-h-screen bg-slate-950">
-    <Navbar />
-    <main>
-      <router-view />
-    </main>
-  </div>
+  <MainLayout>
+    <router-view />
+  </MainLayout>
 </template>
