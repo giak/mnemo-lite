@@ -10,6 +10,8 @@ import json
 import hashlib
 import time
 from datetime import datetime
+import subprocess
+import os
 
 from fastapi import APIRouter, HTTPException
 
@@ -20,6 +22,54 @@ from services.embedding_service import MockEmbeddingService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
+
+
+def get_project_name(working_dir: str = None) -> str:
+    """
+    Detect project name using centralized bash script.
+
+    Falls back through multiple strategies:
+    1. Execute get-project-name.sh from various locations
+    2. Use basename of working directory
+
+    Args:
+        working_dir: Working directory to detect from (default: current dir)
+
+    Returns:
+        Project name in lowercase (always succeeds)
+
+    Examples:
+        >>> get_project_name("/home/user/MnemoLite")
+        "mnemolite"
+        >>> get_project_name()  # From /home/user/MyProject
+        "myproject"
+    """
+    if working_dir is None:
+        working_dir = os.getcwd()
+
+    # Try to find and execute the detection script
+    script_paths = [
+        Path(__file__).parent.parent / "scripts" / "get-project-name.sh",
+        Path(working_dir) / "scripts" / "get-project-name.sh",
+    ]
+
+    for script_path in script_paths:
+        if script_path.exists():
+            try:
+                result = subprocess.run(
+                    ["bash", str(script_path), working_dir],
+                    capture_output=True,
+                    text=True,
+                    timeout=2
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    return result.stdout.strip().lower()
+            except Exception:
+                # Log silently, continue to fallback
+                pass
+
+    # Fallback: use basename of working directory
+    return Path(working_dir).name.lower()
 
 
 def parse_claude_transcripts(projects_dir: str = "/home/user/.claude/projects") -> list[tuple[str, str, str, str, str]]:
@@ -183,10 +233,8 @@ def parse_claude_transcripts(projects_dir: str = "/home/user/.claude/projects") 
                         session_id = transcript_file.stem
                         timestamp = messages[i].get('timestamp') or ""
 
-                        # Extract project name from filename
-                        # Format: ProjectName-hash.jsonl → extract "ProjectName"
-                        # Or use full stem if no dash found
-                        project_name = session_id.rsplit('-', 1)[0] if '-' in session_id else session_id
+                        # Detect project name from directory context
+                        project_name = get_project_name(str(transcripts_path.parent))
 
                         conversations.append((user_text, assistant_text, session_id, timestamp, project_name))
                         saved_hashes.add(content_hash)
@@ -303,7 +351,7 @@ async def import_conversations() -> Dict[str, Any]:
                     memory_type="conversation",
                     tags=tags,
                     author="AutoImport",
-                    project_id=project_name.lower() if project_name else None
+                    project_id=project_name
                 )
 
                 imported += 1
