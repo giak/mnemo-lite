@@ -2,14 +2,29 @@
 Conversation Worker - Consumes from Redis Streams and saves to API.
 """
 import asyncio
+import time
 import structlog
 from dataclasses import dataclass
 from typing import Optional
 import httpx
 from redis import Redis
 from tenacity import retry, stop_after_attempt, wait_exponential
+from opentelemetry import trace, metrics
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource
 
 logger = structlog.get_logger(__name__)
+
+# Global tracer and metrics
+tracer = None
+messages_processed_counter = None
+messages_failed_counter = None
+processing_duration_histogram = None
 
 
 @dataclass
@@ -95,34 +110,90 @@ class ConversationWorker:
             await asyncio.sleep(1)  # Backoff on error
 
     async def _handle_message(self, msg_id: str, data: dict):
-        """Handle a single message."""
-        try:
-            # Parse message
-            message = ConversationMessage(
-                id=msg_id,
-                user_message=data[b'user_message'].decode(),
-                assistant_message=data[b'assistant_message'].decode(),
-                project_name=data[b'project_name'].decode(),
-                session_id=data[b'session_id'].decode(),
-                timestamp=data[b'timestamp'].decode()
-            )
+        """Handle a single message with OpenTelemetry tracing."""
+        # Start measuring time
+        start_time = time.time()
 
-            # Process with retry
-            success = await self.process_message(message)
+        # Create a span for this message processing
+        if tracer:
+            with tracer.start_as_current_span("process_conversation") as span:
+                try:
+                    # Parse message
+                    message = ConversationMessage(
+                        id=msg_id,
+                        user_message=data[b'user_message'].decode(),
+                        assistant_message=data[b'assistant_message'].decode(),
+                        project_name=data[b'project_name'].decode(),
+                        session_id=data[b'session_id'].decode(),
+                        timestamp=data[b'timestamp'].decode()
+                    )
 
-            if success:
-                # Acknowledge message (remove from pending)
-                self.redis.xack(self.stream_name, self.group_name, msg_id)
-                logger.info(
-                    "message_processed",
-                    msg_id=msg_id,
-                    project=message.project_name
+                    # Add span attributes
+                    span.set_attribute("message.id", msg_id)
+                    span.set_attribute("message.project", message.project_name)
+                    span.set_attribute("message.session_id", message.session_id)
+
+                    # Process with retry
+                    success = await self.process_message(message)
+
+                    if success:
+                        # Acknowledge message (remove from pending)
+                        self.redis.xack(self.stream_name, self.group_name, msg_id)
+
+                        # Record metrics
+                        duration_ms = (time.time() - start_time) * 1000
+                        if messages_processed_counter:
+                            messages_processed_counter.add(1, {"project": message.project_name})
+                        if processing_duration_histogram:
+                            processing_duration_histogram.record(duration_ms, {"project": message.project_name})
+
+                        span.set_attribute("success", True)
+                        span.set_attribute("duration_ms", duration_ms)
+
+                        logger.info(
+                            "message_processed",
+                            msg_id=msg_id,
+                            project=message.project_name,
+                            duration_ms=duration_ms
+                        )
+                    else:
+                        # Record failure
+                        if messages_failed_counter:
+                            messages_failed_counter.add(1, {"project": message.project_name})
+
+                        span.set_attribute("success", False)
+                        logger.error("message_failed_permanently", msg_id=msg_id)
+
+                except Exception as e:
+                    # Record exception in span and metrics
+                    if messages_failed_counter:
+                        messages_failed_counter.add(1, {"error": type(e).__name__})
+
+                    span.set_attribute("error", True)
+                    span.record_exception(e)
+                    logger.error("handle_message_error", msg_id=msg_id, error=str(e))
+        else:
+            # Fallback if OpenTelemetry not configured
+            try:
+                message = ConversationMessage(
+                    id=msg_id,
+                    user_message=data[b'user_message'].decode(),
+                    assistant_message=data[b'assistant_message'].decode(),
+                    project_name=data[b'project_name'].decode(),
+                    session_id=data[b'session_id'].decode(),
+                    timestamp=data[b'timestamp'].decode()
                 )
-            else:
-                logger.error("message_failed_permanently", msg_id=msg_id)
 
-        except Exception as e:
-            logger.error("handle_message_error", msg_id=msg_id, error=str(e))
+                success = await self.process_message(message)
+
+                if success:
+                    self.redis.xack(self.stream_name, self.group_name, msg_id)
+                    logger.info("message_processed", msg_id=msg_id, project=message.project_name)
+                else:
+                    logger.error("message_failed_permanently", msg_id=msg_id)
+
+            except Exception as e:
+                logger.error("handle_message_error", msg_id=msg_id, error=str(e))
 
     @retry(
         stop=stop_after_attempt(5),
@@ -209,6 +280,59 @@ async def main():
             structlog.processors.JSONRenderer()
         ]
     )
+
+    # Configure OpenTelemetry
+    global tracer, messages_processed_counter, messages_failed_counter, processing_duration_histogram
+
+    otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://openobserve:5080/api/default/v1/traces")
+    otlp_metrics_endpoint = os.getenv("OTLP_METRICS_ENDPOINT", "http://openobserve:5080/api/default/v1/metrics")
+
+    # OpenObserve authentication
+    import base64
+    auth_string = "admin@mnemolite.local:Complexpass#123"
+    auth_bytes = base64.b64encode(auth_string.encode('utf-8')).decode('utf-8')
+    otlp_headers = {"Authorization": f"Basic {auth_bytes}"}
+
+    # Create resource with service name
+    resource = Resource.create({"service.name": "conversation-worker"})
+
+    # Configure tracing with authentication
+    trace.set_tracer_provider(TracerProvider(resource=resource))
+    trace.get_tracer_provider().add_span_processor(
+        BatchSpanProcessor(OTLPSpanExporter(
+            endpoint=otlp_endpoint,
+            headers=otlp_headers
+        ))
+    )
+    tracer = trace.get_tracer(__name__)
+
+    # Configure metrics with authentication
+    metrics.set_meter_provider(MeterProvider(
+        resource=resource,
+        metric_readers=[PeriodicExportingMetricReader(
+            OTLPMetricExporter(
+                endpoint=otlp_metrics_endpoint,
+                headers=otlp_headers
+            ),
+            export_interval_millis=5000  # Export every 5 seconds
+        )]
+    ))
+
+    meter = metrics.get_meter(__name__)
+    messages_processed_counter = meter.create_counter(
+        "conversations.processed",
+        description="Number of conversations processed successfully"
+    )
+    messages_failed_counter = meter.create_counter(
+        "conversations.failed",
+        description="Number of conversations that failed permanently"
+    )
+    processing_duration_histogram = meter.create_histogram(
+        "conversations.processing_duration_ms",
+        description="Time to process conversation (milliseconds)"
+    )
+
+    logger.info("opentelemetry_configured", otlp_endpoint=otlp_endpoint)
 
     # Create Redis client
     redis_client = Redis(

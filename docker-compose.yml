@@ -151,9 +151,27 @@ services:
     command: python -m workers.conversation_worker
     logging: *default-logging
 
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:latest
+    container_name: mnemo-openobserve
+    restart: unless-stopped
+    ports:
+      - "5080:5080"  # UI + API
+    environment:
+      - ZO_ROOT_USER_EMAIL=admin@mnemolite.local
+      - ZO_ROOT_USER_PASSWORD=Complexpass#123
+      - ZO_DATA_DIR=/data
+    volumes:
+      - openobserve_data:/data
+    networks:
+      - frontend  # For web UI access
+      - backend   # For receiving traces/metrics from services
+    logging: *default-logging
+
 volumes:
   postgres_data:
   redis_data:
+  openobserve_data:
 
 networks:
   frontend:

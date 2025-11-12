@@ -3,3 +3,7 @@ httpx==0.26.0
 structlog==24.1.0
 tenacity==8.2.3
 pydantic==2.5.3
+opentelemetry-api==1.22.0
+opentelemetry-sdk==1.22.0
+opentelemetry-exporter-otlp==1.22.0
+opentelemetry-instrumentation-httpx==0.43b0
