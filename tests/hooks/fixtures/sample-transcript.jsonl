@@ -1,0 +1,5 @@
+{"message":{"role":"user","content":[{"type":"text","text":"Hello, this is a test message"}]},"timestamp":"2025-11-12T10:00:00Z"}
+{"message":{"role":"assistant","content":[{"type":"text","text":"This is the assistant response to the test"}]},"timestamp":"2025-11-12T10:00:01Z"}
+{"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"test123","content":"Tool result should be ignored"}]},"timestamp":"2025-11-12T10:00:02Z"}
+{"message":{"role":"user","content":[{"type":"text","text":"Second user message"}]},"timestamp":"2025-11-12T10:00:03Z"}
+{"message":{"role":"assistant","content":[{"type":"text","text":"Second assistant response"}]},"timestamp":"2025-11-12T10:00:04Z"}
