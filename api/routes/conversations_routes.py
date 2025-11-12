@@ -22,12 +22,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
 
 
-def parse_claude_transcripts(projects_dir: str = "/home/user/.claude/projects") -> list[tuple[str, str, str, str]]:
+def parse_claude_transcripts(projects_dir: str = "/home/user/.claude/projects") -> list[tuple[str, str, str, str, str]]:
     """
     Parse Claude Code transcripts and extract user-assistant pairs.
 
     Returns:
-        List of (user_text, assistant_text, session_id, timestamp) tuples
+        List of (user_text, assistant_text, session_id, timestamp, project_name) tuples
     """
     transcripts_path = Path(projects_dir)
 
@@ -183,7 +183,12 @@ def parse_claude_transcripts(projects_dir: str = "/home/user/.claude/projects") 
                         session_id = transcript_file.stem
                         timestamp = messages[i].get('timestamp') or ""
 
-                        conversations.append((user_text, assistant_text, session_id, timestamp))
+                        # Extract project name from filename
+                        # Format: ProjectName-hash.jsonl → extract "ProjectName"
+                        # Or use full stem if no dash found
+                        project_name = session_id.rsplit('-', 1)[0] if '-' in session_id else session_id
+
+                        conversations.append((user_text, assistant_text, session_id, timestamp, project_name))
                         saved_hashes.add(content_hash)
 
                         i = j
@@ -254,7 +259,7 @@ async def import_conversations() -> Dict[str, Any]:
 
         # Save each conversation
         imported = 0
-        for user_text, assistant_text, session_id, timestamp in conversations:
+        for user_text, assistant_text, session_id, timestamp, project_name in conversations:
             try:
                 # Create title
                 title = f"Conv: {user_text[:60]}"
@@ -297,7 +302,8 @@ async def import_conversations() -> Dict[str, Any]:
                     content=content,
                     memory_type="conversation",
                     tags=tags,
-                    author="AutoImport"
+                    author="AutoImport",
+                    project_id=project_name.lower() if project_name else None
                 )
 
                 imported += 1
