@@ -26,8 +26,8 @@
 
 ## Implementation Status
 
-**Last Updated:** 2025-11-12 20:15 UTC
-**Status:** ✅ **SYSTEM COMPLETE WITH UI** (Tasks 1-5 Complete)
+**Last Updated:** 2025-11-12 21:10 UTC
+**Status:** ✅ **ALL TASKS COMPLETE** (Tasks 1-6 Complete)
 
 ### ✅ Completed Tasks
 
@@ -133,14 +133,22 @@ Hook Stop → Bash Service → API /queue → Redis Streams → Python Worker �
 - ✅ Worker retry logic: Exponential backoff (1s → 60s max)
 - ✅ Graceful degradation: API endpoint handles Redis/DB unavailable
 
+#### Task 6: AUTOIMPORT One-Time (Commit: 1f5d72f)
+- ✅ **Mount `.claude/projects`:** Mounted all projects read-only at /host/.claude/projects
+- ✅ **Import Script:** Created scripts/import-historical-conversations.py
+- ✅ **Deprecation Warning:** Added to /v1/conversations/import endpoint
+- ✅ **Recursive Search:** Modified parse_claude_transcripts() to use glob("**/*.jsonl")
+- ✅ **Verification (2025-11-12 21:10):**
+  - 536 transcript files found across all projects
+  - 30,605 conversations already imported (author=AutoImport)
+  - 241 conversations via new auto-save queue (author=AutoSave)
+  - Import endpoint functional (0 new, all previously imported)
+- **Status:** Historical conversations already imported by auto-import daemon
+- **Note:** /import endpoint DEPRECATED, will be removed in v2.0
+
 ### 🔄 Pending Tasks
 
-#### Task 6: AUTOIMPORT One-Time
-- ⏳ Not started
-- Will mount `.claude/projects` in Docker (read-only)
-- Will create historical import script
-- Will deprecate AUTOIMPORT endpoint
-- Will run historical import script once
+None - All Task 1-6 Complete!
 
 ### 🎯 Current Architecture (IMPLEMENTED)
 
