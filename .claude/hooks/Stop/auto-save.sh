@@ -1,7 +1,7 @@
 #!/bin/bash
 # Auto-save CURRENT conversation on Stop
 # Hook: Stop (at end of conversation)
-# Version: 1.0.0
+# Version: 1.1.0 - Fixed Claude Code format (.message.role) and tool_result filtering
 
 set -euo pipefail
 
@@ -22,27 +22,34 @@ fi
 # 2. EXTRACT LAST EXCHANGE
 # ============================================================================
 
-# Extract LAST user message
+# Extract LAST REAL user message (Claude Code format: .message.role, exclude tool_result)
 LAST_USER=$(tail -100 "$TRANSCRIPT_PATH" | jq -s '
-  [.[] | select(.role == "user")] |
+  [.[] |
+   select(.message.role == "user") |
+   select(
+     (.message.content | type) == "string" or
+     ((.message.content | type) == "array" and
+      (.message.content | map(select(.type == "tool_result")) | length) == 0)
+   )
+  ] |
   last |
   if . == null then ""
-  elif (.content | type) == "array" then
-    [.content[] | select(.type == "text") | .text] | join("\n")
+  elif (.message.content | type) == "array" then
+    [.message.content[] | select(.type == "text") | .text] | join("\n")
   else
-    .content
+    .message.content
   end
 ' 2>/dev/null | sed 's/^"//; s/"$//' | sed 's/\\n/\n/g' || echo "")
 
-# Extract LAST assistant message
+# Extract LAST assistant message (Claude Code format: .message.role)
 LAST_ASSISTANT=$(tail -100 "$TRANSCRIPT_PATH" | jq -s '
-  [.[] | select(.role == "assistant")] |
+  [.[] | select(.message.role == "assistant")] |
   last |
   if . == null then ""
-  elif (.content | type) == "array" then
-    [.content[] | select(.type == "text") | .text] | join("\n")
+  elif (.message.content | type) == "array" then
+    [.message.content[] | select(.type == "text") | .text] | join("\n")
   else
-    .content
+    .message.content
   end
 ' 2>/dev/null | sed 's/^"//; s/"$//' | sed 's/\\n/\n/g' || echo "")
 
