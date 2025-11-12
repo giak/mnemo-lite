@@ -4,7 +4,7 @@ EPIC-24: Auto-Save Conversations
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pathlib import Path
 import json
 import hashlib
@@ -12,8 +12,9 @@ import time
 from datetime import datetime
 import subprocess
 import os
+import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 
 from mnemo_mcp.tools.memory_tools import WriteMemoryTool
 from db.repositories.memory_repository import MemoryRepository
@@ -259,6 +260,115 @@ def parse_claude_transcripts(projects_dir: str = "/home/user/.claude/projects") 
         pass
 
     return conversations
+
+
+@router.post("/save")
+async def save_conversation(
+    user_message: str = Body(...),
+    assistant_message: str = Body(...),
+    project_name: str = Body(...),
+    session_id: str = Body(...),
+    timestamp: Optional[str] = Body(None)
+) -> Dict[str, Any]:
+    """
+    Save a single conversation from hook (NOT auto-import).
+
+    Called by centralized hook service with pre-extracted messages.
+
+    Args:
+        user_message: User's message content
+        assistant_message: Assistant's response content
+        project_name: Project name (e.g. "mnemolite", "truth-engine")
+        session_id: Claude Code session ID
+        timestamp: Optional ISO timestamp
+
+    Returns:
+        {"success": bool, "memory_id": str}
+
+    Raises:
+        HTTPException: If save fails
+    """
+    try:
+        # Initialize MCP tools
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        db_url = "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite"
+        engine = create_async_engine(db_url, pool_size=2)
+
+        memory_repo = MemoryRepository(engine)
+        embedding_service = MockEmbeddingService(model_name="mock", dimension=768)
+
+        write_tool = WriteMemoryTool()
+        write_tool.inject_services({
+            "memory_repository": memory_repo,
+            "embedding_service": embedding_service
+        })
+
+        class MockContext:
+            pass
+        ctx = MockContext()
+
+        # Create title with unique suffix to avoid duplicates
+        unique_suffix = str(uuid.uuid4())[:8]
+        title = f"Conv: {user_message[:60]}"
+        if len(user_message) > 60:
+            title += "..."
+        title += f" [{unique_suffix}]"
+
+        # Create content
+        ts = timestamp or datetime.now().isoformat()
+        content = f"""# Conversation - {ts}
+
+## 👤 User
+{user_message}
+
+## 🤖 Claude
+{assistant_message}
+
+---
+**Session**: {session_id}
+**Saved**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}"""
+
+        # Determine date tag
+        try:
+            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00')) if timestamp else datetime.now()
+            date_tag = dt.strftime("%Y%m%d")
+        except:
+            date_tag = datetime.now().strftime("%Y%m%d")
+
+        # Tags
+        tags = [
+            "auto-saved",
+            "claude-code",
+            f"session:{session_id[:12]}",
+            f"date:{date_tag}"
+        ]
+
+        # Save via WriteMemoryTool
+        result = await write_tool.execute(
+            ctx=ctx,
+            title=title,
+            content=content,
+            memory_type="conversation",
+            tags=tags,
+            author="AutoSave",
+            project_id=project_name  # STRING name, resolves to UUID
+        )
+
+        # Cleanup
+        await engine.dispose()
+
+        logger.info(f"Saved conversation for project '{project_name}': {result.get('id')}")
+
+        return {
+            "success": True,
+            "memory_id": result.get("id"),
+            "project_name": project_name
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to save conversation: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save conversation: {str(e)}")
 
 
 @router.post("/import")

@@ -88,9 +88,16 @@ if [ "$HOOK_TYPE" = "stop" ]; then
     end
   ' 2>/dev/null | sed 's/^"//; s/"$//' | sed 's/\\n/\n/g' || echo "")
 
-  # Extract LAST assistant message (Claude Code format: .message.role)
-  ASSISTANT_MSG=$(tail -100 "$TRANSCRIPT_PATH" | jq -s '
-    [.[] | select(.message.role == "assistant")] |
+  # Extract LAST assistant message WITH TEXT (Claude Code format: .message.role)
+  # Filter to only messages that contain text (not just tool_use)
+  ASSISTANT_MSG=$(tail -500 "$TRANSCRIPT_PATH" | jq -s '
+    [.[] |
+     select(.message.role == "assistant") |
+     select(
+       (.message.content | type) == "array" and
+       (.message.content | map(select(.type == "text")) | length) > 0
+     )
+    ] |
     last |
     if . == null then ""
     elif (.message.content | type) == "array" then
@@ -210,14 +217,26 @@ fi
 # Build session tag based on hook type
 SESSION_TAG="${SESSION_ID}_${HOOK_TYPE}"
 
-# Call save-direct.py in MnemoLite Docker container
+# Call API endpoint /v1/conversations/save (NEW - replaces save-direct.py)
+# Escape JSON strings properly (keep quotes for JSON syntax)
+USER_MSG_ESCAPED=$(echo "$USER_MSG" | python3 -c "import sys, json; print(json.dumps(sys.stdin.read()))")
+ASSISTANT_MSG_ESCAPED=$(echo "$ASSISTANT_MSG" | python3 -c "import sys, json; print(json.dumps(sys.stdin.read()))")
+TIMESTAMP=$(date -Iseconds)
+
+# Change to MnemoLite directory for docker compose
 cd /home/giak/Work/MnemoLite
-docker compose exec -T api python3 /app/.claude/hooks/Stop/save-direct.py \
-  "$USER_MSG" \
-  "$ASSISTANT_MSG" \
-  "$SESSION_TAG" \
-  "$PROJECT_NAME" \
-  2>&1 | grep -E "^[✓✗]" || true
+
+# Call modern API endpoint
+curl -s -X POST http://localhost:8001/v1/conversations/save \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"user_message\": $USER_MSG_ESCAPED,
+    \"assistant_message\": $ASSISTANT_MSG_ESCAPED,
+    \"project_name\": \"$PROJECT_NAME\",
+    \"session_id\": \"$SESSION_TAG\",
+    \"timestamp\": \"$TIMESTAMP\"
+  }" \
+  2>&1 | grep -qE "success.*true" && echo "✓ Saved" || echo "✗ Failed"
 
 # Mark as saved
 echo "$EXCHANGE_HASH" >> "$HASH_FILE"
