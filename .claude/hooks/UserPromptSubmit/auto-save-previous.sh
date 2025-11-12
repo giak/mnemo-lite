@@ -25,7 +25,56 @@ if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
 fi
 
 # ============================================================================
-# 2. EXTRACT PREVIOUS EXCHANGE (before current user input)
+# 2. DETECT PROJECT NAME (early, before any exits)
+# ============================================================================
+
+# Extract project path from transcript directory structure
+PROJECT_DIR=$(basename "$(dirname "$TRANSCRIPT_PATH")")
+
+# Reconstruct absolute path using regex to preserve hyphens in project names
+PROJECT_PATH=""
+if [[ "$PROJECT_DIR" =~ ^-home-([^-]+)-projects-(.+)$ ]]; then
+  PROJECT_PATH="/home/${BASH_REMATCH[1]}/projects/${BASH_REMATCH[2]}"
+elif [[ "$PROJECT_DIR" =~ ^-home-([^-]+)-Work-(.+)$ ]]; then
+  PROJECT_PATH="/home/${BASH_REMATCH[1]}/Work/${BASH_REMATCH[2]}"
+fi
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Transcript dir: $PROJECT_DIR -> path: $PROJECT_PATH" >> /tmp/hook-autosave-debug.log
+
+# Detect project name using centralized script (uses Git if available)
+SCRIPT_PATHS=(
+  "$PWD/scripts/get-project-name.sh"
+  "$PWD/.claude/scripts/get-project-name.sh"
+  "$(dirname "$TRANSCRIPT_PATH")/../../scripts/get-project-name.sh"
+)
+
+PROJECT_NAME=""
+if [ -n "$PROJECT_PATH" ] && [ -d "$PROJECT_PATH" ]; then
+  for SCRIPT_PATH in "${SCRIPT_PATHS[@]}"; do
+    if [ -f "$SCRIPT_PATH" ]; then
+      PROJECT_NAME=$(bash "$SCRIPT_PATH" "$PROJECT_PATH" 2>/dev/null || echo "")
+      if [ -n "$PROJECT_NAME" ]; then
+        break
+      fi
+    fi
+  done
+fi
+
+# Fallback: extract from PROJECT_PATH or PROJECT_DIR
+if [ -z "$PROJECT_NAME" ]; then
+  if [ -n "$PROJECT_PATH" ]; then
+    PROJECT_NAME=$(basename "$PROJECT_PATH" | tr '[:upper:]' '[:lower:]')
+  else
+    # Extract last segment from PROJECT_DIR
+    PROJECT_NAME=$(echo "$PROJECT_DIR" | sed -E 's/^-home-[^-]+-projects-//; s/^-home-[^-]+-Work-//; s/^-//')
+    PROJECT_NAME=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]')
+  fi
+fi
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Detected project: $PROJECT_NAME" >> /tmp/hook-autosave-debug.log
+
+# ============================================================================
+# 3. EXTRACT PREVIOUS EXCHANGE (before current user input)
 # ============================================================================
 
 # Count total REAL user messages (Claude Code format: .message.role, exclude tool_result)
@@ -133,56 +182,6 @@ fi
 
 echo "DEBUG: Extracted USER=${#PREV_USER} chars, ASSISTANT=${#PREV_ASSISTANT} chars" >> /tmp/hook-autosave-debug.log
 
-# ============================================================================
-# 3. DETECT PROJECT NAME
-# ============================================================================
-
-# Extract project path from transcript directory structure
-# Transcript path format: /home/giak/.claude/projects/-home-giak-projects-truth-engine/...
-# Reconstruct absolute path to use with get-project-name.sh (uses Git detection)
-PROJECT_DIR=$(basename "$(dirname "$TRANSCRIPT_PATH")")
-
-# Reconstruct absolute path using regex to preserve hyphens in project names
-PROJECT_PATH=""
-if [[ "$PROJECT_DIR" =~ ^-home-([^-]+)-projects-(.+)$ ]]; then
-  PROJECT_PATH="/home/${BASH_REMATCH[1]}/projects/${BASH_REMATCH[2]}"
-elif [[ "$PROJECT_DIR" =~ ^-home-([^-]+)-Work-(.+)$ ]]; then
-  PROJECT_PATH="/home/${BASH_REMATCH[1]}/Work/${BASH_REMATCH[2]}"
-fi
-
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Transcript dir: $PROJECT_DIR -> path: $PROJECT_PATH" >> /tmp/hook-autosave-debug.log
-
-# Detect project name using centralized script (uses Git if available)
-SCRIPT_PATHS=(
-  "$PWD/scripts/get-project-name.sh"
-  "$PWD/.claude/scripts/get-project-name.sh"
-  "$(dirname "$TRANSCRIPT_PATH")/../../scripts/get-project-name.sh"
-)
-
-PROJECT_NAME=""
-if [ -n "$PROJECT_PATH" ] && [ -d "$PROJECT_PATH" ]; then
-  for SCRIPT_PATH in "${SCRIPT_PATHS[@]}"; do
-    if [ -f "$SCRIPT_PATH" ]; then
-      PROJECT_NAME=$(bash "$SCRIPT_PATH" "$PROJECT_PATH" 2>/dev/null || echo "")
-      if [ -n "$PROJECT_NAME" ]; then
-        break
-      fi
-    fi
-  done
-fi
-
-# Fallback: extract from PROJECT_PATH or PROJECT_DIR
-if [ -z "$PROJECT_NAME" ]; then
-  if [ -n "$PROJECT_PATH" ]; then
-    PROJECT_NAME=$(basename "$PROJECT_PATH" | tr '[:upper:]' '[:lower:]')
-  else
-    # Extract last segment from PROJECT_DIR
-    PROJECT_NAME=$(echo "$PROJECT_DIR" | sed -E 's/^-home-[^-]+-projects-//; s/^-home-[^-]+-Work-//; s/^-//')
-    PROJECT_NAME=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]')
-  fi
-fi
-
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Detected project: $PROJECT_NAME" >> /tmp/hook-autosave-debug.log
 
 # ============================================================================
 # 4. DEDUPLICATION CHECK (hash-based)
