@@ -74,7 +74,7 @@ function handleCloseModal() {
     <MemoriesStatsBar :stats="data.stats" :last-updated="lastUpdated" />
 
     <!-- 3-Column Dashboard -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 max-h-[calc(100vh-280px)]">
       <!-- Left: Conversations -->
       <div>
         <ConversationsWidget
