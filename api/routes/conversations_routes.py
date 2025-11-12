@@ -263,10 +263,20 @@ def parse_claude_transcripts(projects_dir: str = "/home/user/.claude/projects") 
                         # Detect project name from transcript's parent directory
                         # transcript_file.parent.name = "-home-giak-Work-MnemoLite"
                         encoded_dir = transcript_file.parent.name
+
+                        # Try to decode the project path (host path, may not exist in container)
                         real_path = decode_project_path(encoded_dir)
 
+                        # Extract project name from encoded directory name
+                        # Priority 1: Use get_project_name() with real path IF path exists on filesystem
+                        # Priority 2: Extract directly from encoded directory name (reliable fallback)
                         if real_path and Path(real_path).exists():
+                            # Path exists (e.g., running on host or path mounted in container)
                             project_name = get_project_name(real_path)
+                        elif real_path:
+                            # Path decoded but doesn't exist (e.g., in Docker container)
+                            # Extract project name from the real path (last component)
+                            project_name = Path(real_path).name.lower()
                         else:
                             # Fallback: extract from encoded directory name
                             # "-home-giak-Work-MnemoLite" → "mnemolite"

@@ -259,7 +259,7 @@ class MonitoringAlertService:
                     FROM alerts
                     WHERE alert_type = :alert_type
                       AND acknowledged = FALSE
-                      AND created_at > NOW() - INTERVAL ':hours hours'
+                      AND created_at > NOW() - make_interval(hours => :hours)
                     ORDER BY created_at DESC
                     LIMIT 1
                 """)
