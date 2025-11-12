@@ -29,6 +29,11 @@
 - **Root Cause:** Each project had its own copy of hooks
 - **Test Coverage:** `integration/test-centralized-service.sh`
 
+### Bug 5: SESSION Subdirectory Detection (commit ab8bd8c)
+- **Symptom:** Conversations saved with ".claude" project instead of "mnemolite"
+- **Root Cause:** Service extracted `basename "$(dirname "$TRANSCRIPT_PATH")"` which gave `SESSION:BFC51A2F` instead of `-home-giak-Work-MnemoLite` when transcript nested in session folders
+- **Test Coverage:** `unit/test-project-detection.sh` (Test 6)
+
 ---
 
 ## Test Structure
@@ -99,8 +104,9 @@ bash tests/hooks/run-all-tests.sh --verbose
 | Test 3 | truth-engine detection | Multi-project support |
 | Test 4 | Non-existent path handling | Graceful failures |
 | Test 5 | Basename fallback (non-Git) | Fallback strategy works |
+| Test 6 | SESSION:xxx subdirectory handling | SESSION subdirectory bug |
 
-**Pass Rate:** 4/5 (Test 4 acceptable - script has fallback)
+**Pass Rate:** 5/6 (Test 4 acceptable - script has fallback)
 
 ### Unit Tests: Message Extraction (`test-message-extraction.sh`)
 
