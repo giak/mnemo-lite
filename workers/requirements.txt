@@ -1,34 +1,5 @@
-# Core worker dependencies
-python-dotenv>=1.0.1
-# Added for SQLAlchemy Core with PostgreSQL
-sqlalchemy>=2.0
-psycopg2-binary
-
-# Task Queue (Example: Celery)
-# celery>=5.3.6
-# redis>=5.0.3 # If using Redis as Celery broker
-
-# Data processing / AI
-sentence-transformers>=2.7.0
-numpy==1.26.3
+redis==5.0.1
 httpx==0.26.0
-tembo-pgmq-python==0.10.0
-prometheus-client==0.18.0
-pydantic==2.6.1
-pydantic-settings==2.1.0
-tenacity==8.2.3
 structlog==24.1.0
-rich==13.7.0
-
-# Utilities
-# requests>=2.31.0 # Uncomment if needed
-
-# Logging
-# loguru>=0.7.2 # Uncomment if using Loguru
-
-# Add other dependencies below 
-aiohttp
-structlog
-requests
-pgvector
-# pgmq # Remove incorrect/redundant entry 
+tenacity==8.2.3
+pydantic==2.5.3

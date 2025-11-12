@@ -130,32 +130,26 @@ services:
       retries: 3           # 3 consecutive failures = unhealthy (triggers restart)
       start_period: 120s   # Grace period for startup
 
-  # worker:
-  #   build:
-  #     context: .
-  #     dockerfile: workers/Dockerfile
-  #   container_name: mnemo-worker
-  #   restart: unless-stopped
-  #   environment:
-  #     DATABASE_URL: "postgresql://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}"
-  #     EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v1.5}
-  #     EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
-  #     ENVIRONMENT: ${ENVIRONMENT:-development}
-  #     PYTHONUNBUFFERED: "1"
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #   volumes:
-  #     - ./workers:/app
-  #     - ./certs:/app/certs:ro
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: '0.5'
-  #         memory: 512M
-  #   networks:
-  #     backend:
-  #   logging: *default-logging
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: mnemo-worker
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - api
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - API_URL=http://api:8000
+      - LOG_LEVEL=INFO
+    networks:
+      - backend
+    volumes:
+      - ./workers:/app/workers:ro
+    command: python -m workers.conversation_worker
+    logging: *default-logging
 
 volumes:
   postgres_data:
