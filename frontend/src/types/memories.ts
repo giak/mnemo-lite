@@ -19,6 +19,7 @@ export interface Memory {
   has_embedding: boolean
   author: string | null
   project_id: string | null
+  project_name: string | null
 }
 
 export interface MemoryDetail extends Memory {

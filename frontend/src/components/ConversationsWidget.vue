@@ -99,9 +99,9 @@ function getMemoryTypeLabel(type: string): string {
         </div>
 
         <!-- Project (conditional) -->
-        <div v-if="memory.project_id" class="text-xs text-cyan-400 mb-2 flex items-center gap-1">
+        <div v-if="memory.project_name || memory.project_id" class="text-xs text-cyan-400 mb-2 flex items-center gap-1">
           <span>📁</span>
-          <span class="uppercase font-mono">{{ memory.project_id }}</span>
+          <span class="uppercase font-mono">{{ memory.project_name || memory.project_id }}</span>
         </div>
 
         <!-- Tags + Session -->
