@@ -55,6 +55,32 @@ cp "$MNEMOLITE_ROOT/scripts/stub-hooks/UserPromptSubmit/auto-save-previous.sh" \
    "$PROJECT_PATH/.claude/hooks/UserPromptSubmit/auto-save-previous.sh"
 echo "  ✓ Stubs copied"
 
+# 3.5. Clean up obsolete files
+echo "[3.5/5] Cleaning obsolete hooks..."
+OBSOLETE_FILES=(
+  "$PROJECT_PATH/.claude/hooks/Stop/auto-save-exchange.sh"
+  "$PROJECT_PATH/.claude/hooks/Stop/save-direct.py"
+  "$PROJECT_PATH/.claude/hooks/SessionStart/check-autosave-setup.sh"
+)
+
+CLEANED_COUNT=0
+for file in "${OBSOLETE_FILES[@]}"; do
+  if [ -f "$file" ]; then
+    OBSOLETE_DIR="$PROJECT_PATH/.claude/hooks.obsolete"
+    mkdir -p "$OBSOLETE_DIR"
+    mv "$file" "$OBSOLETE_DIR/" 2>/dev/null && CLEANED_COUNT=$((CLEANED_COUNT + 1))
+  fi
+done
+
+# Remove empty SessionStart directory
+rmdir "$PROJECT_PATH/.claude/hooks/SessionStart" 2>/dev/null && CLEANED_COUNT=$((CLEANED_COUNT + 1)) || true
+
+if [ $CLEANED_COUNT -gt 0 ]; then
+  echo "  ✓ Removed $CLEANED_COUNT obsolete file(s) → hooks.obsolete/"
+else
+  echo "  ✓ No obsolete files found"
+fi
+
 # 4. Make executable
 echo "[4/5] Setting permissions..."
 chmod +x "$PROJECT_PATH/.claude/hooks/Stop/auto-save.sh"
