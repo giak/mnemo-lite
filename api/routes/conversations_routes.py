@@ -14,7 +14,7 @@ import subprocess
 import os
 import uuid
 
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Request
 
 from mnemo_mcp.tools.memory_tools import WriteMemoryTool
 from db.repositories.memory_repository import MemoryRepository
@@ -600,4 +600,126 @@ async def import_conversations() -> Dict[str, Any]:
         raise HTTPException(
             status_code=500,
             detail=f"Import failed: {str(e)}"
+        )
+
+
+@router.get("/metrics")
+async def autosave_metrics(request: Request) -> Dict[str, Any]:
+    """
+    Get auto-save system metrics for UI dashboard.
+
+    Returns real-time metrics from Redis queue and PostgreSQL:
+    - queue_size: Number of messages in Redis stream
+    - pending: Number of unacknowledged messages
+    - last_save: Timestamp of most recent conversation save
+    - error_count: Number of failed messages (from Redis pending errors)
+    - saves_per_hour: Number of conversations saved in last hour
+
+    Returns:
+        {
+            "queue_size": int,
+            "pending": int,
+            "last_save": str | null,
+            "error_count": int,
+            "saves_per_hour": int,
+            "status": "healthy" | "warning" | "error"
+        }
+    """
+    try:
+        import redis
+        from datetime import datetime, timedelta
+        from sqlalchemy import text
+
+        metrics = {
+            "queue_size": 0,
+            "pending": 0,
+            "last_save": None,
+            "error_count": 0,
+            "saves_per_hour": 0,
+            "status": "healthy"
+        }
+
+        # Get Redis metrics
+        try:
+            redis_host = os.getenv("REDIS_HOST", "redis")
+            redis_port = int(os.getenv("REDIS_PORT", "6379"))
+
+            r = redis.Redis(
+                host=redis_host,
+                port=redis_port,
+                decode_responses=False
+            )
+
+            stream_name = "conversations:autosave"
+            group_name = "workers"
+
+            # Get queue size (total messages in stream)
+            metrics["queue_size"] = r.xlen(stream_name)
+
+            # Get pending messages count
+            try:
+                pending_info = r.xpending(stream_name, group_name)
+                if pending_info:
+                    metrics["pending"] = pending_info.get('pending', 0)
+            except:
+                metrics["pending"] = 0
+
+        except Exception as e:
+            logger.warning(f"Redis metrics unavailable: {e}")
+            metrics["status"] = "warning"
+
+        # Get PostgreSQL metrics using SQLAlchemy engine from app.state
+        try:
+            if hasattr(request.app.state, 'db_engine') and request.app.state.db_engine:
+                async with request.app.state.db_engine.connect() as conn:
+                    # Get most recent conversation save
+                    last_save_query = text("""
+                        SELECT created_at
+                        FROM memories
+                        WHERE memory_type = 'conversation'
+                          AND author = 'AutoSave'
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    """)
+                    result = await conn.execute(last_save_query)
+                    last_save_row = result.fetchone()
+
+                    if last_save_row:
+                        metrics["last_save"] = last_save_row[0].isoformat()
+
+                    # Get saves per hour
+                    one_hour_ago = datetime.now() - timedelta(hours=1)
+                    saves_per_hour_query = text("""
+                        SELECT COUNT(*)
+                        FROM memories
+                        WHERE memory_type = 'conversation'
+                          AND author = 'AutoSave'
+                          AND created_at >= :one_hour_ago
+                    """)
+                    result = await conn.execute(saves_per_hour_query, {"one_hour_ago": one_hour_ago})
+                    saves_count_row = result.fetchone()
+
+                    if saves_count_row:
+                        metrics["saves_per_hour"] = saves_count_row[0]
+            else:
+                logger.warning("Database engine not available")
+                metrics["status"] = "warning"
+
+        except Exception as e:
+            logger.warning(f"PostgreSQL metrics unavailable: {e}")
+            metrics["status"] = "warning"
+
+        # Determine overall status
+        if metrics["pending"] > 10:
+            metrics["status"] = "warning"
+        if metrics["pending"] > 50:
+            metrics["status"] = "error"
+
+        return metrics
+
+    except Exception as e:
+        logger.error(f"Error fetching autosave metrics: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch metrics: {str(e)}"
         )

@@ -7,6 +7,7 @@
 import { computed } from 'vue'
 import { useDashboard } from '@/composables/useDashboard'
 import DashboardCard from '@/components/DashboardCard.vue'
+import AutoSaveStatus from '@/components/AutoSaveStatus.vue'
 
 // Use dashboard composable with 30-second refresh
 const { data, loading, errors, lastUpdated, refresh } = useDashboard({
@@ -227,6 +228,11 @@ const hasErrors = computed(() => errors.value.length > 0)
             </div>
           </dl>
         </div>
+      </div>
+
+      <!-- Auto-Save Queue Status (EPIC-24 Task 5) -->
+      <div class="mt-8">
+        <AutoSaveStatus />
       </div>
 
       <!-- Info Footer -->
