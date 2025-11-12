@@ -26,8 +26,8 @@
 
 ## Implementation Status
 
-**Last Updated:** 2025-11-12 19:20 UTC
-**Status:** ✅ **CORE SYSTEM OPERATIONAL** (Tasks 1-3 Complete)
+**Last Updated:** 2025-11-12 19:45 UTC
+**Status:** ✅ **CORE SYSTEM + MONITORING OPERATIONAL** (Tasks 1-4 Complete)
 
 ### ✅ Completed Tasks
 
@@ -63,21 +63,35 @@
   - End-to-end validated ✓
 - **Status:** Operational, all tests passing
 
-### 🔄 Pending Tasks
+#### Task 4: OpenObserve Monitoring (Commit: 4ad0301)
+- ✅ **OpenObserve Container:** Added to docker-compose.yml
+  - Port 5080, persistent volume (openobserve_data)
+  - Connected to frontend (UI) and backend (metrics) networks
+  - Credentials: admin@mnemolite.local / Complexpass#123
+- ✅ **OpenTelemetry Dependencies:** Added to workers/requirements.txt
+  - opentelemetry-api, sdk, exporter-otlp, instrumentation-httpx
+- ✅ **Worker Instrumentation:** conversation_worker.py
+  - Configured OTLP exporters with Basic Auth headers
+  - Created distributed tracing spans (process_conversation)
+  - 3 metrics: conversations.processed, conversations.failed, conversations.processing_duration_ms
+  - Metrics export every 5 seconds
+- ✅ **Verification:** Worker sending traces/metrics successfully (HTTP 200)
+- **Status:** Operational, metrics flowing to OpenObserve
+- **Access:** http://localhost:5080 (admin@mnemolite.local / Complexpass#123)
 
-#### Task 4: OpenObserve Monitoring
-- ⏳ Not started
-- Will add OpenTelemetry instrumentation
-- Will create default dashboards
+### 🔄 Pending Tasks
 
 #### Task 5: UI Status Panel
 - ⏳ Not started
 - Will create `/api/v1/autosave/metrics` endpoint
 - Will create Vue.js AutoSaveStatus component
+- Will display: queue size, last save, error count, saves per hour
 
 #### Task 6: AUTOIMPORT One-Time
 - ⏳ Not started
-- Will mount `.claude/projects` in Docker
+- Will mount `.claude/projects` in Docker (read-only)
+- Will create historical import script
+- Will deprecate AUTOIMPORT endpoint
 - Will run historical import script once
 
 ### 🎯 Current Architecture (IMPLEMENTED)
