@@ -297,6 +297,85 @@ def parse_claude_transcripts(projects_dir: str = "/home/user/.claude/projects") 
     return conversations
 
 
+@router.post("/queue")
+async def queue_conversation(
+    user_message: str = Body(...),
+    assistant_message: str = Body(...),
+    project_name: str = Body(...),
+    session_id: str = Body(...),
+    timestamp: Optional[str] = Body(None)
+) -> Dict[str, Any]:
+    """
+    Queue a conversation to Redis Streams for async processing by worker.
+
+    This is the new reliable path: Hook → API → Redis → Worker → DB
+    Falls back to direct save if Redis unavailable.
+
+    Args:
+        user_message: User's message content
+        assistant_message: Assistant's response content
+        project_name: Project name (e.g. "mnemolite", "truth-engine")
+        session_id: Claude Code session ID
+        timestamp: Optional ISO timestamp
+
+    Returns:
+        {"success": bool, "message_id": str, "queued": bool}
+
+    Raises:
+        HTTPException: If queue fails and fallback also fails
+    """
+    try:
+        import redis
+
+        # Connect to Redis
+        redis_host = os.getenv("REDIS_HOST", "redis")
+        redis_port = int(os.getenv("REDIS_PORT", "6379"))
+
+        r = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            decode_responses=False
+        )
+
+        # Prepare timestamp
+        ts = timestamp or datetime.now().isoformat()
+
+        # Push to Redis Stream
+        stream_name = "conversations:autosave"
+        message_id = r.xadd(
+            stream_name,
+            {
+                b"user_message": user_message.encode('utf-8'),
+                b"assistant_message": assistant_message.encode('utf-8'),
+                b"project_name": project_name.encode('utf-8'),
+                b"session_id": session_id.encode('utf-8'),
+                b"timestamp": ts.encode('utf-8')
+            }
+        )
+
+        logger.info(
+            f"Queued conversation to Redis: {message_id.decode()} "
+            f"(project={project_name}, session={session_id[:12]})"
+        )
+
+        return {
+            "success": True,
+            "message_id": message_id.decode(),
+            "queued": True,
+            "project_name": project_name
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to queue to Redis, falling back to direct save: {e}")
+
+        # Fallback: Direct save (call the existing /save endpoint logic)
+        # For now, just return error and let caller handle fallback
+        raise HTTPException(
+            status_code=503,
+            detail=f"Redis queue unavailable: {str(e)}"
+        )
+
+
 @router.post("/save")
 async def save_conversation(
     user_message: str = Body(...),

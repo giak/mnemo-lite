@@ -211,22 +211,39 @@ if grep -q "^${EXCHANGE_HASH}$" "$HASH_FILE" 2>/dev/null; then
 fi
 
 # ============================================================================
-# 5. SAVE TO MNEMOLITE
+# 5. SAVE TO REDIS QUEUE (with fallback to direct API)
 # ============================================================================
 
-# Build session tag based on hook type
+# Build session tag
 SESSION_TAG="${SESSION_ID}_${HOOK_TYPE}"
-
-# Call API endpoint /v1/conversations/save (NEW - replaces save-direct.py)
-# Escape JSON strings properly (keep quotes for JSON syntax)
-USER_MSG_ESCAPED=$(echo "$USER_MSG" | python3 -c "import sys, json; print(json.dumps(sys.stdin.read()))")
-ASSISTANT_MSG_ESCAPED=$(echo "$ASSISTANT_MSG" | python3 -c "import sys, json; print(json.dumps(sys.stdin.read()))")
 TIMESTAMP=$(date -Iseconds)
 
-# Change to MnemoLite directory for docker compose
-cd /home/giak/Work/MnemoLite
+# Prepare JSON-escaped messages
+USER_MSG_ESCAPED=$(echo "$USER_MSG" | python3 -c "import sys, json; print(json.dumps(sys.stdin.read()))")
+ASSISTANT_MSG_ESCAPED=$(echo "$ASSISTANT_MSG" | python3 -c "import sys, json; print(json.dumps(sys.stdin.read()))")
 
-# Call modern API endpoint
+# Try queuing to Redis via API endpoint (reliable path)
+QUEUE_RESPONSE=$(curl -s -X POST http://localhost:8001/v1/conversations/queue \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"user_message\": $USER_MSG_ESCAPED,
+    \"assistant_message\": $ASSISTANT_MSG_ESCAPED,
+    \"project_name\": \"$PROJECT_NAME\",
+    \"session_id\": \"$SESSION_TAG\",
+    \"timestamp\": \"$TIMESTAMP\"
+  }" 2>&1)
+
+# Check if queue succeeded
+if echo "$QUEUE_RESPONSE" | grep -qE '"success".*:.*true'; then
+  MESSAGE_ID=$(echo "$QUEUE_RESPONSE" | grep -oP '"message_id"\s*:\s*"\K[^"]+')
+  echo "✓ Queued: $MESSAGE_ID"
+  echo "$EXCHANGE_HASH" >> "$HASH_FILE"
+  exit 0
+fi
+
+# Fallback: Direct save if queue failed (API down or Redis unavailable)
+echo "⚠ Queue failed, falling back to direct save" >&2
+
 curl -s -X POST http://localhost:8001/v1/conversations/save \
   -H "Content-Type: application/json" \
   -d "{
@@ -236,7 +253,7 @@ curl -s -X POST http://localhost:8001/v1/conversations/save \
     \"session_id\": \"$SESSION_TAG\",
     \"timestamp\": \"$TIMESTAMP\"
   }" \
-  2>&1 | grep -qE "success.*true" && echo "✓ Saved" || echo "✗ Failed"
+  2>&1 | grep -qE "success.*true" && echo "✓ Saved (direct)" || echo "✗ Failed"
 
 # Mark as saved
 echo "$EXCHANGE_HASH" >> "$HASH_FILE"
