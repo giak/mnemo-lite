@@ -36,6 +36,32 @@ function extractSessionId(tags: string[]): string {
   if (!sessionTag) return 'UNKNOWN'
   return sessionTag.replace('session:', '').substring(0, 8).toUpperCase()
 }
+
+// Format full date in French: "8 novembre 2025 07:18:03"
+function formatFullDate(isoString: string): string {
+  const date = new Date(isoString)
+  const months = [
+    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
+  ]
+  const day = date.getDate()
+  const month = months[date.getMonth()]
+  const year = date.getFullYear()
+  const time = date.toLocaleTimeString('fr-FR')
+  return `${day} ${month} ${year} ${time}`
+}
+
+// Get short label for memory type
+function getMemoryTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    conversation: 'Conv:',
+    note: 'Note:',
+    decision: 'Dec:',
+    task: 'Task:',
+    reference: 'Ref:'
+  }
+  return labels[type] || 'Conv:'
+}
 </script>
 
 <template>
