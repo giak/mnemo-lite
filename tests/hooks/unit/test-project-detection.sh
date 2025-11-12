@@ -77,6 +77,21 @@ PROJECT_NAME=$(bash "$GET_PROJECT_NAME" "$TEMP_DIR/my-test-project" 2>/dev/null 
 rm -rf "$TEMP_DIR"
 assert_equals "my-test-project" "$PROJECT_NAME" "Basename fallback"
 
+# Test 6: SESSION subdirectory handling (regression test for SESSION: bug)
+echo "Test 6: Handle SESSION:xxx subdirectories correctly"
+# Simulate transcript path: .../projects/-home-giak-Work-MnemoLite/SESSION:xxx/transcript.jsonl
+MOCK_TRANSCRIPT="/tmp/-home-giak-Work-MnemoLite/SESSION:TEST123/transcript.jsonl"
+TRANSCRIPT_DIR=$(dirname "$MOCK_TRANSCRIPT")
+TRANSCRIPT_PARENT=$(basename "$TRANSCRIPT_DIR")
+
+if [[ "$TRANSCRIPT_PARENT" =~ ^SESSION: ]] || [[ "$TRANSCRIPT_PARENT" =~ ^agent- ]]; then
+  PROJECT_DIR=$(basename "$(dirname "$TRANSCRIPT_DIR")")
+else
+  PROJECT_DIR="$TRANSCRIPT_PARENT"
+fi
+
+assert_equals "-home-giak-Work-MnemoLite" "$PROJECT_DIR" "SESSION:xxx subdirectory handling"
+
 echo ""
 echo "========================================="
 echo "Results: $TESTS_PASSED/$TESTS_RUN passed"

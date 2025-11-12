@@ -22,7 +22,18 @@ fi
 # ============================================================================
 
 # Extract project path from transcript directory structure
-PROJECT_DIR=$(basename "$(dirname "$TRANSCRIPT_PATH")")
+# Handle SESSION:xxx subdirectories (transcripts can be nested in session folders)
+TRANSCRIPT_DIR=$(dirname "$TRANSCRIPT_PATH")
+TRANSCRIPT_PARENT=$(basename "$TRANSCRIPT_DIR")
+
+if [[ "$TRANSCRIPT_PARENT" =~ ^SESSION: ]] || [[ "$TRANSCRIPT_PARENT" =~ ^agent- ]]; then
+  # Transcript is in .../SESSION:xxx/transcript.jsonl or .../agent-xxx.jsonl parent
+  # Go up one more level to get the actual project directory
+  PROJECT_DIR=$(basename "$(dirname "$TRANSCRIPT_DIR")")
+else
+  # Transcript is directly in project directory
+  PROJECT_DIR="$TRANSCRIPT_PARENT"
+fi
 
 # Reconstruct absolute path using regex to preserve hyphens in project names
 PROJECT_PATH=""
