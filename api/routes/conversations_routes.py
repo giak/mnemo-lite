@@ -73,6 +73,32 @@ def get_project_name(working_dir: str = None) -> str:
     return Path(working_dir).name.lower()
 
 
+def decode_project_path(encoded_dir: str) -> str:
+    """
+    Decode Claude Code encoded directory name to real path.
+
+    Examples:
+        "-home-giak-Work-MnemoLite" → "/home/giak/Work/MnemoLite"
+        "-home-giak-projects-truth-engine" → "/home/giak/projects/truth-engine"
+
+    Returns:
+        Real path, or empty string if not decodable
+    """
+    import re
+
+    # Pattern 1: -home-USER-projects-PROJECT
+    match = re.match(r'^-home-([^-]+)-projects-(.+)$', encoded_dir)
+    if match:
+        return f"/home/{match.group(1)}/projects/{match.group(2)}"
+
+    # Pattern 2: -home-USER-Work-PROJECT
+    match = re.match(r'^-home-([^-]+)-Work-(.+)$', encoded_dir)
+    if match:
+        return f"/home/{match.group(1)}/Work/{match.group(2)}"
+
+    return ""
+
+
 def parse_claude_transcripts(projects_dir: str = "/home/user/.claude/projects") -> list[tuple[str, str, str, str, str]]:
     """
     Parse Claude Code transcripts and extract user-assistant pairs.
@@ -234,8 +260,17 @@ def parse_claude_transcripts(projects_dir: str = "/home/user/.claude/projects") 
                         session_id = transcript_file.stem
                         timestamp = messages[i].get('timestamp') or ""
 
-                        # Detect project name from directory context
-                        project_name = get_project_name(str(transcripts_path.parent))
+                        # Detect project name from transcript's parent directory
+                        # transcript_file.parent.name = "-home-giak-Work-MnemoLite"
+                        encoded_dir = transcript_file.parent.name
+                        real_path = decode_project_path(encoded_dir)
+
+                        if real_path and Path(real_path).exists():
+                            project_name = get_project_name(real_path)
+                        else:
+                            # Fallback: extract from encoded directory name
+                            # "-home-giak-Work-MnemoLite" → "mnemolite"
+                            project_name = encoded_dir.split('-')[-1].lower()
 
                         conversations.append((user_text, assistant_text, session_id, timestamp, project_name))
                         saved_hashes.add(content_hash)
