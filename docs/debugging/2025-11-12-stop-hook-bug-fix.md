@@ -198,6 +198,123 @@ EOF
 
 ---
 
+## Second Root Cause Discovered (2025-11-12 13:00 UTC)
+
+### The Problem Persisted
+
+User reported: "cela ne fonctionne toujours pas !!!" - Conversations from truth-engine at 12:54:23 still had no project_id.
+
+### Investigation Phase 2
+
+Used **systematic debugging** process:
+
+**Evidence gathered:**
+```sql
+Truth-engine conversations (session 6699d37b):
+- 11:56:28 - project_id = NULL (auto)
+- 11:54:23 - project_id = NULL (stop) ← USER'S SCREENSHOT
+- 11:53:58 - project_id = NULL (auto)
+- 11:52:33 - project_id = NULL (stop)
+- 11:51:00 - project_id = truth-engine ✓ (manual test only!)
+
+MnemoLite conversations (session bfc51a2f):
+- 11:55:59 - project_id = mnemolite ✓
+- 11:54:54 - project_id = mnemolite ✓
+```
+
+**Pattern:** ONLY the manual test conversation (11:51:00) had project_id. All "real" conversations from truth-engine had NULL.
+
+**Hypothesis:** Fix was applied in MnemoLite, but not in truth-engine.
+
+**Verification:**
+```bash
+# MnemoLite hook
+$ head -5 /home/giak/Work/MnemoLite/.claude/hooks/Stop/auto-save.sh
+# Version: 1.1.0 - Fixed Claude Code format
+
+# Truth-engine hook
+$ head -5 /home/giak/projects/truth-engine/.claude/hooks/Stop/auto-save.sh
+# Version: 1.0.0  ← OUTDATED!
+
+# File sizes
+MnemoLite:    4833 bytes (Nov 12 12:51)
+truth-engine: 2743 bytes (Nov 8 09:59)  ← FROM 4 DAYS AGO!
+```
+
+### ARCHITECTURAL ROOT CAUSE
+
+**The fundamental problem:** Each Claude Code project has its own copy of `.claude/hooks/`. When hooks are updated in one project, other projects continue using old versions.
+
+```
+MnemoLite/.claude/hooks/Stop/auto-save.sh (v1.1.0 FIXED)
+truth-engine/.claude/hooks/Stop/auto-save.sh (v1.0.0 BROKEN)
+other-project/.claude/hooks/Stop/auto-save.sh (v0.9.0 ANCIENT)
+```
+
+**Impact:**
+- Bug fixes don't propagate
+- Must manually sync code across all projects
+- High maintenance burden
+- Version drift inevitable
+
+### Solution: Centralized Architecture (Option D)
+
+**Brainstormed 4 options:**
+- A: Copy manually (not maintainable)
+- B: Symlinks (unclear if Claude Code supports)
+- C: Sync script (manual execution required)
+- **D: Centralized service** ← USER CHOSE THIS
+
+**Architecture:**
+```
+All projects → Call central service → MnemoLite
+```
+
+**Implementation:**
+1. **Central service:** `scripts/save-conversation-from-hook.sh`
+   - ALL business logic (extraction, detection, saving)
+   - Lives in MnemoLite only
+   - 1 place to maintain
+
+2. **Stub hooks:** `scripts/stub-hooks/`
+   - Minimal 30-line scripts in each project
+   - Just parse JSON + call central service
+   - 708 bytes vs 4833 bytes (86% smaller)
+
+3. **Deployment script:** `scripts/deploy-hooks-to-project.sh`
+   - Automated deployment to any project
+   - Backup, copy, verify
+
+**Benefits:**
+- ✅ Fix MnemoLite → all projects fixed instantly
+- ✅ No manual synchronization
+- ✅ No version drift possible
+- ✅ Single source of truth
+
+**Constraint:** Requires MnemoLite running (docker compose up)
+
+### Deployment to truth-engine
+
+```bash
+$ bash /home/giak/Work/MnemoLite/scripts/deploy-hooks-to-project.sh \
+    /home/giak/projects/truth-engine
+
+✓ Backup created: .claude/hooks.backup.20251112_130045
+✓ Stubs copied (708 bytes each)
+✓ Deployment verified
+```
+
+---
+
 ## Status
 
-✅ **RESOLVED** - Stop hook now correctly extracts messages and saves conversations with project_id for all projects
+✅ **FULLY RESOLVED** - Centralized architecture implemented
+
+- Stop hook extraction: Fixed (commit 964f695)
+- Architectural issue: Resolved with centralized service (commit 8974e51)
+- truth-engine: Stub hooks deployed
+- Future projects: Use `deploy-hooks-to-project.sh` script
+
+**Documentation:**
+- Architecture: [docs/architecture/centralized-hooks.md](../architecture/centralized-hooks.md)
+- Deployment: Use helper script for new projects
