@@ -26,6 +26,7 @@ from mnemo_mcp.models.memory_models import (
 )
 from db.repositories.memory_repository import MemoryRepository
 from services.embedding_service import EmbeddingServiceInterface
+from mnemo_mcp.tools.project_tools import resolve_project_id
 
 logger = structlog.get_logger()
 
@@ -76,7 +77,8 @@ class WriteMemoryTool(BaseMCPComponent):
             memory_type: Classification (note, decision, task, reference, conversation)
             tags: User-defined tags for filtering (optional)
             author: Optional author attribution (e.g., "Claude", "User")
-            project_id: UUID for project scoping (null = global memory)
+            project_id: Project UUID or project name (e.g., "mnemolite")
+                       If name provided, will be resolved to UUID (auto-creates if missing)
             related_chunks: Array of code chunk UUIDs to link (optional)
             resource_links: MCP resource links [{"uri": "...", "type": "..."}] (optional)
 
@@ -109,9 +111,21 @@ class WriteMemoryTool(BaseMCPComponent):
             project_uuid = None
             if project_id:
                 try:
+                    # Try to parse as UUID first (for backward compatibility)
                     project_uuid = uuid.UUID(project_id)
                 except ValueError:
-                    raise ValueError(f"Invalid project_id UUID: {project_id}")
+                    # Not a UUID - treat as project name and resolve
+                    logger.debug(f"Resolving project name '{project_id}' to UUID")
+
+                    # Get database connection from memory_repository's engine
+                    async with self.memory_repository.engine.begin() as conn:
+                        project_uuid = await resolve_project_id(
+                            name=project_id,
+                            conn=conn,
+                            auto_create=True  # Auto-create projects as needed
+                        )
+
+                    logger.info(f"Resolved project '{project_id}' to UUID {project_uuid}")
 
             # Parse related_chunks UUIDs
             related_chunks_uuids = []
