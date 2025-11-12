@@ -83,7 +83,7 @@ services:
       EMBEDDING_MODE: ${EMBEDDING_MODE:-real}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       # Conversation Auto-Save Daemon (EPIC-24)
-      CLAUDE_PROJECTS_DIR: /home/user/.claude/projects
+      CLAUDE_PROJECTS_DIR: /host/.claude/projects
       POLL_INTERVAL: ${POLL_INTERVAL:-30}
       IMPORT_HISTORICAL: ${IMPORT_HISTORICAL:-false}
     depends_on:
@@ -102,7 +102,7 @@ services:
       - ./templates:/app/templates
       - ./static:/app/static
       - ./.claude:/app/.claude:ro  # Claude Code hooks for auto-save conversations
-      - ${CLAUDE_PROJECTS_DIR:-~/.claude/projects/-home-giak-Work-MnemoLite}:/home/user/.claude/projects:ro  # Claude Code transcripts
+      - ${CLAUDE_PROJECTS_DIR:-/home/giak/.claude/projects}:/host/.claude/projects:ro  # Claude Code transcripts (all projects for historical import)
       - /home/giak/projects:/external/projects:ro  # External projects for indexing
       # REMOVED: postgres_data volume (SECURITY: API should NOT access DB files directly)
     deploy:

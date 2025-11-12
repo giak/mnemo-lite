@@ -124,8 +124,8 @@ def parse_claude_transcripts(projects_dir: str = "/home/user/.claude/projects") 
         except:
             pass
 
-    # Find all transcript files (skip agent transcripts)
-    for transcript_file in transcripts_path.glob("*.jsonl"):
+    # Find all transcript files recursively (skip agent transcripts)
+    for transcript_file in transcripts_path.glob("**/*.jsonl"):
         if transcript_file.name.startswith("agent-"):
             continue
 
@@ -486,12 +486,15 @@ async def save_conversation(
 
 
 @router.post("/import")
-async def import_conversations() -> Dict[str, Any]:
+async def import_conversations(projects_dir: str = "/host/.claude/projects") -> Dict[str, Any]:
     """
     Import new conversations from Claude Code transcripts.
 
-    Scans ~/.claude/projects/*.jsonl files, extracts user-assistant pairs,
-    and saves them to MnemoLite memories table with embeddings.
+    ⚠️ DEPRECATED: One-time use only. Use auto-save queue for real-time.
+    This endpoint will be removed in v2.0.
+
+    Args:
+        projects_dir: Path to .claude/projects directory (default: /host/.claude/projects)
 
     Returns:
         {"imported": count, "skipped": count}
@@ -499,9 +502,11 @@ async def import_conversations() -> Dict[str, Any]:
     Raises:
         HTTPException: En cas d'erreur
     """
+    logger.warning("DEPRECATED: /import endpoint called (use auto-save queue instead)")
+
     try:
         # Parse transcripts
-        conversations = parse_claude_transcripts()
+        conversations = parse_claude_transcripts(projects_dir=projects_dir)
 
         if not conversations:
             return {"imported": 0, "skipped": 0, "message": "No new conversations found"}
