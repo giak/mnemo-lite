@@ -9,7 +9,7 @@ import sys
 import os
 
 
-async def save_via_write_memory(user_msg: str, assistant_msg: str, session_id: str):
+async def save_via_write_memory(user_msg: str, assistant_msg: str, session_id: str, project_id: str = None):
     """Save conversation using MnemoLite's write_memory tool with embeddings."""
     try:
         # Change to app directory
@@ -73,7 +73,8 @@ async def save_via_write_memory(user_msg: str, assistant_msg: str, session_id: s
             content=content,
             memory_type="conversation",
             tags=["auto-saved", f"session:{session_id}", f"date:{session_id[:8]}"],
-            author="AutoSave"
+            author="AutoSave",
+            project_id=project_id
         )
 
         await sqlalchemy_engine.dispose()
@@ -94,5 +95,6 @@ if __name__ == "__main__":
     user_msg = sys.argv[1]
     assistant_msg = sys.argv[2]
     session_id = sys.argv[3]
+    project_id = sys.argv[4] if len(sys.argv) > 4 else None
 
-    asyncio.run(save_via_write_memory(user_msg, assistant_msg, session_id))
+    asyncio.run(save_via_write_memory(user_msg, assistant_msg, session_id, project_id))

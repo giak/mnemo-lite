@@ -134,7 +134,36 @@ fi
 echo "DEBUG: Extracted USER=${#PREV_USER} chars, ASSISTANT=${#PREV_ASSISTANT} chars" >> /tmp/hook-autosave-debug.log
 
 # ============================================================================
-# 3. DEDUPLICATION CHECK (hash-based)
+# 3. DETECT PROJECT NAME
+# ============================================================================
+
+# Detect project name using centralized script
+# Try multiple locations (portable across projects)
+SCRIPT_PATHS=(
+  "$PWD/scripts/get-project-name.sh"
+  "$PWD/.claude/scripts/get-project-name.sh"
+  "$(dirname "$TRANSCRIPT_PATH")/../../scripts/get-project-name.sh"
+)
+
+PROJECT_NAME=""
+for SCRIPT_PATH in "${SCRIPT_PATHS[@]}"; do
+  if [ -f "$SCRIPT_PATH" ]; then
+    PROJECT_NAME=$(bash "$SCRIPT_PATH" "$PWD" 2>/dev/null || echo "")
+    if [ -n "$PROJECT_NAME" ]; then
+      break
+    fi
+  fi
+done
+
+# Fallback if script not found
+if [ -z "$PROJECT_NAME" ]; then
+  PROJECT_NAME=$(basename "$PWD" | tr '[:upper:]' '[:lower:]')
+fi
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Detected project: $PROJECT_NAME" >> /tmp/hook-autosave-debug.log
+
+# ============================================================================
+# 4. DEDUPLICATION CHECK (hash-based)
 # ============================================================================
 
 # Compute hash of the exchange
@@ -151,7 +180,7 @@ fi
 echo "DEBUG: Hash $EXCHANGE_HASH not found, proceeding to save..." >> /tmp/hook-autosave-debug.log
 
 # ============================================================================
-# 4. SAVE TO MNEMOLITE (via write_memory MCP tool)
+# 5. SAVE TO MNEMOLITE (via write_memory MCP tool)
 # ============================================================================
 
 # Call Python script inside Docker that uses write_memory tool
@@ -160,6 +189,7 @@ SAVE_OUTPUT=$(cd /home/giak/Work/MnemoLite && docker compose exec -T api python3
   "$PREV_USER" \
   "$PREV_ASSISTANT" \
   "${SESSION_ID}_auto" \
+  "$PROJECT_NAME" \
   2>&1)
 
 echo "DEBUG: Save output: $SAVE_OUTPUT" >> /tmp/hook-autosave-debug.log
@@ -169,7 +199,7 @@ echo "$EXCHANGE_HASH" >> "$HASH_FILE"
 echo "DEBUG: Hash $EXCHANGE_HASH added to dedup file" >> /tmp/hook-autosave-debug.log
 
 # ============================================================================
-# 5. RETURN SUCCESS (non-blocking)
+# 6. RETURN SUCCESS (non-blocking)
 # ============================================================================
 echo '{"continue": true}'
 exit 0
