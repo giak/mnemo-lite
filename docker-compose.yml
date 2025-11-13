@@ -86,6 +86,7 @@ services:
       CLAUDE_PROJECTS_DIR: /host/.claude/projects
       POLL_INTERVAL: ${POLL_INTERVAL:-30}
       IMPORT_HISTORICAL: ${IMPORT_HISTORICAL:-false}
+      ENABLE_AUTO_IMPORT: ${ENABLE_AUTO_IMPORT:-false}
     depends_on:
       db:
         condition: service_healthy
@@ -120,15 +121,16 @@ services:
       - sh
       - -c
       - |
-        nohup bash /app/scripts/conversation-auto-import.sh > /tmp/daemon.log 2>&1 &
+        if [ "${ENABLE_AUTO_IMPORT:-false}" = "true" ]; then
+          nohup bash /app/scripts/conversation-auto-import.sh > /tmp/daemon.log 2>&1 &
+        fi
         exec uvicorn main:app --host 0.0.0.0 --port 8000
     healthcheck:
-      # Multi-step health check: API + Daemon monitoring
-      test: ["CMD", "sh", "-c", "curl -f http://localhost:8000/health && curl -f http://localhost:8000/v1/autosave/health"]
-      interval: 60s        # Check every minute
-      timeout: 10s         # 10s max per check
-      retries: 3           # 3 consecutive failures = unhealthy (triggers restart)
-      start_period: 120s   # Grace period for startup
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
 
   worker:
     build:
