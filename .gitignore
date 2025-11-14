@@ -57,10 +57,6 @@ test_reports/
 *~
 backups/
 
-code_test/
-
-serena-main/
-
 # Temporary test/debug scripts
 api/*_test_*.py
 api/cleanup_*.py
@@ -74,6 +70,3 @@ docs/sessions/
 
 # External projects (not part of MnemoLite)
 api/cv/
-
-# Old static files (using frontend/ now)
-static/
