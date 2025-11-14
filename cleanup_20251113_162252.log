@@ -1,0 +1,50 @@
+[0;32m[2025-11-13 16:22:52][0m ==========================================
+[0;32m[2025-11-13 16:22:52][0m MnemoLite Documentation Cleanup
+[0;32m[2025-11-13 16:22:52][0m ==========================================
+[0;32m[2025-11-13 16:22:52][0m Project root: /home/giak/Work/MnemoLite
+[0;32m[2025-11-13 16:22:52][0m Backup dir: /home/giak/Work/MnemoLite/docs/88_ARCHIVE/backups/cleanup_20251113_162252
+[0;32m[2025-11-13 16:22:52][0m Log file: /home/giak/Work/MnemoLite/cleanup_20251113_162252.log
+[0;32m[2025-11-13 16:22:52][0m 
+[0;32m[2025-11-13 16:22:52][0m Creating backup directory...
+[0;32m[2025-11-13 16:22:52][0m 
+[0;32m[2025-11-13 16:22:52][0m ==========================================
+[0;32m[2025-11-13 16:22:52][0m PHASE 1: Critical Cleanup
+[0;32m[2025-11-13 16:22:52][0m ==========================================
+[0;32m[2025-11-13 16:22:52][0m Backing up api/code_test/ (80MB)...
+[0;32m[2025-11-13 16:22:55][0m Removing api/code_test/...
+[0;34m[INFO][0m ✅ Freed ~80MB disk space
+[0;32m[2025-11-13 16:22:55][0m 
+[0;32m[2025-11-13 16:22:55][0m Archiving obsolete root markdown files...
+[0;34m[INFO][0m ✅ Archived SYNTHESE_MNEMOLITE_V2.md
+[0;34m[INFO][0m ✅ Archived GUIDE_DEMARRAGE.md
+[0;34m[INFO][0m ✅ Moved NEXT_STEPS.md to EPIC-27 completion report
+[0;34m[INFO][0m ✅ Renamed README_SETUP.md → SETUP.md
+[0;32m[2025-11-13 16:22:55][0m 
+[0;32m[2025-11-13 16:22:55][0m ==========================================
+[0;32m[2025-11-13 16:22:55][0m PHASE 2: Create Lifecycle Structure
+[0;32m[2025-11-13 16:22:55][0m ==========================================
+[0;34m[INFO][0m ✅ Created lifecycle directories: 00_CONTROL, 01_DECISIONS, 02_RESEARCH, 88_ARCHIVE, 99_TEMP
+[0;32m[2025-11-13 16:22:55][0m 
+[0;32m[2025-11-13 16:22:55][0m ==========================================
+[0;32m[2025-11-13 16:22:55][0m PHASE 3: Reorganize Documentation
+[0;32m[2025-11-13 16:22:55][0m ==========================================
+[0;34m[INFO][0m ✅ Moved test_inventory.md → 00_CONTROL/CONTROL_test_inventory.md
+[0;34m[INFO][0m ✅ Moved Specification_API.md → 01_DECISIONS/DECISION_api_specification.md
+[0;34m[INFO][0m ✅ Moved bdd_schema.md → 01_DECISIONS/DECISION_database_schema.md
+[0;34m[INFO][0m ✅ Moved architecture_diagrams.md → 01_DECISIONS/DECISION_architecture_diagrams.md
+[0;34m[INFO][0m ✅ Moved docker_setup.md → 01_DECISIONS/DECISION_docker_setup.md
+[0;32m[2025-11-13 16:22:55][0m 
+[0;32m[2025-11-13 16:22:55][0m Archiving Docker analysis files...
+[0;34m[INFO][0m ✅ Archived DOCKER_OPTIMIZATIONS_SUMMARY.md → 88_ARCHIVE/2025-10_docker_analysis/
+[0;34m[INFO][0m ✅ Archived DOCKER_ULTRATHINKING.md → 88_ARCHIVE/2025-10_docker_analysis/
+[0;34m[INFO][0m ✅ Archived DOCKER_VALIDATION_2025.md → 88_ARCHIVE/2025-10_docker_analysis/
+[0;34m[INFO][0m ✅ Archived SERENA_COMPARISON_ANALYSIS.md
+[0;34m[INFO][0m ✅ Archived SERENA_ULTRATHINK_AUDIT.md
+[0;34m[INFO][0m ✅ Archived GRAPH_CONSTRUCTION_SERVICE_ULTRATHINK.md
+[0;34m[INFO][0m ✅ Archived DOCUMENTATION_UPDATE_AUDIT.md
+[0;34m[INFO][0m ✅ Moved STATUS → 99_TEMP/TEMP_2025-11-05_status.md
+[0;34m[INFO][0m ✅ Moved ui_architecture.md → 01_DECISIONS/DECISION_ui_architecture.md
+[0;34m[INFO][0m ✅ Moved ui_design_system.md → 01_DECISIONS/DECISION_ui_design_system.md
+[0;34m[INFO][0m ✅ Moved Document Architecture.md → 01_DECISIONS/
+[0;34m[INFO][0m ✅ Archived VALIDATION_FINALE_PHASE3.md → 88_ARCHIVE/2025-10_validation/
+[0;34m[INFO][0m ✅ Archived phase3_4_validation.md → 88_ARCHIVE/2025-10_validation/

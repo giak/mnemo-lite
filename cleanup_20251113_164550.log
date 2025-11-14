@@ -1,0 +1,84 @@
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;32m[2025-11-13 16:45:50][0m MnemoLite Documentation Cleanup
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;32m[2025-11-13 16:45:50][0m Project root: /home/giak/Work/MnemoLite
+[0;32m[2025-11-13 16:45:50][0m Backup dir: /home/giak/Work/MnemoLite/docs/88_ARCHIVE/backups/cleanup_20251113_164550
+[0;32m[2025-11-13 16:45:50][0m Log file: /home/giak/Work/MnemoLite/cleanup_20251113_164550.log
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m Creating backup directory...
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;32m[2025-11-13 16:45:50][0m PHASE 1: Critical Cleanup
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[1;33m[WARN][0m api/code_test/ not found, skipping
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m Archiving obsolete root markdown files...
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;32m[2025-11-13 16:45:50][0m PHASE 2: Create Lifecycle Structure
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;34m[INFO][0m ✅ Created lifecycle directories: 00_CONTROL, 01_DECISIONS, 02_RESEARCH, 88_ARCHIVE, 99_TEMP
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;32m[2025-11-13 16:45:50][0m PHASE 3: Reorganize Documentation
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m Archiving Docker analysis files...
+[0;34m[INFO][0m ✅ Archived Product Requirements Document
+[0;34m[INFO][0m ✅ Archived Project Foundation Document
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;32m[2025-11-13 16:45:50][0m PHASE 4: Integrate Subdirectories
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;34m[INFO][0m ✅ Integrated ADR-003-REVISION_pg_search_ubuntu.md into serena-evolution
+[0;34m[INFO][0m ✅ Integrated MIGRATION_POSTGRESQL_18_PLAN.md into serena-evolution
+[0;34m[INFO][0m ✅ Integrated PERPLEXITY_PROMPT_BM25_PG18.md into serena-evolution
+[0;34m[INFO][0m ✅ Integrated perplexity_report_bm25_pg18_20251015.md into serena-evolution
+[0;34m[INFO][0m ✅ Integrated US-04-2_DIP_rapport.md into serena-evolution
+[0;34m[INFO][0m ✅ Moved architecture/centralized-hooks.md → 01_DECISIONS/
+[0;34m[INFO][0m ✅ Keeping docs/debugging/ as-is (recent debugging docs)
+[0;34m[INFO][0m ✅ Archived AUTO-SAVE-QUICKSTART.md
+[0;34m[INFO][0m ✅ Archived MCP_INTEGRATION_GUIDE.md (superseded by CLAUDE_CODE_INTEGRATION.md)
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;32m[2025-11-13 16:45:50][0m PHASE 5: Create Archive READMEs
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;34m[INFO][0m ✅ Created README for obsolete v2 docs archive
+[0;34m[INFO][0m ✅ Created README for Docker analysis archive
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;32m[2025-11-13 16:45:50][0m CLEANUP COMPLETE
+[0;32m[2025-11-13 16:45:50][0m ==========================================
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m Statistics:
+[0;32m[2025-11-13 16:45:50][0m   - Backup created: /home/giak/Work/MnemoLite/docs/88_ARCHIVE/backups/cleanup_20251113_164550 (136K)
+[0;32m[2025-11-13 16:45:50][0m   - Current docs/ size: 32M
+[0;32m[2025-11-13 16:45:50][0m   - Freed space: ~80MB (api/code_test/)
+[0;32m[2025-11-13 16:45:50][0m   - Lifecycle structure: ✅ Created
+[0;32m[2025-11-13 16:45:50][0m   - Files reorganized: ✅ Complete
+[0;32m[2025-11-13 16:45:50][0m   - Archives created: ✅ With READMEs
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m Backup contents:
+total 132K
+-rw-rw-r-- 1 giak giak  12K Nov 13 16:45 ADR-003-REVISION_pg_search_ubuntu.md
+-rw-rw-r-- 1 giak giak 6,1K Nov 13 16:45 AUTO-SAVE-QUICKSTART.md
+-rw-rw-r-- 1 giak giak  12K Nov 13 16:45 centralized-hooks.md
+-rw-rw-r-- 1 giak giak 8,3K Nov 13 16:45 MCP_INTEGRATION_GUIDE.md
+-rw-rw-r-- 1 giak giak  15K Nov 13 16:45 MIGRATION_POSTGRESQL_18_PLAN.md
+-rw-rw-r-- 1 giak giak  11K Nov 13 16:45 PERPLEXITY_PROMPT_BM25_PG18.md
+-rw-rw-r-- 1 giak giak 3,5K Nov 13 16:45 perplexity_report_bm25_pg18_20251015.md
+-rw-rw-r-- 1 giak giak 9,9K Nov 13 16:45 Product Requirements Document.md
+-rw-rw-r-- 1 giak giak 8,9K Nov 13 16:45 Project Foundation Document.md
+-rw-rw-r-- 1 giak giak  18K Nov 13 16:45 README.md
+-rw-rw-r-- 1 giak giak 8,9K Nov 13 16:45 US-04-2_DIP_rapport.md
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m ✅ Cleanup complete! Backup preserved at:
+[0;32m[2025-11-13 16:45:50][0m    /home/giak/Work/MnemoLite/docs/88_ARCHIVE/backups/cleanup_20251113_164550
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m 📋 Full log saved to:
+[0;32m[2025-11-13 16:45:50][0m    /home/giak/Work/MnemoLite/cleanup_20251113_164550.log
+[0;32m[2025-11-13 16:45:50][0m 
+[0;32m[2025-11-13 16:45:50][0m Next steps:
+[0;32m[2025-11-13 16:45:50][0m   1. Review changes with: git status
+[0;32m[2025-11-13 16:45:50][0m   2. Create CONTROL files (MISSION_CONTROL, DOCUMENT_INDEX)
+[0;32m[2025-11-13 16:45:50][0m   3. Commit changes
