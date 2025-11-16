@@ -310,6 +310,7 @@ def parse_claude_transcripts(projects_dir: str = "/home/user/.claude/projects") 
 @router.post("/queue")
 async def queue_conversation(
     user_message: str = Body(...),
+    user_message_clean: str = Body(default=""),
     assistant_message: str = Body(...),
     project_name: str = Body(...),
     session_id: str = Body(...),
@@ -323,6 +324,7 @@ async def queue_conversation(
 
     Args:
         user_message: User's message content
+        user_message_clean: Cleaned message for title (without system tags)
         assistant_message: Assistant's response content
         project_name: Project name (e.g. "mnemolite", "truth-engine")
         session_id: Claude Code session ID
@@ -350,12 +352,16 @@ async def queue_conversation(
         # Prepare timestamp
         ts = timestamp or datetime.now().isoformat()
 
+        # Use cleaned message for title, fallback to raw if empty
+        clean_msg = user_message_clean.strip() if user_message_clean else user_message[:100]
+
         # Push to Redis Stream
         stream_name = "conversations:autosave"
         message_id = r.xadd(
             stream_name,
             {
                 b"user_message": user_message.encode('utf-8'),
+                b"user_message_clean": clean_msg.encode('utf-8'),
                 b"assistant_message": assistant_message.encode('utf-8'),
                 b"project_name": project_name.encode('utf-8'),
                 b"session_id": session_id.encode('utf-8'),
@@ -389,6 +395,7 @@ async def queue_conversation(
 @router.post("/save")
 async def save_conversation(
     user_message: str = Body(...),
+    user_message_clean: str = Body(default=""),
     assistant_message: str = Body(...),
     project_name: str = Body(...),
     session_id: str = Body(...),
@@ -401,6 +408,7 @@ async def save_conversation(
 
     Args:
         user_message: User's message content
+        user_message_clean: Cleaned message for title (without system tags)
         assistant_message: Assistant's response content
         project_name: Project name (e.g. "mnemolite", "truth-engine")
         session_id: Claude Code session ID
@@ -432,10 +440,13 @@ async def save_conversation(
             pass
         ctx = MockContext()
 
+        # Use cleaned message for title
+        clean_msg = user_message_clean.strip() if user_message_clean else user_message[:100]
+
         # Create title with unique suffix to avoid duplicates
         unique_suffix = str(uuid.uuid4())[:8]
-        title = f"Conv: {user_message[:60]}"
-        if len(user_message) > 60:
+        title = f"Conv: {clean_msg[:60]}"
+        if len(clean_msg) > 60:
             title += "..."
         title += f" [{unique_suffix}]"
 

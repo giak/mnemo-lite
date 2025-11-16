@@ -32,6 +32,7 @@ class ConversationMessage:
     """Message from Redis Streams."""
     id: str
     user_message: str
+    user_message_clean: str
     assistant_message: str
     project_name: str
     session_id: str
@@ -122,6 +123,7 @@ class ConversationWorker:
                     message = ConversationMessage(
                         id=msg_id,
                         user_message=data[b'user_message'].decode(),
+                        user_message_clean=data.get(b'user_message_clean', b'').decode(),
                         assistant_message=data[b'assistant_message'].decode(),
                         project_name=data[b'project_name'].decode(),
                         session_id=data[b'session_id'].decode(),
@@ -178,6 +180,7 @@ class ConversationWorker:
                 message = ConversationMessage(
                     id=msg_id,
                     user_message=data[b'user_message'].decode(),
+                    user_message_clean=data.get(b'user_message_clean', b'').decode(),
                     assistant_message=data[b'assistant_message'].decode(),
                     project_name=data[b'project_name'].decode(),
                     session_id=data[b'session_id'].decode(),
@@ -217,6 +220,7 @@ class ConversationWorker:
                 f"{self.api_url}/v1/conversations/save",
                 json={
                     "user_message": message.user_message,
+                    "user_message_clean": message.user_message_clean,
                     "assistant_message": message.assistant_message,
                     "project_name": message.project_name,
                     "session_id": message.session_id,
