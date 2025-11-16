@@ -12,7 +12,7 @@ import EmbeddingsWidget from '@/components/EmbeddingsWidget.vue'
 import ConversationDetailModal from '@/components/ConversationDetailModal.vue'
 
 // Use memories composable with 30-second refresh
-const { data, loading, errors, lastUpdated, refresh } = useMemories({
+const { data, loading, loadingMore, hasMore, errors, lastUpdated, refresh, loadMore } = useMemories({
   refreshInterval: 30000
 })
 
@@ -79,7 +79,10 @@ function handleCloseModal() {
       <div>
         <ConversationsWidget
           :memories="data.recentMemories"
+          :loading-more="loadingMore"
+          :has-more="hasMore"
           @view-detail="handleViewDetail"
+          @load-more="loadMore"
         />
       </div>
 

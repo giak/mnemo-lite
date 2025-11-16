@@ -3,19 +3,51 @@
  * EPIC-27: Conversations Widget - SCADA Industrial Style
  * Displays recent conversations with LED indicators and monospace formatting
  */
-import { computed } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import type { Memory } from '@/types/memories'
 
 interface Props {
   memories: Memory[]
+  loadingMore?: boolean  // NEW: Loading state for infinite scroll
+  hasMore?: boolean      // NEW: Whether more memories available
 }
 
 const props = defineProps<Props>()
 
 // Emit events
-defineEmits<{
+const emit = defineEmits<{
   'view-detail': [id: string]
+  'load-more': []  // NEW: Emitted when user scrolls near bottom
 }>()
+
+// NEW: Ref to scrollable container
+const scrollContainer = ref<HTMLElement | null>(null)
+
+// NEW: Scroll handler for infinite scroll
+function handleScroll() {
+  if (!scrollContainer.value || !props.hasMore || props.loadingMore) return
+
+  const { scrollTop, scrollHeight, clientHeight } = scrollContainer.value
+
+  // Trigger loadMore when 200px from bottom
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+  if (distanceFromBottom < 200) {
+    emit('load-more')
+  }
+}
+
+// NEW: Lifecycle - attach/detach scroll listener
+onMounted(() => {
+  if (scrollContainer.value) {
+    scrollContainer.value.addEventListener('scroll', handleScroll)
+  }
+})
+
+onUnmounted(() => {
+  if (scrollContainer.value) {
+    scrollContainer.value.removeEventListener('scroll', handleScroll)
+  }
+})
 
 // Format relative time in UPPERCASE abbreviated format
 function formatRelativeTime(isoString: string): string {
@@ -79,8 +111,12 @@ function getMemoryTypeLabel(type: string): string {
       No Conversations Found
     </div>
 
-    <!-- Conversations List -->
-    <div v-else class="space-y-3 overflow-y-auto h-full">
+    <!-- Conversations List (scrollable with ref) -->
+    <div
+      v-else
+      ref="scrollContainer"
+      class="space-y-3 overflow-y-auto h-full"
+    >
       <div
         v-for="memory in memories"
         :key="memory.id"
@@ -139,6 +175,17 @@ function getMemoryTypeLabel(type: string): string {
             View
           </button>
         </div>
+      </div>
+
+      <!-- NEW: Loading indicator at bottom -->
+      <div v-if="loadingMore" class="text-center py-4">
+        <span class="scada-led scada-led-yellow animate-pulse"></span>
+        <span class="text-sm font-mono text-cyan-400 ml-2">LOADING MORE...</span>
+      </div>
+
+      <!-- NEW: End of list indicator -->
+      <div v-else-if="!hasMore && memories.length > 0" class="text-center py-4">
+        <span class="text-xs font-mono text-gray-500 uppercase">— End of Conversations —</span>
       </div>
     </div>
   </div>
