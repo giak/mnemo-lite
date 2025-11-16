@@ -201,6 +201,45 @@ if [ -z "$ASSISTANT_MSG" ] || [ ${#ASSISTANT_MSG} -lt 1 ]; then
 fi
 
 # ============================================================================
+# 3.5. CLEAN USER MESSAGE (extract first real text)
+# ============================================================================
+
+# Function: Extract first real user text, removing XML-like system tags
+# Input: Raw user message (may contain <ide_opened_file>, <system-reminder>, etc.)
+# Output: First non-empty line without XML tags, max 100 chars
+clean_user_message() {
+  local raw_msg="$1"
+
+  # Remove all XML-like tags and their content (greedy multi-line)
+  # Handles: <ide_opened_file>...</ide_opened_file>, <system-reminder>...</system-reminder>, etc.
+  local cleaned=$(echo "$raw_msg" | sed -E '
+    # Remove opening + content + closing tags (multi-line, greedy)
+    :a
+    s|<[^>]+>.*</[^>]+>||g
+    # Remove orphan opening tags
+    s|<[^>]+>||g
+    # Remove orphan closing tags
+    s|</[^>]+>||g
+    ta
+  ')
+
+  # Extract first non-empty line
+  local first_line=$(echo "$cleaned" | grep -v '^[[:space:]]*$' | head -1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+
+  # Limit to 100 chars for title
+  echo "$first_line" | head -c 100
+}
+
+# Clean USER_MSG for title generation
+USER_MSG_CLEAN=$(clean_user_message "$USER_MSG")
+
+# Use cleaned message for title, keep raw for content
+if [ -z "$USER_MSG_CLEAN" ]; then
+  # Fallback: if cleaning resulted in empty, use first 100 chars of raw
+  USER_MSG_CLEAN=$(echo "$USER_MSG" | head -c 100)
+fi
+
+# ============================================================================
 # 4. DEDUPLICATION CHECK
 # ============================================================================
 EXCHANGE_HASH=$(echo -n "$USER_MSG$ASSISTANT_MSG" | md5sum | cut -d' ' -f1 | cut -c1-16)
@@ -227,6 +266,7 @@ QUEUE_RESPONSE=$(curl -s -X POST http://localhost:8001/v1/conversations/queue \
   -H "Content-Type: application/json" \
   -d "{
     \"user_message\": $USER_MSG_ESCAPED,
+    \"user_message_clean\": $(echo "$USER_MSG_CLEAN" | python3 -c "import sys, json; print(json.dumps(sys.stdin.read()))"),
     \"assistant_message\": $ASSISTANT_MSG_ESCAPED,
     \"project_name\": \"$PROJECT_NAME\",
     \"session_id\": \"$SESSION_TAG\",
@@ -248,6 +288,7 @@ curl -s -X POST http://localhost:8001/v1/conversations/save \
   -H "Content-Type: application/json" \
   -d "{
     \"user_message\": $USER_MSG_ESCAPED,
+    \"user_message_clean\": $(echo "$USER_MSG_CLEAN" | python3 -c "import sys, json; print(json.dumps(sys.stdin.read()))"),
     \"assistant_message\": $ASSISTANT_MSG_ESCAPED,
     \"project_name\": \"$PROJECT_NAME\",
     \"session_id\": \"$SESSION_TAG\",
