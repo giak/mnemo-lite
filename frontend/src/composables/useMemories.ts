@@ -26,6 +26,12 @@ export function useMemories(options: { refreshInterval?: number } = {}) {
   const errors = ref<MemoriesError[]>([])
   const lastUpdated = ref<Date | null>(null)
 
+  // Infinite scroll state
+  const loadingMore = ref(false)
+  const hasMore = ref(true)
+  const offset = ref(0)
+  const pageSize = 20  // Load 20 at a time
+
   let intervalId: number | null = null
 
   // Fetch memories stats
@@ -47,14 +53,28 @@ export function useMemories(options: { refreshInterval?: number } = {}) {
     }
   }
 
-  // Fetch recent memories
-  async function fetchRecentMemories(limit: number = 10): Promise<void> {
+  // Fetch recent memories (with offset for infinite scroll)
+  async function fetchRecentMemories(limit: number = pageSize, append: boolean = false): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/recent?limit=${limit}`)
+      const currentOffset = append ? offset.value : 0
+      const response = await fetch(`${API_BASE_URL}/recent?limit=${limit}&offset=${currentOffset}`)
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
-      data.value.recentMemories = await response.json()
+      const newMemories = await response.json()
+
+      if (append) {
+        // Append to existing list (infinite scroll)
+        data.value.recentMemories.push(...newMemories)
+        offset.value += newMemories.length
+      } else {
+        // Replace list (initial load or refresh)
+        data.value.recentMemories = newMemories
+        offset.value = newMemories.length
+      }
+
+      // Check if we have more to load
+      hasMore.value = newMemories.length === limit
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
       errors.value.push({
@@ -64,6 +84,15 @@ export function useMemories(options: { refreshInterval?: number } = {}) {
       })
       console.error('Failed to fetch recent memories:', error)
     }
+  }
+
+  // Load more memories for infinite scroll
+  async function loadMore(): Promise<void> {
+    if (loadingMore.value || !hasMore.value) return
+
+    loadingMore.value = true
+    await fetchRecentMemories(pageSize, true)  // append = true
+    loadingMore.value = false
   }
 
   // Fetch code chunks
@@ -108,11 +137,13 @@ export function useMemories(options: { refreshInterval?: number } = {}) {
   async function refresh(): Promise<void> {
     loading.value = true
     errors.value = [] // Clear previous errors
+    offset.value = 0  // Reset offset on manual refresh
+    hasMore.value = true  // Reset hasMore flag
 
     // Fetch all endpoints in parallel
     await Promise.all([
       fetchStats(),
-      fetchRecentMemories(),
+      fetchRecentMemories(pageSize, false),  // append = false
       fetchCodeChunks(),
       fetchEmbeddingsHealth()
     ])
@@ -147,8 +178,11 @@ export function useMemories(options: { refreshInterval?: number } = {}) {
   return {
     data,
     loading,
+    loadingMore,  // NEW
+    hasMore,      // NEW
     errors,
     lastUpdated,
-    refresh
+    refresh,
+    loadMore      // NEW
   }
 }
