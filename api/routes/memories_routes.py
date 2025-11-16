@@ -89,6 +89,7 @@ async def get_memories_stats(engine: AsyncEngine = Depends(get_db_engine)) -> Di
 @router.get("/recent")
 async def get_recent_memories(
     limit: int = Query(default=10, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     engine: AsyncEngine = Depends(get_db_engine)
 ) -> List[Dict[str, Any]]:
     """
@@ -96,6 +97,7 @@ async def get_recent_memories(
 
     Args:
         limit: Number of recent items to return (1-100, default 10)
+        offset: Number of memories to skip (for infinite scroll pagination)
 
     Returns:
         List of memory objects with: id, title, created_at, memory_type, tags, has_embedding
@@ -120,8 +122,9 @@ async def get_recent_memories(
                     AND m.memory_type = 'conversation'
                     ORDER BY m.created_at DESC
                     LIMIT :limit
+                    OFFSET :offset
                 """),
-                {"limit": limit}
+                {"limit": limit, "offset": offset}
             )
             rows = result.fetchall()
 
