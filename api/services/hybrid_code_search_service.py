@@ -5,6 +5,7 @@ Orchestrates a complete hybrid search pipeline combining:
 - Lexical search (pg_trgm trigram similarity)
 - Vector search (HNSW semantic similarity)
 - RRF fusion (reciprocal rank fusion)
+- Cross-encoder reranking (optional, EPIC-24 P2)
 - Optional graph expansion (dependency traversal)
 - L2 Redis caching for performance (EPIC-10 Story 10.2)
 
@@ -62,6 +63,7 @@ class HybridSearchResult:
     lexical_score: Optional[float] = None
     vector_similarity: Optional[float] = None
     vector_distance: Optional[float] = None
+    rerank_score: Optional[float] = None  # EPIC-24 P2: Cross-encoder score
 
     # RRF contribution breakdown
     contribution: Dict[str, float] = field(default_factory=dict)
@@ -73,6 +75,7 @@ class HybridSearchResult:
 @dataclass
 class SearchMetadata:
     """Metadata about the search execution."""
+    # Required fields (no defaults) - must come first
     total_results: int
     lexical_count: int
     vector_count: int
@@ -84,12 +87,15 @@ class SearchMetadata:
 
     lexical_weight: float
     vector_weight: float
-
     execution_time_ms: float
+
+    # Optional fields (with defaults)
+    reranking_enabled: bool = False  # EPIC-24 P2
     lexical_time_ms: Optional[float] = None
     vector_time_ms: Optional[float] = None
     fusion_time_ms: Optional[float] = None
     graph_time_ms: Optional[float] = None
+    reranking_time_ms: Optional[float] = None  # EPIC-24 P2
 
 
 @dataclass
@@ -139,6 +145,8 @@ class HybridCodeSearchService:
         vector_service: Optional[VectorSearchService] = None,
         fusion_service: Optional[RRFFusionService] = None,
         redis_cache: Optional[RedisCache] = None,
+        reranker_service: Optional["CrossEncoderRerankService"] = None,
+        default_enable_reranking: bool = False,
     ):
         """
         Initialize hybrid search service.
@@ -149,6 +157,8 @@ class HybridCodeSearchService:
             vector_service: Optional VectorSearchService (created if not provided)
             fusion_service: Optional RRFFusionService (created if not provided)
             redis_cache: Optional RedisCache for L2 caching (EPIC-10 Story 10.2)
+            reranker_service: Optional cross-encoder reranker (EPIC-24 P2)
+            default_enable_reranking: Enable cross-encoder reranking by default (False)
         """
         self.engine = engine
 
@@ -170,7 +180,17 @@ class HybridCodeSearchService:
         # L2 Redis cache (optional - graceful degradation)
         self.redis_cache = redis_cache
 
-        logger.info(f"Hybrid Code Search Service initialized (Redis cache: {'enabled' if redis_cache is not None else 'disabled'})")
+        # EPIC-24 P2: Cross-encoder reranking (lazy-loaded)
+        self.reranker = reranker_service
+        self.default_enable_reranking = default_enable_reranking
+
+        logger.info(
+            f"Hybrid Code Search Service initialized",
+            extra={
+                "redis_cache": "enabled" if redis_cache is not None else "disabled",
+                "reranking_enabled": default_enable_reranking,
+            }
+        )
 
     async def search(
         self,
@@ -181,9 +201,11 @@ class HybridCodeSearchService:
         top_k: int = 10,
         enable_lexical: bool = True,
         enable_vector: bool = True,
+        enable_reranking: Optional[bool] = None,
         lexical_weight: float = 0.4,
         vector_weight: float = 0.6,
         candidate_pool_size: int = 100,
+        rerank_pool_size: int = 30,
     ) -> HybridSearchResponse:
         """
         Execute hybrid search pipeline.
@@ -198,9 +220,12 @@ class HybridCodeSearchService:
             top_k: Number of final results to return (default: 10)
             enable_lexical: Enable lexical search (default: True)
             enable_vector: Enable vector search (default: True)
+            enable_reranking: Enable cross-encoder reranking (EPIC-24 P2)
+                            If None, uses default_enable_reranking
             lexical_weight: Weight for lexical results in RRF (default: 0.4)
             vector_weight: Weight for vector results in RRF (default: 0.6)
             candidate_pool_size: Number of candidates from each method (default: 100)
+            rerank_pool_size: Number of RRF results to rerank (default: 30)
 
         Returns:
             HybridSearchResponse with fused results and metadata
@@ -298,7 +323,59 @@ class HybridCodeSearchService:
         )
         fusion_time = (time.time() - fusion_start) * 1000
 
-        # Limit to top_k
+        # EPIC-24 P2: Cross-encoder reranking (optional)
+        reranking_time = None
+        rerank_scores = {}  # chunk_id -> rerank_score
+        should_rerank = enable_reranking if enable_reranking is not None else self.default_enable_reranking
+
+        if should_rerank and fused_results:
+            # Limit reranking candidates for performance
+            rerank_candidates = fused_results[:rerank_pool_size]
+
+            try:
+                reranking_start = time.time()
+
+                # Lazy-load reranker
+                await self._ensure_reranker_loaded()
+
+                # Prepare documents for reranking (use source_code)
+                documents = [
+                    (f.chunk_id, f.original_result.source_code[:1000])  # Limit code length
+                    for f in rerank_candidates
+                ]
+
+                # Rerank
+                reranked = await self.reranker.rerank_with_ids(
+                    query=query,
+                    documents=documents,
+                    top_k=len(documents),
+                )
+
+                # Store rerank scores and reorder fused_results
+                for chunk_id, score, _ in reranked:
+                    rerank_scores[chunk_id] = score
+
+                # Sort by rerank score
+                rerank_candidates.sort(
+                    key=lambda f: rerank_scores.get(f.chunk_id, -999),
+                    reverse=True
+                )
+
+                # Merge back: reranked candidates first, then any remaining
+                remaining = [f for f in fused_results[rerank_pool_size:]]
+                fused_results = rerank_candidates + remaining
+
+                reranking_time = (time.time() - reranking_start) * 1000
+
+                logger.info(
+                    f"Cross-encoder reranking completed: {len(rerank_candidates)} candidates, {reranking_time:.2f}ms"
+                )
+
+            except Exception as e:
+                logger.warning(f"Cross-encoder reranking failed, using RRF order: {e}")
+                should_rerank = False
+
+        # Limit to top_k (after reranking)
         fused_results = fused_results[:top_k]
 
         # Build hybrid results
@@ -306,6 +383,7 @@ class HybridCodeSearchService:
             fused_results=fused_results,
             lexical_results=lexical_results,
             vector_results=vector_results,
+            rerank_scores=rerank_scores,
         )
 
         # Build metadata
@@ -319,19 +397,22 @@ class HybridCodeSearchService:
             lexical_enabled=enable_lexical,
             vector_enabled=enable_vector,
             graph_expansion_enabled=False,  # Not yet implemented
+            reranking_enabled=should_rerank,  # EPIC-24 P2
             lexical_weight=lexical_weight,
             vector_weight=vector_weight,
             execution_time_ms=total_time,
             lexical_time_ms=lexical_time,
             vector_time_ms=vector_time,
             fusion_time_ms=fusion_time,
+            reranking_time_ms=reranking_time,  # EPIC-24 P2
         )
 
         logger.info(
             f"Hybrid search completed: query='{query[:50]}...', "
             f"results={len(hybrid_results)}, time={total_time:.2f}ms, "
             f"lexical={len(lexical_results) if lexical_results else 0}, "
-            f"vector={len(vector_results) if vector_results else 0}"
+            f"vector={len(vector_results) if vector_results else 0}, "
+            f"reranking={should_rerank}"
         )
 
         response = HybridSearchResponse(
@@ -435,11 +516,18 @@ class HybridCodeSearchService:
         # Both methods: use weighted RRF fusion
         return self.fusion.fuse_with_weights(weighted_results)
 
+    async def _ensure_reranker_loaded(self):
+        """Lazy-load the cross-encoder reranker on first use."""
+        if self.reranker is None:
+            from services.cross_encoder_rerank_service import CrossEncoderRerankService
+            self.reranker = CrossEncoderRerankService()
+
     def _build_hybrid_results(
         self,
         fused_results: List[FusedResult],
         lexical_results: Optional[List[LexicalSearchResult]],
         vector_results: Optional[List[VectorSearchResult]],
+        rerank_scores: Optional[Dict[str, float]] = None,
     ) -> List[HybridSearchResult]:
         """
         Build final hybrid results from fused results.
@@ -459,10 +547,12 @@ class HybridCodeSearchService:
                 vector_scores[r.chunk_id] = r.similarity
                 vector_distances[r.chunk_id] = r.distance
 
+        rerank_scores = rerank_scores or {}
+
         # Build hybrid results
         hybrid_results = []
 
-        for fused in fused_results:
+        for rank, fused in enumerate(fused_results, start=1):
             # Get original result (prefer vector for richer metadata)
             original = fused.original_result
 
@@ -487,7 +577,7 @@ class HybridCodeSearchService:
             hybrid_results.append(HybridSearchResult(
                 chunk_id=fused.chunk_id,
                 rrf_score=fused.rrf_score,
-                rank=fused.rank,
+                rank=rank,  # Use current position (may be reranked)
                 source_code=source_code,
                 name=name,
                 name_path=name_path,  # EPIC-11 Story 11.2
@@ -498,6 +588,7 @@ class HybridCodeSearchService:
                 lexical_score=lexical_scores.get(fused.chunk_id),
                 vector_similarity=vector_scores.get(fused.chunk_id),
                 vector_distance=vector_distances.get(fused.chunk_id),
+                rerank_score=rerank_scores.get(fused.chunk_id),  # EPIC-24 P2
                 contribution=fused.contribution,
             ))
 
