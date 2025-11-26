@@ -16,6 +16,7 @@ import uuid
 
 from mcp.server.fastmcp import Context
 import structlog
+from datetime import datetime
 
 from mnemo_mcp.base import BaseMCPComponent
 from mnemo_mcp.models.memory_models import (
@@ -232,9 +233,12 @@ class ListMemoriesResource(BaseMCPComponent):
 
 class SearchMemoriesResource(BaseMCPComponent):
     """
-    Resource for semantic search of memories using embeddings.
+    Resource for hybrid search of memories (lexical + vector + RRF fusion).
 
-    URI: memories://search/{query}?limit={n}&offset={n}&project_id={uuid}&threshold={0.0-1.0}
+    EPIC-24 P0: Combines pg_trgm trigram similarity and pgvector embeddings
+    using Reciprocal Rank Fusion (RRF) for optimal retrieval.
+
+    URI: memories://search/{query}?limit={n}&offset={n}&project_id={uuid}&...
 
     Path Parameter:
         - query: Search text (URL-encoded)
@@ -245,13 +249,17 @@ class SearchMemoriesResource(BaseMCPComponent):
         - project_id: UUID (optional, filter by project)
         - memory_type: filter by type (optional)
         - tags: comma-separated tags (optional)
-        - threshold: similarity threshold 0.0-1.0 (default 0.7)
+        - enable_lexical: true|false (default true) - enable trigram search
+        - enable_vector: true|false (default true) - enable vector search
+        - lexical_weight: 0.0-1.0 (default 0.4) - weight for lexical in RRF
+        - vector_weight: 0.0-1.0 (default 0.6) - weight for vector in RRF
 
     Usage in Claude Desktop:
-        Access "memories://search/async%20patterns?limit=3" to search for async patterns
+        Access "memories://search/Bardella?limit=5" for hybrid search
+        Access "memories://search/Bardella?enable_vector=false" for lexical-only
 
     Returns:
-        MemorySearchResponse with ranked memories + similarity scores
+        MemorySearchResponse with ranked memories + RRF scores
 
     Caching:
         - Redis L2 cache, 5-minute TTL
@@ -259,8 +267,9 @@ class SearchMemoriesResource(BaseMCPComponent):
 
     Performance:
         - Cached: <10ms P95
-        - Uncached: ~150-300ms P95 (includes embedding generation)
-        - Embedding failure: falls back to lexical search
+        - Uncached: ~100-200ms P95 (parallel lexical + vector)
+        - Lexical catches exact matches (proper nouns like "Bardella")
+        - Vector catches semantic similarity (synonyms, paraphrases)
     """
 
     def get_name(self) -> str:
@@ -268,7 +277,7 @@ class SearchMemoriesResource(BaseMCPComponent):
 
     async def get(self, ctx: Context, uri: str) -> Dict[str, Any]:
         """
-        Search memories by semantic similarity.
+        Search memories using hybrid search (lexical + vector + RRF).
 
         Args:
             ctx: MCP context (unused for resources)
@@ -313,43 +322,132 @@ class SearchMemoriesResource(BaseMCPComponent):
 
             limit = min(int(params.get("limit", 5)), 50)
             offset = int(params.get("offset", 0))
-            threshold = float(params.get("threshold", 0.7))
 
-            # Generate query embedding
-            if not self.embedding_service:
-                raise RuntimeError("Embedding service not available")
+            # EPIC-24: Hybrid search parameters
+            enable_lexical = params.get("enable_lexical", "true").lower() == "true"
+            enable_vector = params.get("enable_vector", "true").lower() == "true"
+            lexical_weight = float(params.get("lexical_weight", 0.4))
+            vector_weight = float(params.get("vector_weight", 0.6))
 
-            embedding_start = time.time()
-            query_embedding = await self.embedding_service.generate_embedding(query_text)
-            embedding_ms = (time.time() - embedding_start) * 1000
+            # Validate weights
+            if not (0.0 <= lexical_weight <= 1.0):
+                raise ValueError("lexical_weight must be between 0.0 and 1.0")
+            if not (0.0 <= vector_weight <= 1.0):
+                raise ValueError("vector_weight must be between 0.0 and 1.0")
 
-            # Vector search
-            memories, total_count = await self.memory_repository.search_by_vector(
-                vector=query_embedding,
-                filters=filters,
-                limit=limit,
-                offset=offset,
-                distance_threshold=threshold
-            )
+            # Generate query embedding for vector search
+            # EPIC-24 P1: Use text_type=QUERY for v2 model compatibility
+            query_embedding = None
+            embedding_ms = 0.0
 
-            # Build response
-            response = MemorySearchResponse(
-                query=query_text,
-                memories=memories,
-                pagination=PaginationMetadata(
+            if enable_vector and self.embedding_service:
+                embedding_start = time.time()
+                # Use embed_query for search queries (important for v2 models)
+                if hasattr(self.embedding_service, 'embed_query'):
+                    query_embedding = await self.embedding_service.embed_query(query_text)
+                else:
+                    query_embedding = await self.embedding_service.generate_embedding(query_text)
+                embedding_ms = (time.time() - embedding_start) * 1000
+
+            # Use hybrid search service if available
+            if self.hybrid_memory_search_service:
+                response = await self.hybrid_memory_search_service.search(
+                    query=query_text,
+                    embedding=query_embedding,
+                    filters=filters,
                     limit=limit,
                     offset=offset,
-                    total=total_count,
-                    has_more=offset + len(memories) < total_count
-                ),
-                metadata={
-                    "threshold": threshold,
-                    "embedding_model": "nomic-embed-text-v1.5",
-                    "embedding_time_ms": f"{embedding_ms:.2f}"
-                }
-            )
+                    enable_lexical=enable_lexical,
+                    enable_vector=enable_vector and query_embedding is not None,
+                    lexical_weight=lexical_weight,
+                    vector_weight=vector_weight,
+                )
 
-            result = response.model_dump(mode='json')
+                # Convert hybrid results to Memory objects for response
+                memories = []
+                for hr in response.results:
+                    # Parse datetime string from PostgreSQL (format: '2025-11-26 07:08:52.399567+00')
+                    # PostgreSQL ::text cast produces +00 instead of +00:00, so we fix it
+                    created_at_str = hr.created_at
+                    if isinstance(created_at_str, str):
+                        # Fix timezone format: +00 -> +00:00
+                        if created_at_str.endswith('+00'):
+                            created_at_str = created_at_str + ':00'
+                        elif created_at_str.endswith('-00'):
+                            created_at_str = created_at_str + ':00'
+                        created_at_dt = datetime.fromisoformat(created_at_str)
+                    else:
+                        created_at_dt = created_at_str
+
+                    # Build Memory object from hybrid result
+                    memory = Memory(
+                        id=uuid.UUID(hr.memory_id),
+                        title=hr.title,
+                        content=hr.content_preview,  # Preview only for search results
+                        memory_type=MemoryType(hr.memory_type),
+                        tags=hr.tags,
+                        created_at=created_at_dt,
+                        updated_at=created_at_dt,  # Use created_at as fallback for search results
+                        author=hr.author,
+                        similarity_score=hr.rrf_score,  # Use RRF score as similarity
+                    )
+                    memories.append(memory)
+
+                # Build response with hybrid metadata
+                result_response = MemorySearchResponse(
+                    query=query_text,
+                    memories=memories,
+                    pagination=PaginationMetadata(
+                        limit=limit,
+                        offset=offset,
+                        total=response.metadata.total_results,
+                        has_more=offset + len(memories) < response.metadata.total_results
+                    ),
+                    metadata={
+                        "search_mode": "hybrid",
+                        "embedding_model": "nomic-embed-text-v1.5",
+                        "embedding_time_ms": f"{embedding_ms:.2f}",
+                        "lexical_enabled": response.metadata.lexical_enabled,
+                        "vector_enabled": response.metadata.vector_enabled,
+                        "lexical_weight": response.metadata.lexical_weight,
+                        "vector_weight": response.metadata.vector_weight,
+                        "lexical_count": response.metadata.lexical_count,
+                        "vector_count": response.metadata.vector_count,
+                        "execution_time_ms": f"{response.metadata.execution_time_ms:.2f}",
+                    }
+                )
+
+            else:
+                # Fallback to vector-only search (original behavior)
+                if not self.embedding_service or not query_embedding:
+                    raise RuntimeError("Embedding service not available")
+
+                memories, total_count = await self.memory_repository.search_by_vector(
+                    vector=query_embedding,
+                    filters=filters,
+                    limit=limit,
+                    offset=offset,
+                    distance_threshold=0.7  # Legacy threshold
+                )
+
+                result_response = MemorySearchResponse(
+                    query=query_text,
+                    memories=memories,
+                    pagination=PaginationMetadata(
+                        limit=limit,
+                        offset=offset,
+                        total=total_count,
+                        has_more=offset + len(memories) < total_count
+                    ),
+                    metadata={
+                        "search_mode": "vector_only",
+                        "embedding_model": "nomic-embed-text-v1.5",
+                        "embedding_time_ms": f"{embedding_ms:.2f}",
+                        "fallback_reason": "hybrid_service_unavailable"
+                    }
+                )
+
+            result = result_response.model_dump(mode='json')
 
             # Cache result (5 min TTL)
             if self.redis_client:
@@ -360,9 +458,8 @@ class SearchMemoriesResource(BaseMCPComponent):
             logger.info(
                 "Memory search completed",
                 query=query_text,
-                count=len(memories),
-                total=total_count,
-                threshold=threshold,
+                count=len(result_response.memories),
+                search_mode=result_response.metadata.get("search_mode", "unknown"),
                 elapsed_ms=f"{elapsed_ms:.2f}"
             )
 
