@@ -125,24 +125,34 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     # --------------------------------------------------------------------
 
     # Story 23.2: Initialize EmbeddingService
-    # Use MockEmbeddingService for fast startup (no 2-min model loading)
-    # To use real embeddings: EMBEDDING_MODE=real (requires model download)
+    # Use real embeddings by default for semantic search to work
+    # Set EMBEDDING_MODE=mock for fast startup without model loading
     try:
-        embedding_mode = "mock"  # TODO: Read from env var if needed
+        import os
+        embedding_mode = os.getenv("EMBEDDING_MODE", "real")
 
-        from services.embedding_service import MockEmbeddingService
-
-        embedding_service = MockEmbeddingService(
-            model_name="mock-model",
-            dimension=768
-        )
+        if embedding_mode == "mock":
+            from services.embedding_service import MockEmbeddingService
+            embedding_service = MockEmbeddingService(
+                model_name="mock-model",
+                dimension=768
+            )
+            logger.info(
+                "mcp.embedding_service.initialized",
+                mode="mock",
+                dimension=768
+            )
+        else:
+            from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
+            embedding_service = SentenceTransformerEmbeddingService()
+            logger.info(
+                "mcp.embedding_service.initialized",
+                mode="real",
+                model="nomic-embed-text-v1.5",
+                dimension=768
+            )
 
         services["embedding_service"] = embedding_service
-        logger.info(
-            "mcp.embedding_service.initialized",
-            mode=embedding_mode,
-            dimension=768
-        )
 
     except Exception as e:
         logger.warning(
@@ -273,6 +283,30 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         services["memory_repository"] = None
         services["metrics_collector"] = None
 
+    # EPIC-24 P0: Initialize HybridMemorySearchService
+    try:
+        from services.hybrid_memory_search_service import HybridMemorySearchService
+        from services.rrf_fusion_service import RRFFusionService
+
+        # HybridMemorySearchService requires SQLAlchemy engine
+        if sqlalchemy_engine:
+            hybrid_memory_search_service = HybridMemorySearchService(
+                engine=sqlalchemy_engine,
+                fusion_service=RRFFusionService(k=60),
+                default_lexical_weight=0.5,
+                default_vector_weight=0.5,
+            )
+            services["hybrid_memory_search_service"] = hybrid_memory_search_service
+
+            logger.info("mcp.hybrid_memory_search_service.initialized")
+        else:
+            logger.warning("mcp.hybrid_memory_search_service.skipped", reason="no_engine")
+            services["hybrid_memory_search_service"] = None
+
+    except Exception as e:
+        logger.warning("mcp.hybrid_memory_search_service.initialization_failed", error=str(e))
+        services["hybrid_memory_search_service"] = None
+
     # Story 23.4: Initialize NodeRepository and GraphTraversalService
     try:
         from db.repositories.node_repository import NodeRepository
@@ -309,6 +343,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         write_memory_tool,
         update_memory_tool,
         delete_memory_tool,
+        search_memory_tool,
     )
     from mnemo_mcp.resources.memory_resources import (
         get_memory_resource,
@@ -350,6 +385,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     write_memory_tool.inject_services(services)
     update_memory_tool.inject_services(services)
     delete_memory_tool.inject_services(services)
+    search_memory_tool.inject_services(services)
     get_memory_resource.inject_services(services)
     list_memories_resource.inject_services(services)
     search_memories_resource.inject_services(services)
@@ -378,7 +414,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         "mcp.components.services_injected",
         components=[
             "ping_tool", "search_code_tool", "health_resource",
-            "write_memory_tool", "update_memory_tool", "delete_memory_tool",
+            "write_memory_tool", "update_memory_tool", "delete_memory_tool", "search_memory_tool",
             "get_memory_resource", "list_memories_resource", "search_memories_resource",
             "graph_node_details_resource", "find_callers_resource", "find_callees_resource",
             "index_project_tool", "reindex_file_tool", "index_status_resource",
@@ -606,6 +642,7 @@ def register_memory_components(mcp: FastMCP):
         write_memory_tool,
         update_memory_tool,
         delete_memory_tool,
+        search_memory_tool,
     )
     from mnemo_mcp.resources.memory_resources import (
         get_memory_resource,
@@ -632,6 +669,7 @@ def register_memory_components(mcp: FastMCP):
         project_id: Optional[str] = None,
         related_chunks: List[str] | None = None,
         resource_links: List[Dict[str, str]] | None = None,
+        embedding_source: Optional[str] = None,
     ) -> dict:
         """
         Create a new persistent memory with semantic embedding.
@@ -642,12 +680,15 @@ def register_memory_components(mcp: FastMCP):
         Args:
             title: Short memory title (1-200 chars)
             content: Full memory content
-            memory_type: Classification (note, decision, task, reference, conversation)
+            memory_type: Classification (note, decision, task, reference, conversation, investigation)
             tags: User-defined tags for filtering (optional)
             author: Optional author attribution (e.g., "Claude", "User")
             project_id: UUID for project scoping (null = global memory)
             related_chunks: Array of code chunk UUIDs to link (optional)
             resource_links: MCP resource links [{"uri": "...", "type": "..."}] (optional)
+            embedding_source: Optional focused text for embedding computation (EPIC-24).
+                             If provided, embedding is computed on this instead of title+content.
+                             Recommended: 200-400 word structured summary with subject, themes, entities.
 
         Returns:
             MemoryResponse with id, title, memory_type, timestamps, embedding_generated
@@ -667,6 +708,7 @@ def register_memory_components(mcp: FastMCP):
             project_id=project_id,
             related_chunks=related_chunks or [],
             resource_links=resource_links or [],
+            embedding_source=embedding_source,
         )
         return response
 
@@ -682,12 +724,13 @@ def register_memory_components(mcp: FastMCP):
         author: Optional[str] = None,
         related_chunks: Optional[List[str]] = None,
         resource_links: Optional[List[Dict[str, str]]] = None,
+        embedding_source: Optional[str] = None,
     ) -> dict:
         """
         Update an existing memory (partial update).
 
         Updates one or more fields of an existing memory.
-        Regenerates embedding if title or content changes.
+        Regenerates embedding if title, content, or embedding_source changes.
 
         Args:
             id: Memory UUID to update
@@ -698,6 +741,7 @@ def register_memory_components(mcp: FastMCP):
             author: Update author (optional)
             related_chunks: Update related code chunks - replaces existing (optional)
             resource_links: Update resource links - replaces existing (optional)
+            embedding_source: Update focused text for embedding - triggers embedding regeneration (optional)
 
         Returns:
             Dict with id, updated_at, embedding_regenerated
@@ -716,6 +760,7 @@ def register_memory_components(mcp: FastMCP):
             author=author,
             related_chunks=related_chunks,
             resource_links=resource_links,
+            embedding_source=embedding_source,
         )
         return response
 
@@ -752,6 +797,46 @@ def register_memory_components(mcp: FastMCP):
             ctx=ctx,
             id=id,
             permanent=permanent,
+        )
+        return response
+
+    @mcp.tool()
+    async def search_memory(
+        ctx: Context,
+        query: str,
+        limit: int = 10,
+        offset: int = 0,
+        memory_type: str | None = None,
+        tags: list[str] | None = None,
+    ) -> dict:
+        """
+        Search memories using semantic vector search.
+
+        Finds memories semantically similar to the query using embeddings.
+        Results are ranked by similarity score.
+
+        Args:
+            query: Search query (keywords or natural language)
+            limit: Maximum results (1-50, default: 10)
+            offset: Pagination offset (default: 0)
+            memory_type: Filter by type: note|decision|task|reference|conversation|investigation (optional)
+            tags: Filter by tags (optional)
+
+        Returns:
+            MemorySearchResponse with results, scores, and pagination
+
+        Examples:
+            - search_memory(query="async patterns")
+            - search_memory(query="Duclos ObsDelphi", limit=5)
+            - search_memory(query="decision architecture", memory_type="decision")
+        """
+        response = await search_memory_tool.execute(
+            ctx=ctx,
+            query=query,
+            limit=limit,
+            offset=offset,
+            memory_type=memory_type,
+            tags=tags,
         )
         return response
 
@@ -831,7 +916,7 @@ def register_memory_components(mcp: FastMCP):
 
     logger.info(
         "mcp.components.memory.registered",
-        tools=["write_memory", "update_memory", "delete_memory"],
+        tools=["write_memory", "update_memory", "delete_memory", "search_memory"],
         resources=["memories://get/{id}", "memories://list", "memories://search/{query}"]
     )
 

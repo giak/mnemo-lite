@@ -66,6 +66,7 @@ class WriteMemoryTool(BaseMCPComponent):
         project_id: Optional[str] = None,
         related_chunks: List[str] = None,
         resource_links: List[Dict[str, str]] = None,
+        embedding_source: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create a new persistent memory.
@@ -74,13 +75,16 @@ class WriteMemoryTool(BaseMCPComponent):
             ctx: MCP context
             title: Short memory title (1-200 chars)
             content: Full memory content
-            memory_type: Classification (note, decision, task, reference, conversation)
+            memory_type: Classification (note, decision, task, reference, conversation, investigation)
             tags: User-defined tags for filtering (optional)
             author: Optional author attribution (e.g., "Claude", "User")
             project_id: Project UUID or project name (e.g., "mnemolite")
                        If name provided, will be resolved to UUID (auto-creates if missing)
             related_chunks: Array of code chunk UUIDs to link (optional)
             resource_links: MCP resource links [{"uri": "...", "type": "..."}] (optional)
+            embedding_source: Optional focused text for embedding computation (EPIC-24).
+                             If provided, embedding is computed on this instead of title+content.
+                             Recommended: 200-400 word structured summary with subject, themes, entities.
 
         Returns:
             Dict with id, title, memory_type, created_at, updated_at, embedding_generated
@@ -145,6 +149,7 @@ class WriteMemoryTool(BaseMCPComponent):
                 project_id=project_uuid,
                 related_chunks=related_chunks_uuids,
                 resource_links=resource_links or [],
+                embedding_source=embedding_source,
             )
 
             # Generate embedding (graceful degradation on failure)
@@ -153,14 +158,29 @@ class WriteMemoryTool(BaseMCPComponent):
 
             if self.embedding_service:
                 try:
-                    # Combine title + content for embedding
-                    embedding_text = f"{title}\n\n{content}"
+                    # EPIC-24: Use embedding_source if provided, otherwise title+content
+                    if embedding_source:
+                        embedding_text = embedding_source
+                        logger.info(
+                            "Using embedding_source for embedding generation",
+                            title=title,
+                            embedding_source_len=len(embedding_source)
+                        )
+                    else:
+                        embedding_text = f"{title}\n\n{content}"
+                        logger.info(
+                            "Using title+content for embedding generation (no embedding_source)",
+                            title=title,
+                            content_len=len(content)
+                        )
+
                     embedding = await self.embedding_service.generate_embedding(embedding_text)
                     embedding_generated = True
                     logger.info(
                         "Embedding generated for memory",
                         title=title,
-                        embedding_dim=len(embedding) if embedding else 0
+                        embedding_dim=len(embedding) if embedding else 0,
+                        used_embedding_source=embedding_source is not None
                     )
                 except Exception as e:
                     logger.warning(
@@ -242,6 +262,7 @@ class UpdateMemoryTool(BaseMCPComponent):
         author: Optional[str] = None,
         related_chunks: Optional[List[str]] = None,
         resource_links: Optional[List[Dict[str, str]]] = None,
+        embedding_source: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Update an existing memory (partial update).
@@ -256,6 +277,7 @@ class UpdateMemoryTool(BaseMCPComponent):
             author: Update author (optional)
             related_chunks: Update related code chunks - replaces existing (optional)
             resource_links: Update resource links - replaces existing (optional)
+            embedding_source: Update focused text for embedding - triggers embedding regeneration (optional)
 
         Returns:
             Dict with id, updated_at, embedding_regenerated
@@ -306,29 +328,55 @@ class UpdateMemoryTool(BaseMCPComponent):
                 author=author,
                 related_chunks=related_chunks_uuids,
                 resource_links=resource_links,
+                embedding_source=embedding_source,
             )
 
             # Determine if embedding needs regeneration
-            needs_embedding_regeneration = (title is not None and title != existing_memory.title) or \
-                                           (content is not None and content != existing_memory.content)
+            # EPIC-24: Also regenerate if embedding_source is explicitly provided
+            needs_embedding_regeneration = (
+                (title is not None and title != existing_memory.title) or
+                (content is not None and content != existing_memory.content) or
+                (embedding_source is not None)  # Always regenerate if new embedding_source provided
+            )
 
             new_embedding = None
             embedding_regenerated = False
 
             if needs_embedding_regeneration and self.embedding_service:
                 try:
-                    # Use new values if provided, else keep existing
-                    new_title = title if title is not None else existing_memory.title
-                    new_content = content if content is not None else existing_memory.content
+                    # EPIC-24: Prioritize embedding_source for embedding generation
+                    if embedding_source:
+                        embedding_text = embedding_source
+                        logger.info(
+                            "Using new embedding_source for embedding regeneration",
+                            memory_id=id,
+                            embedding_source_len=len(embedding_source)
+                        )
+                    elif hasattr(existing_memory, 'embedding_source') and existing_memory.embedding_source:
+                        # Use existing embedding_source if available
+                        embedding_text = existing_memory.embedding_source
+                        logger.info(
+                            "Using existing embedding_source for embedding regeneration",
+                            memory_id=id
+                        )
+                    else:
+                        # Fall back to title+content
+                        new_title = title if title is not None else existing_memory.title
+                        new_content = content if content is not None else existing_memory.content
+                        embedding_text = f"{new_title}\n\n{new_content}"
+                        logger.info(
+                            "Using title+content for embedding regeneration (no embedding_source)",
+                            memory_id=id
+                        )
 
-                    embedding_text = f"{new_title}\n\n{new_content}"
                     new_embedding = await self.embedding_service.generate_embedding(embedding_text)
                     embedding_regenerated = True
 
                     logger.info(
                         "Embedding regenerated for updated memory",
                         memory_id=id,
-                        embedding_dim=len(new_embedding) if new_embedding else 0
+                        embedding_dim=len(new_embedding) if new_embedding else 0,
+                        used_embedding_source=embedding_source is not None
                     )
                 except Exception as e:
                     logger.warning(
@@ -535,7 +583,193 @@ class DeleteMemoryTool(BaseMCPComponent):
             raise RuntimeError(f"Failed to delete memory: {e}") from e
 
 
+class SearchMemoryTool(BaseMCPComponent):
+    """
+    Tool for semantic search on memories.
+
+    Searches memories using hybrid lexical + vector search.
+    Returns ranked results with similarity scores.
+
+    Usage:
+        search_memory(query="Duclos ObsDelphi investigation")
+        → Returns memories matching the query semantically
+    """
+
+    def get_name(self) -> str:
+        return "search_memory"
+
+    async def execute(
+        self,
+        ctx: Context,
+        query: str,
+        memory_type: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """
+        Semantic search on memories.
+
+        Args:
+            ctx: MCP context
+            query: Search query (natural language)
+            memory_type: Filter by type (note, decision, task, reference, conversation, investigation)
+            tags: Filter by tags (optional)
+            limit: Max results (1-50, default 10)
+            offset: Pagination offset (default 0)
+
+        Returns:
+            Dict with memories list, pagination, and search metadata
+        """
+        start_time = time.time()
+
+        logger.info(
+            "search_memory.execute.start",
+            query=query,
+            limit=limit,
+            offset=offset,
+            memory_type=memory_type,
+            tags=tags,
+            has_services=self._services is not None,
+            has_embedding_service=self.embedding_service is not None,
+            has_hybrid_search=self.hybrid_memory_search_service is not None,
+            has_memory_repo=self.memory_repository is not None,
+        )
+
+        try:
+            # Validate inputs
+            if not query or len(query.strip()) == 0:
+                raise ValueError("Query cannot be empty")
+
+            limit = max(1, min(50, limit))
+            offset = max(0, offset)
+
+            # Parse memory_type if provided
+            memory_type_enum = None
+            if memory_type:
+                try:
+                    memory_type_enum = MemoryType(memory_type)
+                except ValueError:
+                    valid_types = [t.value for t in MemoryType]
+                    raise ValueError(
+                        f"Invalid memory_type '{memory_type}'. Valid: {', '.join(valid_types)}"
+                    )
+
+            # Generate query embedding
+            if not self.embedding_service:
+                raise RuntimeError("Embedding service not available")
+
+            query_embedding = await self.embedding_service.generate_embedding(query)
+
+            embedding_ms = (time.time() - start_time) * 1000
+
+            # Try hybrid search if available
+            if hasattr(self, 'hybrid_memory_search_service') and self.hybrid_memory_search_service:
+                from mnemo_mcp.models.memory_models import MemoryFilters
+
+                filters = MemoryFilters(
+                    memory_type=memory_type_enum if memory_type_enum else None,
+                    tags=tags or [],
+                )
+
+                response = await self.hybrid_memory_search_service.search(
+                    query=query,
+                    embedding=query_embedding,
+                    filters=filters,
+                    limit=limit,
+                    offset=offset,
+                )
+
+                # Convert HybridResult to memory format
+                memories = []
+                for hr in response.results:
+                    memories.append({
+                        "id": str(hr.memory_id),
+                        "title": hr.title,
+                        "content_preview": hr.content_preview,
+                        "memory_type": hr.memory_type,
+                        "tags": hr.tags or [],
+                        "similarity_score": hr.rrf_score,
+                        "created_at": hr.created_at,
+                    })
+
+                result = {
+                    "query": query,
+                    "memories": memories,
+                    "total": response.metadata.total_results,
+                    "limit": limit,
+                    "offset": offset,
+                    "has_more": offset + len(memories) < response.metadata.total_results,
+                    "metadata": {
+                        "search_mode": "hybrid",
+                        "embedding_time_ms": round(embedding_ms, 2),
+                        "execution_time_ms": round(response.metadata.execution_time_ms, 2),
+                    }
+                }
+
+            else:
+                # Fallback to vector-only search
+                filters = {}
+                if memory_type_enum:
+                    filters["memory_type"] = memory_type_enum
+                if tags:
+                    filters["tags"] = tags
+
+                memories_list, total_count = await self.memory_repository.search_by_vector(
+                    vector=query_embedding,
+                    filters=filters if filters else None,
+                    limit=limit,
+                    offset=offset,
+                    distance_threshold=0.7
+                )
+
+                memories = []
+                for m in memories_list:
+                    memories.append({
+                        "id": str(m.id),
+                        "title": m.title,
+                        "content_preview": m.content[:300] + "..." if len(m.content) > 300 else m.content,
+                        "memory_type": m.memory_type.value if hasattr(m.memory_type, 'value') else m.memory_type,
+                        "tags": m.tags or [],
+                        "similarity_score": m.similarity_score if hasattr(m, 'similarity_score') else None,
+                        "created_at": m.created_at.isoformat() if m.created_at else None,
+                    })
+
+                result = {
+                    "query": query,
+                    "memories": memories,
+                    "total": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "has_more": offset + len(memories) < total_count,
+                    "metadata": {
+                        "search_mode": "vector_only",
+                        "embedding_time_ms": round(embedding_ms, 2),
+                    }
+                }
+
+            elapsed_ms = (time.time() - start_time) * 1000
+
+            logger.info(
+                "Memory search completed",
+                query=query,
+                count=len(result["memories"]),
+                elapsed_ms=f"{elapsed_ms:.2f}"
+            )
+
+            return result
+
+        except ValueError as e:
+            logger.error("Validation error in search_memory", error=str(e))
+            raise
+
+        except Exception as e:
+            logger.error("Failed to search memories", error=str(e), query=query)
+            raise RuntimeError(f"Failed to search memories: {e}") from e
+
+
 # Singleton instances for registration
 write_memory_tool = WriteMemoryTool()
 update_memory_tool = UpdateMemoryTool()
 delete_memory_tool = DeleteMemoryTool()
+search_memory_tool = SearchMemoryTool()

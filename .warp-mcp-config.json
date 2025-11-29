@@ -7,7 +7,7 @@
       ],
       "env": {},
       "working_directory": "/home/giak/Work/MnemoLite",
-      "description": "MnemoLite - Code intelligence with hybrid search (lexical+vector), graph traversal, and semantic memories. Tools: search_code, write_memory, index_project, reindex_file, switch_project."
+      "description": "MnemoLite - Code intelligence with hybrid search (lexical+vector), graph traversal, and semantic memories. Tools: search_code, search_memory, write_memory, update_memory, delete_memory, index_project, reindex_file, switch_project, clear_cache."
     }
   }
 }

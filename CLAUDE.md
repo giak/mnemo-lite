@@ -1,9 +1,8 @@
-
 # CLAUDE.md - MnemoLite (Compressed DSL)
 
 **DSL:** §=section ◊=concept →=flow ⊕=compose ∧=AND !=critical @=loc |=OR {}=set :=def +=add ←=emph
 
-v4.2.0 | 2025-10-28 | +Test.Public.Interface heuristic | MCP testing validation
+v4.3.0 | 2025-11-29 | +search_memory.MCP.tool | Memory semantic search via MCP
 
 ## §IDENTITY
 
@@ -19,12 +18,11 @@ MnemoLite: PG18.cognitive.memory ⊕ CODE.INTEL → skill:mnemolite-architecture
 
 ## §COGNITIVE.WORKFLOWS
 
-
 ◊Decision.Frameworks:
-  New.Feature → Test.First → Implement.Minimal → Document → Commit
-  Bug.Fix → Reproduce → Root.Cause → Fix → Regression.Test → Document
-  Refactor → Benchmark.Before → Implement → Verify.Performance → Rollback.If.Slower
-  Architecture → Research(TEMP→RESEARCH) → Decide(DECISION) → Archive → skill:document-lifecycle
+New.Feature → Test.First → Implement.Minimal → Document → Commit
+Bug.Fix → Reproduce → Root.Cause → Fix → Regression.Test → Document
+Refactor → Benchmark.Before → Implement → Verify.Performance → Rollback.If.Slower
+Architecture → Research(TEMP→RESEARCH) → Decide(DECISION) → Archive → skill:document-lifecycle
 
 ## §CRITICAL.HEURISTICS
 
@@ -43,16 +41,16 @@ MnemoLite: PG18.cognitive.memory ⊕ CODE.INTEL → skill:mnemolite-architecture
 ◊Philosophy: CLAUDE.md=HOW.to.think (cognitive.engine.DSL) | Skills=WHAT.to.know (knowledge.base)
 
 ◊Update.Rule:
-  CLAUDE.md ← Universal ∧ stable ∧ cognitive ∧ cross-cutting ∧ compressible.1line.DSL
-  Skills ← Project.specific | domain.specific | evolving | detailed | >1line.DSL
+CLAUDE.md ← Universal ∧ stable ∧ cognitive ∧ cross-cutting ∧ compressible.1line.DSL
+Skills ← Project.specific | domain.specific | evolving | detailed | >1line.DSL
 
 ◊Evolution:
-  Bottom.up: Skills.emerge@500+.lines
-  Top.down: Principles.extracted@3x.repeat
-  Horizontal: Patterns.adopted.filtered → skill:claude-md-evolution@5.criteria
+Bottom.up: Skills.emerge@500+.lines
+Top.down: Principles.extracted@3x.repeat
+Horizontal: Patterns.adopted.filtered → skill:claude-md-evolution@5.criteria
 
 ◊Maintenance → skill:claude-md-evolution (HOW.vs.WHAT.Test | Version.Bump | Validation)
 
 ---
 
-v4.2.0 | 2025-10-28 | +Test.Public.Interface | reveals.integration.bugs | Changelog→git.log | Previous→v4.1.0
+v4.3.0 | 2025-11-29 | +search_memory.tool | MCP.memory.search | Changelog→git.log | Previous→v4.2.0
