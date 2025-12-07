@@ -7,7 +7,8 @@ import { useMemorySearch } from '../useMemorySearch'
 import { nextTick } from 'vue'
 
 // Mock fetch
-global.fetch = vi.fn()
+const mockFetch = vi.fn()
+vi.stubGlobal('fetch', mockFetch)
 
 describe('useMemorySearch', () => {
   beforeEach(() => {
@@ -38,17 +39,15 @@ describe('useMemorySearch', () => {
       },
     ]
 
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({
-          results: mockResults,
-          total: 1,
-          query: 'Duclos',
-          search_time_ms: 45,
-        }),
-      })
-    ) as any
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        results: mockResults,
+        total: 1,
+        query: 'Duclos',
+        search_time_ms: 45,
+      }),
+    })
 
     const { results, loading, error, search } = useMemorySearch()
 
@@ -61,19 +60,17 @@ describe('useMemorySearch', () => {
   })
 
   it('should search with memory_type filter', async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ results: [], total: 0 }),
-      })
-    ) as any
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ results: [], total: 0 }),
+    })
 
     const { search } = useMemorySearch()
 
     await search('test', { memoryType: 'investigation' })
     await nextTick()
 
-    const callBody = JSON.parse((global.fetch as any).mock.calls[0][1].body)
+    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body)
     expect(callBody.memory_type).toBe('investigation')
   })
 
@@ -97,14 +94,12 @@ describe('useMemorySearch', () => {
       { id: 'id-2', title: 'B', content_preview: '', memory_type: 'note', tags: [], score: 0.8, created_at: '' },
     ]
 
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ results: mockResults, total: 2 }),
-      })
-    ) as any
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ results: mockResults, total: 2 }),
+    })
 
-    const { results, selectedIds, selectAll, search } = useMemorySearch()
+    const { selectedIds, selectAll, search } = useMemorySearch()
 
     await search('test')
     await nextTick()
