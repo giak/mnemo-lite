@@ -6,6 +6,8 @@
 
 import { ref, computed } from 'vue'
 
+const API_BASE_URL = 'http://localhost:8001/api/v1/memories'
+
 export interface MemorySearchResult {
   id: string
   title: string
@@ -28,13 +30,15 @@ export function useMemorySearch() {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const selectedIds = ref<Set<string>>(new Set())
+  const total = ref(0)
 
-  const totalResults = computed(() => results.value.length)
+  const totalResults = computed(() => total.value)
 
   const search = async (query: string, options: MemorySearchOptions = {}) => {
     if (!query.trim()) {
       results.value = []
       error.value = null
+      total.value = 0
       return
     }
 
@@ -52,7 +56,7 @@ export function useMemorySearch() {
         requestBody.memory_type = options.memoryType
       }
 
-      const response = await fetch('http://localhost:8001/api/v1/memories/search', {
+      const response = await fetch(`${API_BASE_URL}/search`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -66,11 +70,13 @@ export function useMemorySearch() {
 
       const data = await response.json()
       results.value = data.results || []
+      total.value = data.total || 0
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
       error.value = errorMessage
       console.error('Memory search error:', err)
       results.value = []
+      total.value = 0
     } finally {
       loading.value = false
     }
@@ -124,6 +130,7 @@ export function useMemorySearch() {
     error.value = null
     loading.value = false
     selectedIds.value = new Set()
+    total.value = 0
   }
 
   return {
