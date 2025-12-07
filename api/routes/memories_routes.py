@@ -5,9 +5,10 @@ Endpoints for Memories Monitor page displaying conversations, code, embeddings.
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -355,4 +356,123 @@ async def get_embeddings_health(engine: AsyncEngine = Depends(get_db_engine)) ->
         raise HTTPException(
             status_code=500,
             detail="Failed to retrieve embeddings health. Please try again later."
+        )
+
+
+# Search endpoint models and implementation
+
+class MemorySearchRequest(BaseModel):
+    """Request body for memory search."""
+    query: str = Field(..., min_length=1, description="Search query")
+    memory_type: Optional[str] = Field(None, description="Filter by memory type")
+    limit: int = Field(20, ge=1, le=100, description="Max results")
+    offset: int = Field(0, ge=0, description="Pagination offset")
+
+
+class MemorySearchResult(BaseModel):
+    """Single memory search result."""
+    id: str
+    title: str
+    content_preview: str
+    memory_type: str
+    tags: List[str]
+    author: Optional[str]
+    created_at: str
+    score: float
+
+
+class MemorySearchResponse(BaseModel):
+    """Response for memory search."""
+    results: List[MemorySearchResult]
+    total: int
+    query: str
+    search_time_ms: float
+
+
+@router.post("/search", response_model=MemorySearchResponse)
+async def search_memories(
+    request: MemorySearchRequest,
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> MemorySearchResponse:
+    """
+    Semantic search on memories.
+
+    Uses hybrid lexical + vector search with RRF fusion.
+    Supports filtering by memory_type (note, decision, task, reference, conversation, investigation).
+
+    Returns:
+        MemorySearchResponse with results, total count, and search metadata.
+    """
+    import time
+    from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
+    from services.hybrid_memory_search_service import HybridMemorySearchService
+    from mnemo_mcp.models.memory_models import MemoryFilters, MemoryType
+
+    start_time = time.time()
+
+    try:
+        # Validate memory_type if provided
+        memory_type_enum = None
+        if request.memory_type:
+            try:
+                memory_type_enum = MemoryType(request.memory_type)
+            except ValueError:
+                valid_types = [t.value for t in MemoryType]
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid memory_type. Valid types: {', '.join(valid_types)}"
+                )
+
+        # Get embedding service
+        embedding_service = SentenceTransformerEmbeddingService()
+
+        # Generate query embedding
+        query_embedding = await embedding_service.generate_embedding(request.query)
+
+        # Build filters
+        filters = MemoryFilters(
+            memory_type=memory_type_enum,
+            tags=[],
+        )
+
+        # Search using hybrid service
+        search_service = HybridMemorySearchService(engine)
+        response = await search_service.search(
+            query=request.query,
+            embedding=query_embedding,
+            filters=filters,
+            limit=request.limit,
+            offset=request.offset,
+        )
+
+        # Convert to response format
+        results = []
+        for hr in response.results:
+            results.append(MemorySearchResult(
+                id=str(hr.memory_id),
+                title=hr.title,
+                content_preview=hr.content_preview,
+                memory_type=hr.memory_type,
+                tags=hr.tags or [],
+                author=hr.author,
+                created_at=hr.created_at,
+                score=round(hr.rrf_score, 4),
+            ))
+
+        elapsed_ms = (time.time() - start_time) * 1000
+
+        return MemorySearchResponse(
+            results=results,
+            total=response.metadata.total_results,
+            query=request.query,
+            search_time_ms=round(elapsed_ms, 2),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Memory search failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Memory search failed. Please try again later."
         )
