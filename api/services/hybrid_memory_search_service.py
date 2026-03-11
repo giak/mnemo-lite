@@ -456,7 +456,7 @@ class HybridMemorySearchService:
             SELECT
                 id::text as memory_id,
                 title,
-                LEFT(content, 500) as content_preview,
+                content as content_preview,
                 memory_type,
                 tags,
                 created_at::text,
@@ -551,7 +551,7 @@ class HybridMemorySearchService:
             SELECT
                 id::text as memory_id,
                 title,
-                LEFT(content, 500) as content_preview,
+                content as content_preview,
                 memory_type,
                 tags,
                 created_at::text,

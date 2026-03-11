@@ -14,8 +14,13 @@ Usage:
 
 import sys
 import asyncio
+import warnings
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
+
+# Redirect all warnings to stderr (stdout is reserved for JSONRPC in stdio mode)
+warnings.showwarning = lambda msg, cat, fn, ln, file=None, line=None: \
+    print(f"{fn}:{ln}: {cat.__name__}: {msg}", file=sys.stderr)
 
 from mcp.server.fastmcp import FastMCP
 import structlog
@@ -23,7 +28,8 @@ import structlog
 from mnemo_mcp.config import config
 from mnemo_mcp.prompts import register_prompts
 
-# Setup structured logging
+# Setup structured logging - MUST use stderr for MCP stdio transport
+# stdout is reserved for JSONRPC protocol messages only
 structlog.configure(
     processors=[
         structlog.processors.TimeStamper(fmt="iso"),
@@ -34,7 +40,7 @@ structlog.configure(
         getattr(structlog.stdlib.logging, config.log_level)
     ),
     context_class=dict,
-    logger_factory=structlog.PrintLoggerFactory(),
+    logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
 )
 
 logger = structlog.get_logger()
@@ -344,6 +350,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         update_memory_tool,
         delete_memory_tool,
         search_memory_tool,
+        read_memory_tool,
     )
     from mnemo_mcp.resources.memory_resources import (
         get_memory_resource,
@@ -386,6 +393,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     update_memory_tool.inject_services(services)
     delete_memory_tool.inject_services(services)
     search_memory_tool.inject_services(services)
+    read_memory_tool.inject_services(services)
     get_memory_resource.inject_services(services)
     list_memories_resource.inject_services(services)
     search_memories_resource.inject_services(services)
@@ -414,7 +422,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         "mcp.components.services_injected",
         components=[
             "ping_tool", "search_code_tool", "health_resource",
-            "write_memory_tool", "update_memory_tool", "delete_memory_tool", "search_memory_tool",
+            "write_memory_tool", "update_memory_tool", "delete_memory_tool", "search_memory_tool", "read_memory_tool",
             "get_memory_resource", "list_memories_resource", "search_memories_resource",
             "graph_node_details_resource", "find_callers_resource", "find_callees_resource",
             "index_project_tool", "reindex_file_tool", "index_status_resource",
@@ -643,6 +651,7 @@ def register_memory_components(mcp: FastMCP):
         update_memory_tool,
         delete_memory_tool,
         search_memory_tool,
+        read_memory_tool,
     )
     from mnemo_mcp.resources.memory_resources import (
         get_memory_resource,
@@ -840,6 +849,33 @@ def register_memory_components(mcp: FastMCP):
         )
         return response
 
+    # Register read_memory tool
+    @mcp.tool()
+    async def read_memory(
+        ctx: Context,
+        id: str,
+    ) -> dict:
+        """
+        Read the complete content of a specific memory by ID.
+
+        Retrieves the full, un-truncated memory content. This is the recommended
+        tool to use when you need the complete details of a memory found via search.
+
+        Args:
+            id: The UUID of the memory to read
+
+        Returns:
+            Dict containing the complete memory details and content
+
+        Example:
+            - read_memory(id="123e4567-e89b-12d3-a456-426614174000")
+        """
+        response = await read_memory_tool.execute(
+            ctx=ctx,
+            id=id,
+        )
+        return response
+
     # Register memories://get/{id} resource
     @mcp.resource("memories://get/{id}")
     async def get_memory(id: str) -> dict:
@@ -916,7 +952,7 @@ def register_memory_components(mcp: FastMCP):
 
     logger.info(
         "mcp.components.memory.registered",
-        tools=["write_memory", "update_memory", "delete_memory", "search_memory"],
+        tools=["write_memory", "update_memory", "delete_memory", "search_memory", "read_memory"],
         resources=["memories://get/{id}", "memories://list", "memories://search/{query}"]
     )
 

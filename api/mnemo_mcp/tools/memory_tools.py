@@ -768,8 +768,90 @@ class SearchMemoryTool(BaseMCPComponent):
             raise RuntimeError(f"Failed to search memories: {e}") from e
 
 
+class ReadMemoryTool(BaseMCPComponent):
+    """
+    Tool for reading the complete content of a specific memory by ID.
+
+    Usage in Claude Desktop:
+        "Read the full content of memory abc-123"
+        → Tool call: read_memory(id="abc-123-...")
+        → Returns full memory details including complete content
+    """
+
+    def get_name(self) -> str:
+        return "read_memory"
+
+    async def execute(
+        self,
+        ctx: Context,
+        id: str,
+    ) -> Dict[str, Any]:
+        """
+        Read full content of a memory.
+
+        Args:
+            ctx: MCP context
+            id: Memory UUID to read
+
+        Returns:
+            Dict with complete memory details including full content
+        """
+        start_time = time.time()
+
+        try:
+            # Validate memory ID
+            try:
+                memory_uuid = uuid.UUID(id)
+            except ValueError:
+                raise ValueError(f"Invalid memory UUID: {id}")
+
+            # Fetch memory
+            memory = await self.memory_repository.get_by_id(str(memory_uuid))
+            
+            if not memory:
+                raise RuntimeError(f"Memory {id} not found or deleted")
+
+            elapsed_ms = (time.time() - start_time) * 1000
+
+            logger.info(
+                "Memory read successfully",
+                memory_id=id,
+                title=memory.title,
+                elapsed_ms=f"{elapsed_ms:.2f}"
+            )
+
+            response = MemoryResponse(
+                id=memory.id,
+                title=memory.title,
+                memory_type=memory.memory_type,
+                created_at=memory.created_at,
+                updated_at=memory.updated_at,
+                embedding_generated=memory.embedding is not None,
+                tags=memory.tags,
+                author=memory.author,
+                content_preview=memory.content,  # Return full content here too for backward compat
+            )
+            
+            # Need to explicitly include full content as it's not in the base Response model
+            result = response.model_dump(mode='json')
+            result['content'] = memory.content
+            
+            return result
+
+        except ValueError as e:
+            logger.error("Validation error in read_memory", error=str(e))
+            raise
+
+        except Exception as e:
+            logger.error("Failed to read memory", error=str(e), memory_id=id)
+            raise RuntimeError(f"Failed to read memory: {e}") from e
+
+
+
 # Singleton instances for registration
 write_memory_tool = WriteMemoryTool()
 update_memory_tool = UpdateMemoryTool()
 delete_memory_tool = DeleteMemoryTool()
 search_memory_tool = SearchMemoryTool()
+read_memory_tool = ReadMemoryTool()
+
