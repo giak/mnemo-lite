@@ -38,9 +38,13 @@ fi
 # Reconstruct absolute path using regex to preserve hyphens in project names
 PROJECT_PATH=""
 if [[ "$PROJECT_DIR" =~ ^-home-([^-]+)-projects-(.+)$ ]]; then
-  PROJECT_PATH="/home/${BASH_REMATCH[1]}/projects/${BASH_REMATCH[2]}"
+  # Convert hyphens to slashes in the captured project path
+  PROJECT_SUBPATH=$(echo "${BASH_REMATCH[2]}" | tr '-' '/')
+  PROJECT_PATH="/home/${BASH_REMATCH[1]}/projects/$PROJECT_SUBPATH"
 elif [[ "$PROJECT_DIR" =~ ^-home-([^-]+)-Work-(.+)$ ]]; then
-  PROJECT_PATH="/home/${BASH_REMATCH[1]}/Work/${BASH_REMATCH[2]}"
+  # Convert hyphens to slashes in the captured project path
+  PROJECT_SUBPATH=$(echo "${BASH_REMATCH[2]}" | tr '-' '/')
+  PROJECT_PATH="/home/${BASH_REMATCH[1]}/Work/$PROJECT_SUBPATH"
 fi
 
 # Detect project name using centralized script (uses Git if available)
@@ -51,15 +55,12 @@ if [ -n "$PROJECT_PATH" ] && [ -d "$PROJECT_PATH" ] && [ -f "$SCRIPT_PATH" ]; th
   PROJECT_NAME=$(bash "$SCRIPT_PATH" "$PROJECT_PATH" 2>/dev/null || echo "")
 fi
 
-# Fallback: extract from PROJECT_PATH or PROJECT_DIR
+# Fallback: extract last segment (most reliable for nested paths)
 if [ -z "$PROJECT_NAME" ]; then
-  if [ -n "$PROJECT_PATH" ]; then
-    PROJECT_NAME=$(basename "$PROJECT_PATH" | tr '[:upper:]' '[:lower:]')
-  else
-    # Extract last segment from PROJECT_DIR
-    PROJECT_NAME=$(echo "$PROJECT_DIR" | sed -E 's/^-home-[^-]+-projects-//; s/^-home-[^-]+-Work-//; s/^-//')
-    PROJECT_NAME=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]')
-  fi
+  # Extract last hyphen-separated segment from PROJECT_DIR
+  # This works even when directories contain hyphens (e.g., "expanse-v1")
+  # "-home-giak-projects-test-expanse-expanse-v1-gpt-project-mco" → "mco"
+  PROJECT_NAME=$(echo "$PROJECT_DIR" | rev | cut -d'-' -f1 | rev | tr '[:upper:]' '[:lower:]')
 fi
 
 # ============================================================================

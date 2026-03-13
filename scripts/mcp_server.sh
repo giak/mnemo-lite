@@ -1,21 +1,18 @@
 #!/bin/bash
-# MnemoLite MCP Server Launcher for Claude Code
+# MnemoLite MCP Server Launcher (Antifragile Edition)
 #
-# This script launches the MnemoLite MCP server in Docker stdio mode
-# for integration with Claude Code (CLI).
+# 1. We redirect stderr to a file (>> /tmp/mnemo_mcp.err) to keep stdout 100% pure JSON.
+# 2. We use 'exec' to handle signals correctly.
+# 3. We use python -u for unbuffered output.
+# 4. We rely on the Lazy Import fix in the python code for speed.
 
-set -e
-
-# Navigate to project root
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$PROJECT_ROOT"
-
-# Check if Docker services are running
-if ! docker compose ps | grep -q "Up"; then
-    echo "Error: Docker services are not running. Start them with:" >&2
-    echo "  docker compose up -d" >&2
-    exit 1
+# Rotate log file slightly (keep last 1MB)
+if [ -f /tmp/mnemo_mcp.err ]; then
+    tail -c 1000000 /tmp/mnemo_mcp.err > /tmp/mnemo_mcp.err.tmp && mv /tmp/mnemo_mcp.err.tmp /tmp/mnemo_mcp.err
 fi
 
-# Launch MCP server in stdio mode via Docker
-exec docker compose exec -T api python3 -m mnemo_mcp.server
+echo "[$(date)] MCP Connection Started" >> /tmp/mnemo_mcp.err
+
+# Execute the server
+# Note: No EMBEDDING_MODE=mock here, we are using the Lazy Import fix in code.
+exec docker exec -i mnemo-api python3 -u -m mnemo_mcp.server 2>> /tmp/mnemo_mcp.err
