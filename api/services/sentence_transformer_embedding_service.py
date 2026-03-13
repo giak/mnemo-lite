@@ -12,11 +12,10 @@ Supports:
 import os
 import logging
 import asyncio
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Any
 from enum import Enum
 import hashlib
 
-from sentence_transformers import SentenceTransformer
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -140,7 +139,7 @@ class SentenceTransformerEmbeddingService:
         self._cache_access = {} if cache_size > 0 else None
 
         # Model chargé de manière lazy
-        self._model: Optional[SentenceTransformer] = None
+        self._model: Any = None
         self._lock = asyncio.Lock()
         self._load_attempted = False
 
@@ -220,8 +219,9 @@ class SentenceTransformerEmbeddingService:
                 self._model = None
                 raise RuntimeError(f"Failed to load model: {e}") from e
 
-    def _load_model_sync(self) -> SentenceTransformer:
+    def _load_model_sync(self) -> Any:
         """Charge le modèle (fonction synchrone pour executor)."""
+        from sentence_transformers import SentenceTransformer
         return SentenceTransformer(
             self.model_name,
             device=self.device,

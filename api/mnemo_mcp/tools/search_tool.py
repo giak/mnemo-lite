@@ -158,9 +158,11 @@ class SearchCodeTool(BaseMCPComponent):
         if enable_vector and embedding_service:
             try:
                 # Generate embedding for query
-                # Note: Current MockEmbeddingService doesn't distinguish CODE vs TEXT domains
-                # but HybridCodeSearchService prefers CODE embedding if available
-                embedding_code = await embedding_service.generate_embedding(query)
+                # EPIC-24 P1: Use embed_query for v2 model compatibility
+                if hasattr(embedding_service, 'embed_query'):
+                    embedding_code = await embedding_service.embed_query(query)
+                else:
+                    embedding_code = await embedding_service.generate_embedding(query)
                 logger.info(
                     "search_code.embedding_generated",
                     dimension=len(embedding_code) if embedding_code else 0

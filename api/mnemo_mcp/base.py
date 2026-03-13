@@ -160,6 +160,11 @@ class BaseMCPComponent(ABC):
         """Access database connection pool (asyncpg)."""
         return self._services.get("db") if self._services else None
 
+    @property
+    def hybrid_memory_search_service(self):
+        """Access hybrid memory search service (EPIC-24)."""
+        return self._services.get("hybrid_memory_search_service") if self._services else None
+
     def _parse_query_params(self, uri: str) -> Dict[str, str]:
         """
         Parse query parameters from URI.

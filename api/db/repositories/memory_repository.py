@@ -60,8 +60,7 @@ class MemoryRepository:
             now = datetime.now(timezone.utc)
 
             # Convert arrays and JSONB for PostgreSQL
-            tags_array = f"ARRAY{memory_create.tags}::TEXT[]" if memory_create.tags else "ARRAY[]::TEXT[]"
-            related_chunks_array = f"ARRAY[{','.join(str(c) for c in memory_create.related_chunks)}]::UUID[]" if memory_create.related_chunks else "ARRAY[]::UUID[]"
+            # Use bind parameters for arrays to handle escaping correctly
             resource_links_json = json.dumps(memory_create.resource_links)
 
             # Format embedding for pgvector
@@ -76,9 +75,9 @@ class MemoryRepository:
                 )
                 VALUES (
                     :id, :title, :content, :created_at, :updated_at,
-                    :memory_type, {tags_array}, :author, :project_id,
+                    :memory_type, :tags, :author, :project_id,
                     {embedding_str}, :embedding_model,
-                    {related_chunks_array}, :resource_links
+                    :related_chunks, :resource_links
                 )
                 RETURNING *
             """)
@@ -90,9 +89,11 @@ class MemoryRepository:
                 "created_at": now,
                 "updated_at": now,
                 "memory_type": memory_create.memory_type.value,
+                "tags": memory_create.tags if memory_create.tags else [],
                 "author": memory_create.author,
                 "project_id": str(memory_create.project_id) if memory_create.project_id else None,
                 "embedding_model": "nomic-embed-text-v1.5" if embedding else None,
+                "related_chunks": memory_create.related_chunks if memory_create.related_chunks else [],
                 "resource_links": resource_links_json,
             }
 
@@ -188,19 +189,16 @@ class MemoryRepository:
                 params["memory_type"] = memory_update.memory_type.value
 
             if memory_update.tags is not None:
-                tags_array = f"ARRAY{memory_update.tags}::TEXT[]" if memory_update.tags else "ARRAY[]::TEXT[]"
-                update_fields.append(f"tags = {tags_array}")
+                update_fields.append("tags = :tags")
+                params["tags"] = memory_update.tags if memory_update.tags else []
 
             if memory_update.author is not None:
                 update_fields.append("author = :author")
                 params["author"] = memory_update.author
 
             if memory_update.related_chunks is not None:
-                if memory_update.related_chunks:
-                    chunks_array = f"ARRAY[{','.join(str(c) for c in memory_update.related_chunks)}]::UUID[]"
-                else:
-                    chunks_array = "ARRAY[]::UUID[]"
-                update_fields.append(f"related_chunks = {chunks_array}")
+                update_fields.append("related_chunks = :related_chunks")
+                params["related_chunks"] = memory_update.related_chunks if memory_update.related_chunks else []
 
             if memory_update.resource_links is not None:
                 update_fields.append("resource_links = :resource_links::jsonb")

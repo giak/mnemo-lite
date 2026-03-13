@@ -19,6 +19,7 @@ class MemoryType(str, Enum):
     TASK = "task"                    # TODO items, action items
     REFERENCE = "reference"          # Documentation links, external resources
     CONVERSATION = "conversation"    # Dialogue context for multi-turn chats
+    INVESTIGATION = "investigation"  # EPIC-24: Truth Engine investigation outputs
 
 
 class MemoryBase(BaseModel):
@@ -59,6 +60,10 @@ class MemoryBase(BaseModel):
     resource_links: List[Dict[str, str]] = Field(
         default_factory=list,
         description="MCP 2025-06-18 resource links: [{'uri': '...', 'type': '...'}]"
+    )
+    embedding_source: Optional[str] = Field(
+        None,
+        description="Optional focused text for embedding computation. If NULL, embedding is computed on title+content. Typical: 200-400 word structured summary with subject, themes, entities, findings."
     )
 
     @field_validator('tags')
@@ -132,6 +137,10 @@ class MemoryUpdate(BaseModel):
     resource_links: Optional[List[Dict[str, str]]] = Field(
         None,
         description="Update resource links (replaces existing)"
+    )
+    embedding_source: Optional[str] = Field(
+        None,
+        description="Update focused text for embedding computation (triggers embedding regeneration)"
     )
 
     @field_validator('tags')
