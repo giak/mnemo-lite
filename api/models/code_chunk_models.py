@@ -46,6 +46,9 @@ class ChunkType(str, Enum):
     VUE_SCRIPT = "vue_script"              # <script> section
     VUE_STYLE = "vue_style"                # <style> section
 
+    # Markdown
+    MARKDOWN_SECTION = "markdown_section"  # Section split by ## headers
+
     # Fallback
     FALLBACK_FIXED = "fallback_fixed"  # Fallback when AST parsing fails
 

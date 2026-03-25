@@ -813,6 +813,7 @@ class CodeIndexingService:
             ".swift": "swift",
             ".kt": "kotlin",
             ".scala": "scala",
+            ".md": "markdown",
         }
 
         # Extract extension

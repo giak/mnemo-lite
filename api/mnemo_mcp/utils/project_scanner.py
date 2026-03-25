@@ -53,6 +53,7 @@ class ProjectScanner:
         ".swift",   # Swift
         ".kt",      # Kotlin
         ".scala",   # Scala
+        ".md",      # Markdown (Expanse: KERNEL, VISION, APEX, etc.)
     }
 
     # Hard limit to prevent memory issues with very large projects

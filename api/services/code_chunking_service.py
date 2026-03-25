@@ -404,6 +404,10 @@ class CodeChunkingService:
         if not source_code.strip():
             raise ValueError("source_code cannot be empty")
 
+        # Markdown: chunk by ## headers (no AST needed)
+        if language.lower() == "markdown":
+            return await self._chunk_markdown(source_code, file_path, max_chunk_size)
+
         # EPIC-29: Classify file type (for TypeScript/JavaScript only)
         from api.services.file_classification_service import FileType
         file_type = None
@@ -796,6 +800,94 @@ class CodeChunkingService:
             chunk_num += 1
 
         logger.info(f"Fixed chunking: created {len(chunks)} chunks for {file_path}")
+        return chunks
+
+    async def _chunk_markdown(
+        self,
+        source_code: str,
+        file_path: str,
+        max_chunk_size: int = 2000
+    ) -> list[CodeChunk]:
+        """
+        Chunk markdown files by ## headers.
+
+        Strategy:
+        - Split on lines starting with '## '
+        - Content before first ## is prepended to first chunk
+        - Large sections are split using fallback fixed chunking
+        """
+        import re
+
+        lines = source_code.split('\n')
+        chunks = []
+
+        # Find all ## header positions
+        header_positions = []
+        for i, line in enumerate(lines):
+            if re.match(r'^##\s+.+', line):
+                header_positions.append(i)
+
+        # No headers → single chunk
+        if not header_positions:
+            chunk = CodeChunk(
+                file_path=file_path,
+                language="markdown",
+                chunk_type=ChunkType.MARKDOWN_SECTION,
+                name="content",
+                source_code=source_code,
+                start_line=1,
+                end_line=len(lines),
+                metadata={"sections": 0}
+            )
+            return [chunk]
+
+        # Split by headers
+        for idx, header_pos in enumerate(header_positions):
+            # Section runs from this header to next header (or EOF)
+            if idx + 1 < len(header_positions):
+                end_pos = header_positions[idx + 1]
+            else:
+                end_pos = len(lines)
+
+            # Include preamble before first header
+            if idx == 0 and header_pos > 0:
+                section_lines = lines[0:end_pos]
+                start_line = 1
+            else:
+                section_lines = lines[header_pos:end_pos]
+                start_line = header_pos + 1
+
+            section_text = '\n'.join(section_lines)
+
+            # Extract header name
+            header_match = re.match(r'^##\s+(.+)$', lines[header_pos])
+            name = header_match.group(1).strip() if header_match else f"section_{idx}"
+
+            # If section is too large, split it
+            if len(section_text) > max_chunk_size:
+                # Create sub-chunks using fixed chunking
+                sub_chunks_result = await self._fallback_fixed_chunking(
+                    section_text, file_path, "markdown", max_chunk_size
+                )
+                for sc in sub_chunks_result:
+                    sc.chunk_type = ChunkType.MARKDOWN_SECTION
+                    sc.name = name
+                    sc.language = "markdown"
+                    chunks.append(sc)
+            else:
+                chunk = CodeChunk(
+                    file_path=file_path,
+                    language="markdown",
+                    chunk_type=ChunkType.MARKDOWN_SECTION,
+                    name=name,
+                    source_code=section_text,
+                    start_line=start_line,
+                    end_line=end_pos,
+                    metadata={"header": name}
+                )
+                chunks.append(chunk)
+
+        logger.info(f"Markdown chunking: created {len(chunks)} chunks for {file_path}")
         return chunks
 
     async def _chunk_barrel_file(

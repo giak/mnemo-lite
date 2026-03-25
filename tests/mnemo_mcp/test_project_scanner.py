@@ -64,12 +64,11 @@ class TestProjectScannerBasic:
         (tmp_path / "readme.txt").write_text("Text file")
         (tmp_path / "data.json").write_text('{"key": "value"}')
         (tmp_path / "image.png").write_bytes(b'\x89PNG')
-        (tmp_path / "doc.md").write_text("# Markdown")
 
         scanner = ProjectScanner()
         files = await scanner.scan(str(tmp_path), respect_gitignore=False)
 
-        # Only code.py should be found
+        # Only code.py should be found (.md is now supported)
         assert len(files) == 1
         assert "code.py" in files[0].path
 
@@ -267,13 +266,14 @@ class TestProjectScannerIntegration:
         scanner = ProjectScanner()
         files = await scanner.scan(str(tmp_path), respect_gitignore=True)
 
-        # Should find: setup.py, __init__.py, main.py, utils.py, test_main.py
-        # Should NOT find: README.md (not .py), .venv/lib.py (gitignored)
-        assert len(files) == 5
+        # Should find: setup.py, __init__.py, main.py, utils.py, test_main.py, README.md
+        # Should NOT find: .venv/lib.py (gitignored)
+        assert len(files) == 6
 
         paths = [f.path for f in files]
         assert any("setup.py" in p for p in paths)
         assert any("main.py" in p for p in paths)
         assert any("utils.py" in p for p in paths)
         assert any("test_main.py" in p for p in paths)
+        assert any("README.md" in p for p in paths)
         assert not any(".venv" in p for p in paths)  # Gitignored
