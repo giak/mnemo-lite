@@ -179,5 +179,4 @@ networks:
   frontend:
     driver: bridge
   backend:
-    internal: true
     driver: bridge

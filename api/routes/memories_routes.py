@@ -231,6 +231,207 @@ async def get_recent_code_chunks(
         )
 
 
+# Write endpoint
+
+class MemoryCreateRequest(BaseModel):
+    """Request body for creating a memory."""
+    title: str = Field(..., min_length=1, max_length=200, description="Short memory title")
+    content: str = Field(..., min_length=1, description="Full memory content")
+    memory_type: str = Field("note", description="Type: note, decision, task, reference, conversation, investigation")
+    tags: List[str] = Field(default_factory=list, description="User-defined tags")
+    author: Optional[str] = Field(None, max_length=100, description="Author attribution")
+    embedding_source: Optional[str] = Field(None, description="Focused text for embedding (optional)")
+
+
+class MemoryCreateResponse(BaseModel):
+    """Response for memory creation."""
+    id: str
+    title: str
+    memory_type: str
+    created_at: str
+
+
+@router.post("", response_model=MemoryCreateResponse, status_code=201)
+async def create_memory(
+    request: MemoryCreateRequest,
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> MemoryCreateResponse:
+    """
+    Create a new memory with semantic embedding.
+
+    Generates an embedding from title+content (or embedding_source if provided)
+    and stores the memory in PostgreSQL with pgvector.
+    """
+    import uuid
+    from datetime import datetime, timezone
+    from mnemo_mcp.models.memory_models import MemoryCreate, MemoryType
+    from db.repositories.memory_repository import MemoryRepository
+    from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
+
+    try:
+        # Validate memory_type
+        try:
+            memory_type_enum = MemoryType(request.memory_type)
+        except ValueError:
+            valid_types = [t.value for t in MemoryType]
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid memory_type. Valid types: {', '.join(valid_types)}"
+            )
+
+        # Generate embedding
+        embedding = None
+        try:
+            embedding_service = SentenceTransformerEmbeddingService()
+            text_for_embedding = request.embedding_source or f"{request.title} {request.content}"
+            embedding = await embedding_service.generate_embedding(text_for_embedding)
+        except Exception as e:
+            logger.warning(f"Embedding generation failed, storing without embedding: {e}")
+
+        # Create memory
+        memory_repo = MemoryRepository(engine)
+        memory_create = MemoryCreate(
+            title=request.title,
+            content=request.content,
+            memory_type=memory_type_enum,
+            tags=request.tags,
+            author=request.author,
+            embedding_source=request.embedding_source,
+        )
+
+        memory = await memory_repo.create(memory_create, embedding=embedding)
+
+        return MemoryCreateResponse(
+            id=str(memory.id),
+            title=memory.title,
+            memory_type=memory.memory_type,
+            created_at=memory.timestamp.isoformat() if hasattr(memory, 'timestamp') and memory.timestamp else datetime.now(timezone.utc).isoformat(),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create memory: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create memory. Please try again later."
+        )
+
+
+# Update endpoint
+
+class MemoryUpdateRequest(BaseModel):
+    """Request body for updating a memory (all fields optional)."""
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    content: Optional[str] = Field(None, min_length=1)
+    memory_type: Optional[str] = None
+    tags: Optional[List[str]] = None
+    author: Optional[str] = None
+    embedding_source: Optional[str] = None
+
+
+@router.put("/{memory_id}")
+async def update_memory_endpoint(
+    memory_id: str,
+    request: MemoryUpdateRequest,
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """Update an existing memory (partial update). Regenerates embedding if content changes."""
+    from datetime import timezone
+    from mnemo_mcp.models.memory_models import MemoryUpdate, MemoryType
+    from db.repositories.memory_repository import MemoryRepository
+    from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
+
+    try:
+        # Validate memory_type if provided
+        if request.memory_type:
+            try:
+                MemoryType(request.memory_type)
+            except ValueError:
+                valid_types = [t.value for t in MemoryType]
+                raise HTTPException(status_code=400, detail=f"Invalid memory_type. Valid: {', '.join(valid_types)}")
+
+        # Regenerate embedding if content changed
+        embedding = None
+        regenerate = False
+        if request.title or request.content or request.embedding_source:
+            try:
+                svc = SentenceTransformerEmbeddingService()
+                text = request.embedding_source or f"{request.title or ''} {request.content or ''}"
+                if text.strip():
+                    embedding = await svc.generate_embedding(text)
+                    regenerate = True
+            except Exception as e:
+                logger.warning(f"Embedding regeneration failed: {e}")
+
+        memory_repo = MemoryRepository(engine)
+        update = MemoryUpdate(
+            title=request.title,
+            content=request.content,
+            memory_type=MemoryType(request.memory_type) if request.memory_type else None,
+            tags=request.tags,
+            author=request.author,
+            embedding_source=request.embedding_source,
+        )
+
+        result = await memory_repo.update(
+            memory_id, update,
+            regenerate_embedding=regenerate,
+            new_embedding=embedding,
+        )
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Memory not found or deleted.")
+
+        return {
+            "id": str(result.id),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "embedding_regenerated": regenerate,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update memory: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to update memory.")
+
+
+# Delete endpoint
+
+@router.delete("/{memory_id}")
+async def delete_memory_endpoint(
+    memory_id: str,
+    permanent: bool = Query(False, description="Hard delete (irreversible)"),
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """Delete a memory (soft by default, hard with ?permanent=true)."""
+    from datetime import timezone
+    from db.repositories.memory_repository import MemoryRepository
+
+    try:
+        memory_repo = MemoryRepository(engine)
+
+        if permanent:
+            success = await memory_repo.delete_permanently(memory_id)
+        else:
+            success = await memory_repo.soft_delete(memory_id)
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Memory not found.")
+
+        result = {"id": memory_id, "deleted": True, "permanent": permanent}
+        if not permanent:
+            result["deleted_at"] = datetime.now(timezone.utc).isoformat()
+            result["can_restore"] = True
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete memory: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete memory.")
+
+
 @router.get("/{memory_id}")
 async def get_memory_by_id(
     memory_id: str,
@@ -365,6 +566,7 @@ class MemorySearchRequest(BaseModel):
     """Request body for memory search."""
     query: str = Field(..., min_length=1, description="Search query")
     memory_type: Optional[str] = Field(None, description="Filter by memory type")
+    tags: List[str] = Field(default_factory=list, description="Filter by tags (AND logic)")
     limit: int = Field(20, ge=1, le=100, description="Max results")
     offset: int = Field(0, ge=0, description="Pagination offset")
 
@@ -432,7 +634,7 @@ async def search_memories(
         # Build filters
         filters = MemoryFilters(
             memory_type=memory_type_enum,
-            tags=[],
+            tags=request.tags or [],
         )
 
         # Search using hybrid service
