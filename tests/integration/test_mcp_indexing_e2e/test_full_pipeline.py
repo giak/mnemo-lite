@@ -213,7 +213,7 @@ async def code_indexing_service_with_cache(engine: AsyncEngine, test_repository:
     chunk_repository = CodeChunkRepository(engine=engine)
     
     l1_cache = CodeChunkCache(max_size_mb=10)
-    l2_cache = RedisCache(redis_url="redis://localhost:6379/0")
+    l2_cache = RedisCache(redis_url="redis://redis:6379/0")
     chunk_cache = CascadeCache(l1_cache=l1_cache, l2_cache=l2_cache)
     
     service = CodeIndexingService(
@@ -228,7 +228,8 @@ async def code_indexing_service_with_cache(engine: AsyncEngine, test_repository:
     
     yield service
     
-    await chunk_cache.l1.clear()
+    if chunk_cache.l1:
+        chunk_cache.l1.clear()
     
     async with engine.connect() as conn:
         await conn.execute(

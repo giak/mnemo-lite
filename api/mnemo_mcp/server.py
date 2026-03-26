@@ -116,7 +116,9 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         )
 
         # Test connection
-        await redis_client.ping()
+        ping_res = redis_client.ping()
+        if hasattr(ping_res, '__await__'):
+            await ping_res
         logger.info("mcp.redis.connected")
 
         services["redis"] = redis_client
@@ -131,41 +133,28 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     # --------------------------------------------------------------------
 
     # Story 23.2: Initialize EmbeddingService
-    # Use real embeddings by default for semantic search to work
-    # Set EMBEDDING_MODE=mock for fast startup without model loading
+    # DualEmbeddingService is required because CodeIndexingService expects
+    # generate_embedding(domain=EmbeddingDomain) returning Dict[str, List[float]].
+    # SentenceTransformerEmbeddingService uses generate_embedding(text_type=TextType)
+    # returning List[float] — incompatible interface.
+    # Set EMBEDDING_MODE=mock for fast startup without model loading.
     try:
-        import os
-        embedding_mode = os.getenv("EMBEDDING_MODE", "real")
-
-        if embedding_mode == "mock":
-            from services.embedding_service import MockEmbeddingService
-            embedding_service = MockEmbeddingService(
-                model_name="mock-model",
-                dimension=768
-            )
-            logger.info(
-                "mcp.embedding_service.initialized",
-                mode="mock",
-                dimension=768
-            )
-        else:
-            from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
-            embedding_service = SentenceTransformerEmbeddingService()
-            logger.info(
-                "mcp.embedding_service.initialized",
-                mode="real",
-                model="nomic-embed-text-v1.5",
-                dimension=768
-            )
-
+        from services.dual_embedding_service import DualEmbeddingService
+        embedding_service = DualEmbeddingService()
+        await embedding_service.preload_models()
         services["embedding_service"] = embedding_service
-
+        logger.info(
+            "mcp.embedding_service.initialized",
+            mode=embedding_service._embedding_mode,
+            text_model=embedding_service.text_model_name,
+            code_model=embedding_service.code_model_name,
+            dimension=embedding_service.dimension
+        )
     except Exception as e:
         logger.warning(
             "mcp.embedding_service.initialization_failed",
             error=str(e)
         )
-        # Embedding service is optional - graceful degradation to lexical-only
         services["embedding_service"] = None
 
     # Create SQLAlchemy engine FIRST (needed by multiple services)

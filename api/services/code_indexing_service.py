@@ -362,7 +362,7 @@ class CodeIndexingService:
 
             # L1/L2 CASCADE CACHE LOOKUP (before expensive chunking/embedding pipeline)
             if self.chunk_cache:
-                cached_chunks = self.chunk_cache.get(file_input.path, file_input.content)
+                cached_chunks = await self.chunk_cache.get_chunks(file_input.path, file_input.content)
                 if cached_chunks:
                     # Cache HIT: Skip entire pipeline and return cached result
                     end_time = datetime.now()
@@ -759,10 +759,26 @@ class CodeIndexingService:
             )
 
             # Generate single embedding (TEXT OR CODE)
-            embeddings = await self.embedding_service.generate_embedding(
-                text=chunk.source_code,
-                domain=domain
-            )
+            # DualEmbeddingService interface: generate_embedding(text, domain=EmbeddingDomain)
+            # Returns Dict[str, List[float]] with 'text' and/or 'code' keys
+            try:
+                embeddings = await self.embedding_service.generate_embedding(
+                    text=chunk.source_code,
+                    domain=domain
+                )
+            except TypeError as type_error:
+                # DEFENSIVE: Handle mismatched embedding service interface.
+                # SentenceTransformerEmbeddingService uses generate_embedding(text, text_type=TextType)
+                # returning List[float]. DualEmbeddingService uses generate_embedding(text, domain=EmbeddingDomain)
+                # returning Dict[str, List[float]]. This fallback bridges the gap.
+                if "domain" in str(type_error):
+                    self.logger.warning(
+                        f"Embedding service uses incompatible interface (missing 'domain' param). "
+                        f"Falling back to legacy single embedding. Error: {type_error}"
+                    )
+                    legacy_result = await self._generate_embedding_legacy_bridge(chunk, domain)
+                    return legacy_result
+                raise  # Re-raise if not our specific error
 
             # Return single embedding (50% faster than HYBRID)
             if domain == EmbeddingDomain.TEXT:
@@ -780,6 +796,46 @@ class CodeIndexingService:
             self.logger.error(
                 f"Failed to generate embeddings for chunk: {e}", exc_info=True
             )
+            return {"text": None, "code": None}
+
+    async def _generate_embedding_legacy_bridge(
+        self,
+        chunk: CodeChunk,
+        domain: EmbeddingDomain,
+    ) -> Dict[str, Optional[List[float]]]:
+        """
+        Fallback for embedding services with legacy interface.
+
+        SentenceTransformerEmbeddingService.generate_embedding() returns List[float]
+        (not Dict[str, List[float]]). This bridge converts the legacy format to
+        the expected format for CodeIndexingService.
+
+        Only used when embedding service doesn't support 'domain' parameter.
+        """
+        try:
+            # Try calling with text_type (SentenceTransformerEmbeddingService interface)
+            from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
+            text_type_map = {
+                EmbeddingDomain.TEXT: "passage",
+                EmbeddingDomain.CODE: "passage",
+            }
+            legacy_emb = await self.embedding_service.generate_embedding(
+                text=chunk.source_code,
+                text_type=text_type_map.get(domain, "passage")
+            )
+
+            # Convert List[float] → Dict[str, List[float]]
+            if isinstance(legacy_emb, list):
+                if domain == EmbeddingDomain.TEXT:
+                    return {"text": legacy_emb, "code": None}
+                else:
+                    return {"text": None, "code": legacy_emb}
+
+            # Already in dict format (shouldn't happen in this bridge)
+            return legacy_emb
+
+        except Exception as e:
+            self.logger.error(f"Legacy bridge failed: {e}")
             return {"text": None, "code": None}
 
     def _detect_language(self, file_path: str) -> Optional[str]:
