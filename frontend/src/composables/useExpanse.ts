@@ -47,7 +47,8 @@ export function useExpanse(options: { refreshInterval?: number } = {}) {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
-      data.value.memories = await response.json()
+      const result = await response.json()
+      data.value.memories = result.results || result || []
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       error.value = `memories: ${msg}`
@@ -61,7 +62,18 @@ export function useExpanse(options: { refreshInterval?: number } = {}) {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
-      data.value.codeChunks = await response.json()
+      const result = await response.json()
+      const chunks = result.recent_chunks || result.files || []
+      // Group by file
+      const grouped: Record<string, number> = {}
+      for (const c of chunks) {
+        const fname = c.file_path?.split('/').pop() || c.file || 'unknown'
+        grouped[fname] = (grouped[fname] || 0) + 1
+      }
+      data.value.codeChunks = Object.entries(grouped).map(([file, count]) => ({
+        file,
+        chunks: count
+      }))
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       error.value = `code-chunks: ${msg}`
