@@ -5,11 +5,15 @@ FastMCP-based Model Context Protocol server.
 Exposes MnemoLite's code intelligence features to LLMs like Claude.
 
 Usage:
-    # stdio transport (Claude Desktop)
+    # stdio transport (Claude Desktop, default)
     python -m api.mcp.server
 
-    # HTTP transport (Web clients)
+    # Streamable HTTP transport (Web clients, production)
     MCP_TRANSPORT=http python -m api.mcp.server
+    # → server listens on /mcp endpoint (default port 8002)
+
+    # Mount in existing FastAPI app
+    app.mount("/mcp", mcp.streamable_http_app())
 """
 
 import sys
@@ -1545,13 +1549,15 @@ def main():
 
         elif config.transport == "http":
             logger.info(
-                "mcp.server.run.http",
+                "mcp.server.run.streamable_http",
                 host=config.http_host,
                 port=config.http_port
             )
-            # TODO Story 23.8: HTTP transport implementation
-            logger.error("HTTP transport not yet implemented (Story 23.8)")
-            sys.exit(1)
+            # Streamable HTTP transport (MCP spec 2025-06-18)
+            # Replaces legacy SSE transport for production deployments.
+            # Clients connect via POST to /mcp endpoint.
+            # Supports both stateful (session-based) and stateless modes.
+            mcp.run(transport="streamable-http")
 
         else:
             logger.error(f"Unknown transport mode: {config.transport}")

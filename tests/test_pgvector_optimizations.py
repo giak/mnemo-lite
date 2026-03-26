@@ -476,6 +476,61 @@ class TestRegressionGuards:
 
 
 # ============================================================================
+# 8. STREAMABLE HTTP TRANSPORT
+# ============================================================================
+
+class TestStreamableHTTPTransport:
+    """
+    Verify Streamable HTTP transport is implemented.
+
+    MCP spec 2025-06-18: Streamable HTTP replaces legacy SSE.
+    """
+
+    def test_http_transport_calls_mcp_run(self):
+        """server.py must call mcp.run(transport='streamable-http') for HTTP mode."""
+        import inspect
+        from mnemo_mcp import server
+
+        source = inspect.getsource(server.main)
+
+        assert "streamable-http" in source, (
+            "server.py must use transport='streamable-http' for HTTP mode"
+        )
+
+    def test_http_transport_no_longer_exits_with_error(self):
+        """HTTP transport must not exit with 'not implemented' error."""
+        import inspect
+        from mnemo_mcp import server
+
+        source = inspect.getsource(server.main)
+
+        # Should NOT contain the old TODO error
+        assert "HTTP transport not yet implemented" not in source, (
+            "HTTP transport TODO must be replaced with actual implementation"
+        )
+        assert "Story 23.8" not in source or "streamable-http" in source, (
+            "Story 23.8 TODO must be resolved with streamable-http implementation"
+        )
+
+    def test_transport_config_supports_http(self):
+        """MCPConfig must accept 'http' as transport value."""
+        from mnemo_mcp.config import MCPConfig
+
+        config = MCPConfig(transport="http")
+        assert config.transport == "http"
+
+    def test_config_has_http_host_and_port(self):
+        """MCPConfig must have http_host and http_port settings."""
+        from mnemo_mcp.config import MCPConfig
+
+        config = MCPConfig()
+        assert hasattr(config, "http_host")
+        assert hasattr(config, "http_port")
+        assert config.http_host == "0.0.0.0"
+        assert config.http_port == 8002
+
+
+# ============================================================================
 # 7. ADAPTIVE RRF K
 # ============================================================================
 
