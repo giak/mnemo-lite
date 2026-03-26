@@ -43,6 +43,9 @@ export interface ExpanseData {
   stats: MemoriesStats | null
 }
 
+// Expanse-specific tags to track
+const EXPANSE_TAGS = ['sys:pattern', 'sys:drift', 'sys:extension', 'sys:history', 'sys:anchor', 'trace:fresh', 'sys:core']
+
 export function useExpanse(options: { refreshInterval?: number } = {}) {
   const { refreshInterval = 30000 } = options
 
@@ -59,14 +62,32 @@ export function useExpanse(options: { refreshInterval?: number } = {}) {
 
   let intervalId: number | null = null
 
+  // Fetch memories tagged with Expanse tags
   async function fetchMemories(): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/recent?limit=50`)
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      // Search for each Expanse tag and combine results
+      const allMemories: ExpanseMemory[] = []
+      const seen = new Set<string>()
+
+      for (const tag of EXPANSE_TAGS) {
+        const response = await fetch(`${API_BASE_URL}/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: tag, tags: [tag], limit: 10 })
+        })
+        if (!response.ok) continue
+        const result = await response.json()
+        for (const m of (result.results || [])) {
+          if (!seen.has(m.id)) {
+            seen.add(m.id)
+            allMemories.push(m)
+          }
+        }
       }
-      const result = await response.json()
-      data.value.memories = Array.isArray(result) ? result : (result.memories || result.results || [])
+
+      data.value.memories = allMemories.sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       error.value = `memories: ${msg}`
@@ -76,7 +97,7 @@ export function useExpanse(options: { refreshInterval?: number } = {}) {
 
   async function fetchCodeChunks(): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/code-chunks/recent?limit=20`)
+      const response = await fetch(`${API_BASE_URL}/code-chunks/recent?limit=50`)
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
