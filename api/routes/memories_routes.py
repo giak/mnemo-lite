@@ -12,7 +12,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from dependencies import get_db_engine
+from dependencies import get_db_engine, get_embedding_service
+from interfaces.services import EmbeddingServiceProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -594,7 +595,8 @@ class MemorySearchResponse(BaseModel):
 @router.post("/search", response_model=MemorySearchResponse)
 async def search_memories(
     request: MemorySearchRequest,
-    engine: AsyncEngine = Depends(get_db_engine)
+    engine: AsyncEngine = Depends(get_db_engine),
+    embedding_service: EmbeddingServiceProtocol = Depends(get_embedding_service)
 ) -> MemorySearchResponse:
     """
     Semantic search on memories.
@@ -606,7 +608,6 @@ async def search_memories(
         MemorySearchResponse with results, total count, and search metadata.
     """
     import time
-    from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
     from services.hybrid_memory_search_service import HybridMemorySearchService
     from mnemo_mcp.models.memory_models import MemoryFilters, MemoryType
 
@@ -624,9 +625,6 @@ async def search_memories(
                     status_code=400,
                     detail=f"Invalid memory_type. Valid types: {', '.join(valid_types)}"
                 )
-
-        # Get embedding service
-        embedding_service = SentenceTransformerEmbeddingService()
 
         # Generate query embedding
         query_embedding = await embedding_service.generate_embedding(request.query)
