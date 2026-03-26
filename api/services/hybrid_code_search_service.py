@@ -146,7 +146,7 @@ class HybridCodeSearchService:
         fusion_service: Optional[RRFFusionService] = None,
         redis_cache: Optional[RedisCache] = None,
         reranker_service: Optional["CrossEncoderRerankService"] = None,
-        default_enable_reranking: bool = False,
+        default_enable_reranking: bool = True,
     ):
         """
         Initialize hybrid search service.
@@ -158,7 +158,7 @@ class HybridCodeSearchService:
             fusion_service: Optional RRFFusionService (created if not provided)
             redis_cache: Optional RedisCache for L2 caching (EPIC-10 Story 10.2)
             reranker_service: Optional cross-encoder reranker (EPIC-24 P2)
-            default_enable_reranking: Enable cross-encoder reranking by default (False)
+            default_enable_reranking: Enable cross-encoder reranking by default (True)
         """
         self.engine = engine
 

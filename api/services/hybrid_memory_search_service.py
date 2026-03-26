@@ -150,7 +150,7 @@ class HybridMemorySearchService:
         reranker_service: Optional["CrossEncoderRerankService"] = None,
         default_lexical_weight: float = 0.5,
         default_vector_weight: float = 0.5,
-        default_enable_reranking: bool = False,
+        default_enable_reranking: bool = True,
     ):
         """
         Initialize hybrid memory search service.
@@ -161,7 +161,7 @@ class HybridMemorySearchService:
             reranker_service: Optional cross-encoder reranker (EPIC-24 P2)
             default_lexical_weight: Default weight for lexical results (0.5)
             default_vector_weight: Default weight for vector results (0.5)
-            default_enable_reranking: Enable cross-encoder reranking by default (False)
+            default_enable_reranking: Enable cross-encoder reranking by default (True)
         """
         self.engine = engine
         self.fusion = fusion_service or RRFFusionService(k=60)
