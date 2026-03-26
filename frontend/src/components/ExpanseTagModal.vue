@@ -2,8 +2,9 @@
 /**
  * Expanse Tag Detail Modal
  * Shows memories with a specific Expanse tag
+ * Draggable, transparent backdrop
  */
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 
 interface Props {
   tag: string | null
@@ -28,8 +29,17 @@ const memories = ref<TagMemory[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 
+// Drag state
+const modalRef = ref<HTMLElement | null>(null)
+const pos = ref({ x: 0, y: 0 })
+const dragStart = ref({ x: 0, y: 0, posX: 0, posY: 0 })
+const isDragging = ref(false)
+
+// Center modal when it opens
 watch(() => props.isOpen, async (isOpen) => {
   if (isOpen && props.tag) {
+    // Center on screen
+    pos.value = { x: 0, y: 0 }
     await fetchMemories()
   } else {
     memories.value = []
@@ -61,9 +71,41 @@ function handleClose() {
   emit('close')
 }
 
-function handleBackdropClick(event: MouseEvent) {
-  if (event.target === event.currentTarget) handleClose()
+// Drag handlers
+function onDragStart(e: MouseEvent) {
+  // Only drag from header
+  const target = e.target as HTMLElement
+  if (target.closest('button')) return
+
+  isDragging.value = true
+  dragStart.value = {
+    x: e.clientX,
+    y: e.clientY,
+    posX: pos.value.x,
+    posY: pos.value.y
+  }
+  window.addEventListener('mousemove', onDragMove)
+  window.addEventListener('mouseup', onDragEnd)
 }
+
+function onDragMove(e: MouseEvent) {
+  if (!isDragging.value) return
+  pos.value = {
+    x: dragStart.value.posX + (e.clientX - dragStart.value.x),
+    y: dragStart.value.posY + (e.clientY - dragStart.value.y)
+  }
+}
+
+function onDragEnd() {
+  isDragging.value = false
+  window.removeEventListener('mousemove', onDragMove)
+  window.removeEventListener('mouseup', onDragEnd)
+}
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', onDragMove)
+  window.removeEventListener('mouseup', onDragEnd)
+})
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-FR', {
@@ -74,20 +116,25 @@ function formatDate(iso: string): string {
 </script>
 
 <template>
-  <Transition name="modal-backdrop">
+  <Transition name="modal-fade">
     <div
       v-if="isOpen"
-      class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
-      @click="handleBackdropClick"
+      class="fixed inset-0 z-50 pointer-events-none"
     >
-      <Transition name="modal-content">
-        <div
-          v-if="isOpen"
-          class="scada-panel-dark rounded-lg shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col"
-          @click.stop
-        >
-          <!-- Header -->
-          <div class="flex items-center justify-between p-4 border-b-2 border-slate-700">
+      <div
+        ref="modalRef"
+        class="absolute top-1/2 left-1/2 w-full max-w-3xl max-h-[80vh] pointer-events-auto"
+        :style="{
+          transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`,
+          transition: isDragging ? 'none' : 'transform 0.15s ease-out'
+        }"
+      >
+        <div class="scada-panel-dark rounded-lg shadow-2xl overflow-hidden flex flex-col border-2 border-slate-600">
+          <!-- Header (draggable) -->
+          <div
+            class="flex items-center justify-between p-4 border-b-2 border-slate-700 cursor-move select-none"
+            @mousedown="onDragStart"
+          >
             <div class="flex items-center gap-3">
               <span class="scada-led scada-led-cyan"></span>
               <h2 class="text-lg font-bold text-cyan-400 font-mono uppercase tracking-wide">
@@ -157,17 +204,14 @@ function formatDate(iso: string): string {
             </button>
           </div>
         </div>
-      </Transition>
+      </div>
     </div>
   </Transition>
 </template>
 
 <style scoped>
-.modal-backdrop-enter-active, .modal-backdrop-leave-active { transition: opacity 0.3s ease; }
-.modal-backdrop-enter-from, .modal-backdrop-leave-to { opacity: 0; }
-.modal-content-enter-active, .modal-content-leave-active { transition: all 0.3s ease; }
-.modal-content-enter-from { opacity: 0; transform: scale(0.95); }
-.modal-content-leave-to { opacity: 0; transform: scale(0.95); }
+.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.2s ease; }
+.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
 .overflow-y-auto { scrollbar-width: thin; scrollbar-color: #475569 #1e293b; }
 .overflow-y-auto::-webkit-scrollbar { width: 8px; }
 .overflow-y-auto::-webkit-scrollbar-track { background: #1e293b; }
