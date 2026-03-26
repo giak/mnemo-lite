@@ -656,8 +656,12 @@ class CodeChunkRepository:
         )
 
         try:
-            db_result = await self._execute_query(query, params)
-            rows = db_result.mappings().all()
+            async with self.engine.connect() as conn:
+                # pgvector tuning: ef_search + iterative_scan (fixes overfiltering with filters)
+                await conn.execute(text("SET LOCAL hnsw.ef_search = 100"))
+                await conn.execute(text("SET LOCAL hnsw.iterative_scan = 'on'"))
+                db_result = await conn.execute(query, params)
+                rows = db_result.mappings().all()
             return [CodeChunkModel.from_db_record(row) for row in rows]
         except Exception as e:
             self.logger.error(f"Vector search failed: {e}", exc_info=True)

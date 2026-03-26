@@ -140,8 +140,10 @@ class VectorSearchService:
 
         where_clause = " AND ".join(where_clauses) if where_clauses else "TRUE"
 
-        # SET command (executed separately)
-        set_sql = f"SET LOCAL hnsw.ef_search = {self.ef_search}"
+        # SET commands (executed in same transaction)
+        # ef_search: controls accuracy/speed tradeoff (default 40, production 100)
+        # iterative_scan: fixes overfiltering when WHERE filters eliminate HNSW candidates (pgvector 0.8+)
+        set_sql = f"SET LOCAL hnsw.ef_search = {self.ef_search}; SET LOCAL hnsw.iterative_scan = 'on'"
 
         # Query with inner product operator (<#>) for performance
         # Note: Inner product ≈ cosine for normalized embeddings
