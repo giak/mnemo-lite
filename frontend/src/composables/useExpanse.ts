@@ -1,5 +1,5 @@
 /**
- * EPIC-26: Expanse Data Composable
+ * Expanse Data Composable
  * Vue 3 composable for fetching Expanse data from the MnemoLite API
  */
 
@@ -16,10 +16,31 @@ export interface ExpanseMemory {
   score?: number
 }
 
+export interface CodeChunk {
+  id: string
+  file_path: string
+  chunk_type: string
+  repository: string
+  language: string
+}
+
+export interface IndexingStats {
+  chunks_today: number
+  files_today: number
+}
+
+export interface MemoriesStats {
+  total: number
+  today: number
+  embedding_rate: number
+  last_activity: string
+}
+
 export interface ExpanseData {
   memories: ExpanseMemory[]
-  codeChunks: { file: string; chunks: number }[]
-  patternStats: Record<string, number>
+  codeChunks: CodeChunk[]
+  indexingStats: IndexingStats
+  stats: MemoriesStats | null
 }
 
 export function useExpanse(options: { refreshInterval?: number } = {}) {
@@ -28,7 +49,8 @@ export function useExpanse(options: { refreshInterval?: number } = {}) {
   const data = ref<ExpanseData>({
     memories: [],
     codeChunks: [],
-    patternStats: {}
+    indexingStats: { chunks_today: 0, files_today: 0 },
+    stats: null
   })
 
   const loading = ref(false)
@@ -39,16 +61,12 @@ export function useExpanse(options: { refreshInterval?: number } = {}) {
 
   async function fetchMemories(): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 50 })
-      })
+      const response = await fetch(`${API_BASE_URL}/recent?limit=50`)
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
       const result = await response.json()
-      data.value.memories = result.results || result || []
+      data.value.memories = Array.isArray(result) ? result : (result.memories || result.results || [])
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       error.value = `memories: ${msg}`
@@ -63,17 +81,8 @@ export function useExpanse(options: { refreshInterval?: number } = {}) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
       const result = await response.json()
-      const chunks = result.recent_chunks || result.files || []
-      // Group by file
-      const grouped: Record<string, number> = {}
-      for (const c of chunks) {
-        const fname = c.file_path?.split('/').pop() || c.file || 'unknown'
-        grouped[fname] = (grouped[fname] || 0) + 1
-      }
-      data.value.codeChunks = Object.entries(grouped).map(([file, count]) => ({
-        file,
-        chunks: count
-      }))
+      data.value.codeChunks = result.recent_chunks || []
+      data.value.indexingStats = result.indexing_stats || { chunks_today: 0, files_today: 0 }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       error.value = `code-chunks: ${msg}`
@@ -87,7 +96,7 @@ export function useExpanse(options: { refreshInterval?: number } = {}) {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
-      data.value.patternStats = await response.json()
+      data.value.stats = await response.json()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       error.value = `stats: ${msg}`
