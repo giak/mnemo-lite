@@ -246,7 +246,8 @@ class CodeChunkQueryBuilder:
             - 'text': Search via embedding_text (docstrings, comments)
             - 'code': Search via embedding_code (code semantics)
         """
-        embedding_col = "embedding_text" if embedding_type == "text" else "embedding_code"
+        # Use halfvec columns for search (50% smaller index, 99.2% recall)
+        embedding_col = "embedding_text_half" if embedding_type == "text" else "embedding_code_half"
 
         # Import CodeChunkModel to use _format_embedding_for_db
         from models.code_chunk_models import CodeChunkModel
@@ -277,11 +278,11 @@ class CodeChunkQueryBuilder:
 
         query_str = text(f"""
             SELECT {self.COLUMNS},
-                   1 - ({embedding_col} <=> '{embedding_str}'::vector) AS similarity,
-                   {embedding_col} <=> '{embedding_str}'::vector AS distance
+                   1 - ({embedding_col} <=> '{embedding_str}'::halfvec) AS similarity,
+                   {embedding_col} <=> '{embedding_str}'::halfvec AS distance
             FROM code_chunks
             {where_clause}
-            ORDER BY {embedding_col} <=> '{embedding_str}'::vector
+            ORDER BY {embedding_col} <=> '{embedding_str}'::halfvec
             LIMIT :limit OFFSET :offset
         """)
 

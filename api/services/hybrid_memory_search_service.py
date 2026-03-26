@@ -525,7 +525,7 @@ class HybridMemorySearchService:
         start_time = time.time()
 
         # Build WHERE clauses
-        where_clauses = ["deleted_at IS NULL", "embedding IS NOT NULL"]
+        where_clauses = ["deleted_at IS NULL", "embedding_half IS NOT NULL"]
         params: Dict[str, Any] = {"limit": limit}
 
         if filters:
@@ -544,8 +544,8 @@ class HybridMemorySearchService:
 
         where_sql = " AND ".join(where_clauses)
 
-        # Format vector for pgvector
-        vector_str = f"'[{','.join(map(str, embedding))}]'::vector"
+        # Format vector for pgvector halfvec
+        vector_str = f"'[{','.join(map(str, embedding))}]'::halfvec"
 
         query_sql = text(f"""
             SELECT
@@ -556,15 +556,18 @@ class HybridMemorySearchService:
                 tags,
                 created_at::text,
                 author,
-                (1 - (embedding <=> {vector_str})) as similarity_score
+                (1 - (embedding_half <=> {vector_str})) as similarity_score
             FROM memories
             WHERE {where_sql}
-            ORDER BY embedding <=> {vector_str}
+            ORDER BY embedding_half <=> {vector_str}
             LIMIT :limit
         """)
 
         try:
             async with self.engine.begin() as conn:
+                # pgvector tuning for halfvec search
+                await conn.execute(text("SET LOCAL hnsw.ef_search = 100"))
+                await conn.execute(text("SET LOCAL hnsw.iterative_scan = 'on'"))
                 result = await conn.execute(query_sql, params)
                 rows = result.fetchall()
 

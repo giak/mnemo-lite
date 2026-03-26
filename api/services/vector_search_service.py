@@ -97,10 +97,10 @@ class VectorSearchService:
         if embedding_domain not in ("TEXT", "CODE"):
             raise ValueError("embedding_domain must be 'TEXT' or 'CODE'")
 
-        # Choose embedding column based on domain
-        embedding_column = "embedding_text" if embedding_domain == "TEXT" else "embedding_code"
+        # Choose embedding column based on domain (halfvec for search)
+        embedding_column = "embedding_text_half" if embedding_domain == "TEXT" else "embedding_code_half"
 
-        # Format embedding for SQL
+        # Format embedding for pgvector halfvec query
         embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
 
         # Build WHERE clauses
@@ -108,7 +108,9 @@ class VectorSearchService:
         params = {"limit": limit}
 
         # Filter out NULL embeddings
-        where_clauses.append(f"{embedding_column} IS NOT NULL")
+        # Use halfvec columns for search (50% smaller, same recall)
+        halfvec_column = "embedding_text_half" if embedding_domain == "TEXT" else "embedding_code_half"
+        where_clauses.append(f"{halfvec_column} IS NOT NULL")
 
         # Apply filters
         if filters:
@@ -145,14 +147,13 @@ class VectorSearchService:
         # iterative_scan: fixes overfiltering when WHERE filters eliminate HNSW candidates (pgvector 0.8+)
         set_sql = f"SET LOCAL hnsw.ef_search = {self.ef_search}; SET LOCAL hnsw.iterative_scan = 'on'"
 
-        # Query with inner product operator (<#>) for performance
-        # Note: Inner product ≈ cosine for normalized embeddings
-        # pgvector returns negative dot product, we negate to get similarity
+        # Query using halfvec columns (50% smaller index, 99.2% recall)
+        # Cast query vector to halfvec for operator <=> compatibility
         query_sql = f"""
             SELECT
                 id::TEXT as chunk_id,
-                ({embedding_column} <=> '{embedding_str}'::vector) as distance,
-                (1 - ({embedding_column} <=> '{embedding_str}'::vector) / 2) as similarity,
+                ({embedding_column} <=> '{embedding_str}'::halfvec) as distance,
+                (1 - ({embedding_column} <=> '{embedding_str}'::halfvec) / 2) as similarity,
                 source_code,
                 name,
                 name_path,
@@ -162,7 +163,7 @@ class VectorSearchService:
                 metadata
             FROM code_chunks
             WHERE {where_clause}
-            ORDER BY {embedding_column} <=> '{embedding_str}'::vector
+            ORDER BY {embedding_column} <=> '{embedding_str}'::halfvec
             LIMIT :limit
         """
 

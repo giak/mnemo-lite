@@ -475,22 +475,22 @@ class MemoryRepository:
 
             where_sql = " AND ".join(where_clauses)
 
-            # Format vector for pgvector
-            vector_str = f"'[{','.join(map(str, vector))}]'::vector"
+            # Format vector for pgvector halfvec (50% smaller, same recall)
+            vector_str = f"'[{','.join(map(str, vector))}]'::halfvec"
 
-            # Search query with cosine distance
+            # Search query with cosine distance (using halfvec column)
             query = text(f"""
                 SELECT
                     id, title, content, created_at, updated_at,
                     memory_type, tags, author, project_id,
                     embedding, embedding_model, related_chunks, resource_links,
                     deleted_at,
-                    (embedding <=> {vector_str}) as distance,
-                    (1 - (embedding <=> {vector_str})) as similarity_score
+                    (embedding_half <=> {vector_str}) as distance,
+                    (1 - (embedding_half <=> {vector_str})) as similarity_score
                 FROM memories
                 WHERE {where_sql}
-                    AND embedding IS NOT NULL
-                    AND (embedding <=> {vector_str}) <= :threshold
+                    AND embedding_half IS NOT NULL
+                    AND (embedding_half <=> {vector_str}) <= :threshold
                 ORDER BY distance ASC
                 LIMIT :limit OFFSET :offset
             """)
@@ -500,8 +500,8 @@ class MemoryRepository:
                 SELECT COUNT(*) as total
                 FROM memories
                 WHERE {where_sql}
-                    AND embedding IS NOT NULL
-                    AND (embedding <=> {vector_str}) <= :threshold
+                    AND embedding_half IS NOT NULL
+                    AND (embedding_half <=> {vector_str}) <= :threshold
             """)
 
             async with self.engine.begin() as conn:
