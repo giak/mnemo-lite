@@ -148,9 +148,11 @@ class HybridMemorySearchService:
         engine: AsyncEngine,
         fusion_service: Optional[RRFFusionService] = None,
         reranker_service: Optional["CrossEncoderRerankService"] = None,
+        decay_service: Optional["MemoryDecayService"] = None,
         default_lexical_weight: float = 0.5,
         default_vector_weight: float = 0.5,
         default_enable_reranking: bool = True,
+        default_enable_decay: bool = True,
     ):
         """
         Initialize hybrid memory search service.
@@ -159,22 +161,27 @@ class HybridMemorySearchService:
             engine: SQLAlchemy async engine
             fusion_service: Optional RRF fusion service (created if not provided)
             reranker_service: Optional cross-encoder reranker (EPIC-24 P2)
+            decay_service: Optional temporal decay service
             default_lexical_weight: Default weight for lexical results (0.5)
             default_vector_weight: Default weight for vector results (0.5)
             default_enable_reranking: Enable cross-encoder reranking by default (True)
+            default_enable_decay: Enable temporal decay scoring by default (True)
         """
         self.engine = engine
         self.fusion = fusion_service or RRFFusionService(k=60)
         self.reranker = reranker_service  # Lazy-loaded on first use if None
+        self.decay_service = decay_service  # Lazy-loaded on first use if None
         self.default_lexical_weight = default_lexical_weight
         self.default_vector_weight = default_vector_weight
         self.default_enable_reranking = default_enable_reranking
+        self.default_enable_decay = default_enable_decay
 
         logger.info(
             "HybridMemorySearchService initialized",
             lexical_weight=default_lexical_weight,
             vector_weight=default_vector_weight,
             reranking_enabled=default_enable_reranking,
+            decay_enabled=default_enable_decay,
         )
 
     async def search(
@@ -355,7 +362,50 @@ class HybridMemorySearchService:
                 )
                 should_rerank = False
 
-        # Apply offset and limit (after reranking)
+        # Temporal decay scoring (post-reranking, pre-offset)
+        decay_applied = False
+        if self.default_enable_decay and fused_results:
+            try:
+                decay_start = time.time()
+                await self._ensure_decay_loaded()
+
+                # Apply decay to all fused results using their original created_at
+                for fused in fused_results:
+                    original = fused.original_result
+                    time_str = getattr(original, "created_at", None)
+                    if time_str:
+                        from datetime import datetime, timezone
+                        try:
+                            if isinstance(time_str, str):
+                                created_at = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+                            else:
+                                created_at = time_str
+                            decayed = self.decay_service.apply_decay(
+                                relevance_score=fused.rrf_score,
+                                created_at=created_at,
+                            )
+                            fused.rrf_score = decayed
+                            decay_applied = True
+                        except (ValueError, AttributeError):
+                            pass
+
+                # Re-sort by decayed score
+                if decay_applied:
+                    fused_results.sort(key=lambda f: f.rrf_score, reverse=True)
+                    # Update ranks
+                    for i, fused in enumerate(fused_results):
+                        fused.rank = i + 1
+
+                decay_time = (time.time() - decay_start) * 1000
+                logger.info(
+                    "Temporal decay applied",
+                    results=len(fused_results),
+                    time_ms=f"{decay_time:.2f}",
+                )
+            except Exception as e:
+                logger.warning("Decay scoring failed, skipping", error=str(e))
+
+        # Apply offset and limit (after reranking + decay)
         fused_results = fused_results[offset:offset + limit]
 
         # Build hybrid results
@@ -406,6 +456,12 @@ class HybridMemorySearchService:
         if self.reranker is None:
             from services.cross_encoder_rerank_service import CrossEncoderRerankService
             self.reranker = CrossEncoderRerankService()
+
+    async def _ensure_decay_loaded(self):
+        """Lazy-load the decay service on first use."""
+        if self.decay_service is None:
+            from services.memory_decay_service import MemoryDecayService
+            self.decay_service = MemoryDecayService()
 
     async def _lexical_search(
         self,

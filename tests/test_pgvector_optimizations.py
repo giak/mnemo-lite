@@ -531,6 +531,104 @@ class TestStreamableHTTPTransport:
 
 
 # ============================================================================
+# 9. MEMORY DECAY SCORING
+# ============================================================================
+
+class TestMemoryDecayService:
+    """
+    Verify temporal decay scoring for memory search results.
+
+    Decay formula: final_score = relevance_score × exp(-decay_rate × age_days)
+    """
+
+    def test_decay_at_zero_age_is_one(self):
+        """Decay factor at age=0 should be 1.0 (no decay)."""
+        from services.memory_decay_service import MemoryDecayService
+
+        service = MemoryDecayService()
+        assert service.compute_decay(age_days=0) == 1.0
+
+    def test_decay_decreases_with_age(self):
+        """Decay factor should decrease as age increases."""
+        from services.memory_decay_service import MemoryDecayService
+
+        service = MemoryDecayService(decay_rate=0.01)
+        d0 = service.compute_decay(age_days=0)
+        d7 = service.compute_decay(age_days=7)
+        d70 = service.compute_decay(age_days=70)
+        d365 = service.compute_decay(age_days=365)
+
+        assert d0 > d7 > d70 > d365
+
+    def test_half_life_at_rate_001(self):
+        """At decay_rate=0.01, half-life should be ~70 days."""
+        from services.memory_decay_service import MemoryDecayService
+
+        service = MemoryDecayService(decay_rate=0.01)
+        half_life = service.half_life(0.01)
+        assert 65 < half_life < 75, f"Half-life should be ~70 days, got {half_life}"
+
+    def test_decay_presets_cover_expanse_tags(self):
+        """Decay presets must cover all Expanse sys: tags."""
+        from services.memory_decay_service import DECAY_PRESETS
+
+        required_tags = ["sys:core", "sys:anchor", "sys:pattern", "sys:extension",
+                         "sys:history", "sys:drift"]
+        for tag in required_tags:
+            assert tag in DECAY_PRESETS, f"Missing decay preset for {tag}"
+
+    def test_sys_core_decays_slowly(self):
+        """sys:core should decay much slower than sys:history."""
+        from services.memory_decay_service import DECAY_PRESETS
+
+        core_rate = DECAY_PRESETS["sys:core"]
+        history_rate = DECAY_PRESETS["sys:history"]
+        assert core_rate < history_rate, (
+            f"sys:core ({core_rate}) should decay slower than sys:history ({history_rate})"
+        )
+
+    def test_apply_decay_to_score(self):
+        """apply_decay should reduce score based on age."""
+        from services.memory_decay_service import MemoryDecayService
+        from datetime import datetime, timezone, timedelta
+
+        service = MemoryDecayService(decay_rate=0.01)
+        now = datetime.now(timezone.utc)
+
+        # Recent memory (1 day old)
+        recent = now - timedelta(days=1)
+        score_recent = service.apply_decay(1.0, recent, now=now)
+
+        # Old memory (100 days old)
+        old = now - timedelta(days=100)
+        score_old = service.apply_decay(1.0, old, now=now)
+
+        assert score_recent > score_old
+        assert abs(score_recent - 0.99) < 0.01  # ~exp(-0.01*1) = 0.99
+        assert score_old < 0.5  # exp(-0.01*100) = 0.368
+
+    def test_decay_disabled_with_zero_rate(self):
+        """decay_rate=0 should return 1.0 (no decay)."""
+        from services.memory_decay_service import MemoryDecayService
+
+        service = MemoryDecayService(decay_rate=0)
+        assert service.compute_decay(age_days=365, decay_rate=0) == 1.0
+
+    def test_decay_integrated_in_memory_search(self):
+        """HybridMemorySearchService must have decay support."""
+        import inspect
+        from services.hybrid_memory_search_service import HybridMemorySearchService
+
+        init_src = inspect.getsource(HybridMemorySearchService.__init__)
+        assert "decay_service" in init_src, (
+            "HybridMemorySearchService must accept decay_service parameter"
+        )
+        assert "default_enable_decay" in init_src, (
+            "HybridMemorySearchService must have default_enable_decay parameter"
+        )
+
+
+# ============================================================================
 # 7. ADAPTIVE RRF K
 # ============================================================================
 
