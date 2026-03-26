@@ -45,9 +45,9 @@ class IndexStatusResource(BaseMCPComponent):
         """
         try:
             # Check services
-            redis = self.services.get("redis")
-            engine = self.services.get("sqlalchemy_engine")
-            chunk_cache = self.services.get("chunk_cache")
+            redis = self._services.get("redis")
+            engine = self._services.get("engine")
+            chunk_cache = self._services.get("chunk_cache")
 
             if not engine:
                 return {

@@ -46,6 +46,9 @@ torch==2.5.1+cpu
 torchvision==0.20.1+cpu
 
 # Embeddings (installs after torch CPU to avoid CUDA version)
+# Pinned: transformers 4.51.3 required by jina-embeddings-v2-base-code
+# (find_pruneable_heads_and_indices removed in transformers 5.x)
+transformers==4.51.3
 sentence-transformers>=2.7.0
 numpy==1.26.3
 einops>=0.7.0

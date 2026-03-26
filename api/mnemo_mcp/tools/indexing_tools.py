@@ -101,21 +101,9 @@ class IndexProjectTool(BaseMCPComponent):
 
             logger.info(f"Found {len(files)} code files in {project_path}")
 
-            # Step 2: Elicit confirmation if many files
-            if len(files) > 100 and ctx:
-                response = await ctx.elicit(
-                    prompt=(
-                        f"Index {len(files)} files in repository '{repository}'? "
-                        f"This may take several minutes and will generate embeddings for all code chunks."
-                    ),
-                    schema={"type": "string", "enum": ["yes", "no"]}
-                )
-
-                if response.value == "no":
-                    return {
-                        "success": False,
-                        "message": "Indexing cancelled by user"
-                    }
+            # Step 2: Log if many files (elicitation skipped — FastMCP API changed)
+            if len(files) > 100:
+                logger.warning(f"Indexing {len(files)} files — large project, proceeding without confirmation")
 
             # Step 3: Acquire distributed lock (prevent concurrent indexing)
             lock_key = f"indexing:lock:{repository}"

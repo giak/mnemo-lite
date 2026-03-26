@@ -104,7 +104,10 @@ class RedisCache:
                 decode_responses=True,
                 max_connections=20,
             )
-            await self.client.ping()
+            # EPIC-12: Robust connection test (handles both sync and async clients)
+            ping_res = self.client.ping()
+            if hasattr(ping_res, '__await__'):
+                await ping_res
             logger.info("Redis L2 cache connected", url=self.redis_url)
         except Exception as e:
             logger.error("Redis connection failed - continuing without L2 cache", error=str(e))

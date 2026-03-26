@@ -131,6 +131,10 @@ class ProjectScanner:
                 if not file_path.is_file():
                     continue
 
+                # Skip dot-prefixed directories (.git, .kilocode, .claude, etc.)
+                if any(part.startswith('.') for part in file_path.relative_to(project_root).parts):
+                    continue
+
                 # Check if gitignored
                 if gitignore_spec and self._is_gitignored(file_path, project_root, gitignore_spec):
                     skipped_gitignore += 1
