@@ -3,8 +3,9 @@
  * Expanse Dashboard - SCADA Industrial Style
  * 3-column dashboard showing MCP data: memories, code chunks, pattern stats
  */
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useExpanse } from '@/composables/useExpanse'
+import ExpanseTagModal from '@/components/ExpanseTagModal.vue'
 
 const { data, loading, error, lastUpdated, refresh } = useExpanse({
   refreshInterval: 30000
@@ -17,6 +18,20 @@ const ledColor: Record<string, string> = {
   conversation: 'cyan',
   note: 'cyan',
   task: 'green'
+}
+
+// Modal state
+const selectedTag = ref<string | null>(null)
+const isModalOpen = ref(false)
+
+function openTagModal(tag: string) {
+  selectedTag.value = tag
+  isModalOpen.value = true
+}
+
+function closeTagModal() {
+  isModalOpen.value = false
+  setTimeout(() => { selectedTag.value = null }, 300)
 }
 
 // Group code chunks by file name
@@ -162,7 +177,8 @@ const formattedTime = computed(() => {
           <div
             v-for="tag in expanseTags"
             :key="tag"
-            class="bg-slate-800/50 border border-slate-700 rounded px-3 py-2 flex items-center justify-between"
+            class="bg-slate-800/50 border border-slate-700 rounded px-3 py-2 flex items-center justify-between cursor-pointer hover:border-cyan-600 transition-colors"
+            @click="openTagModal(tag)"
           >
             <span class="font-mono text-sm text-slate-300 uppercase">{{ tag }}</span>
             <span class="scada-data text-cyan-400 text-sm font-mono">
@@ -192,5 +208,12 @@ const formattedTime = computed(() => {
         </div>
       </div>
     </div>
+
+    <!-- Tag Detail Modal -->
+    <ExpanseTagModal
+      :tag="selectedTag"
+      :is-open="isModalOpen"
+      @close="closeTagModal"
+    />
   </div>
 </template>
