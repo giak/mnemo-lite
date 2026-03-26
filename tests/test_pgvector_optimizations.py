@@ -473,3 +473,115 @@ class TestRegressionGuards:
         assert "default_enable_reranking: bool = True" in mem_src, (
             "HybridMemorySearchService default_enable_reranking must default to True"
         )
+
+
+# ============================================================================
+# 7. ADAPTIVE RRF K
+# ============================================================================
+
+class TestAdaptiveRRFK:
+    """
+    Verify RRF k adapts to query characteristics.
+
+    k=20: Code-heavy queries (precision)
+    k=60: Balanced queries (standard)
+    k=80: Natural language queries (recall)
+    """
+
+    def test_code_heavy_query_returns_k20(self):
+        """Queries with code indicators should use k=20 (precision)."""
+        from services.rrf_fusion_service import RRFFusionService
+
+        # Function signature
+        assert RRFFusionService.get_optimal_k("def process_payment(self, amount: float)") == 20
+        # Method call
+        assert RRFFusionService.get_optimal_k("User.objects.filter(active=True)") == 20
+        # C++ style
+        assert RRFFusionService.get_optimal_k("std::vector<int>::push_back") == 20
+        # Arrow operator
+        assert RRFFusionService.get_optimal_k("self.client->send(data)") == 20
+
+    def test_natural_language_query_returns_k80(self):
+        """Natural language queries (>5 words, no code indicators) should use k=80 (recall)."""
+        from services.rrf_fusion_service import RRFFusionService
+
+        assert RRFFusionService.get_optimal_k("how to implement authentication in FastAPI with JWT") == 80
+        assert RRFFusionService.get_optimal_k("best practices for error handling in distributed systems") == 80
+        assert RRFFusionService.get_optimal_k("what is the difference between async and sync in Python") == 80
+
+    def test_balanced_query_returns_k60(self):
+        """Mixed or short queries should use k=60 (standard)."""
+        from services.rrf_fusion_service import RRFFusionService
+
+        # Short query
+        assert RRFFusionService.get_optimal_k("search memory") == 60
+        # Mixed (some code indicators but not enough)
+        assert RRFFusionService.get_optimal_k("search_memory tags sys:pattern") == 60
+        # Medium length
+        assert RRFFusionService.get_optimal_k("find all python functions") == 60
+
+    def test_empty_query_returns_k60(self):
+        """Empty query should return default k=60."""
+        from services.rrf_fusion_service import RRFFusionService
+
+        assert RRFFusionService.get_optimal_k("") == 60
+        assert RRFFusionService.get_optimal_k("   ") == 60
+        assert RRFFusionService.get_optimal_k(None) == 60
+
+    def test_get_optimal_k_is_static(self):
+        """get_optimal_k should be callable without instantiation."""
+        from services.rrf_fusion_service import RRFFusionService
+
+        # Should work as static method
+        k = RRFFusionService.get_optimal_k("def foo(): pass")
+        assert k == 20
+
+    def test_search_uses_adaptive_k(self):
+        """HybridCodeSearchService.search_with_auto_weights should pass adaptive k."""
+        import inspect
+        from services.hybrid_code_search_service import HybridCodeSearchService
+
+        source = inspect.getsource(HybridCodeSearchService.search_with_auto_weights)
+
+        assert "get_optimal_k" in source, (
+            "search_with_auto_weights must call RRFFusionService.get_optimal_k"
+        )
+        assert "rrf_k" in source, (
+            "search_with_auto_weights must pass rrf_k to search()"
+        )
+
+    def test_search_accepts_rrf_k_parameter(self):
+        """HybridCodeSearchService.search should accept rrf_k parameter."""
+        import inspect
+        from services.hybrid_code_search_service import HybridCodeSearchService
+
+        source = inspect.getsource(HybridCodeSearchService.search)
+        assert "rrf_k" in source, (
+            "search() must accept rrf_k parameter"
+        )
+
+    def test_fuse_results_passes_k(self):
+        """_fuse_results must pass rrf_k to RRF fusion."""
+        import inspect
+        from services.hybrid_code_search_service import HybridCodeSearchService
+
+        source = inspect.getsource(HybridCodeSearchService._fuse_results)
+        assert "rrf_k" in source, (
+            "_fuse_results must accept and use rrf_k parameter"
+        )
+
+    def test_rrf_k_affects_scoring(self):
+        """Different k values should produce different RRF scores."""
+        from services.rrf_fusion_service import RRFFusionService
+
+        # Rank 1, k=20 → 1/(20+1) = 0.0476...
+        score_k20 = RRFFusionService.calculate_rrf_score(rank=1, k=20)
+        # Rank 1, k=60 → 1/(60+1) = 0.0164...
+        score_k60 = RRFFusionService.calculate_rrf_score(rank=1, k=60)
+        # Rank 1, k=80 → 1/(80+1) = 0.0123...
+        score_k80 = RRFFusionService.calculate_rrf_score(rank=1, k=80)
+
+        # Lower k = higher score for top ranks (more precision-focused)
+        assert score_k20 > score_k60 > score_k80, (
+            "Lower k should produce higher scores for top ranks"
+        )

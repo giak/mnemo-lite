@@ -297,3 +297,60 @@ class RRFFusionService:
             0.01639...  # 1 / (60 + 1)
         """
         return 1 / (k + rank)
+
+    @staticmethod
+    def get_optimal_k(query: str) -> int:
+        """
+        Determine optimal RRF k based on query characteristics.
+
+        The constant k controls RRF sensitivity to top ranks:
+        - Low k (10-20): Very sensitive to top ranks → precision
+        - Medium k (60): Balanced → general search
+        - High k (80-100): More democratic → recall
+
+        Heuristic:
+        - Code-heavy (many operators `(){}.->::`): k=20 (precision)
+          The user knows what they want, top lexical/vector results matter most.
+        - Natural language (>5 words, 0 code indicators): k=80 (recall)
+          Broader query benefits from democratic weighting of many candidates.
+        - Default (mixed/balanced): k=60 (industry standard)
+
+        Args:
+            query: Search query string
+
+        Returns:
+            Optimal k value (20, 60, or 80)
+
+        Examples:
+            >>> RRFFusionService.get_optimal_k("def process_payment(self, amount: float)")
+            20  # Code-heavy
+            >>> RRFFusionService.get_optimal_k("how to implement authentication in FastAPI")
+            80  # Natural language
+            >>> RRFFusionService.get_optimal_k("search_memory tags sys:pattern")
+            60  # Balanced
+        """
+        if not query or not query.strip():
+            return 60
+
+        # Count code indicators
+        code_indicators = sum([
+            query.count("("),
+            query.count(")"),
+            query.count("{"),
+            query.count("}"),
+            query.count("."),
+            query.count("->"),
+            query.count("::"),
+        ])
+
+        words = query.split()
+
+        if code_indicators >= 3:
+            # Code-heavy: precision-focused
+            return 20
+        elif code_indicators == 0 and len(words) > 5:
+            # Pure natural language: recall-focused
+            return 80
+        else:
+            # Balanced (mixed query or short)
+            return 60

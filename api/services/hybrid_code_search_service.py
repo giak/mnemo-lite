@@ -206,6 +206,7 @@ class HybridCodeSearchService:
         vector_weight: float = 0.6,
         candidate_pool_size: int = 100,
         rerank_pool_size: int = 30,
+        rrf_k: Optional[int] = None,
     ) -> HybridSearchResponse:
         """
         Execute hybrid search pipeline.
@@ -320,6 +321,7 @@ class HybridCodeSearchService:
             vector_results=vector_results,
             lexical_weight=lexical_weight,
             vector_weight=vector_weight,
+            rrf_k=rrf_k,
         )
         fusion_time = (time.time() - fusion_start) * 1000
 
@@ -482,12 +484,16 @@ class HybridCodeSearchService:
         vector_results: Optional[List[VectorSearchResult]],
         lexical_weight: float,
         vector_weight: float,
+        rrf_k: Optional[int] = None,
     ) -> List[FusedResult]:
         """
         Fuse lexical and vector results using RRF.
 
         Uses weighted RRF fusion if both result lists provided,
         otherwise returns single result list (no fusion needed).
+
+        Args:
+            rrf_k: Optional RRF k override. If None, uses service default (60).
         """
         # Prepare weighted results for RRF
         weighted_results = []
@@ -501,19 +507,22 @@ class HybridCodeSearchService:
         # If only one method used, no fusion needed
         if len(weighted_results) == 1:
             results_list, weight = weighted_results[0]
+            k = rrf_k or 60
             # Convert to FusedResult format
             return [
                 FusedResult(
                     chunk_id=r.chunk_id,
-                    rrf_score=1.0 / (60 + r.rank),  # Single method RRF score
+                    rrf_score=1.0 / (k + r.rank),
                     rank=r.rank,
                     original_result=r,
-                    contribution={"single_method": 1.0 / (60 + r.rank)},
+                    contribution={"single_method": 1.0 / (k + r.rank)},
                 )
                 for r in results_list
             ]
 
-        # Both methods: use weighted RRF fusion
+        # Both methods: use weighted RRF fusion with optional k override
+        if rrf_k is not None:
+            return self.fusion.fuse_with_weights(weighted_results, k=rrf_k)
         return self.fusion.fuse_with_weights(weighted_results)
 
     async def _ensure_reranker_loaded(self):
@@ -654,6 +663,10 @@ class HybridCodeSearchService:
             lexical_weight, vector_weight = 0.4, 0.6
             logger.info(f"Auto-weights (balanced): lexical=0.4, vector=0.6")
 
+        # Adaptive RRF k based on query type
+        optimal_k = RRFFusionService.get_optimal_k(query)
+        logger.info(f"Auto-RRF k: {optimal_k} for query type")
+
         return await self.search(
             query=query,
             embedding_text=embedding_text,
@@ -662,6 +675,7 @@ class HybridCodeSearchService:
             top_k=top_k,
             lexical_weight=lexical_weight,
             vector_weight=vector_weight,
+            rrf_k=optimal_k,
         )
 
     def _serialize_search_response(self, response: HybridSearchResponse) -> dict:
