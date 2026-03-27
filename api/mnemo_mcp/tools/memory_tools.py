@@ -1073,6 +1073,149 @@ class MarkConsumedTool(BaseMCPComponent):
             raise RuntimeError(f"Failed to mark memories consumed: {e}") from e
 
 
+class SystemSnapshotTool(BaseMCPComponent):
+    """
+    Tool for getting a system snapshot in a single call.
+
+    Replaces 4 sequential boot queries with parallel fetches.
+    Returns context groups + health metrics for agent boot.
+
+    Usage (Expanse boot):
+        snapshot = get_system_snapshot(repository="expanse")
+        → Returns: core, patterns, extensions, profile, project
+                    + health (drifts, traces, candidates, history_count)
+    """
+
+    def get_name(self) -> str:
+        return "get_system_snapshot"
+
+    async def execute(self, ctx: Context, **params) -> dict:
+        """
+        Get system snapshot in parallel queries.
+
+        Args:
+            repository: Repository/project name (default: "expanse")
+            context_budget: Max tokens for context (default: 500)
+
+        Returns:
+            Dict with: core, patterns, extensions, profile, project, health
+        """
+        repository = params.get("repository", "expanse")
+        context_budget = params.get("context_budget", 500)
+
+        try:
+            engine = self._services.get("engine")
+            if not engine:
+                raise RuntimeError("Database engine not available")
+
+            import asyncio
+            from sqlalchemy import text
+
+            async def fetch_group(conn, query_tag, limit):
+                """Fetch memories matching a tag group."""
+                try:
+                    result = await conn.execute(
+                        text("""
+                            SELECT id::text, title, memory_type, tags, created_at::text
+                            FROM memories
+                            WHERE (:tag = ANY(tags) OR :tag2 = ANY(tags))
+                              AND deleted_at IS NULL
+                            ORDER BY created_at DESC
+                            LIMIT :limit
+                        """),
+                        {"tag": query_tag, "tag2": query_tag, "limit": limit}
+                    )
+                    rows = result.fetchall()
+                    return [
+                        {"id": r[0], "title": r[1], "type": r[2], "tags": r[3], "created_at": r[4]}
+                        for r in rows
+                    ]
+                except Exception:
+                    return []
+
+            async def fetch_health(conn):
+                """Fetch health metrics in one query."""
+                try:
+                    result = await conn.execute(text("""
+                        SELECT
+                            (SELECT COUNT(*) FROM memories WHERE 'sys:history' = ANY(tags) AND deleted_at IS NULL) as history_count,
+                            (SELECT COUNT(*) FROM memories WHERE 'sys:drift' = ANY(tags) AND consumed_at IS NULL AND deleted_at IS NULL) as fresh_drifts,
+                            (SELECT COUNT(*) FROM memories WHERE tags @> ARRAY['trace:fresh'] AND consumed_at IS NULL AND deleted_at IS NULL) as fresh_traces,
+                            (SELECT COUNT(*) FROM memories WHERE 'sys:pattern:candidate' = ANY(tags) AND consumed_at IS NULL AND deleted_at IS NULL) as candidates_pending,
+                            (SELECT COUNT(*) FROM memories WHERE deleted_at IS NULL) as total_memories
+                    """))
+                    row = result.fetchone()
+                    if row:
+                        return {
+                            "history_count": row[0],
+                            "needs_consolidation": row[0] > 20,
+                            "fresh_drifts": row[1],
+                            "fresh_traces": row[2],
+                            "candidates_pending": row[3],
+                            "total_memories": row[4],
+                        }
+                    return {"history_count": 0, "needs_consolidation": False, "fresh_drifts": 0, "fresh_traces": 0, "candidates_pending": 0, "total_memories": 0}
+                except Exception as e:
+                    return {"error": str(e)}
+
+            # Run all queries in parallel (4 concurrent)
+            async with engine.connect() as conn:
+                core_task = fetch_group(conn, "sys:core", 20)
+                anchor_task = fetch_group(conn, "sys:anchor", 20)
+                pattern_task = fetch_group(conn, "sys:pattern", 20)
+                extension_task = fetch_group(conn, "sys:extension", 10)
+                profile_task = fetch_group(conn, "sys:user:profile", 5)
+                project_task = fetch_group(conn, f"sys:project:{repository}", 1)
+                health_task = fetch_health(conn)
+
+                core, anchors, patterns, extensions, profile, project, health = await asyncio.gather(
+                    core_task, anchor_task, pattern_task, extension_task,
+                    profile_task, project_task, health_task
+                )
+
+            # Merge core + anchors (deduplicate)
+            seen_ids = set()
+            merged_core = []
+            for m in core + anchors:
+                if m["id"] not in seen_ids:
+                    seen_ids.add(m["id"])
+                    merged_core.append(m)
+
+            # Filter patterns to exclude candidates (sealed only)
+            sealed_patterns = [p for p in patterns if "sys:pattern:candidate" not in (p.get("tags") or [])]
+            candidates = [p for p in patterns if "sys:pattern:candidate" in (p.get("tags") or [])]
+
+            result = {
+                "core": merged_core,
+                "patterns": sealed_patterns[:20],
+                "candidates": candidates[:5],
+                "extensions": extensions,
+                "profile": profile,
+                "project": project,
+                "health": health,
+                "budget": {
+                    "allocated": context_budget,
+                    "items_returned": len(merged_core) + len(sealed_patterns) + len(extensions) + len(profile),
+                }
+            }
+
+            logger.info(
+                "system.snapshot",
+                repository=repository,
+                core=len(merged_core),
+                patterns=len(sealed_patterns),
+                extensions=len(extensions),
+                drifts=health.get("fresh_drifts", 0),
+                traces=health.get("fresh_traces", 0),
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error("Failed to get system snapshot", error=str(e))
+            raise RuntimeError(f"Failed to get system snapshot: {e}") from e
+
+
 
 # Singleton instances for registration
 write_memory_tool = WriteMemoryTool()
@@ -1082,4 +1225,5 @@ search_memory_tool = SearchMemoryTool()
 read_memory_tool = ReadMemoryTool()
 consolidate_memory_tool = ConsolidateMemoryTool()
 mark_consumed_tool = MarkConsumedTool()
+system_snapshot_tool = SystemSnapshotTool()
 

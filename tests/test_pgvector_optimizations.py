@@ -1067,3 +1067,38 @@ class TestConsumptionTracking:
             pytest.skip("Migration path not accessible")
         found = any("c4d7f2a8e102_consumption" in f for f in os.listdir(versions_dir))
         assert found, "Consumption tracking migration not found"
+
+
+# ============================================================================
+# 15. SYSTEM SNAPSHOT
+# ============================================================================
+
+class TestSystemSnapshot:
+    """Verify system snapshot tool for agent boot."""
+
+    def test_snapshot_tool_exists(self):
+        from mnemo_mcp.tools.memory_tools import SystemSnapshotTool
+        tool = SystemSnapshotTool()
+        assert tool.get_name() == "get_system_snapshot"
+
+    def test_snapshot_registered_in_server(self):
+        import inspect
+        from mnemo_mcp import server
+        source = inspect.getsource(server.register_memory_components)
+        assert "get_system_snapshot" in source
+
+    def test_snapshot_returns_health_metrics(self):
+        """Snapshot must include health metrics (drifts, traces, consolidation)."""
+        import inspect
+        from mnemo_mcp.tools.memory_tools import SystemSnapshotTool
+        source = inspect.getsource(SystemSnapshotTool.execute)
+        assert "fresh_drifts" in source
+        assert "fresh_traces" in source
+        assert "needs_consolidation" in source
+
+    def test_snapshot_parallel_queries(self):
+        """Snapshot must use asyncio.gather for parallel queries."""
+        import inspect
+        from mnemo_mcp.tools.memory_tools import SystemSnapshotTool
+        source = inspect.getsource(SystemSnapshotTool.execute)
+        assert "asyncio.gather" in source

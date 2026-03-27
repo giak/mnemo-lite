@@ -346,6 +346,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         read_memory_tool,
         consolidate_memory_tool,
         mark_consumed_tool,
+        system_snapshot_tool,
     )
     from mnemo_mcp.resources.memory_resources import (
         get_memory_resource,
@@ -391,7 +392,8 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     search_memory_tool.inject_services(services)
     read_memory_tool.inject_services(services)
     consolidate_memory_tool.inject_services(services)
-    mark_consumed_tool.inject_services(services)
+    mark_consumed_tool.inject_services
+    system_snapshot_tool.inject_services(services)
     get_memory_resource.inject_services(services)
     list_memories_resource.inject_services(services)
     search_memories_resource.inject_services(services)
@@ -422,7 +424,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         components=[
             "ping_tool", "search_code_tool", "health_resource",
             "write_memory_tool", "update_memory_tool", "delete_memory_tool", "search_memory_tool", "read_memory_tool",
-            "consolidate_memory_tool", "mark_consumed_tool",
+            "consolidate_memory_tool", "mark_consumed_tool", "system_snapshot_tool",
             "get_memory_resource", "list_memories_resource", "search_memories_resource",
             "graph_node_details_resource", "find_callers_resource", "find_callees_resource",
             "index_project_tool", "reindex_file_tool", "index_incremental_tool", "index_status_resource",
@@ -654,6 +656,7 @@ def register_memory_components(mcp: FastMCP):
         read_memory_tool,
         consolidate_memory_tool,
         mark_consumed_tool,
+        system_snapshot_tool,
     )
     from mnemo_mcp.resources.memory_resources import (
         get_memory_resource,
@@ -969,6 +972,40 @@ def register_memory_components(mcp: FastMCP):
             ctx=ctx,
             memory_ids=memory_ids,
             consumed_by=consumed_by,
+        )
+        return response
+
+    # Register get_system_snapshot tool
+    @mcp.tool()
+    async def get_system_snapshot(
+        ctx: Context,
+        repository: str = "expanse",
+        context_budget: int = 500,
+    ) -> dict:
+        """
+        Get system snapshot in a single call (replaces 4 sequential boot queries).
+
+        Returns context groups + health metrics for agent boot.
+        4x faster than sequential search_memory calls.
+
+        Returns:
+            core: sys:core + sys:anchor (merged, deduplicated)
+            patterns: sys:pattern (sealed, excludes candidates)
+            candidates: sys:pattern:candidate (pending approval)
+            extensions: sys:extension
+            profile: sys:user:profile
+            project: sys:project:{repository}
+            health: {history_count, needs_consolidation, fresh_drifts, fresh_traces, candidates_pending, total_memories}
+            budget: {allocated, items_returned}
+
+        Example:
+            get_system_snapshot(repository="expanse")
+            → {core: [...], patterns: [...], health: {fresh_drifts: 3, ...}}
+        """
+        response = await system_snapshot_tool.execute(
+            ctx=ctx,
+            repository=repository,
+            context_budget=context_budget,
         )
         return response
 
