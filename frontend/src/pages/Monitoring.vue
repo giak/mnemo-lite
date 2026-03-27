@@ -117,10 +117,12 @@ const chartMax = computed(() => {
       <div class="flex items-center gap-4">
         <button
           @click="showHelp = !showHelp"
-          class="scada-btn flex items-center gap-1"
-          :class="showHelp ? 'scada-btn-primary' : ''"
+          class="scada-btn scada-btn-ghost flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-700 hover:border-cyan-600 hover:text-cyan-400 transition-colors"
+          :class="showHelp ? 'border-cyan-600 text-cyan-400 bg-slate-800' : ''"
+          title="Afficher l'aide"
         >
-          ?
+          <span class="text-lg font-bold">?</span>
+          <span class="text-xs hidden md:inline">AIDE</span>
         </button>
         <span class="scada-data text-slate-400 font-mono text-sm">
           LAST UPDATE: {{ formattedTime }}
