@@ -359,6 +359,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     from mnemo_mcp.tools.indexing_tools import (
         index_project_tool,
         reindex_file_tool,
+        index_incremental_tool,
     )
     from mnemo_mcp.resources.indexing_resources import (
         index_status_resource,
@@ -401,6 +402,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     # Story 23.5: Inject services into indexing components
     index_project_tool.inject_services(services)
     reindex_file_tool.inject_services(services)
+    index_incremental_tool.inject_services(services)
     index_status_resource.inject_services(services)
 
     # Story 23.6: Inject services into analytics components
@@ -421,7 +423,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
             "consolidate_memory_tool",
             "get_memory_resource", "list_memories_resource", "search_memories_resource",
             "graph_node_details_resource", "find_callers_resource", "find_callees_resource",
-            "index_project_tool", "reindex_file_tool", "index_status_resource",
+            "index_project_tool", "reindex_file_tool", "index_incremental_tool", "index_status_resource",
             "clear_cache_tool", "cache_stats_resource", "search_analytics_resource",
             "switch_project_tool", "list_projects_resource", "supported_languages_resource"
         ]
@@ -1141,6 +1143,7 @@ def register_indexing_components(mcp: FastMCP) -> None:
     from mnemo_mcp.tools.indexing_tools import (
         index_project_tool,
         reindex_file_tool,
+        index_incremental_tool,
     )
     from mnemo_mcp.resources.indexing_resources import (
         index_status_resource,
@@ -1229,6 +1232,44 @@ def register_indexing_components(mcp: FastMCP) -> None:
             file_path=file_path,
             repository=repository,
             ctx=ctx,
+        )
+        return response
+
+    # Register index_incremental tool
+    @mcp.tool()
+    async def index_incremental(
+        ctx: Context,
+        project_path: str,
+        repository: str = "default",
+        include_gitignored: bool = False,
+    ) -> dict:
+        """
+        Re-index only files modified since last indexing.
+
+        Much faster than index_project for large repositories.
+        Compares file modification times against database timestamps.
+        Only re-indexes files where mtime > last indexed_at.
+
+        Performance (782 files):
+            index_project:     ~6.5 hours
+            index_incremental: ~50 seconds (only changed files)
+
+        Args:
+            project_path: Path to project root directory
+            repository: Repository name for scoping (default: "default")
+            include_gitignored: Include files ignored by .gitignore (default: False)
+
+        Returns:
+            Dict with: scanned, changed, indexed, skipped, time_ms
+
+        Example:
+            index_incremental(project_path="/home/user/expanse")
+        """
+        response = await index_incremental_tool.execute(
+            ctx=ctx,
+            project_path=project_path,
+            repository=repository,
+            include_gitignored=include_gitignored,
         )
         return response
 

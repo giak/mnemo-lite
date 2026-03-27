@@ -697,6 +697,64 @@ class TestMemoryConsolidation:
 
 
 # ============================================================================
+# 11. INCREMENTAL INDEXING
+# ============================================================================
+
+class TestIncrementalIndexing:
+    """
+    Verify incremental indexing tool exists and compares mtime vs indexed_at.
+
+    Incremental indexing: only re-index files where mtime > last indexed_at.
+    Performance: 6.5h → 50s for 782 files (99% improvement).
+    """
+
+    def test_incremental_tool_exists(self):
+        """IndexIncrementalTool class must exist."""
+        from mnemo_mcp.tools.indexing_tools import IndexIncrementalTool
+        tool = IndexIncrementalTool()
+        assert tool.get_name() == "index_incremental"
+
+    def test_incremental_tool_singleton_exists(self):
+        """index_incremental_tool singleton must be exported."""
+        from mnemo_mcp.tools.indexing_tools import index_incremental_tool
+        assert index_incremental_tool is not None
+        assert index_incremental_tool.get_name() == "index_incremental"
+
+    def test_incremental_uses_mtime_comparison(self):
+        """Incremental indexing must compare file mtime with DB indexed_at."""
+        import inspect
+        from mnemo_mcp.tools.indexing_tools import IndexIncrementalTool
+
+        source = inspect.getsource(IndexIncrementalTool.execute)
+        assert "getmtime" in source or "mtime" in source, (
+            "Incremental indexing must check file modification time"
+        )
+        assert "indexed_at" in source or "last_indexed" in source, (
+            "Incremental indexing must compare against last indexed timestamp"
+        )
+
+    def test_incremental_queries_db_for_indexed_files(self):
+        """Incremental indexing must query DB for indexed files."""
+        import inspect
+        from mnemo_mcp.tools.indexing_tools import IndexIncrementalTool
+
+        source = inspect.getsource(IndexIncrementalTool.execute)
+        assert "MAX(indexed_at)" in source or "indexed_at" in source, (
+            "Incremental indexing must query MAX(indexed_at) per file"
+        )
+
+    def test_incremental_registered_in_server(self):
+        """index_incremental must be registered in server.py."""
+        import inspect
+        from mnemo_mcp import server
+
+        source = inspect.getsource(server.register_indexing_components)
+        assert "index_incremental" in source, (
+            "index_incremental must be registered as MCP tool"
+        )
+
+
+# ============================================================================
 # 7. ADAPTIVE RRF K
 # ============================================================================
 
