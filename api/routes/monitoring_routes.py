@@ -7,7 +7,7 @@ Provides real-time operational monitoring endpoints for MCO.
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy import text
 
@@ -16,6 +16,7 @@ from dependencies import get_db_engine
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/monitoring", tags=["Monitoring"])
+router_v1 = APIRouter(prefix="/api/v1", tags=["Monitoring v1"])
 
 
 @router.get("/status")
@@ -348,3 +349,207 @@ async def get_system_metrics(
             "active_connections": 0,
             "error": str(e)
         }
+
+
+# ============================================================================
+# Monitoring v1 Endpoints — Metrics & Alerts
+# ============================================================================
+
+@router_v1.get("/metrics/latency")
+async def get_latency_metrics(
+    hours: int = Query(default=24, ge=1, le=168),
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """
+    Get API latency aggregated by hour for the last N hours.
+
+    Returns avg, p95, max and count per hour bucket.
+    """
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                text("""
+                    SELECT
+                        date_trunc('hour', timestamp) AS hour,
+                        AVG(value) AS avg,
+                        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY value) AS p95,
+                        MAX(value) AS max,
+                        COUNT(*) AS count
+                    FROM metrics
+                    WHERE metric_type = 'api'
+                      AND metric_name = 'latency_ms'
+                      AND timestamp >= NOW() - make_interval(hours => :hours)
+                    GROUP BY hour
+                    ORDER BY hour
+                """),
+                {"hours": hours}
+            )
+            rows = result.fetchall()
+
+            data = [
+                {
+                    "hour": row.hour.isoformat(),
+                    "avg": round(float(row.avg), 2),
+                    "p95": round(float(row.p95), 2),
+                    "max": round(float(row.max), 2),
+                    "count": row.count,
+                }
+                for row in rows
+            ]
+
+            return {"data": data}
+
+    except Exception as e:
+        logger.error(f"Failed to get latency metrics: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve latency metrics.")
+
+
+@router_v1.get("/alerts/summary")
+async def get_alerts_summary(
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """
+    Get alert counts grouped by type and severity.
+
+    Returns unacknowledged and total counts per alert_type/severity pair.
+    """
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                text("""
+                    SELECT
+                        alert_type,
+                        severity,
+                        COUNT(*) FILTER (WHERE NOT acknowledged) AS unacked,
+                        COUNT(*) AS total
+                    FROM alerts
+                    GROUP BY alert_type, severity
+                    ORDER BY severity DESC, total DESC
+                """)
+            )
+            rows = result.fetchall()
+
+            data = [
+                {
+                    "alert_type": row.alert_type,
+                    "severity": row.severity,
+                    "unacked": row.unacked,
+                    "total": row.total,
+                }
+                for row in rows
+            ]
+
+            return {"data": data}
+
+    except Exception as e:
+        logger.error(f"Failed to get alerts summary: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve alerts summary.")
+
+
+@router_v1.get("/alerts/recent")
+async def get_recent_alerts(
+    limit: int = Query(default=20, ge=1, le=100),
+    severity: Optional[str] = Query(default=None),
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """
+    Get recent alerts, optionally filtered by severity.
+    """
+    try:
+        async with engine.connect() as conn:
+            query = """
+                SELECT
+                    id::text,
+                    alert_type,
+                    severity,
+                    message,
+                    created_at,
+                    value,
+                    threshold,
+                    acknowledged
+                FROM alerts
+            """
+            params: Dict[str, Any] = {"limit": limit}
+
+            if severity:
+                query += " WHERE severity = :severity"
+                params["severity"] = severity
+
+            query += " ORDER BY created_at DESC LIMIT :limit"
+
+            result = await conn.execute(text(query), params)
+            rows = result.fetchall()
+
+            data = [
+                {
+                    "id": row.id,
+                    "alert_type": row.alert_type,
+                    "severity": row.severity,
+                    "message": row.message,
+                    "created_at": row.created_at.isoformat(),
+                    "value": round(float(row.value), 2),
+                    "threshold": round(float(row.threshold), 2),
+                    "acknowledged": row.acknowledged,
+                }
+                for row in rows
+            ]
+
+            return {"data": data}
+
+    except Exception as e:
+        logger.error(f"Failed to get recent alerts: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve recent alerts.")
+
+
+@router_v1.post("/alerts/{alert_id}/ack")
+async def acknowledge_alert(
+    alert_id: str,
+    engine: AsyncEngine = Depends(get_db_engine)
+) -> Dict[str, Any]:
+    """
+    Acknowledge an alert by ID.
+
+    Sets acknowledged=true and records acknowledged_at timestamp.
+    """
+    try:
+        # First check if the alert exists and its state
+        async with engine.connect() as conn:
+            check = await conn.execute(
+                text("SELECT id, acknowledged FROM alerts WHERE id = :alert_id"),
+                {"alert_id": alert_id}
+            )
+            existing = check.fetchone()
+
+            if not existing:
+                raise HTTPException(status_code=404, detail="Alert not found.")
+            if existing.acknowledged:
+                raise HTTPException(status_code=409, detail="Alert is already acknowledged.")
+
+        # Update in a transactional context
+        async with engine.begin() as conn:
+            result = await conn.execute(
+                text("""
+                    UPDATE alerts
+                    SET acknowledged = TRUE,
+                        acknowledged_at = NOW()
+                    WHERE id = :alert_id
+                      AND NOT acknowledged
+                    RETURNING acknowledged_at
+                """),
+                {"alert_id": alert_id}
+            )
+            row = result.fetchone()
+
+            if not row:
+                raise HTTPException(status_code=404, detail="Alert not found.")
+
+            return {
+                "acknowledged": True,
+                "acknowledged_at": row.acknowledged_at.isoformat(),
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to acknowledge alert: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to acknowledge alert.")

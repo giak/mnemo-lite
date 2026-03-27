@@ -514,6 +514,7 @@ app.include_router(health_routes.router)
 app.include_router(ui_routes.router)
 app.include_router(graph_routes.router)
 app.include_router(monitoring_routes.router)
+app.include_router(monitoring_routes.router_v1)  # Metrics & Alerts API v1
 app.include_router(monitoring_routes_advanced.router)  # EPIC-22 Story 22.1
 app.include_router(conversations_routes.router, tags=["v1_Conversations"])  # EPIC-24: Auto-Save
 app.include_router(autosave_monitoring_routes.router, tags=["v1_AutoSave_Monitoring"])  # EPIC-24: Auto-Save Monitoring UI
