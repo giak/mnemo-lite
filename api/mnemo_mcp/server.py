@@ -344,6 +344,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         delete_memory_tool,
         search_memory_tool,
         read_memory_tool,
+        consolidate_memory_tool,
     )
     from mnemo_mcp.resources.memory_resources import (
         get_memory_resource,
@@ -387,6 +388,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     delete_memory_tool.inject_services(services)
     search_memory_tool.inject_services(services)
     read_memory_tool.inject_services(services)
+    consolidate_memory_tool.inject_services(services)
     get_memory_resource.inject_services(services)
     list_memories_resource.inject_services(services)
     search_memories_resource.inject_services(services)
@@ -416,6 +418,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         components=[
             "ping_tool", "search_code_tool", "health_resource",
             "write_memory_tool", "update_memory_tool", "delete_memory_tool", "search_memory_tool", "read_memory_tool",
+            "consolidate_memory_tool",
             "get_memory_resource", "list_memories_resource", "search_memories_resource",
             "graph_node_details_resource", "find_callers_resource", "find_callees_resource",
             "index_project_tool", "reindex_file_tool", "index_status_resource",
@@ -645,6 +648,7 @@ def register_memory_components(mcp: FastMCP):
         delete_memory_tool,
         search_memory_tool,
         read_memory_tool,
+        consolidate_memory_tool,
     )
     from mnemo_mcp.resources.memory_resources import (
         get_memory_resource,
@@ -866,6 +870,61 @@ def register_memory_components(mcp: FastMCP):
         response = await read_memory_tool.execute(
             ctx=ctx,
             id=id,
+        )
+        return response
+
+    # Register consolidate_memory tool
+    @mcp.tool()
+    async def consolidate_memory(
+        ctx: Context,
+        title: str,
+        summary: str,
+        source_ids: List[str],
+        tags: Optional[List[str]] = None,
+        memory_type: Optional[str] = None,
+        author: Optional[str] = None,
+    ) -> dict:
+        """
+        Consolidate multiple memories into a single summary memory.
+
+        Used by agents to compress accumulating history:
+        - When count(sys:history) > 20, summarize oldest 10 into 1 consolidated
+        - Creates new memory with the summary content
+        - Soft-deletes source memories
+        - Auto-tags with :summary suffix and sys:consolidated
+
+        Workflow:
+        1. search_memory(query="sys:history", limit=10) → get old memories
+        2. LLM generates summary from the results
+        3. consolidate_memory(title="...", summary="...", source_ids=[...])
+
+        Args:
+            title: Title for the consolidated memory (e.g., "History: March 20-26")
+            summary: The consolidated content (LLM-generated summary)
+            source_ids: List of memory UUIDs to consolidate (min 2, will be soft-deleted)
+            tags: Tags for consolidated memory (auto-adds :summary suffix to first tag)
+            memory_type: Type for consolidated memory (default: note)
+            author: Optional author attribution
+
+        Returns:
+            Dict with consolidated_memory (id, title), deleted_count, source_ids
+
+        Example:
+            consolidate_memory(
+                title="History: March 20-26",
+                summary="Worked on search optimization: halfvec, reranking, decay...",
+                source_ids=["uuid1", "uuid2", "uuid3"],
+                tags=["sys:history", "v15"]
+            )
+        """
+        response = await consolidate_memory_tool.execute(
+            ctx=ctx,
+            title=title,
+            summary=summary,
+            source_ids=source_ids,
+            tags=tags or [],
+            memory_type=memory_type or "note",
+            author=author,
         )
         return response
 

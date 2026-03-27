@@ -1,10 +1,16 @@
 """
 MCP Memory Tools
 
-Tools for persistent memory storage: create, update, and delete memories.
+Tools for persistent memory storage: create, update, delete, search,
+and consolidate memories.
 
 EPIC-23 Story 23.3: Persistent memory storage for LLM interactions.
 Provides CRUD operations with semantic embeddings and project scoping.
+
+Consolidation (Expanse Apex §V):
+    When too many memories accumulate (e.g., sys:history > 20),
+    the agent summarizes older ones into a single consolidated memory
+    and soft-deletes the originals.
 """
 
 import time
@@ -847,6 +853,137 @@ class ReadMemoryTool(BaseMCPComponent):
             raise RuntimeError(f"Failed to read memory: {e}") from e
 
 
+class ConsolidateMemoryTool(BaseMCPComponent):
+    """
+    Tool for consolidating multiple memories into a single summary.
+
+    Used by agents (like Expanse) to compress accumulating history:
+    - When sys:history count > 20, summarize oldest 10 into 1 consolidated
+    - Creates new memory with summary content
+    - Soft-deletes source memories
+    - Tags consolidated memory with :summary suffix
+
+    Workflow (2-step for LLM integration):
+    1. Agent calls search_memory to find memories to consolidate
+    2. Agent generates summary from the results
+    3. Agent calls consolidate_memory with summary + source IDs
+    """
+
+    def get_name(self) -> str:
+        return "consolidate_memory"
+
+    async def execute(self, ctx: Context, **params) -> dict:
+        """
+        Consolidate multiple memories into a single summary memory.
+
+        Args:
+            title: Title for the consolidated memory
+            summary: The consolidated content (LLM-generated summary)
+            source_ids: List of memory UUIDs to consolidate (will be soft-deleted)
+            tags: Tags for the consolidated memory (auto-adds :summary suffix to first tag)
+            memory_type: Type for consolidated memory (default: note)
+            author: Optional author attribution
+
+        Returns:
+            Dict with consolidated_memory (id, title), deleted_count, source_ids
+        """
+        title = params.get("title")
+        summary = params.get("summary")
+        source_ids = params.get("source_ids", [])
+        tags = params.get("tags", [])
+        memory_type = params.get("memory_type", "note")
+        author = params.get("author")
+
+        # Validation
+        if not title or not title.strip():
+            raise ValueError("title is required")
+        if not summary or not summary.strip():
+            raise ValueError("summary is required")
+        if not source_ids or len(source_ids) < 2:
+            raise ValueError("source_ids must contain at least 2 memory IDs to consolidate")
+
+        try:
+            repo = self.memory_repository
+            embedding_svc = self.embedding_service
+
+            if not repo:
+                raise RuntimeError("MemoryRepository not available")
+
+            # Auto-tag with :summary suffix on first tag
+            consolidated_tags = list(tags)
+            if consolidated_tags:
+                base_tag = consolidated_tags[0]
+                if not base_tag.endswith(":summary"):
+                    consolidated_tags[0] = f"{base_tag}:summary"
+            consolidated_tags.append("sys:consolidated")
+
+            # Generate embedding for the summary
+            embedding_text = f"{title}\n\n{summary}"
+            embedding = None
+            if embedding_svc:
+                try:
+                    embedding = await embedding_svc.generate_embedding(embedding_text)
+                except Exception as e:
+                    logger.warning("Embedding generation failed for consolidation", error=str(e))
+
+            # Create the consolidated memory
+            memory_create = MemoryCreate(
+                title=title,
+                content=summary,
+                memory_type=MemoryType(memory_type),
+                tags=consolidated_tags,
+                author=author or "consolidation",
+            )
+
+            consolidated = await repo.create(memory_create, embedding=embedding)
+
+            # Soft-delete source memories
+            deleted_count = 0
+            for source_id in source_ids:
+                try:
+                    # Parse UUID
+                    memory_uuid = uuid.UUID(source_id) if isinstance(source_id, str) else source_id
+                    success = await repo.soft_delete(memory_uuid)
+                    if success:
+                        deleted_count += 1
+                except (ValueError, Exception) as e:
+                    logger.warning(
+                        "Failed to soft-delete source memory during consolidation",
+                        source_id=str(source_id),
+                        error=str(e)
+                    )
+
+            result = {
+                "consolidated_memory": {
+                    "id": str(consolidated.id),
+                    "title": consolidated.title,
+                    "memory_type": consolidated.memory_type,
+                    "tags": consolidated.tags,
+                    "created_at": consolidated.created_at.isoformat(),
+                },
+                "deleted_count": deleted_count,
+                "total_source_ids": len(source_ids),
+                "source_ids": [str(sid) for sid in source_ids],
+            }
+
+            logger.info(
+                "Memory consolidation completed",
+                consolidated_id=str(consolidated.id),
+                deleted=deleted_count,
+                total=len(source_ids),
+            )
+
+            return result
+
+        except ValueError as e:
+            logger.error("Validation error in consolidate_memory", error=str(e))
+            raise
+
+        except Exception as e:
+            logger.error("Failed to consolidate memories", error=str(e))
+            raise RuntimeError(f"Failed to consolidate memories: {e}") from e
+
+
 
 # Singleton instances for registration
 write_memory_tool = WriteMemoryTool()
@@ -854,4 +991,5 @@ update_memory_tool = UpdateMemoryTool()
 delete_memory_tool = DeleteMemoryTool()
 search_memory_tool = SearchMemoryTool()
 read_memory_tool = ReadMemoryTool()
+consolidate_memory_tool = ConsolidateMemoryTool()
 

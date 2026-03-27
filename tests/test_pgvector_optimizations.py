@@ -629,6 +629,74 @@ class TestMemoryDecayService:
 
 
 # ============================================================================
+# 10. MEMORY CONSOLIDATION
+# ============================================================================
+
+class TestMemoryConsolidation:
+    """
+    Verify memory consolidation tool exists and is properly registered.
+
+    Consolidation pattern (Expanse Apex §V):
+    - Agent searches old memories → generates summary → calls consolidate
+    - Creates consolidated memory with summary
+    - Soft-deletes source memories
+    """
+
+    def test_consolidate_tool_exists(self):
+        """ConsolidateMemoryTool class must exist."""
+        from mnemo_mcp.tools.memory_tools import ConsolidateMemoryTool
+        tool = ConsolidateMemoryTool()
+        assert tool.get_name() == "consolidate_memory"
+
+    def test_consolidate_tool_singleton_exists(self):
+        """consolidate_memory_tool singleton must be exported."""
+        from mnemo_mcp.tools.memory_tools import consolidate_memory_tool
+        assert consolidate_memory_tool is not None
+        assert consolidate_memory_tool.get_name() == "consolidate_memory"
+
+    def test_consolidate_validates_min_source_ids(self):
+        """Consolidation must require at least 2 source IDs."""
+        import inspect
+        from mnemo_mcp.tools.memory_tools import ConsolidateMemoryTool
+
+        source = inspect.getsource(ConsolidateMemoryTool.execute)
+        assert "at least 2" in source or "source_ids" in source
+
+    def test_consolidate_tags_summary_suffix(self):
+        """Consolidated memory must auto-add :summary suffix to first tag."""
+        import inspect
+        from mnemo_mcp.tools.memory_tools import ConsolidateMemoryTool
+
+        source = inspect.getsource(ConsolidateMemoryTool.execute)
+        assert ":summary" in source, (
+            "Consolidation must auto-add :summary suffix to tags"
+        )
+        assert "sys:consolidated" in source, (
+            "Consolidation must add sys:consolidated tag"
+        )
+
+    def test_consolidate_soft_deletes_sources(self):
+        """Consolidation must soft-delete source memories."""
+        import inspect
+        from mnemo_mcp.tools.memory_tools import ConsolidateMemoryTool
+
+        source = inspect.getsource(ConsolidateMemoryTool.execute)
+        assert "soft_delete" in source, (
+            "Consolidation must soft-delete source memories"
+        )
+
+    def test_consolidate_registered_in_server(self):
+        """consolidate_memory must be registered in server.py."""
+        import inspect
+        from mnemo_mcp import server
+
+        source = inspect.getsource(server.register_tools)
+        assert "consolidate_memory" in source, (
+            "consolidate_memory must be registered as MCP tool"
+        )
+
+
+# ============================================================================
 # 7. ADAPTIVE RRF K
 # ============================================================================
 
