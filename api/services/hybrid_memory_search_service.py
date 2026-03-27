@@ -623,7 +623,7 @@ class HybridMemorySearchService:
             async with self.engine.begin() as conn:
                 # pgvector tuning for halfvec search
                 await conn.execute(text("SET LOCAL hnsw.ef_search = 100"))
-                await conn.execute(text("SET LOCAL hnsw.iterative_scan = 'on'"))
+                await conn.execute(text("SET LOCAL hnsw.iterative_scan = 'relaxed_order'"))
                 result = await conn.execute(query_sql, params)
                 rows = result.fetchall()
 

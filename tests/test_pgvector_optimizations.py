@@ -3,7 +3,7 @@ TDD tests for pgvector optimizations (2026-03-26).
 
 Verifies the following optimizations:
 1. halfvec (float16) columns used in search queries
-2. iterative_scan='on' applied in vector searches
+2. iterative_scan.*relaxed_order' applied in vector searches
 3. ef_search=100 applied in vector searches
 4. Cross-encoder reranking enabled by default
 5. Hybrid services use correct defaults
@@ -186,7 +186,7 @@ class TestPgvectorTuningParameters:
     Verify pgvector tuning parameters are applied in search queries.
 
     - ef_search=100: recall ~97% (vs ~92% at default 40)
-    - iterative_scan='on': fixes overfiltering with WHERE filters
+    - iterative_scan.*relaxed_order': fixes overfiltering with WHERE filters
     """
 
     def test_vector_search_service_sets_ef_search(self):

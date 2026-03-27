@@ -147,7 +147,7 @@ class VectorSearchService:
         # iterative_scan: fixes overfiltering when WHERE filters eliminate HNSW candidates (pgvector 0.8+)
         set_cmds = [
             f"SET LOCAL hnsw.ef_search = {self.ef_search}",
-            "SET LOCAL hnsw.iterative_scan = 'on'",
+            "SET LOCAL hnsw.iterative_scan = 'relaxed_order'",
         ]
 
         # Query using halfvec columns (50% smaller index, 99.2% recall)

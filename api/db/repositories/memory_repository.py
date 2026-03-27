@@ -507,7 +507,7 @@ class MemoryRepository:
             async with self.engine.begin() as conn:
                 # pgvector tuning: ef_search + iterative_scan (fixes overfiltering with filters)
                 await conn.execute(text("SET LOCAL hnsw.ef_search = 100"))
-                await conn.execute(text("SET LOCAL hnsw.iterative_scan = 'on'"))
+                await conn.execute(text("SET LOCAL hnsw.iterative_scan = 'relaxed_order'"))
 
                 # Get total count
                 count_result = await conn.execute(count_query, params)

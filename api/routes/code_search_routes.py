@@ -7,7 +7,7 @@ and semantic (HNSW) search with RRF fusion.
 
 import logging
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from services.hybrid_code_search_service import (
@@ -188,48 +188,64 @@ async def get_hybrid_search_service(
     """,
 )
 async def hybrid_search(
-    request: HybridSearchRequest,
+    request: Request,
+    search_request: HybridSearchRequest,
     service: HybridCodeSearchService = Depends(get_hybrid_search_service),
 ) -> HybridSearchResponseModel:
     """
     Execute hybrid code search.
 
     Combines lexical and semantic search with RRF fusion.
+    If no embedding is provided, auto-generates one from the query.
     """
     try:
+        # Auto-generate embeddings if not provided by client
+        embedding_text = search_request.embedding_text
+        embedding_code = search_request.embedding_code
+
+        if embedding_text is None and search_request.enable_vector:
+            try:
+                from dependencies import get_embedding_service
+                embedding_svc = await get_embedding_service(request)
+                if embedding_svc:
+                    embedding_text = await embedding_svc.generate_embedding(search_request.query)
+                    logger.info(f"Auto-generated TEXT embedding for query: {search_request.query[:50]}")
+            except Exception as e:
+                logger.warning(f"Failed to auto-generate embedding: {e}")
+
         # Convert filters
         filters = None
-        if request.filters:
+        if search_request.filters:
             filters = SearchFilters(
-                language=request.filters.language,
-                chunk_type=request.filters.chunk_type,
-                repository=request.filters.repository,
-                file_path=request.filters.file_path,
+                language=search_request.filters.language,
+                chunk_type=search_request.filters.chunk_type,
+                repository=search_request.filters.repository,
+                file_path=search_request.filters.file_path,
             )
 
         # Execute search
-        if request.auto_weights:
+        if search_request.auto_weights:
             # Use automatic weight selection
             response = await service.search_with_auto_weights(
-                query=request.query,
-                embedding_text=request.embedding_text,
-                embedding_code=request.embedding_code,
+                query=search_request.query,
+                embedding_text=embedding_text,
+                embedding_code=embedding_code,
                 filters=filters,
-                top_k=request.top_k,
+                top_k=search_request.top_k,
             )
         else:
             # Use manual weights
             response = await service.search(
-                query=request.query,
-                embedding_text=request.embedding_text,
-                embedding_code=request.embedding_code,
+                query=search_request.query,
+                embedding_text=embedding_text,
+                embedding_code=embedding_code,
                 filters=filters,
-                top_k=request.top_k,
-                enable_lexical=request.enable_lexical,
-                enable_vector=request.enable_vector,
-                lexical_weight=request.lexical_weight,
-                vector_weight=request.vector_weight,
-                candidate_pool_size=request.candidate_pool_size,
+                top_k=search_request.top_k,
+                enable_lexical=search_request.enable_lexical,
+                enable_vector=search_request.enable_vector,
+                lexical_weight=search_request.lexical_weight,
+                vector_weight=search_request.vector_weight,
+                candidate_pool_size=search_request.candidate_pool_size,
             )
 
         # Convert to response model
@@ -308,21 +324,21 @@ async def lexical_search(
     try:
         # Convert filters
         filters_dict = None
-        if request.filters:
+        if search_request.filters:
             filters_dict = {
                 k: v
                 for k, v in {
-                    "language": request.filters.language,
-                    "chunk_type": request.filters.chunk_type,
-                    "repository": request.filters.repository,
-                    "file_path": request.filters.file_path,
+                    "language": search_request.filters.language,
+                    "chunk_type": search_request.filters.chunk_type,
+                    "repository": search_request.filters.repository,
+                    "file_path": search_request.filters.file_path,
                 }.items()
                 if v is not None
             }
 
         # Execute lexical search
         results = await service.lexical.search(
-            query=request.query,
+            query=search_request.query,
             filters=filters_dict,
             limit=request.limit,
         )
@@ -386,14 +402,14 @@ async def vector_search(
 
         # Convert filters
         filters_dict = None
-        if request.filters:
+        if search_request.filters:
             filters_dict = {
                 k: v
                 for k, v in {
-                    "language": request.filters.language,
-                    "chunk_type": request.filters.chunk_type,
-                    "repository": request.filters.repository,
-                    "file_path": request.filters.file_path,
+                    "language": search_request.filters.language,
+                    "chunk_type": search_request.filters.chunk_type,
+                    "repository": search_request.filters.repository,
+                    "file_path": search_request.filters.file_path,
                 }.items()
                 if v is not None
             }
