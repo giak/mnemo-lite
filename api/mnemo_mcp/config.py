@@ -41,11 +41,8 @@ class MCPConfig(BaseSettings):
 
     # Authentication (HTTP transport only)
     auth_mode: Literal["none", "api_key", "oauth"] = "none"
-    api_keys: dict[str, str] = {
-        "dev-key-12345": "developer",
-        "test-key-67890": "tester"
-    }
-    oauth_secret_key: str = "change-me-in-production"
+    api_keys: dict[str, str] = {}
+    oauth_secret_key: str = ""
 
     # CORS (HTTP transport only)
     cors_origins: List[str] = ["http://localhost:3000", "http://localhost:8001"]
@@ -53,9 +50,9 @@ class MCPConfig(BaseSettings):
     cors_allow_methods: List[str] = ["GET", "POST", "OPTIONS"]
     cors_allow_headers: List[str] = ["Authorization", "Content-Type"]
 
-    # Database (use Docker service names in containers, localhost for host)
-    database_url: str = "postgresql://mnemo:mnemopass@db:5432/mnemolite"
-    test_database_url: str = "postgresql://mnemo:mnemopass@db:5432/mnemolite_test"
+    # Database (must be set via MCP_DATABASE_URL env var)
+    database_url: str = ""
+    test_database_url: str = ""
 
     # Redis (use Docker service name in containers, localhost for host)
     redis_url: str = "redis://redis:6379/0"
