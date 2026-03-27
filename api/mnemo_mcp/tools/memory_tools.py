@@ -715,15 +715,16 @@ class SearchMemoryTool(BaseMCPComponent):
 
             else:
                 # Fallback to vector-only search
-                filters = {}
-                if memory_type_enum:
-                    filters["memory_type"] = memory_type_enum
-                if tags:
-                    filters["tags"] = tags
+                from mnemo_mcp.models.memory_models import MemoryFilters
+                fallback_filters = MemoryFilters(
+                    memory_type=memory_type_enum,
+                    tags=tags or None,
+                    project_id=project_id,
+                )
 
                 memories_list, total_count = await self.memory_repository.search_by_vector(
                     vector=query_embedding,
-                    filters=filters if filters else None,
+                    filters=fallback_filters,
                     limit=limit,
                     offset=offset,
                     distance_threshold=0.7

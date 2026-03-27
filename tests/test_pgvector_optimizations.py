@@ -755,6 +755,68 @@ class TestIncrementalIndexing:
 
 
 # ============================================================================
+# 12. BUG-02: MEMORY FILTERS IN VECTOR FALLBACK
+# ============================================================================
+
+class TestBug02MemoryFilters:
+    """
+    BUG-02: search_memory fallback passes dict instead of MemoryFilters.
+
+    The vector-only fallback path in search_memory was building a plain dict
+    for filters, but search_by_vector() expects a MemoryFilters Pydantic model.
+    Tags and memory_type were silently ignored in fallback mode.
+
+    Impact: Expanse boot queries with tags=["sys:core","sys:anchor"] returned
+    unfiltered results when hybrid search was unavailable.
+    """
+
+    def test_fallback_uses_memory_filters_model(self):
+        """search_memory fallback must use MemoryFilters, not dict."""
+        import inspect
+        from mnemo_mcp.tools.memory_tools import SearchMemoryTool
+
+        source = inspect.getsource(SearchMemoryTool.execute)
+
+        # Should import and use MemoryFilters
+        assert "MemoryFilters" in source, (
+            "search_memory fallback must use MemoryFilters Pydantic model"
+        )
+
+    def test_fallback_no_plain_dict_filters(self):
+        """search_memory fallback must NOT build plain dict for filters."""
+        import inspect
+        from mnemo_mcp.tools.memory_tools import SearchMemoryTool
+
+        source = inspect.getsource(SearchMemoryTool.execute)
+        lines = source.split('\n')
+
+        # Find the fallback section
+        in_fallback = False
+        for line in lines:
+            if "Fallback to vector-only" in line:
+                in_fallback = True
+            if in_fallback and "filters = {}" in line:
+                # Check if this is the old dict pattern
+                if "MemoryFilters" not in line:
+                    assert False, (
+                        "Fallback must NOT use 'filters = {}' dict pattern. "
+                        "Use MemoryFilters instead."
+                    )
+
+    def test_fallback_includes_tags(self):
+        """search_memory fallback must pass tags to MemoryFilters."""
+        import inspect
+        from mnemo_mcp.tools.memory_tools import SearchMemoryTool
+
+        source = inspect.getsource(SearchMemoryTool.execute)
+
+        # Find the fallback section and verify tags are passed
+        assert "tags=tags" in source or "tags=" in source, (
+            "Fallback must pass tags to MemoryFilters"
+        )
+
+
+# ============================================================================
 # 7. ADAPTIVE RRF K
 # ============================================================================
 
