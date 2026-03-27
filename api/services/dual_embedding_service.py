@@ -138,16 +138,28 @@ class DualEmbeddingService:
         self._text_lock = asyncio.Lock()
         self._code_lock = asyncio.Lock()
 
-        # EPIC-12 Story 12.3: Circuit breaker (removes fail-forever behavior)
-        self.circuit_breaker = CircuitBreaker(
+        # EPIC-12 Story 12.3: Circuit breaker per model (TEXT + CODE separate)
+        # Before: single circuit breaker — if CODE fails, TEXT also blocked
+        # After: independent circuit breakers — failures don't cascade
+        self.text_circuit_breaker = CircuitBreaker(
             failure_threshold=EMBEDDING_CIRCUIT_CONFIG.failure_threshold,
             recovery_timeout=EMBEDDING_CIRCUIT_CONFIG.recovery_timeout,
             half_open_max_calls=EMBEDDING_CIRCUIT_CONFIG.half_open_max_calls,
-            name="embedding_service"
+            name="embedding_text"
+        )
+        self.code_circuit_breaker = CircuitBreaker(
+            failure_threshold=EMBEDDING_CIRCUIT_CONFIG.failure_threshold,
+            recovery_timeout=EMBEDDING_CIRCUIT_CONFIG.recovery_timeout,
+            half_open_max_calls=EMBEDDING_CIRCUIT_CONFIG.half_open_max_calls,
+            name="embedding_code"
         )
 
+        # Backward compat alias
+        self.circuit_breaker = self.text_circuit_breaker
+
         # Register for health monitoring
-        register_circuit_breaker(self.circuit_breaker)
+        register_circuit_breaker(self.text_circuit_breaker)
+        register_circuit_breaker(self.code_circuit_breaker)
 
         if self._mock_mode:
             logger.warning(
@@ -309,10 +321,10 @@ class DualEmbeddingService:
         if self._text_model is not None:
             return
 
-        # EPIC-12 Story 12.3: Check circuit breaker
-        if not self.circuit_breaker.can_execute():
+        # EPIC-12 Story 12.3: Check TEXT circuit breaker (independent from CODE)
+        if not self.text_circuit_breaker.can_execute():
             raise RuntimeError(
-                f"Embedding service circuit breaker is {self.circuit_breaker.state.value}. "
+                f"TEXT embedding circuit breaker is {self.text_circuit_breaker.state.value}. "
                 f"Model loading temporarily unavailable (will retry after {EMBEDDING_CIRCUIT_CONFIG.recovery_timeout}s)."
             )
 
@@ -329,17 +341,17 @@ class DualEmbeddingService:
                 )
 
                 # EPIC-12 Story 12.3: Record success
-                self.circuit_breaker.record_success()
+                self.text_circuit_breaker.record_success()
 
             except Exception as e:
                 # EPIC-12 Story 12.3: Record failure
-                self.circuit_breaker.record_failure()
+                self.text_circuit_breaker.record_failure()
 
                 logger.error(
                     f"❌ Failed to load TEXT model: {e}",
                     extra={
-                        "circuit_state": self.circuit_breaker.state.value,
-                        "failure_count": self.circuit_breaker._failure_count
+                        "circuit_state": self.text_circuit_breaker.state.value,
+                        "failure_count": self.text_circuit_breaker._failure_count
                     },
                     exc_info=True
                 )
@@ -364,10 +376,10 @@ class DualEmbeddingService:
         if self._code_model is not None:
             return
 
-        # EPIC-12 Story 12.3: Check circuit breaker before attempting load
-        if not self.circuit_breaker.can_execute():
+        # EPIC-12 Story 12.3: Check CODE circuit breaker (independent from TEXT)
+        if not self.code_circuit_breaker.can_execute():
             raise RuntimeError(
-                f"Embedding service circuit breaker is {self.circuit_breaker.state.value}. "
+                f"CODE embedding circuit breaker is {self.code_circuit_breaker.state.value}. "
                 f"Model loading temporarily unavailable (will retry after {EMBEDDING_CIRCUIT_CONFIG.recovery_timeout}s)."
             )
 
@@ -396,16 +408,16 @@ class DualEmbeddingService:
                 )
 
                 # EPIC-12 Story 12.3: Record successful load
-                self.circuit_breaker.record_success()
+                self.code_circuit_breaker.record_success()
 
             except Exception as e:
                 # EPIC-12 Story 12.3: Record failure
-                self.circuit_breaker.record_failure()
+                self.code_circuit_breaker.record_failure()
 
                 logger.error(
                     f"❌ Failed to load CODE model: {e}",
                     exc_info=True,
-                    extra={"circuit_state": self.circuit_breaker.state.value}
+                    extra={"circuit_state": self.code_circuit_breaker.state.value}
                 )
                 self._code_model = None
                 raise RuntimeError(f"Failed to load CODE model: {e}") from e
