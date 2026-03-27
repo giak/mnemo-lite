@@ -144,11 +144,12 @@ class VectorSearchService:
         where_clause = " AND ".join(where_clauses) if where_clauses else "TRUE"
 
         # SET commands (executed in same transaction)
-        # ef_search: controls accuracy/speed tradeoff (default 40, production 100)
-        # iterative_scan: fixes overfiltering when WHERE filters eliminate HNSW candidates (pgvector 0.8+)
+        # Note: SET commands cannot use bind parameters (PostgreSQL limitation)
+        # int() cast ensures no injection possible for integer values
+        ef_value = int(self.ef_search)  # validated in set_ef_search() [10-1000]
         set_cmds = [
-            ("SET LOCAL hnsw.ef_search = :ef", {"ef": int(self.ef_search)}),
-            ("SET LOCAL hnsw.iterative_scan = 'relaxed_order'", {}),
+            f"SET LOCAL hnsw.ef_search = {ef_value}",
+            "SET LOCAL hnsw.iterative_scan = 'relaxed_order'",
         ]
 
         # Query using halfvec columns (50% smaller index, 99.2% recall)
@@ -174,8 +175,8 @@ class VectorSearchService:
         try:
             async with self.engine.begin() as conn:
                 # Execute SET commands in same transaction (separate statements for asyncpg)
-                for set_sql, set_params in set_cmds:
-                    await conn.execute(text(set_sql), set_params)
+                for set_cmd in set_cmds:
+                    await conn.execute(text(set_cmd))
                 result = await conn.execute(text(query_sql), params)
                 rows = result.fetchall()
 
