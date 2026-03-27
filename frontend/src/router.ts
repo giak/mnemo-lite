@@ -46,6 +46,11 @@ const router = createRouter({
       path: '/expanse',
       name: 'expanse',
       component: () => import('@/pages/Expanse.vue')
+    },
+    {
+      path: '/monitoring',
+      name: 'monitoring',
+      component: () => import('@/pages/Monitoring.vue')
     }
   ]
 })
