@@ -610,6 +610,7 @@ class SearchMemoryTool(BaseMCPComponent):
         query: str,
         memory_type: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        consumed: Optional[bool] = None,
         limit: int = 10,
         offset: int = 0,
     ) -> Dict[str, Any]:
@@ -621,6 +622,7 @@ class SearchMemoryTool(BaseMCPComponent):
             query: Search query (natural language)
             memory_type: Filter by type (note, decision, task, reference, conversation, investigation)
             tags: Filter by tags (optional)
+            consumed: Filter by consumption status (None=all, True=consumed, False=fresh)
             limit: Max results (1-50, default 10)
             offset: Pagination offset (default 0)
 
@@ -676,6 +678,7 @@ class SearchMemoryTool(BaseMCPComponent):
                 filters = MemoryFilters(
                     memory_type=memory_type_enum if memory_type_enum else None,
                     tags=tags or [],
+                    consumed=consumed,
                 )
 
                 response = await self.hybrid_memory_search_service.search(
@@ -720,6 +723,7 @@ class SearchMemoryTool(BaseMCPComponent):
                     memory_type=memory_type_enum,
                     tags=tags or None,
                     project_id=project_id,
+                    consumed=consumed,
                 )
 
                 memories_list, total_count = await self.memory_repository.search_by_vector(
@@ -985,6 +989,90 @@ class ConsolidateMemoryTool(BaseMCPComponent):
             raise RuntimeError(f"Failed to consolidate memories: {e}") from e
 
 
+class MarkConsumedTool(BaseMCPComponent):
+    """
+    Tool for marking memories as consumed by an agent process.
+
+    Used by agents (like Expanse Dream) to mark memories as processed.
+    Prevents re-processing and enables queries for fresh/unconsumed memories.
+
+    Idempotent: re-marking an already consumed memory has no effect.
+
+    Usage:
+        # Dream Passe 1: process drifts, then mark them consumed
+        drifts = search_memory(tags=["sys:drift"], consumed=False)
+        ... process drifts ...
+        mark_consumed(memory_ids=[d.id for d in drifts], consumed_by="dream_passe1")
+
+        # Later: only get fresh drifts
+        fresh = search_memory(tags=["sys:drift"], consumed=False)
+    """
+
+    def get_name(self) -> str:
+        return "mark_consumed"
+
+    async def execute(self, ctx: Context, **params) -> dict:
+        """
+        Mark memories as consumed.
+
+        Args:
+            memory_ids: List of memory UUIDs to mark as consumed
+            consumed_by: Who consumed them (e.g., "dream_passe1", "boot", "manual")
+
+        Returns:
+            Dict with: marked (count), already_consumed (count), total_requested
+        """
+        memory_ids = params.get("memory_ids", [])
+        consumed_by = params.get("consumed_by", "unknown")
+
+        if not memory_ids:
+            return {"marked": 0, "already_consumed": 0, "total_requested": 0}
+
+        if not consumed_by or not consumed_by.strip():
+            raise ValueError("consumed_by is required")
+
+        try:
+            engine = self._services.get("engine")
+            if not engine:
+                raise RuntimeError("Database engine not available")
+
+            from sqlalchemy import text
+
+            # Idempotent: only update memories that are NOT already consumed
+            async with engine.begin() as conn:
+                result = await conn.execute(
+                    text("""
+                        UPDATE memories
+                        SET consumed_at = NOW(), consumed_by = :consumed_by
+                        WHERE id = ANY(:ids)
+                          AND consumed_at IS NULL
+                          AND deleted_at IS NULL
+                    """),
+                    {"consumed_by": consumed_by.strip(), "ids": memory_ids}
+                )
+                marked = result.rowcount
+
+            already_consumed = len(memory_ids) - marked
+
+            logger.info(
+                "memories.mark_consumed",
+                marked=marked,
+                already_consumed=already_consumed,
+                consumed_by=consumed_by,
+            )
+
+            return {
+                "marked": marked,
+                "already_consumed": already_consumed,
+                "total_requested": len(memory_ids),
+                "consumed_by": consumed_by,
+            }
+
+        except Exception as e:
+            logger.error("Failed to mark memories consumed", error=str(e))
+            raise RuntimeError(f"Failed to mark memories consumed: {e}") from e
+
+
 
 # Singleton instances for registration
 write_memory_tool = WriteMemoryTool()
@@ -993,4 +1081,5 @@ delete_memory_tool = DeleteMemoryTool()
 search_memory_tool = SearchMemoryTool()
 read_memory_tool = ReadMemoryTool()
 consolidate_memory_tool = ConsolidateMemoryTool()
+mark_consumed_tool = MarkConsumedTool()
 

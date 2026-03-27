@@ -345,6 +345,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         search_memory_tool,
         read_memory_tool,
         consolidate_memory_tool,
+        mark_consumed_tool,
     )
     from mnemo_mcp.resources.memory_resources import (
         get_memory_resource,
@@ -390,6 +391,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     search_memory_tool.inject_services(services)
     read_memory_tool.inject_services(services)
     consolidate_memory_tool.inject_services(services)
+    mark_consumed_tool.inject_services(services)
     get_memory_resource.inject_services(services)
     list_memories_resource.inject_services(services)
     search_memories_resource.inject_services(services)
@@ -420,7 +422,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         components=[
             "ping_tool", "search_code_tool", "health_resource",
             "write_memory_tool", "update_memory_tool", "delete_memory_tool", "search_memory_tool", "read_memory_tool",
-            "consolidate_memory_tool",
+            "consolidate_memory_tool", "mark_consumed_tool",
             "get_memory_resource", "list_memories_resource", "search_memories_resource",
             "graph_node_details_resource", "find_callers_resource", "find_callees_resource",
             "index_project_tool", "reindex_file_tool", "index_incremental_tool", "index_status_resource",
@@ -651,6 +653,7 @@ def register_memory_components(mcp: FastMCP):
         search_memory_tool,
         read_memory_tool,
         consolidate_memory_tool,
+        mark_consumed_tool,
     )
     from mnemo_mcp.resources.memory_resources import (
         get_memory_resource,
@@ -927,6 +930,45 @@ def register_memory_components(mcp: FastMCP):
             tags=tags or [],
             memory_type=memory_type or "note",
             author=author,
+        )
+        return response
+
+    # Register mark_consumed tool
+    @mcp.tool()
+    async def mark_consumed(
+        ctx: Context,
+        memory_ids: List[str],
+        consumed_by: str,
+    ) -> dict:
+        """
+        Mark memories as consumed by an agent process.
+
+        Used by agents (like Expanse Dream) to mark memories as processed.
+        Prevents re-processing and enables queries for fresh/unconsumed memories.
+
+        Idempotent: re-marking an already consumed memory has no effect.
+
+        Workflow:
+        1. search_memory(tags=["sys:drift"], consumed=False) → get fresh drifts
+        2. Process the drifts
+        3. mark_consumed(memory_ids=[d.id for d in drifts], consumed_by="dream_passe1")
+
+        Later: search_memory(tags=["sys:drift"], consumed=False) → only fresh
+
+        Args:
+            memory_ids: List of memory UUIDs to mark as consumed (min 1)
+            consumed_by: Who consumed them (e.g., "dream_passe1", "boot", "manual")
+
+        Returns:
+            Dict with: marked (count), already_consumed (count), total_requested
+
+        Example:
+            mark_consumed(memory_ids=["uuid1", "uuid2"], consumed_by="dream_passe1")
+        """
+        response = await mark_consumed_tool.execute(
+            ctx=ctx,
+            memory_ids=memory_ids,
+            consumed_by=consumed_by,
         )
         return response
 

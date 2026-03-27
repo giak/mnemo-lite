@@ -503,6 +503,12 @@ class HybridMemorySearchService:
                     where_clauses.append(f":tag{i} = ANY(tags)")
                     params[f"tag{i}"] = tag
 
+            if filters.consumed is not None:
+                if filters.consumed:
+                    where_clauses.append("consumed_at IS NOT NULL")
+                else:
+                    where_clauses.append("consumed_at IS NULL")
+
         where_sql = " AND ".join(where_clauses)
 
         # Optimized approach: ILIKE + trigram on title/embedding_source ONLY
@@ -597,6 +603,12 @@ class HybridMemorySearchService:
                 for i, tag in enumerate(filters.tags):
                     where_clauses.append(f":tag{i} = ANY(tags)")
                     params[f"tag{i}"] = tag
+
+            if filters.consumed is not None:
+                if filters.consumed:
+                    where_clauses.append("consumed_at IS NOT NULL")
+                else:
+                    where_clauses.append("consumed_at IS NULL")
 
         where_sql = " AND ".join(where_clauses)
 

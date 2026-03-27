@@ -993,3 +993,77 @@ class TestAdaptiveRRFK:
         assert score_k20 > score_k60 > score_k80, (
             "Lower k should produce higher scores for top ranks"
         )
+
+
+# ============================================================================
+# 14. CONSUMPTION TRACKING
+# ============================================================================
+
+class TestConsumptionTracking:
+    """
+    Verify consumption tracking for agent memory lifecycle.
+    """
+
+    def test_mark_consumed_tool_exists(self):
+        """MarkConsumedTool must exist."""
+        from mnemo_mcp.tools.memory_tools import MarkConsumedTool
+        tool = MarkConsumedTool()
+        assert tool.get_name() == "mark_consumed"
+
+    def test_mark_consumed_singleton_exists(self):
+        """mark_consumed_tool singleton must be exported."""
+        from mnemo_mcp.tools.memory_tools import mark_consumed_tool
+        assert mark_consumed_tool is not None
+
+    def test_mark_consumed_idempotent(self):
+        """mark_consumed must only update WHERE consumed_at IS NULL."""
+        import inspect
+        from mnemo_mcp.tools.memory_tools import MarkConsumedTool
+        source = inspect.getsource(MarkConsumedTool.execute)
+        assert "consumed_at IS NULL" in source
+
+    def test_consumed_filter_in_memory_filters(self):
+        """MemoryFilters must have consumed field."""
+        from mnemo_mcp.models.memory_models import MemoryFilters
+        f1 = MemoryFilters(consumed=False)
+        assert f1.consumed is False
+        f2 = MemoryFilters(consumed=True)
+        assert f2.consumed is True
+        f3 = MemoryFilters()
+        assert f3.consumed is None
+
+    def test_consumed_in_search_memory(self):
+        """search_memory must accept consumed parameter."""
+        import inspect
+        from mnemo_mcp.tools.memory_tools import SearchMemoryTool
+        source = inspect.getsource(SearchMemoryTool.execute)
+        assert "consumed" in source
+
+    def test_consumed_in_repository(self):
+        """MemoryRepository.search_by_vector must handle consumed filter."""
+        import inspect
+        from db.repositories.memory_repository import MemoryRepository
+        source = inspect.getsource(MemoryRepository.search_by_vector)
+        assert "consumed_at" in source
+
+    def test_consumed_in_hybrid_search(self):
+        """HybridMemorySearchService must handle consumed filter."""
+        import inspect
+        from services.hybrid_memory_search_service import HybridMemorySearchService
+        lex_source = inspect.getsource(HybridMemorySearchService._lexical_search)
+        vec_source = inspect.getsource(HybridMemorySearchService._vector_search)
+        assert "consumed_at" in lex_source
+        assert "consumed_at" in vec_source
+
+    def test_migration_exists(self):
+        """Consumption tracking migration must exist."""
+        import os
+        versions_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "api", "alembic", "versions"
+        )
+        if not os.path.isdir(versions_dir):
+            import pytest
+            pytest.skip("Migration path not accessible")
+        found = any("c4d7f2a8e102_consumption" in f for f in os.listdir(versions_dir))
+        assert found, "Consumption tracking migration not found"

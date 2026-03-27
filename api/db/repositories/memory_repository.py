@@ -478,6 +478,12 @@ class MemoryRepository:
                     for i, tag in enumerate(filters.tags):
                         params[f"tag{i}"] = tag
 
+                if filters.consumed is not None:
+                    if filters.consumed:
+                        where_clauses.append("consumed_at IS NOT NULL")
+                    else:
+                        where_clauses.append("consumed_at IS NULL")
+
             where_sql = " AND ".join(where_clauses)
 
             # Format vector for pgvector halfvec (validated via helper)

@@ -344,6 +344,10 @@ class MemoryFilters(BaseModel):
         None,
         description="Filter memories created before this timestamp"
     )
+    consumed: Optional[bool] = Field(
+        None,
+        description="Filter by consumption status (None=all, True=consumed, False=fresh/unconsumed)"
+    )
 
     @field_validator('tags')
     @classmethod
