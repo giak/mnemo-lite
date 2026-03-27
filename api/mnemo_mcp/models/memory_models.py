@@ -348,6 +348,10 @@ class MemoryFilters(BaseModel):
         None,
         description="Filter by consumption status (None=all, True=consumed, False=fresh/unconsumed)"
     )
+    lifecycle_state: Optional[str] = Field(
+        None,
+        description="Filter by lifecycle state (None=all, 'sealed', 'candidate', 'doubt', 'summary')"
+    )
 
     @field_validator('tags')
     @classmethod

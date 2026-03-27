@@ -611,6 +611,7 @@ class SearchMemoryTool(BaseMCPComponent):
         memory_type: Optional[str] = None,
         tags: Optional[List[str]] = None,
         consumed: Optional[bool] = None,
+        lifecycle_state: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
     ) -> Dict[str, Any]:
@@ -623,6 +624,7 @@ class SearchMemoryTool(BaseMCPComponent):
             memory_type: Filter by type (note, decision, task, reference, conversation, investigation)
             tags: Filter by tags (optional)
             consumed: Filter by consumption status (None=all, True=consumed, False=fresh)
+            lifecycle_state: Filter by lifecycle (None=all, "sealed", "candidate", "doubt", "summary")
             limit: Max results (1-50, default 10)
             offset: Pagination offset (default 0)
 
@@ -679,6 +681,7 @@ class SearchMemoryTool(BaseMCPComponent):
                     memory_type=memory_type_enum if memory_type_enum else None,
                     tags=tags or [],
                     consumed=consumed,
+                    lifecycle_state=lifecycle_state,
                 )
 
                 response = await self.hybrid_memory_search_service.search(
@@ -724,6 +727,7 @@ class SearchMemoryTool(BaseMCPComponent):
                     tags=tags or None,
                     project_id=project_id,
                     consumed=consumed,
+                    lifecycle_state=lifecycle_state,
                 )
 
                 memories_list, total_count = await self.memory_repository.search_by_vector(

@@ -484,6 +484,17 @@ class MemoryRepository:
                     else:
                         where_clauses.append("consumed_at IS NULL")
 
+                if filters.lifecycle_state:
+                    if filters.lifecycle_state == "sealed":
+                        where_clauses.append("NOT EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:candidate')")
+                        where_clauses.append("NOT EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
+                    elif filters.lifecycle_state == "candidate":
+                        where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:candidate')")
+                    elif filters.lifecycle_state == "doubt":
+                        where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
+                    elif filters.lifecycle_state == "summary":
+                        where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:summary')")
+
             where_sql = " AND ".join(where_clauses)
 
             # Format vector for pgvector halfvec (validated via helper)
