@@ -416,12 +416,18 @@ app.add_middleware(MetricsMiddleware)
 
 # API Key authentication middleware
 from middleware.auth import APIKeyMiddleware
+from middleware.rate_limit import RateLimitMiddleware
 _auth_enabled = os.getenv("MNEMO_AUTH_ENABLED", "false").lower() == "true"
+_rate_limit_enabled = os.getenv("MNEMO_RATE_LIMIT_ENABLED", "true").lower() == "true"
+_rate_limit_max = int(os.getenv("MNEMO_RATE_LIMIT_MAX", "100"))
+_rate_limit_window = int(os.getenv("MNEMO_RATE_LIMIT_WINDOW", "60"))
+
+app.add_middleware(RateLimitMiddleware, max_requests=_rate_limit_max, window_seconds=_rate_limit_window, enabled=_rate_limit_enabled)
 app.add_middleware(APIKeyMiddleware, enabled=_auth_enabled)
 logger.info(
     "auth.middleware",
     enabled=_auth_enabled,
-    api_key_count=len(os.getenv("MNEMO_API_KEYS", "").split(",")) if os.getenv("MNEMO_API_KEYS") else 0,
+    rate_limit=f"{_rate_limit_max}/{_rate_limit_window}s",
 )
 
 # EPIC-21: Disable browser cache in development for instant UI reload
