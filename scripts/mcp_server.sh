@@ -13,6 +13,9 @@ fi
 
 echo "[$(date)] MCP Connection Started" >> /tmp/mnemo_mcp.err
 
-# Execute the server
-# Note: No EMBEDDING_MODE=mock here, we are using the Lazy Import fix in code.
-exec docker exec -i mnemo-api python3 -u -m mnemo_mcp.server 2>> /tmp/mnemo_mcp.err
+# Execute the server inside the container
+# Pass DATABASE_URL from container env to MCP_DATABASE_URL (Pydantic prefix)
+# Strip asyncpg prefix if present (MCP expects postgresql://)
+CONTAINER_DB_URL=$(docker exec mnemo-api printenv DATABASE_URL 2>/dev/null || echo "")
+MCP_DB_URL="${MCP_DATABASE_URL:-$(echo "$CONTAINER_DB_URL" | sed 's/postgresql+asyncpg/postgresql/')}"
+exec docker exec -i -e MCP_DATABASE_URL="$MCP_DB_URL" mnemo-api python3 -u -m mnemo_mcp.server 2>> /tmp/mnemo_mcp.err
