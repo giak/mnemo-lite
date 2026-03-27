@@ -589,4 +589,162 @@
     color: var(--color-status-info-light);
     border: 1px solid oklch(from var(--color-status-info) l c h / 0.3);
   }
+
+  /* ============================================================
+     SCADA MARKDOWN — Rich content rendering
+     ============================================================ */
+
+  .scada-markdown {
+    color: var(--color-text-secondary);
+    line-height: 1.7;
+    font-family: var(--font-mono);
+  }
+
+  .scada-markdown h1,
+  .scada-markdown h2,
+  .scada-markdown h3,
+  .scada-markdown h4 {
+    color: var(--color-text-data);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+  }
+
+  .scada-markdown h1 { font-size: 1.5rem; font-weight: 700; border-bottom: 2px solid var(--color-border-primary); padding-bottom: 0.3em; }
+  .scada-markdown h2 { font-size: 1.25rem; font-weight: 700; }
+  .scada-markdown h3 { font-size: 1.1rem; font-weight: 600; }
+  .scada-markdown h4 { font-size: 1rem; font-weight: 600; color: var(--color-text-muted); }
+
+  .scada-markdown p { margin-bottom: 1em; }
+
+  .scada-markdown a {
+    color: var(--color-text-data);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .scada-markdown a:hover { color: #67e8f9; }
+
+  .scada-markdown strong { color: var(--color-text-primary); font-weight: 700; }
+  .scada-markdown em { color: var(--color-text-muted); font-style: italic; }
+
+  .scada-markdown ul,
+  .scada-markdown ol {
+    margin-bottom: 1em;
+    padding-left: 1.5em;
+  }
+  .scada-markdown ul { list-style-type: disc; }
+  .scada-markdown ol { list-style-type: decimal; }
+  .scada-markdown li { margin-bottom: 0.3em; }
+  .scada-markdown li::marker { color: var(--color-text-data); }
+
+  .scada-markdown blockquote {
+    border-left: 4px solid oklch(from var(--color-status-info) l c h / 0.5);
+    padding: 0.5em 1em;
+    margin: 1em 0;
+    background-color: oklch(from var(--color-status-info) calc(l * 0.15) c h / 0.15);
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  .scada-markdown code {
+    background-color: var(--color-bg-secondary);
+    color: #86efac;
+    padding: 0.15em 0.4em;
+    border-radius: 0.25rem;
+    font-size: 0.9em;
+    font-family: var(--font-mono);
+  }
+
+  .scada-markdown pre {
+    background-color: var(--color-bg-primary);
+    border: 2px solid var(--color-border-primary);
+    border-radius: 0.5rem;
+    padding: 1em;
+    overflow-x: auto;
+    margin: 1em 0;
+  }
+
+  .scada-markdown pre code {
+    background-color: transparent;
+    color: inherit;
+    padding: 0;
+    font-size: 0.85em;
+    line-height: 1.6;
+  }
+
+  .scada-markdown table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+    font-size: 0.875rem;
+  }
+  .scada-markdown th {
+    background-color: var(--color-bg-secondary);
+    border: 1px solid var(--color-border-primary);
+    padding: 0.5em 0.75em;
+    text-align: left;
+    font-weight: 600;
+    color: var(--color-text-data);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.75rem;
+  }
+  .scada-markdown td {
+    border: 1px solid var(--color-border-primary);
+    padding: 0.5em 0.75em;
+  }
+  .scada-markdown tr:hover td {
+    background-color: var(--color-bg-secondary);
+  }
+
+  .scada-markdown hr {
+    border: none;
+    border-top: 2px solid var(--color-border-primary);
+    margin: 1.5em 0;
+  }
+
+  .scada-markdown img {
+    max-width: 100%;
+    border-radius: 0.5rem;
+    border: 2px solid var(--color-border-primary);
+  }
+
+  /* ============================================================
+     HIGHLIGHT.JS — Code syntax highlighting (SCADA dark theme)
+     ============================================================ */
+
+  .scada-markdown .hljs {
+    background: transparent;
+    color: #e2e8f0;
+  }
+  .scada-markdown .hljs-keyword { color: #c084fc; }
+  .scada-markdown .hljs-built_in { color: #67e8f9; }
+  .scada-markdown .hljs-type { color: #67e8f9; }
+  .scada-markdown .hljs-literal { color: #f472b6; }
+  .scada-markdown .hljs-number { color: #f472b6; }
+  .scada-markdown .hljs-string { color: #86efac; }
+  .scada-markdown .hljs-comment { color: #64748b; font-style: italic; }
+  .scada-markdown .hljs-function { color: #60a5fa; }
+  .scada-markdown .hljs-title { color: #60a5fa; }
+  .scada-markdown .hljs-params { color: #e2e8f0; }
+  .scada-markdown .hljs-attr { color: #fbbf24; }
+  .scada-markdown .hljs-attribute { color: #86efac; }
+  .scada-markdown .hljs-selector-class { color: #67e8f9; }
+  .scada-markdown .hljs-selector-tag { color: #c084fc; }
+  .scada-markdown .hljs-selector-id { color: #60a5fa; }
+  .scada-markdown .hljs-variable { color: #f472b6; }
+  .scada-markdown .hljs-template-variable { color: #f472b6; }
+  .scada-markdown .hljs-meta { color: #94a3b8; }
+  .scada-markdown .hljs-tag { color: #c084fc; }
+  .scada-markdown .hljs-name { color: #c084fc; }
+  .scada-markdown .hljs-punctuation { color: #94a3b8; }
+  .scada-markdown .hljs-symbol { color: #fbbf24; }
+  .scada-markdown .hljs-bullet { color: #fbbf24; }
+  .scada-markdown .hljs-code { color: #86efac; }
+  .scada-markdown .hljs-deletion { color: #ef4444; background-color: oklch(from #ef4444 l c h / 0.15); }
+  .scada-markdown .hljs-addition { color: #22c55e; background-color: oklch(from #22c55e l c h / 0.15); }
+  .scada-markdown .hljs-regexp { color: #f472b6; }
+  .scada-markdown .hljs-formula { color: #fbbf24; }
 }

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
  * EPIC-27: Conversation Detail Modal - SCADA Industrial Style
- * Modal dialog with LED indicators and monospace formatting
+ * Modal dialog with LED indicators, Markdown rendering, and monospace formatting
  */
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import type { MemoryDetail } from '@/types/memories'
+import { useMarkdown } from '@/composables/useMarkdown'
 
 interface Props {
   memoryId: string | null
@@ -83,6 +84,10 @@ function extractSessionId(tags: string[]): string {
   if (!sessionTag) return 'UNKNOWN'
   return sessionTag.replace('session:', '').substring(0, 8).toUpperCase()
 }
+
+// Markdown rendering
+const contentRef = computed(() => memory.value?.content || '')
+const { renderedContent } = useMarkdown(contentRef)
 </script>
 
 <template>
@@ -170,9 +175,7 @@ function extractSessionId(tags: string[]): string {
                   <span class="scada-led scada-led-cyan"></span>
                   <h3 class="scada-label text-cyan-400">Conversation Content</h3>
                 </div>
-                <div class="prose prose-invert max-w-none">
-                  <pre class="whitespace-pre-wrap text-gray-300 text-sm leading-relaxed font-mono">{{ memory.content }}</pre>
-                </div>
+                <div class="scada-markdown" v-html="renderedContent"></div>
               </div>
 
               <!-- Metadata -->
