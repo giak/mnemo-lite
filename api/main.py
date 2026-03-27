@@ -407,6 +407,16 @@ app.add_middleware(
 # EPIC-22 Story 22.1: Metrics middleware for observability
 app.add_middleware(MetricsMiddleware)
 
+# API Key authentication middleware
+from middleware.auth import APIKeyMiddleware
+_auth_enabled = os.getenv("MNEMO_AUTH_ENABLED", "false").lower() == "true"
+app.add_middleware(APIKeyMiddleware, enabled=_auth_enabled)
+logger.info(
+    "auth.middleware",
+    enabled=_auth_enabled,
+    api_key_count=len(os.getenv("MNEMO_API_KEYS", "").split(",")) if os.getenv("MNEMO_API_KEYS") else 0,
+)
+
 # EPIC-21: Disable browser cache in development for instant UI reload
 @app.middleware("http")
 async def disable_cache_in_development(request: Request, call_next):
