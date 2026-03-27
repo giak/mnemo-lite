@@ -4,6 +4,7 @@ MCP Base Classes and Models
 Provides base classes and Pydantic models for all MCP components.
 """
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Dict
 from urllib.parse import urlparse, parse_qs
@@ -11,6 +12,9 @@ from pydantic import BaseModel, Field
 import structlog
 
 logger = structlog.get_logger()
+
+# Default timeout for MCP tool execution (seconds)
+MCP_TOOL_TIMEOUT = int(__import__("os").getenv("MCP_TOOL_TIMEOUT", "30"))
 
 
 class MCPBaseResponse(BaseModel):
@@ -91,6 +95,38 @@ class BaseMCPComponent(ABC):
             component=self.get_name(),
             services=service_names
         )
+
+    async def run_with_timeout(self, coro, timeout: Optional[int] = None, tool_name: str = ""):
+        """
+        Execute a coroutine with timeout protection.
+
+        Prevents MCP tools from hanging indefinitely on slow DB/embedding calls.
+
+        Args:
+            coro: Coroutine to execute
+            timeout: Timeout in seconds (default: MCP_TOOL_TIMEOUT env var, 30s)
+            tool_name: Tool name for logging
+
+        Returns:
+            Result of the coroutine
+
+        Raises:
+            asyncio.TimeoutError: If execution exceeds timeout
+        """
+        t = timeout or MCP_TOOL_TIMEOUT
+        name = tool_name or self.get_name()
+        try:
+            return await asyncio.wait_for(coro, timeout=t)
+        except asyncio.TimeoutError:
+            logger.error(
+                "mcp.tool.timeout",
+                tool=name,
+                timeout_seconds=t,
+            )
+            raise RuntimeError(
+                f"Tool '{name}' timed out after {t}s. "
+                f"Increase MCP_TOOL_TIMEOUT if needed."
+            )
 
     @abstractmethod
     def get_name(self) -> str:
