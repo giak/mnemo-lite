@@ -76,13 +76,14 @@ async def get_import_timeline(
     try:
         async with engine.begin() as conn:
             result = await conn.execute(
-                text(f"""
+                text("""
                     SELECT DATE(created_at) as import_date, COUNT(*) as count
                     FROM memories
-                    WHERE author = 'AutoImport' AND created_at > NOW() - INTERVAL '{days} days'
+                    WHERE author = 'AutoImport' AND created_at > NOW() - make_interval(days => :days)
                     GROUP BY DATE(created_at)
                     ORDER BY import_date DESC
-                """)
+                """),
+                {"days": days}
             )
 
             return [{"date": str(row.import_date), "count": row.count} for row in result]

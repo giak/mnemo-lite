@@ -138,14 +138,14 @@ class ErrorRepository:
                 MAX(timestamp) as last_occurrence,
                 MIN(timestamp) as first_occurrence
             FROM error_logs
-            WHERE timestamp > NOW() - INTERVAL '{hours} hours'
+            WHERE timestamp > NOW() - make_interval(hours => :hours)
             GROUP BY category, service, error_type, severity
             ORDER BY total_count DESC
         """)
 
         try:
             async with self.engine.connect() as conn:
-                result = await conn.execute(query)
+                result = await conn.execute(query, {"hours": hours})
                 rows = result.fetchall()
 
                 return [
@@ -194,13 +194,13 @@ class ErrorRepository:
                 context
             FROM error_logs
             WHERE severity = 'CRITICAL'
-              AND timestamp > NOW() - INTERVAL '{hours} hours'
+              AND timestamp > NOW() - make_interval(hours => :hours)
             ORDER BY timestamp DESC
         """)
 
         try:
             async with self.engine.connect() as conn:
-                result = await conn.execute(query)
+                result = await conn.execute(query, {"hours": hours})
                 rows = result.fetchall()
 
                 return [
@@ -246,13 +246,13 @@ class ErrorRepository:
                 severity,
                 COUNT(*) as count
             FROM error_logs
-            WHERE timestamp > NOW() - INTERVAL '{hours} hours'
+            WHERE timestamp > NOW() - make_interval(hours => :hours)
             GROUP BY severity
         """)
 
         try:
             async with self.engine.connect() as conn:
-                result = await conn.execute(query)
+                result = await conn.execute(query, {"hours": hours})
                 rows = result.fetchall()
 
                 return {row.severity: row.count for row in rows}
@@ -293,7 +293,7 @@ class ErrorRepository:
                 context
             FROM error_logs
             WHERE category = :category
-              AND timestamp > NOW() - INTERVAL '{hours} hours'
+              AND timestamp > NOW() - make_interval(hours => :hours)
             ORDER BY timestamp DESC
             LIMIT :limit
         """)

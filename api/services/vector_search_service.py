@@ -146,8 +146,8 @@ class VectorSearchService:
         # ef_search: controls accuracy/speed tradeoff (default 40, production 100)
         # iterative_scan: fixes overfiltering when WHERE filters eliminate HNSW candidates (pgvector 0.8+)
         set_cmds = [
-            f"SET LOCAL hnsw.ef_search = {self.ef_search}",
-            "SET LOCAL hnsw.iterative_scan = 'relaxed_order'",
+            ("SET LOCAL hnsw.ef_search = :ef", {"ef": int(self.ef_search)}),
+            ("SET LOCAL hnsw.iterative_scan = 'relaxed_order'", {}),
         ]
 
         # Query using halfvec columns (50% smaller index, 99.2% recall)
@@ -173,8 +173,8 @@ class VectorSearchService:
         try:
             async with self.engine.begin() as conn:
                 # Execute SET commands in same transaction (separate statements for asyncpg)
-                for set_cmd in set_cmds:
-                    await conn.execute(text(set_cmd))
+                for set_sql, set_params in set_cmds:
+                    await conn.execute(text(set_sql), set_params)
                 result = await conn.execute(text(query_sql), params)
                 rows = result.fetchall()
 
