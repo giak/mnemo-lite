@@ -5,7 +5,7 @@
 
 import { ref, onMounted, onUnmounted } from 'vue'
 
-const API_BASE_URL = 'http://localhost:8001/api/v1'
+const API_BASE_URL = '/api/v1'
 
 export interface LatencyPoint {
   hour: string
