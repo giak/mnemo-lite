@@ -68,7 +68,7 @@ async def lifespan(app: FastAPI):
                 pool_size=20,  # Reduced from 10 - sufficient for local app
                 max_overflow=10,  # Reduced from 5 - minimal overflow needed
                 pool_recycle=3600,  # Recycle connections after 1 hour
-                pool_pre_ping=False,  # Not needed for local PostgreSQL
+                pool_pre_ping=True,  # Verify connection alive before use (fixes Docker restart)
                 future=True,
                 connect_args={
                     "server_settings": {
@@ -388,13 +388,20 @@ app = FastAPI(
 )
 
 # Configuration CORS
-# EPIC-25: Allow Vue.js frontend in development
-allowed_origins = ["*"] if ENVIRONMENT == "development" else [
-    "https://app.mnemolite.com",
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:3002",
-]
+# Never use "*" in production — validate ENVIRONMENT
+if ENVIRONMENT == "development":
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:5173",  # Vite dev server
+        "http://127.0.0.1:3000",
+    ]
+else:
+    allowed_origins = [
+        "https://app.mnemolite.com",
+    ]
+logger.info("cors.origins", environment=ENVIRONMENT, origins=allowed_origins)
 
 app.add_middleware(
     CORSMiddleware,

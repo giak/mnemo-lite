@@ -239,7 +239,7 @@ class SearchCodeTool(BaseMCPComponent):
                     vector_time_ms=hybrid_response.metadata.vector_time_ms,
                     fusion_time_ms=hybrid_response.metadata.fusion_time_ms,
                     graph_time_ms=hybrid_response.metadata.graph_time_ms,
-                    cache_hit=False,
+                    cache_hit=False,  # False here — cache hits return early at line 145
                 ),
                 total=total,
                 limit=limit,

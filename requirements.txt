@@ -9,7 +9,7 @@ psycopg2-binary>=2.9.0 # Pour SQLAlchemy sync et outils admin
 alembic>=1.13.0 # Database migrations with async support
 
 # Embedding
-# sentence-transformers>=2.2.0 # Ou autre librairie
+sentence-transformers>=2.7.0
 
 # Configuration & Logging
 python-dotenv>=1.0.0
