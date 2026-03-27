@@ -72,6 +72,23 @@ EMBEDDING_MODELS = {
         "query_prefix": "query: ",
         "document_prefix": "passage: ",
     },
+    # Jina Embeddings v5 (2026, distillé de Qwen3-Embedding-4B)
+    "jinaai/jina-embeddings-v5-text-nano": {
+        "version": "v5-nano",
+        "dimension": 768,
+        "uses_prompt_name": True,  # Uses task-specific LoRA adapters
+        "uses_prefix": False,
+        "query_prefix": None,
+        "document_prefix": None,
+    },
+    "jinaai/jina-embeddings-v5-text-small": {
+        "version": "v5-small",
+        "dimension": 1024,
+        "uses_prompt_name": True,
+        "uses_prefix": False,
+        "query_prefix": None,
+        "document_prefix": None,
+    },
 }
 
 # Backward compatibility alias
@@ -88,6 +105,8 @@ class SentenceTransformerEmbeddingService:
     - intfloat/multilingual-e5-base (278M params, 768D, best French quality)
     - intfloat/multilingual-e5-small (118M params, 384D, fast multilingual)
     - nomic-ai/nomic-embed-text-v2-moe (475M params, 768D, requires GPU)
+    - jinaai/jina-embeddings-v5-text-nano (239M, 768D, MMTEB 65.5, recommended)
+    - jinaai/jina-embeddings-v5-text-small (677M, 1024D, MMTEB 67.0, SOTA sub-1B)
 
     Features:
     - Lazy model loading (avoids cold start blocking)

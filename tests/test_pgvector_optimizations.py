@@ -817,6 +817,43 @@ class TestBug02MemoryFilters:
 
 
 # ============================================================================
+# 13. EMBEDDING MODELS (jina-v5 support)
+# ============================================================================
+
+class TestEmbeddingModels:
+    """
+    Verify jina-v5 embedding models are supported.
+    """
+
+    def test_jina_v5_nano_in_config(self):
+        """jinaai/jina-embeddings-v5-text-nano must be in EMBEDDING_MODELS."""
+        from services.sentence_transformer_embedding_service import EMBEDDING_MODELS
+
+        assert "jinaai/jina-embeddings-v5-text-nano" in EMBEDDING_MODELS
+        nano = EMBEDDING_MODELS["jinaai/jina-embeddings-v5-text-nano"]
+        assert nano["dimension"] == 768
+        assert nano["uses_prompt_name"] is True
+
+    def test_jina_v5_small_in_config(self):
+        """jinaai/jina-embeddings-v5-text-small must be in EMBEDDING_MODELS."""
+        from services.sentence_transformer_embedding_service import EMBEDDING_MODELS
+
+        assert "jinaai/jina-embeddings-v5-text-small" in EMBEDDING_MODELS
+        small = EMBEDDING_MODELS["jinaai/jina-embeddings-v5-text-small"]
+        assert small["dimension"] == 1024
+
+    def test_jina_v5_nano_same_dimension_as_e5_base(self):
+        """jina-v5-nano (768D) must match e5-base (768D) for migration-free swap."""
+        from services.sentence_transformer_embedding_service import EMBEDDING_MODELS
+
+        nano_dim = EMBEDDING_MODELS["jinaai/jina-embeddings-v5-text-nano"]["dimension"]
+        e5_dim = EMBEDDING_MODELS["intfloat/multilingual-e5-base"]["dimension"]
+        assert nano_dim == e5_dim, (
+            f"jina-v5-nano ({nano_dim}D) must match e5-base ({e5_dim}D) for migration-free swap"
+        )
+
+
+# ============================================================================
 # 7. ADAPTIVE RRF K
 # ============================================================================
 
