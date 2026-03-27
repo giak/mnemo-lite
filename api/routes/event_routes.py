@@ -42,7 +42,7 @@ async def create_event(
         logger.error(f"Erreur lors de la création de l'événement: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Erreur lors de la création de l'événement: {str(e)}",
+            detail="Creation failed",
         )
 
 
@@ -79,7 +79,7 @@ async def get_event(
         )
         raise HTTPException(
             status_code=500,
-            detail=f"Erreur lors de la récupération de l'événement: {str(e)}",
+            detail="Retrieval failed",
         )
 
 
@@ -118,7 +118,7 @@ async def update_event_metadata(
         )
         raise HTTPException(
             status_code=500,
-            detail=f"Erreur lors de la mise à jour des métadonnées: {str(e)}",
+            detail="Update failed",
         )
 
 
@@ -151,7 +151,7 @@ async def delete_event(
         )
         raise HTTPException(
             status_code=500,
-            detail=f"Erreur lors de la suppression de l'événement: {str(e)}",
+            detail="Delete failed",
         )
 
 
@@ -184,7 +184,7 @@ async def filter_events_by_metadata(
             f"Erreur lors du filtrage des événements par métadonnées: {str(e)}"
         )
         raise HTTPException(
-            status_code=500, detail=f"Erreur lors du filtrage des événements: {str(e)}"
+            status_code=500, detail="Filter failed"
         )
 
 
@@ -216,7 +216,7 @@ async def search_events_by_embedding(
         )
         raise HTTPException(
             status_code=500,
-            detail=f"Erreur lors de la recherche d'événements: {str(e)}",
+            detail="Search failed",
         )
 
 # Performance optimization: Add caching

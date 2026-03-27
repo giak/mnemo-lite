@@ -90,7 +90,7 @@ async def build_graph(
         return stats
     except Exception as e:
         logger.error(f"Failed to build graph: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to build graph: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/traverse", response_model=GraphTraversal)
@@ -136,10 +136,10 @@ async def traverse_graph(
 
     except ValueError as e:
         logger.error(f"Invalid traversal request: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Request failed")
     except Exception as e:
         logger.error(f"Failed to traverse graph: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to traverse graph: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/path", response_model=PathResponse)
@@ -199,7 +199,7 @@ async def find_path(
 
     except Exception as e:
         logger.error(f"Failed to find path: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to find path: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/repositories", response_model=List[str])
@@ -232,7 +232,7 @@ async def list_repositories(
 
     except Exception as e:
         logger.error(f"Failed to list repositories: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list repositories: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/stats/{repository}", response_model=Dict[str, Any])
@@ -308,7 +308,7 @@ async def get_graph_stats(
 
     except Exception as e:
         logger.error(f"Failed to get graph stats for {repository}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/data/{repository}")
@@ -420,7 +420,7 @@ async def get_graph_data(
 
     except Exception as e:
         logger.error(f"Failed to get graph data for {repository}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get graph data: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/metrics/{repository}", response_model=Dict[str, Any])
@@ -504,7 +504,7 @@ async def get_repository_metrics(
 
     except Exception as e:
         logger.error(f"Failed to get metrics for {repository}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get metrics: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/module/{repository}")
@@ -657,4 +657,4 @@ async def get_module_graph(
 
     except Exception as e:
         logger.error(f"Failed to get module graph for {repository}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get module graph: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -1414,7 +1414,7 @@ async def code_upload_process(
             logger.warning(f"Upload rejected: Invalid JSON - {e}")
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid JSON payload: {str(e)}"
+                detail="Invalid JSON payload"
             )
 
         # SECURITY CHECK #2: Validate repository name

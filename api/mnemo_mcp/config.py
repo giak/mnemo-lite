@@ -6,6 +6,7 @@ Loads from environment variables with MCP_ prefix.
 """
 
 from typing import List, Literal
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,20 +42,20 @@ class MCPConfig(BaseSettings):
 
     # Authentication (HTTP transport only)
     auth_mode: Literal["none", "api_key", "oauth"] = "none"
-    api_keys: dict[str, str] = {}
+    api_keys: dict[str, str] = Field(default_factory=dict)
     oauth_secret_key: str = ""
 
     # CORS (HTTP transport only)
-    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:8001"]
+    cors_origins: List[str] = Field(default_factory=lambda: ["http://localhost:3000", "http://localhost:8001"])
     cors_allow_credentials: bool = True
-    cors_allow_methods: List[str] = ["GET", "POST", "OPTIONS"]
-    cors_allow_headers: List[str] = ["Authorization", "Content-Type"]
+    cors_allow_methods: List[str] = Field(default_factory=lambda: ["GET", "POST", "OPTIONS"])
+    cors_allow_headers: List[str] = Field(default_factory=lambda: ["Authorization", "Content-Type"])
 
     # Database (must be set via MCP_DATABASE_URL env var)
     database_url: str = ""
     test_database_url: str = ""
 
-    # Redis (use Docker service name in containers, localhost for host)
+    # Redis
     redis_url: str = "redis://redis:6379/0"
 
     # Cache settings
@@ -69,6 +70,51 @@ class MCPConfig(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False
     )
+
+    @model_validator(mode="after")
+    def validate_config(self):
+        """Validate configuration at startup with clear error messages."""
+        errors = []
+
+        # Database URL required
+        if not self.database_url:
+            errors.append(
+                "MCP_DATABASE_URL is required. "
+                "Set it in .env or as environment variable. "
+                "Example: MCP_DATABASE_URL=postgresql://user:pass@host:5432/mnemolite"
+            )
+        elif not self.database_url.startswith("postgresql://"):
+            errors.append(
+                f"MCP_DATABASE_URL must start with 'postgresql://'. "
+                f"Got: {self.database_url[:20]}..."
+            )
+
+        # HTTP transport requires auth in production
+        if self.transport == "http" and self.auth_mode == "none":
+            errors.append(
+                "HTTP transport without authentication is insecure. "
+                "Set MCP_AUTH_MODE=api_key and MCP_API_KEYS=key:owner"
+            )
+
+        # OAuth requires secret
+        if self.auth_mode == "oauth" and not self.oauth_secret_key:
+            errors.append(
+                "MCP_OAUTH_SECRET_KEY is required when auth_mode=oauth. "
+                "Generate a random key: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+            )
+
+        # Cache TTLs must be positive
+        for field_name in ["cache_ttl_code_search", "cache_ttl_graph",
+                           "cache_ttl_index_status", "cache_ttl_cache_stats"]:
+            val = getattr(self, field_name)
+            if val < 0:
+                errors.append(f"{field_name} must be >= 0, got {val}")
+
+        if errors:
+            error_msg = "Configuration errors:\n" + "\n".join(f"  - {e}" for e in errors)
+            raise ValueError(error_msg)
+
+        return self
 
 
 # Global config instance

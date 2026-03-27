@@ -138,7 +138,7 @@ async def flush_cache(
         raise  # Re-raise HTTP exceptions as-is (don't convert to 500)
     except Exception as e:
         logger.error("Cache flush failed via API", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Cache flush failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Cache operation failed")
 
 
 @router.get("/stats")
@@ -220,7 +220,7 @@ async def get_cache_stats(
         raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
         logger.error("Cache stats retrieval failed", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve cache stats: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/clear-all")
@@ -280,4 +280,4 @@ async def clear_all_caches(
         raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
         logger.error("Clear all caches failed", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to clear caches: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")

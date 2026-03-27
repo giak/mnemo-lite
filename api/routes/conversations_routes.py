@@ -392,7 +392,7 @@ async def queue_conversation(
         # For now, just return error and let caller handle fallback
         raise HTTPException(
             status_code=503,
-            detail=f"Redis queue unavailable: {str(e)}"
+            detail="Service unavailable"
         )
 
 
@@ -507,7 +507,7 @@ async def save_conversation(
 
     except Exception as e:
         logger.error(f"Failed to save conversation: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to save conversation: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/import")
@@ -629,7 +629,7 @@ async def import_conversations(projects_dir: str = "/host/.claude/projects") -> 
         logger.error(f"Error during import: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Import failed: {str(e)}"
+            detail="Import failed"
         )
 
 
@@ -751,5 +751,5 @@ async def autosave_metrics(request: Request) -> Dict[str, Any]:
         logger.error(f"Error fetching autosave metrics: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch metrics: {str(e)}"
+            detail="Internal server error"
         )

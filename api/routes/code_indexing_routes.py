@@ -403,7 +403,7 @@ async def index_files(
         logger.error(f"Validation error in index_files: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail="Request failed",
         )
     except Exception as e:
         logger.error(f"Index files failed: {e}", exc_info=True)

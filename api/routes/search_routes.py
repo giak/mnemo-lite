@@ -98,7 +98,7 @@ async def search_post(
         logger.error(f"Error in search POST: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Search error: {str(e)}"
+            detail="Search failed"
         )
 
 
@@ -201,7 +201,7 @@ async def search(
             )
             raise HTTPException(
                 status_code=422,
-                detail=f"Erreur lors du traitement de la requête vectorielle: {str(e)}",
+                detail="Request failed",
             )
 
     # Effectuer la recherche en utilisant le service approprié
@@ -223,7 +223,7 @@ async def search(
         return SearchResponse(data=results, meta=response_meta)
     
     except ServiceError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Request failed")
     except Exception as e:
         logger.exception("Unexpected error during search", exc_info=True)
         raise HTTPException(status_code=500, detail="An unexpected error occurred during search.")
@@ -257,7 +257,7 @@ async def search_by_content(
         logger.error(f"Erreur lors de la recherche par contenu: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erreur lors de la recherche: {str(e)}",
+            detail="Search failed",
         )
 
 
@@ -289,7 +289,7 @@ async def search_by_similarity(
         logger.error(f"Erreur lors de la recherche par similarité: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erreur lors de la recherche: {str(e)}",
+            detail="Search failed",
         )
 
 
@@ -329,5 +329,5 @@ async def search_by_metadata(
         logger.error(f"Erreur lors de la recherche par métadonnées: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erreur lors de la recherche: {str(e)}",
+            detail="Search failed",
         )

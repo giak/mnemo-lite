@@ -91,7 +91,7 @@ async def get_text_embeddings_stats(engine: AsyncEngine = Depends(get_db_engine)
         logger.error(f"Failed to get text embeddings stats: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to get text embeddings stats: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -130,5 +130,5 @@ async def get_code_embeddings_stats(engine: AsyncEngine = Depends(get_db_engine)
         logger.error(f"Failed to get code embeddings stats: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to get code embeddings stats: {str(e)}"
+            detail="Internal server error"
         )

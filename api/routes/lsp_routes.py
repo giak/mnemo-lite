@@ -129,7 +129,7 @@ async def lsp_health_check():
         logger.error(f"LSP health check failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Health check failed: {str(e)}",
+            detail="Health check failed",
         )
 
 
@@ -196,5 +196,5 @@ async def restart_lsp_server():
         logger.error(f"LSP restart failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Restart failed: {str(e)}",
+            detail="Restart failed",
         )

@@ -143,7 +143,7 @@ async def start_batch_indexing(
         logger.error(f"Failed to start batch indexing: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start batch indexing: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -255,5 +255,5 @@ async def get_batch_indexing_status(
         logger.error(f"Failed to get batch indexing status: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get batch indexing status: {str(e)}",
+            detail="Internal server error",
         )

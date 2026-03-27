@@ -291,7 +291,7 @@ async def hybrid_search(
         logger.error(f"Validation error in hybrid search: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail="Request failed",
         )
     except Exception as e:
         logger.error(f"Hybrid search failed: {e}", exc_info=True)
@@ -365,7 +365,7 @@ async def lexical_search(
         logger.error(f"Validation error in lexical search: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail="Request failed",
         )
     except Exception as e:
         logger.error(f"Lexical search failed: {e}", exc_info=True)
@@ -447,7 +447,7 @@ async def vector_search(
         logger.error(f"Validation error in vector search: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail="Request failed",
         )
     except Exception as e:
         logger.error(f"Vector search failed: {e}", exc_info=True)
