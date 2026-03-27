@@ -47,7 +47,7 @@ export function useMonitoring(options: { refreshInterval?: number } = {}) {
 
   async function fetchLatency(): Promise<void> {
     try {
-      const resp = await fetch(`${API_BASE_URL}/metrics/latency?hours=24`)
+      const resp = await fetch(`${API_BASE_URL}/monitoring/latency?hours=24`)
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       const data = await resp.json()
       latency.value = data.data || []

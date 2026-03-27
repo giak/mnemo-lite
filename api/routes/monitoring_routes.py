@@ -355,7 +355,7 @@ async def get_system_metrics(
 # Monitoring v1 Endpoints — Metrics & Alerts
 # ============================================================================
 
-@router_v1.get("/metrics/latency")
+@router_v1.get("/monitoring/latency")
 async def get_latency_metrics(
     hours: int = Query(default=24, ge=1, le=168),
     engine: AsyncEngine = Depends(get_db_engine)
