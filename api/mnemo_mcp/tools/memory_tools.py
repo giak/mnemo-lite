@@ -1227,3 +1227,82 @@ consolidate_memory_tool = ConsolidateMemoryTool()
 mark_consumed_tool = MarkConsumedTool()
 system_snapshot_tool = SystemSnapshotTool()
 
+
+
+class ConfigureDecayTool(BaseMCPComponent):
+    """
+    Tool for configuring tag-based decay rules.
+
+    Replaces hardcoded DECAY_PRESETS with configurable per-tag rules.
+    Supports auto-consolidation thresholds and priority boosts.
+
+    Usage:
+        configure_decay(tag_pattern="sys:history", decay_rate=0.05, auto_consolidate_threshold=20)
+        configure_decay(tag_pattern="sys:core", decay_rate=0.0)  # No decay
+    """
+
+    def get_name(self) -> str:
+        return "configure_decay"
+
+    async def execute(self, ctx: Context, **params) -> dict:
+        """Configure decay for a tag pattern."""
+        tag_pattern = params.get("tag_pattern")
+        decay_rate = params.get("decay_rate")
+        auto_consolidate_threshold = params.get("auto_consolidate_threshold")
+        priority_boost = params.get("priority_boost", 0.0)
+
+        if not tag_pattern:
+            raise ValueError("tag_pattern is required")
+        if decay_rate is None:
+            raise ValueError("decay_rate is required")
+        if decay_rate < 0:
+            raise ValueError("decay_rate must be >= 0")
+
+        import math
+        half_life = math.log(2) / decay_rate if decay_rate > 0 else None
+
+        try:
+            engine = self._services.get("engine")
+            if not engine:
+                raise RuntimeError("Database engine not available")
+
+            from sqlalchemy import text
+
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text("""
+                        INSERT INTO memory_decay_config (tag_pattern, decay_rate, half_life_days, auto_consolidate_threshold, priority_boost, updated_at)
+                        VALUES (:tag, :rate, :hl, :threshold, :boost, NOW())
+                        ON CONFLICT (tag_pattern) DO UPDATE SET
+                            decay_rate = EXCLUDED.decay_rate,
+                            half_life_days = EXCLUDED.half_life_days,
+                            auto_consolidate_threshold = EXCLUDED.auto_consolidate_threshold,
+                            priority_boost = EXCLUDED.priority_boost,
+                            updated_at = NOW()
+                    """),
+                    {
+                        "tag": tag_pattern,
+                        "rate": decay_rate,
+                        "hl": int(half_life) if half_life else None,
+                        "threshold": auto_consolidate_threshold,
+                        "boost": priority_boost,
+                    }
+                )
+
+            logger.info("decay.configured", tag=tag_pattern, rate=decay_rate, threshold=auto_consolidate_threshold)
+
+            return {
+                "tag_pattern": tag_pattern,
+                "decay_rate": decay_rate,
+                "half_life_days": int(half_life) if half_life else None,
+                "auto_consolidate_threshold": auto_consolidate_threshold,
+                "priority_boost": priority_boost,
+            }
+
+        except Exception as e:
+            logger.error("Failed to configure decay", error=str(e))
+            raise RuntimeError(f"Failed to configure decay: {e}") from e
+
+
+system_snapshot_tool = SystemSnapshotTool()
+configure_decay_tool = ConfigureDecayTool()

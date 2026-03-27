@@ -347,6 +347,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         consolidate_memory_tool,
         mark_consumed_tool,
         system_snapshot_tool,
+        configure_decay_tool,
     )
     from mnemo_mcp.resources.memory_resources import (
         get_memory_resource,
@@ -393,7 +394,8 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     read_memory_tool.inject_services(services)
     consolidate_memory_tool.inject_services(services)
     mark_consumed_tool.inject_services
-    system_snapshot_tool.inject_services(services)
+    system_snapshot_tool.inject_services
+    configure_decay_tool.inject_services(services)
     get_memory_resource.inject_services(services)
     list_memories_resource.inject_services(services)
     search_memories_resource.inject_services(services)
@@ -424,7 +426,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         components=[
             "ping_tool", "search_code_tool", "health_resource",
             "write_memory_tool", "update_memory_tool", "delete_memory_tool", "search_memory_tool", "read_memory_tool",
-            "consolidate_memory_tool", "mark_consumed_tool", "system_snapshot_tool",
+            "consolidate_memory_tool", "mark_consumed_tool", "system_snapshot_tool", "configure_decay_tool",
             "get_memory_resource", "list_memories_resource", "search_memories_resource",
             "graph_node_details_resource", "find_callers_resource", "find_callees_resource",
             "index_project_tool", "reindex_file_tool", "index_incremental_tool", "index_status_resource",
@@ -657,6 +659,7 @@ def register_memory_components(mcp: FastMCP):
         consolidate_memory_tool,
         mark_consumed_tool,
         system_snapshot_tool,
+        configure_decay_tool,
     )
     from mnemo_mcp.resources.memory_resources import (
         get_memory_resource,
@@ -1006,6 +1009,41 @@ def register_memory_components(mcp: FastMCP):
             ctx=ctx,
             repository=repository,
             context_budget=context_budget,
+        )
+        return response
+
+    # Register configure_decay tool
+    @mcp.tool()
+    async def configure_decay(
+        ctx: Context,
+        tag_pattern: str,
+        decay_rate: float,
+        auto_consolidate_threshold: Optional[int] = None,
+        priority_boost: float = 0.0,
+    ) -> dict:
+        """
+        Configure decay rules for a tag pattern.
+
+        Replaces hardcoded decay presets with configurable per-tag rules.
+        Idempotent (UPSERT).
+
+        Args:
+            tag_pattern: Tag to configure (e.g., "sys:history", "sys:core")
+            decay_rate: Exponential decay rate (0.0 = permanent, 0.1 = ~7 days half-life)
+            auto_consolidate_threshold: Auto-consolidate when count exceeds this (None = no auto)
+            priority_boost: Score adjustment for search ranking (+0.5 = important, -0.1 = deprioritize)
+
+        Examples:
+            configure_decay("sys:history", 0.05, auto_consolidate_threshold=20)
+            configure_decay("sys:core", 0.0)  # Permanent, no decay
+            configure_decay("sys:drift", 0.02, priority_boost=0.3)
+        """
+        response = await configure_decay_tool.execute(
+            ctx=ctx,
+            tag_pattern=tag_pattern,
+            decay_rate=decay_rate,
+            auto_consolidate_threshold=auto_consolidate_threshold,
+            priority_boost=priority_boost,
         )
         return response
 
