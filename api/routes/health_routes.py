@@ -102,6 +102,24 @@ async def health_check(db_engine: AsyncEngine = Depends(get_db_engine)):
     # Vérification de la santé de PostgreSQL via engine
     pg_status = await check_postgres_via_engine(db_engine)
 
+    # Vérification Redis (from app state or dependency)
+    redis_status = {"status": "unknown"}
+    try:
+        from dependencies import get_redis
+        # Try to ping Redis from app state
+        redis_client = None
+        try:
+            redis_client = await get_redis(None)
+        except Exception:
+            pass
+        if redis_client:
+            await redis_client.ping()
+            redis_status = {"status": "ok"}
+        else:
+            redis_status = {"status": "unavailable", "message": "Redis client not initialized"}
+    except Exception as e:
+        redis_status = {"status": "error", "message": str(e)}
+
     # Systèmes critiques fonctionnels?
     is_healthy = pg_status["status"] == "ok"
     # Service Unavailable si PG est down
@@ -123,7 +141,7 @@ async def health_check(db_engine: AsyncEngine = Depends(get_db_engine)):
     # Check if any critical circuit is OPEN
     critical_circuits_open = [
         name for name, metrics in circuit_breakers.items()
-        if metrics["state"] == "open" and name in ["embedding_service"]  # Critical services
+        if metrics["state"] == "open" and name in ["embedding_text", "embedding_code", "embedding_service"]  # Critical services
     ]
 
     # Degrade health if critical circuits are open
@@ -138,7 +156,7 @@ async def health_check(db_engine: AsyncEngine = Depends(get_db_engine)):
         "database": pg_status["status"] == "ok",  # For test compatibility
         "services": {
             "postgres": pg_status,
-            # Section chromadb supprimée
+            "redis": redis_status,
         },
         "circuit_breakers": circuit_breakers,  # EPIC-12 Story 12.3
         "critical_circuits_open": critical_circuits_open,  # EPIC-12 Story 12.3

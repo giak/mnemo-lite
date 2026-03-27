@@ -32,8 +32,8 @@ from db.query_builders import EventQueryBuilder
 # Import ContextLogger for better logging
 from utils.context_logger import get_repository_logger
 
-# Configuration du logger
-logging.basicConfig(level=logging.INFO) # Ou logging.DEBUG pour plus de détails
+# Configuration du logger — removed: logging.basicConfig conflicts with structlog
+# Use structlog.get_logger() instead
 
 # Type aliases for better readability
 QueryParams: TypeAlias = Dict[str, Any]
