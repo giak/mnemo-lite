@@ -57,11 +57,15 @@ def get_project_name(working_dir: str = None) -> str:
     for script_path in script_paths:
         if script_path.exists():
             try:
+                # Sanitize working_dir: must be absolute path, no shell metacharacters
+                safe_dir = os.path.realpath(working_dir)
+                if not os.path.isdir(safe_dir):
+                    continue
                 result = subprocess.run(
-                    ["bash", str(script_path), working_dir],
+                    ["/bin/bash", str(script_path), safe_dir],
                     capture_output=True,
                     text=True,
-                    timeout=2
+                    timeout=5
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     return result.stdout.strip().lower()
