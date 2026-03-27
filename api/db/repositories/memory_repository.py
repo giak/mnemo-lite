@@ -63,8 +63,12 @@ class MemoryRepository:
             # Use bind parameters for arrays to handle escaping correctly
             resource_links_json = json.dumps(memory_create.resource_links)
 
-            # Format embedding for pgvector
-            embedding_str = f"'[{','.join(map(str, embedding))}]'::vector" if embedding else "NULL"
+            # Format embedding for pgvector (validated via helper)
+            if embedding:
+                from utils.sql_vector import format_vector_for_sql
+                embedding_str = f"'{format_vector_for_sql(embedding)}'::vector"
+            else:
+                embedding_str = "NULL"
 
             query = text(f"""
                 INSERT INTO memories (
@@ -205,7 +209,8 @@ class MemoryRepository:
                 params["resource_links"] = json.dumps(memory_update.resource_links)
 
             if regenerate_embedding and new_embedding:
-                embedding_str = f"'[{','.join(map(str, new_embedding))}]'::vector"
+                from utils.sql_vector import format_vector_for_sql
+                embedding_str = f"'{format_vector_for_sql(new_embedding)}'::vector"
                 update_fields.append(f"embedding = {embedding_str}")
                 update_fields.append("embedding_model = :embedding_model")
                 params["embedding_model"] = "nomic-embed-text-v1.5"
@@ -475,8 +480,9 @@ class MemoryRepository:
 
             where_sql = " AND ".join(where_clauses)
 
-            # Format vector for pgvector halfvec (50% smaller, same recall)
-            vector_str = f"'[{','.join(map(str, vector))}]'::halfvec"
+            # Format vector for pgvector halfvec (validated via helper)
+            from utils.sql_vector import format_halfvec_for_sql
+            vector_str = f"'{format_halfvec_for_sql(vector)}'::halfvec"
 
             # Search query with cosine distance (using halfvec column)
             query = text(f"""

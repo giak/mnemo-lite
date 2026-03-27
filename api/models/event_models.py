@@ -45,12 +45,11 @@ class EventModel(BaseModel):
 
     @staticmethod
     def _format_embedding_for_db(embedding: Optional[List[float]]) -> Optional[str]:
-        """Formats a list of floats into a string suitable for pgvector/DB text insert."""
+        """Formats a list of floats into a string suitable for pgvector (validated)."""
         if embedding is None:
             return None
-        # Format as a string '[0.1, 0.2, ...]'
-        # This format works for both raw INSERT and for pgvector type adapter
-        return "[" + ",".join(map(str, embedding)) + "]"
+        from utils.sql_vector import format_vector_for_sql
+        return format_vector_for_sql(embedding)
 
     @classmethod
     def from_db_record(cls, record_data: Any) -> "EventModel":

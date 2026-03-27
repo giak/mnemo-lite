@@ -45,8 +45,9 @@ class EventQueryBuilder(BaseQueryBuilder):
             self.logger.warning(f"Expected list for embedding, got {type(embedding)}")
             return None
 
-        # Format as PostgreSQL array literal
-        return f"[{','.join(map(str, embedding))}]"
+        # Format as PostgreSQL array literal (validated via helper)
+        from utils.sql_vector import format_vector_for_sql
+        return format_vector_for_sql(embedding)
 
     def build_add_query(
         self,

@@ -166,10 +166,11 @@ class CodeChunkModel(CodeChunkBase):
 
     @staticmethod
     def _format_embedding_for_db(embedding: Optional[list[float]]) -> Optional[str]:
-        """Format embedding list to string for pgvector."""
+        """Format embedding list to string for pgvector (validated)."""
         if embedding is None:
             return None
-        return "[" + ",".join(map(str, embedding)) + "]"
+        from utils.sql_vector import format_vector_for_sql
+        return format_vector_for_sql(embedding)
 
     @classmethod
     def from_db_record(cls, record_data: Any) -> "CodeChunkModel":

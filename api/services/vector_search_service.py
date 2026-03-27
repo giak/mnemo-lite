@@ -100,8 +100,9 @@ class VectorSearchService:
         # Choose embedding column based on domain (halfvec for search)
         embedding_column = "embedding_text_half" if embedding_domain == "TEXT" else "embedding_code_half"
 
-        # Format embedding for pgvector halfvec query
-        embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+        # Format embedding for pgvector halfvec query (validated via helper)
+        from utils.sql_vector import format_halfvec_for_sql
+        embedding_str = format_halfvec_for_sql(embedding)
 
         # Build WHERE clauses
         where_clauses = []

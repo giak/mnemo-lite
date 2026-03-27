@@ -600,8 +600,9 @@ class HybridMemorySearchService:
 
         where_sql = " AND ".join(where_clauses)
 
-        # Format vector for pgvector halfvec
-        vector_str = f"'[{','.join(map(str, embedding))}]'::halfvec"
+        # Format vector for pgvector halfvec (validated via helper)
+        from utils.sql_vector import format_halfvec_for_sql
+        vector_str = f"'{format_halfvec_for_sql(embedding)}'::halfvec"
 
         query_sql = text(f"""
             SELECT
