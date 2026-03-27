@@ -92,6 +92,9 @@ class CodeChunkCache:
         logger.debug("L1 cache MISS", file_path=file_path)
         return None
 
+    # Backward compat alias for code_indexing_service
+    get_chunks = get
+
     def put(self, file_path: str, source_code: str, chunks: List[dict]):
         """
         Store chunks with content hash.
