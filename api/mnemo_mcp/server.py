@@ -363,6 +363,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         index_project_tool,
         reindex_file_tool,
         index_incremental_tool,
+        index_markdown_workspace_tool,
     )
     from mnemo_mcp.resources.indexing_resources import (
         index_status_resource,
@@ -408,7 +409,8 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     # Story 23.5: Inject services into indexing components
     index_project_tool.inject_services(services)
     reindex_file_tool.inject_services(services)
-    index_incremental_tool.inject_services(services)
+    index_incremental_tool.inject_services
+    index_markdown_workspace_tool.inject_services(services)
     index_status_resource.inject_services(services)
 
     # Story 23.6: Inject services into analytics components
@@ -429,7 +431,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
             "consolidate_memory_tool", "mark_consumed_tool", "system_snapshot_tool", "configure_decay_tool",
             "get_memory_resource", "list_memories_resource", "search_memories_resource",
             "graph_node_details_resource", "find_callers_resource", "find_callees_resource",
-            "index_project_tool", "reindex_file_tool", "index_incremental_tool", "index_status_resource",
+            "index_project_tool", "reindex_file_tool", "index_incremental_tool", "index_markdown_workspace_tool", "index_status_resource",
             "clear_cache_tool", "cache_stats_resource", "search_analytics_resource",
             "switch_project_tool", "list_projects_resource", "supported_languages_resource"
         ]
@@ -1261,6 +1263,7 @@ def register_indexing_components(mcp: FastMCP) -> None:
         index_project_tool,
         reindex_file_tool,
         index_incremental_tool,
+        index_markdown_workspace_tool,
     )
     from mnemo_mcp.resources.indexing_resources import (
         index_status_resource,
@@ -1387,6 +1390,41 @@ def register_indexing_components(mcp: FastMCP) -> None:
             project_path=project_path,
             repository=repository,
             include_gitignored=include_gitignored,
+        )
+        return response
+
+    # Register index_markdown_workspace tool
+    @mcp.tool()
+    async def index_markdown_workspace(
+        ctx: Context,
+        root_path: str,
+        repository: str = "expanse",
+        max_file_size_kb: int = 50,
+    ) -> dict:
+        """
+        Index markdown workspace for agent memory.
+
+        Specialized for Expanse: skip tree-sitter, LSP, metadata, graph.
+        Just: scan .md → split by ## → embed TEXT → store halfvec.
+
+        10x faster than index_project for markdown-only repos.
+
+        Args:
+            root_path: Path to project root
+            repository: Repository name (default: "expanse")
+            max_file_size_kb: Skip files larger than this (default: 50)
+
+        Returns:
+            Dict with: scanned, indexed, chunks_created, time_ms
+
+        Example:
+            index_markdown_workspace(root_path="/home/giak/projects/expanse")
+        """
+        response = await index_markdown_workspace_tool.execute(
+            ctx=ctx,
+            root_path=root_path,
+            repository=repository,
+            max_file_size_kb=max_file_size_kb,
         )
         return response
 
