@@ -56,6 +56,11 @@ const router = createRouter({
       path: '/brain',
       name: 'brain',
       component: () => import('@/pages/Brain.vue')
+    },
+    {
+      path: '/expanse-memory',
+      name: 'expanse-memory',
+      component: () => import('@/pages/ExpanseMemory.vue')
     }
   ]
 })

@@ -20,6 +20,7 @@ const links: MenuItem[] = [
   { name: 'MEMORIES', path: '/memories' },
   { name: 'PROJECTS', path: '/projects' },
   { name: 'EXPANSE', path: '/expanse' },
+  { name: 'EXP. MEMORY', path: '/expanse-memory' },
   { name: 'MONITORING', path: '/monitoring' },
   { name: 'BRAIN', path: '/brain' },
   {
