@@ -469,11 +469,11 @@ class IndexIncrementalTool(BaseMCPComponent):
                 raise RuntimeError("CodeIndexingService not available")
 
             # 1. Scan project directory
-            scanner = ProjectScanner(
-                root_path=project_path,
-                include_gitignored=include_gitignored,
+            scanner = ProjectScanner()
+            all_files = await scanner.scan(
+                project_path=project_path,
+                respect_gitignore=not include_gitignored
             )
-            all_files = scanner.scan()
             scanned_count = len(all_files)
 
             if scanned_count == 0:
@@ -662,8 +662,11 @@ class IndexMarkdownWorkspaceTool(BaseMCPComponent):
 
             # 1. Scan for .md files only
             from mnemo_mcp.utils.project_scanner import ProjectScanner
-            scanner = ProjectScanner(root_path=root_path, include_gitignored=False)
-            all_files = scanner.scan()
+            scanner = ProjectScanner()
+            all_files = await scanner.scan(
+                project_path=root_path,
+                respect_gitignore=True
+            )
 
             # Filter to .md only and skip large files
             md_files = []
