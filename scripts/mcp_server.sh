@@ -1,24 +1,29 @@
 #!/bin/bash
-# MnemoLite MCP Server Launcher (Antifragile Edition)
+# MnemoLite MCP Server Launcher
 #
-# 1. We redirect stderr to a file (>> /tmp/mnemo_mcp.err) to keep stdout 100% pure JSON.
-# 2. We use 'exec' to handle signals correctly.
-# 3. We use python -u for unbuffered output.
-# 4. We rely on the Lazy Import fix in the python code for speed.
+# Launches the MCP server inside Docker with reliable stdin/stdout forwarding.
+# Compatible with: Claude Desktop, Kilo, VS Code, any MCP client.
+#
+# Uses Python subprocess with direct stdin/stdout pipes for reliable
+# bidirectional communication (bash exec + docker exec -i loses data).
 
-# Rotate log file slightly (keep last 1MB)
-if [ -f /tmp/mnemo_mcp.err ]; then
-    tail -c 1000000 /tmp/mnemo_mcp.err > /tmp/mnemo_mcp.err.tmp && mv /tmp/mnemo_mcp.err.tmp /tmp/mnemo_mcp.err
-fi
-
-echo "[$(date)] MCP Connection Started" >> /tmp/mnemo_mcp.err
-
-# Execute the server inside the container
-# Pass DATABASE_URL from container env to MCP_DATABASE_URL (Pydantic prefix)
-# Strip asyncpg prefix if present (MCP expects postgresql://)
 CONTAINER_DB_URL=$(docker exec mnemo-api printenv DATABASE_URL 2>/dev/null || echo "")
 MCP_DB_URL="${MCP_DATABASE_URL:-$(echo "$CONTAINER_DB_URL" | sed 's/postgresql+asyncpg/postgresql/')}"
 
-# The MCP client (Kilo) handles stdin/stdout communication.
-# docker exec -i forwards stdin to the container.
-exec docker exec -i -e MCP_DATABASE_URL="$MCP_DB_URL" mnemo-api python3 -u -m mnemo_mcp.server 2>> /tmp/mnemo_mcp.err
+# Python proxy: directly connects stdin/stdout to docker exec subprocess
+# This avoids the bash exec → docker exec pipe forwarding issues
+exec python3 -u -c "
+import subprocess, sys
+proc = subprocess.Popen(
+    ['docker', 'exec', '-i',
+     '-e', 'MCP_DATABASE_URL=$MCP_DB_URL',
+     'mnemo-api',
+     'python3', '-u', '-m', 'mnemo_mcp.server'],
+    stdin=sys.stdin,
+    stdout=sys.stdout,
+    stderr=open('/tmp/mnemo_mcp.err', 'a'),
+    bufsize=0
+)
+proc.wait()
+sys.exit(proc.returncode)
+"
