@@ -76,10 +76,18 @@ class MCPConfig(BaseSettings):
         """Validate configuration at startup with clear error messages."""
         errors = []
 
-        # Database URL required
+        # Database URL — fall back to DATABASE_URL if MCP_DATABASE_URL not set
+        if not self.database_url:
+            import os as _os
+            db_url = _os.getenv("DATABASE_URL", "")
+            if db_url:
+                # Strip asyncpg prefix if present
+                self.database_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
+
+        # Database URL still required
         if not self.database_url:
             errors.append(
-                "MCP_DATABASE_URL is required. "
+                "MCP_DATABASE_URL or DATABASE_URL is required. "
                 "Set it in .env or as environment variable. "
                 "Example: MCP_DATABASE_URL=postgresql://user:pass@host:5432/mnemolite"
             )
