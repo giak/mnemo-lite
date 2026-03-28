@@ -180,7 +180,9 @@ class WriteMemoryTool(BaseMCPComponent):
                             content_len=len(content)
                         )
 
-                    embedding = await self.embedding_service.generate_embedding(embedding_text)
+                    embedding_raw = await self.embedding_service.generate_embedding(embedding_text)
+                    # DualEmbeddingService returns {"text": [...], "code": [...]} — extract TEXT
+                    embedding = embedding_raw.get("text") if isinstance(embedding_raw, dict) else embedding_raw
                     embedding_generated = True
                     logger.info(
                         "Embedding generated for memory",
@@ -375,7 +377,9 @@ class UpdateMemoryTool(BaseMCPComponent):
                             memory_id=id
                         )
 
-                    new_embedding = await self.embedding_service.generate_embedding(embedding_text)
+                    new_embedding_raw = await self.embedding_service.generate_embedding(embedding_text)
+                    # DualEmbeddingService returns {"text": [...], "code": [...]} — extract TEXT
+                    new_embedding = new_embedding_raw.get("text") if isinstance(new_embedding_raw, dict) else new_embedding_raw
                     embedding_regenerated = True
 
                     logger.info(
@@ -669,7 +673,9 @@ class SearchMemoryTool(BaseMCPComponent):
             if not self.embedding_service:
                 raise RuntimeError("Embedding service not available")
 
-            query_embedding = await self.embedding_service.generate_embedding(query)
+            query_embedding_raw = await self.embedding_service.generate_embedding(query)
+            # DualEmbeddingService returns {"text": [...], "code": [...]} — extract TEXT
+            query_embedding = query_embedding_raw.get("text") if isinstance(query_embedding_raw, dict) else query_embedding_raw
 
             embedding_ms = (time.time() - start_time) * 1000
 

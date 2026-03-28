@@ -162,7 +162,12 @@ class SearchCodeTool(BaseMCPComponent):
                 if hasattr(embedding_service, 'embed_query'):
                     embedding_code = await embedding_service.embed_query(query)
                 else:
-                    embedding_code = await embedding_service.generate_embedding(query)
+                    embedding_raw = await embedding_service.generate_embedding(query)
+                    # DualEmbeddingService returns {"text": [...], "code": [...]} — extract CODE
+                    if isinstance(embedding_raw, dict):
+                        embedding_code = embedding_raw.get("code") or embedding_raw.get("text")
+                    else:
+                        embedding_code = embedding_raw
                 logger.info(
                     "search_code.embedding_generated",
                     dimension=len(embedding_code) if embedding_code else 0
