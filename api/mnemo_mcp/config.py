@@ -97,12 +97,14 @@ class MCPConfig(BaseSettings):
                 f"Got: {self.database_url[:20]}..."
             )
 
-        # HTTP transport requires auth in production
+        # HTTP transport warns without auth (skip in Docker/local dev)
         if self.transport == "http" and self.auth_mode == "none":
-            errors.append(
-                "HTTP transport without authentication is insecure. "
-                "Set MCP_AUTH_MODE=api_key and MCP_API_KEYS=key:owner"
-            )
+            import os as _os
+            if _os.getenv("ENVIRONMENT", "development") == "production":
+                errors.append(
+                    "HTTP transport without authentication is insecure. "
+                    "Set MCP_AUTH_MODE=api_key and MCP_API_KEYS=key:owner"
+                )
 
         # OAuth requires secret
         if self.auth_mode == "oauth" and not self.oauth_secret_key:

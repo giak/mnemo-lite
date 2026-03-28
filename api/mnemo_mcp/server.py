@@ -479,6 +479,8 @@ def create_mcp_server() -> FastMCP:
     mcp = FastMCP(
         name=config.server_name,
         lifespan=server_lifespan,
+        host=config.http_host,
+        port=config.http_port,
     )
 
     logger.info(
