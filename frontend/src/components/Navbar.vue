@@ -21,6 +21,7 @@ const links: MenuItem[] = [
   { name: 'PROJECTS', path: '/projects' },
   { name: 'EXPANSE', path: '/expanse' },
   { name: 'MONITORING', path: '/monitoring' },
+  { name: 'BRAIN', path: '/brain' },
   {
     name: 'GRAPH',
     children: [
