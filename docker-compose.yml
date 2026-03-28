@@ -105,6 +105,7 @@ services:
       - ./.claude:/app/.claude:ro  # Claude Code hooks for auto-save conversations
       - ${CLAUDE_PROJECTS_DIR:-/home/giak/.claude/projects}:/host/.claude/projects:ro  # Claude Code transcripts (all projects for historical import)
       - /home/giak/projects:/external/projects:ro  # External projects for indexing
+      - hf_cache:/root/.cache/huggingface  # Shared model cache with MCP
       # REMOVED: postgres_data volume (SECURITY: API should NOT access DB files directly)
     deploy:
       resources:
@@ -184,6 +185,7 @@ services:
       - backend
     volumes:
       - ./api:/app
+      - hf_cache:/root/.cache/huggingface  # Shared model cache with API
     deploy:
       resources:
         limits:
@@ -221,6 +223,7 @@ volumes:
   postgres_data:
   redis_data:
   openobserve_data:
+  hf_cache:  # Shared HuggingFace model cache (embedding models)
 
 networks:
   frontend:
