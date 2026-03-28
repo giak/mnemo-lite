@@ -103,15 +103,21 @@ export function useExpanseMemory(options: { refreshInterval?: number } = {}) {
     loading.value = true
     error.value = null
 
-    // Fetch stats
-    const statsResult = await safeFetch(`${API}/memories/stats`)
+    // Fetch stats + all tag searches IN PARALLEL
+    const searchPromises = EXPANSE_TAGS.map(t =>
+      safePost(`${API}/memories/search`, { query: t.tag, tags: [t.tag], limit: 20 })
+    )
 
-    // Fetch memories by EACH Expanse tag
+    const [statsResult, chunksResult, ...tagResults] = await Promise.all([
+      safeFetch(`${API}/memories/stats`),
+      safeFetch(`${API}/memories/code-chunks/recent?limit=10`),
+      ...searchPromises
+    ])
+
+    // Merge all tag results, deduplicate by id
     const allMemories: any[] = []
     const seen = new Set<string>()
-
-    for (const tagDef of EXPANSE_TAGS) {
-      const result = await safePost(`${API}/memories/search`, { query: tagDef.tag, tags: [tagDef.tag], limit: 20 })
+    for (const result of tagResults) {
       for (const m of (result?.results || [])) {
         if (!seen.has(m.id)) {
           seen.add(m.id)
@@ -119,9 +125,6 @@ export function useExpanseMemory(options: { refreshInterval?: number } = {}) {
         }
       }
     }
-
-    // Fetch chunks
-    const chunksResult = await safeFetch(`${API}/memories/code-chunks/recent?limit=10`)
 
     // Build tag data
     const tags: ExpanseTag[] = EXPANSE_TAGS.map(t => ({
