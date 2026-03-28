@@ -87,16 +87,27 @@ export function useExpanseMemory(options: { refreshInterval?: number } = {}) {
     } catch { return null }
   }
 
+  async function safePost(url: string, body: any): Promise<any> {
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      if (!resp.ok) return null
+      return await resp.json()
+    } catch { return null }
+  }
+
   async function fetchAll(): Promise<void> {
     loading.value = true
     error.value = null
 
-    // Fetch stats + memories
-    const [statsResult, memoriesResult, chunksResult, decayResult] = await Promise.all([
+    // Fetch stats + memories (search is POST)
+    const [statsResult, memoriesResult, chunksResult] = await Promise.all([
       safeFetch(`${API}/memories/stats`),
-      safeFetch(`${API}/memories/search?q=expanse&limit=50`),
+      safePost(`${API}/memories/search`, { query: 'expanse', limit: 50 }),
       safeFetch(`${API}/memories/code-chunks/recent?limit=10`),
-      safeFetch(`${API}/memories/decay/config`).catch(() => null),
     ])
 
     // Build tag data
@@ -133,7 +144,7 @@ export function useExpanseMemory(options: { refreshInterval?: number } = {}) {
         drifts,
         traces,
         consolidationNeeded: history > 20,
-        decayPresets: decayResult?.data?.length || 7
+        decayPresets: 7
       },
       filteredMemories: []
     }
@@ -144,7 +155,7 @@ export function useExpanseMemory(options: { refreshInterval?: number } = {}) {
 
   async function fetchByTag(tag: string): Promise<void> {
     selectedTag.value = tag
-    const result = await safeFetch(`${API}/memories/search?q=${tag}&tags=${tag}&limit=30`)
+    const result = await safePost(`${API}/memories/search`, { query: tag, tags: [tag], limit: 30 })
     data.value.filteredMemories = result?.results || []
   }
 
