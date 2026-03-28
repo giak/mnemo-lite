@@ -828,7 +828,7 @@ def register_memory_components(mcp: FastMCP):
         limit: int = 10,
         offset: int = 0,
         memory_type: str | None = None,
-        tags: list[str] | None = None,
+        tags: str | list[str] | None = None,
     ) -> dict:
         """
         Search memories using semantic vector search.
