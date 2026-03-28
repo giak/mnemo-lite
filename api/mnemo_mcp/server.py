@@ -139,20 +139,20 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     # Story 23.2: Initialize EmbeddingService
     # DualEmbeddingService is required because CodeIndexingService expects
     # generate_embedding(domain=EmbeddingDomain) returning Dict[str, List[float]].
-    # SentenceTransformerEmbeddingService uses generate_embedding(text_type=TextType)
-    # returning List[float] — incompatible interface.
-    # Set EMBEDDING_MODE=mock for fast startup without model loading.
+    # Models are lazy-loaded on first use (not preloaded at startup for speed).
     try:
         from services.dual_embedding_service import DualEmbeddingService
         embedding_service = DualEmbeddingService()
-        await embedding_service.preload_models()
+        # Don't preload models — lazy load on first tool call
+        # await embedding_service.preload_models()  # ~12s, too slow for MCP startup
         services["embedding_service"] = embedding_service
         logger.info(
             "mcp.embedding_service.initialized",
             mode=embedding_service._embedding_mode,
             text_model=embedding_service.text_model_name,
             code_model=embedding_service.code_model_name,
-            dimension=embedding_service.dimension
+            dimension=embedding_service.dimension,
+            lazy_load=True,
         )
     except Exception as e:
         logger.warning(
