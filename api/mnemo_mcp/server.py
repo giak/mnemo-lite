@@ -394,8 +394,8 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     search_memory_tool.inject_services(services)
     read_memory_tool.inject_services(services)
     consolidate_memory_tool.inject_services(services)
-    mark_consumed_tool.inject_services
-    system_snapshot_tool.inject_services
+    mark_consumed_tool.inject_services(services)
+    system_snapshot_tool.inject_services(services)
     configure_decay_tool.inject_services(services)
     get_memory_resource.inject_services(services)
     list_memories_resource.inject_services(services)
@@ -409,7 +409,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     # Story 23.5: Inject services into indexing components
     index_project_tool.inject_services(services)
     reindex_file_tool.inject_services(services)
-    index_incremental_tool.inject_services
+    index_incremental_tool.inject_services(services)
     index_markdown_workspace_tool.inject_services(services)
     index_status_resource.inject_services(services)
 
