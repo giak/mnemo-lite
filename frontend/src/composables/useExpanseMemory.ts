@@ -103,15 +103,27 @@ export function useExpanseMemory(options: { refreshInterval?: number } = {}) {
     loading.value = true
     error.value = null
 
-    // Fetch stats + memories (search is POST)
-    const [statsResult, memoriesResult, chunksResult] = await Promise.all([
-      safeFetch(`${API}/memories/stats`),
-      safePost(`${API}/memories/search`, { query: 'expanse', limit: 50 }),
-      safeFetch(`${API}/memories/code-chunks/recent?limit=10`),
-    ])
+    // Fetch stats
+    const statsResult = await safeFetch(`${API}/memories/stats`)
+
+    // Fetch memories by EACH Expanse tag
+    const allMemories: any[] = []
+    const seen = new Set<string>()
+
+    for (const tagDef of EXPANSE_TAGS) {
+      const result = await safePost(`${API}/memories/search`, { query: tagDef.tag, tags: [tagDef.tag], limit: 20 })
+      for (const m of (result?.results || [])) {
+        if (!seen.has(m.id)) {
+          seen.add(m.id)
+          allMemories.push(m)
+        }
+      }
+    }
+
+    // Fetch chunks
+    const chunksResult = await safeFetch(`${API}/memories/code-chunks/recent?limit=10`)
 
     // Build tag data
-    const allMemories: any[] = memoriesResult?.results || []
     const tags: ExpanseTag[] = EXPANSE_TAGS.map(t => ({
       ...t,
       count: allMemories.filter(m => (m.tags || []).some((tag: string) => tag.toLowerCase() === t.tag.toLowerCase())).length,
