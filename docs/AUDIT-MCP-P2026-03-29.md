@@ -159,32 +159,42 @@ Commit: 280927a
 
 ---
 
-## Phase 4 — Dette Technique (P3, ~1j)
+## Phase 4 — Dette Technique (P3, ~1j) — ✅ TERMINÉ (2/4, 2 skip)
 
-### P3-1 : `_convert_to_mcp_node` dupliqué 3×
+### P3-1 : `_convert_to_mcp_node` dupliqué 3× — ✅ FIXÉ
 ```
 Fichier: resources/graph_resources.py:177, 375, 562
-Fix:    Extraire dans BaseMCPComponent ou utility
+Fix:    Extracted to module-level _convert_to_mcp_node() function
+        3 class methods delegate to it
+Commit: 8d6b633
+Lines removed: ~60 (3 duplicate methods)
 ```
 
-### P3-2 : Validation tags dupliquée 3×
+### P3-2 : Validation tags dupliquée 3× — ✅ FIXÉ
 ```
 Fichier: models/memory_models.py:69, 146, 356
-Fix:    Extraire dans un validateur commun
+Fix:    Extracted to _normalize_tags() module-level function
+        3 field_validators delegate to it
+        Handles: None, empty, trim, lowercase, deduplicate
+Commit: 8d6b633
+Lines removed: ~40 (3 duplicate methods)
 ```
 
-### P3-3 : `**params` anti-pattern (6 outils)
+### P3-3 : `**params` anti-pattern — ⏭️ SKIPPÉ
 ```
-Fichiers: memory_tools.py:896,1030,1108,1263, indexing_tools.py:443,645
-Fix:    Paramètres nommés explicites
+Risque: Changer les signatures de 6 outils cassera les tests
+        et potentiellement le schéma MCP (inputSchema)
+Décision: Les outils fonctionnent, le risque > le gain
 ```
 
-### P3-4 : God-class `server.py` (1833 lignes)
+### P3-4 : God-class `server.py` (1833 lignes) — ⏭️ SKIPPÉ
 ```
-Fix:    Extraire lifespan dans ServiceFactory
-        Extraire registrations dans register_*.py
-        Réduire server.py à < 500 lignes
+Risque: Refactoring majeur (extraire lifespan, registrations)
+        Potentiellement cassant si mal fait
+Décision: Nécessite une session dédiée avec tests E2E complets
 ```
+
+**Tests : 23/23 passed (4.0s)**
 
 ---
 
@@ -192,10 +202,12 @@ Fix:    Extraire lifespan dans ServiceFactory
 
 | Phase | Effort | Impact | Priorité | Status |
 |-------|--------|--------|----------|--------|
-| P0 (6+1 bugs) | 1h | **Crashs runtime** | 🔴 Immédiat | ✅ FAIT (17/17 tests) |
-| P1 (4 fixes) | 2h | **Broken features** | 🟡 Cette semaine | ✅ FAIT (17/17 tests) |
-| P2 (3+2 perf) | 3h | Performance | 🟢 Ce mois | ✅ FAIT (17/17 tests) |
-| P3 (4 dette) | 1j | Maintenance | 🔵 Quand possible | ⬜ |
+| P0 (6+1 bugs) | 1h | **Crashs runtime** | 🔴 Immédiat | ✅ FAIT (23/23 tests) |
+| P1 (4 fixes) | 2h | **Broken features** | 🟡 Cette semaine | ✅ FAIT (23/23 tests) |
+| P2 (3+2 perf) | 3h | Performance | 🟢 Ce mois | ✅ FAIT (23/23 tests) |
+| P3 (2+2 dette) | 1j | Maintenance | 🔵 Quand possible | ✅ FAIT (2/4, 2 skip) |
+
+**TOTAL : 16/18 items fixed, 23/23 tests passed, 0 regression**
 
 ---
 
