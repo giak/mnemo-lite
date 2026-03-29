@@ -225,3 +225,45 @@ class TestP13DatabaseUrlParsing:
         assert not has_unsafe_split or has_safe_split, (
             "database_url.split('@')[1] crashes if no @ — use safe split with [-1]"
         )
+
+
+# ============================================================================
+# P3 Refactoring
+# ============================================================================
+
+class TestP31ExtractedHelpers:
+    """Verify extracted module-level helpers work correctly."""
+
+    def test_convert_to_mcp_node_is_module_level(self):
+        """_convert_to_mcp_node should be a module-level function."""
+        from mnemo_mcp.resources import graph_resources
+        assert hasattr(graph_resources, "_convert_to_mcp_node"), (
+            "_convert_to_mcp_node should be extracted to module level"
+        )
+
+    def test_normalize_tags_function_exists(self):
+        """_normalize_tags should be a module-level function."""
+        from mnemo_mcp.models import memory_models
+        assert hasattr(memory_models, "_normalize_tags")
+
+    def test_normalize_tags_deduplicates(self):
+        """_normalize_tags should remove duplicates."""
+        from mnemo_mcp.models.memory_models import _normalize_tags
+        result = _normalize_tags(["SYS:core", "sys:core", "v15"])
+        assert result == ["sys:core", "v15"]
+
+    def test_normalize_tags_trims_and_lowercases(self):
+        """_normalize_tags should trim and lowercase."""
+        from mnemo_mcp.models.memory_models import _normalize_tags
+        result = _normalize_tags([" SYS:CORE ", "V15 "])
+        assert result == ["sys:core", "v15"]
+
+    def test_normalize_tags_handles_none(self):
+        """_normalize_tags should handle None input."""
+        from mnemo_mcp.models.memory_models import _normalize_tags
+        assert _normalize_tags(None) is None
+
+    def test_normalize_tags_handles_empty(self):
+        """_normalize_tags should handle empty list."""
+        from mnemo_mcp.models.memory_models import _normalize_tags
+        assert _normalize_tags([]) == []
