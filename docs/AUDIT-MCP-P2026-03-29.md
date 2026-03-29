@@ -76,33 +76,41 @@ Test:  TestRegressionSingletons (2 tests) ✅
 
 ---
 
-## Phase 2 — Fixes Élevés (P1, ~2h)
+## Phase 2 — Fixes Élevés (P1, ~2h) — ✅ TERMINÉ
 
-### P1-1 : `search_memory` hard-fail si embedding down
+### P1-1 : `search_memory` hard-fail si embedding down — ✅ FIXÉ
 ```
 Fichier: tools/memory_tools.py:679
 Actuel: raise RuntimeError("Embedding service not available")
-Fix:    Fallback vers tag-only search (pas d'embedding, juste filtres tags)
+Fix:    try/except around embedding, fallback to tag-only search, log warning
+Commit: 280927a
+Test:   TestP11SearchMemoryGracefulDegradation (2 tests) ✅
 ```
 
-### P1-2 : `datetime.utcnow()` déprécié (11 occurrences)
+### P1-2 : `datetime.utcnow()` déprécié (9 occurrences) — ✅ FIXÉ
 ```
-Fichiers: test_tool.py, health_resource.py, analytics_resources.py, indexing_tools.py
-Fix:      datetime.now(timezone.utc)
+Fichiers: health_resource.py, analytics_resources.py, indexing_tools.py, test_tool.py
+Fix:      datetime.now(timezone.utc) + added timezone import
+Commit: 280927a
+Test:   TestP12DatetimeTimezone (3 tests) ✅
 ```
 
-### P1-3 : database_url.split("@") crash
+### P1-3 : `database_url.split("@")` crash — ✅ FIXÉ
 ```
 Fichier: server.py:88
 Erreur: IndexError si pas de @ dans l'URL
-Fix:    host = config.database_url.split("@")[-1] if "@" in config.database_url else config.database_url
+Fix:    .split("@")[-1] with "@" check
+Commit: 280927a
+Test:   TestP13DatabaseUrlParsing (1 test) ✅
 ```
 
-### P1-4 : Singleton `system_snapshot_tool` dupliqué
+### P1-4 : Singleton `system_snapshot_tool` dupliqué — ✅ DÉJÀ FIXÉ
 ```
-Fichier: tools/memory_tools.py:1244 + 1323
-Fix:    Retirer la première déclaration (ligne 1244)
+Commit: d3635bf
+Test:   TestRegressionSingletons (2 tests) ✅
 ```
+
+**Tests : 17/17 passed (3.9s)**
 
 ---
 
@@ -178,8 +186,8 @@ Fix:    Extraire lifespan dans ServiceFactory
 
 | Phase | Effort | Impact | Priorité | Status |
 |-------|--------|--------|----------|--------|
-| P0 (6+1 bugs) | 1h | **Crashs runtime** | 🔴 Immédiat | ✅ FAIT (11/11 tests) |
-| P1 (4 fixes) | 2h | **Broken features** | 🟡 Cette semaine | ⬜ |
+| P0 (6+1 bugs) | 1h | **Crashs runtime** | 🔴 Immédiat | ✅ FAIT (17/17 tests) |
+| P1 (4 fixes) | 2h | **Broken features** | 🟡 Cette semaine | ✅ FAIT (17/17 tests) |
 | P2 (5 perf) | 3h | Performance | 🟢 Ce mois | ⬜ |
 | P3 (4 dette) | 1j | Maintenance | 🔵 Quand possible | ⬜ |
 
