@@ -1243,7 +1243,7 @@ search_memory_tool = SearchMemoryTool()
 read_memory_tool = ReadMemoryTool()
 consolidate_memory_tool = ConsolidateMemoryTool()
 mark_consumed_tool = MarkConsumedTool()
-system_snapshot_tool = SystemSnapshotTool()
+# system_snapshot_tool defined after ConfigureDecayTool (line 1325)
 
 
 
