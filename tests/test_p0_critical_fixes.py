@@ -217,8 +217,11 @@ class TestP13DatabaseUrlParsing:
         """server.py must not crash on database_url without @."""
         import inspect
         from mnemo_mcp import server
-        source = inspect.getsource(server.lifespan)
-        # Check for safe split pattern
-        assert "split(\"@\")" not in source or "[-1]" in source or "if " in source.split("split(\"@\")")[0][-50:], (
-            "database_url.split('@')[1] crashes if no @ — use safe split"
+        # Find the source of the server_lifespan function
+        source = inspect.getsource(server.server_lifespan)
+        # Check that split("@")[1] is NOT used without a safe check
+        has_unsafe_split = 'split("@")[1]' in source or "split('@')[1]" in source
+        has_safe_split = "split('@')[-1]" in source or 'split("@")[-1]' in source
+        assert not has_unsafe_split or has_safe_split, (
+            "database_url.split('@')[1] crashes if no @ — use safe split with [-1]"
         )
