@@ -483,6 +483,7 @@ def create_mcp_server() -> FastMCP:
         lifespan=server_lifespan,
         host=config.http_host,
         port=config.http_port,
+        stateless_http=True,  # No session tracking — works after Docker restart
     )
 
     logger.info(
