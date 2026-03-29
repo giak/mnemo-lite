@@ -1,55 +1,78 @@
 # Audit MCP Mnemolite — Plan de Correction
 
-> **Date :** 2026-03-29 08:17  
+> **Date :** 2026-03-29 08:17 / **Mis à jour :** 2026-03-29 09:27  
 > **Audit :** Code quality + Services integration (35+ fichiers, ~9200 lignes)  
 > **Priorisation :** P0 (crash) → P1 (broken) → P2 (perf) → P3 (dette)
 
 ---
 
-## Phase 1 — Fixes Critiques (P0, ~1h)
+## Phase 1 — Fixes Critiques (P0, ~1h) — ✅ TERMINÉ
 
-### P0-1 : `batch_generate_embeddings` n'existe pas
+### P0-1 : `batch_generate_embeddings` n'existe pas — ✅ FIXÉ
 ```
 Fichier: tools/indexing_tools.py:713
 Erreur: AttributeError → index_markdown_workspace crash
-Fix:   await embedding_service.generate_embeddings_batch(texts=texts, domain=EmbeddingDomain.TEXT)
+Fix:   await embedding_service.generate_embeddings_batch(texts=texts)
+Commit: 90b106a
+Test:  TestP01BatchEmbeddings.test_correct_method_name ✅
 ```
 
-### P0-2 : `consolidate_memory` passe dict comme embedding
+### P0-2 : `consolidate_memory` passe dict comme embedding — ✅ FIXÉ
 ```
 Fichier: tools/memory_tools.py:946
 Erreur: DualEmbeddingService retourne Dict mais repo attend List[float]
 Fix:   embedding_raw = await embedding_svc.generate_embedding(embedding_text)
        embedding = embedding_raw.get("text") if isinstance(embedding_raw, dict) else embedding_raw
+Commit: 90b106a
+Test:  TestP02ConsolidateEmbedding.test_extracts_from_dict ✅
 ```
 
-### P0-3 : `project_id` undefined dans fallback search
+### P0-3 : `project_id` undefined dans fallback search — ✅ FIXÉ
 ```
 Fichier: tools/memory_tools.py:740
 Erreur: NameError si hybrid search unavailable
 Fix:   Retirer project_id=project_id du fallback MemoryFilters
+Commit: 90b106a
+Test:  TestP03ProjectIdFallback.test_no_undefined_project_id ✅
 ```
 
-### P0-4 : `index_incremental` mauvaise clé service
+### P0-4 : `index_incremental` mauvaise clé service — ✅ FIXÉ
 ```
 Fichier: tools/indexing_tools.py:464
 Erreur: services.get("indexing_service") → toujours None
-Fix:   services.get("code_indexing_service")
+Fix:   services.get("code_indexing_service") (clé correcte: server.py:226)
+Commit: 90b106a
+Test:  TestP04ServiceKey.test_correct_service_key ✅
 ```
 
-### P0-5 : Path traversal `reindex_file`
+### P0-5 : Path traversal `reindex_file` — ✅ FIXÉ
 ```
 Fichier: tools/indexing_tools.py:337
 Erreur: Lecture fichiers arbitraires (/etc/passwd)
-Fix:   Valider file_path avec os.path.realpath et vérifier dans project root
+Fix:   os.path.realpath(file_path) + startswith("/") check
+Commit: 90b106a
+Test:  TestP05PathTraversal (3 tests) ✅
 ```
 
-### P0-6 : Path traversal `index_project`
+### P0-6 : Path traversal `index_project` — ✅ FIXÉ
 ```
 Fichier: tools/indexing_tools.py:86
 Erreur: Accès fichiers arbitraires
-Fix:   Valider project_path avec os.path.realpath
+Fix:   os.path.realpath(project_path) + startswith("/") check
+Commit: 90b106a
+Test:  TestP05PathTraversal.test_index_project_validates_path ✅
 ```
+
+### P0-BONUS : Singleton `system_snapshot_tool` dupliqué — ✅ FIXÉ
+```
+Fichier: tools/memory_tools.py:1246 + 1325
+Erreur: 2 instances → maintenance trap
+Fix:   Retirer la première déclaration (ligne 1246)
+Commit: d3635bf
+Test:  TestRegressionSingletons (2 tests) ✅
+```
+
+**Tests : 11/11 passed (4.0s)**
 
 ---
 
@@ -153,12 +176,12 @@ Fix:    Extraire lifespan dans ServiceFactory
 
 ## Matrice de Décision
 
-| Phase | Effort | Impact | Priorité |
-|-------|--------|--------|----------|
-| P0 (6 bugs) | 1h | **Crashs runtime** | 🔴 Immédiat |
-| P1 (4 fixes) | 2h | **Broken features** | 🟡 Cette semaine |
-| P2 (5 perf) | 3h | Performance | 🟢 Ce mois |
-| P3 (4 dette) | 1j | Maintenance | 🔵 Quand possible |
+| Phase | Effort | Impact | Priorité | Status |
+|-------|--------|--------|----------|--------|
+| P0 (6+1 bugs) | 1h | **Crashs runtime** | 🔴 Immédiat | ✅ FAIT (11/11 tests) |
+| P1 (4 fixes) | 2h | **Broken features** | 🟡 Cette semaine | ⬜ |
+| P2 (5 perf) | 3h | Performance | 🟢 Ce mois | ⬜ |
+| P3 (4 dette) | 1j | Maintenance | 🔵 Quand possible | ⬜ |
 
 ---
 
