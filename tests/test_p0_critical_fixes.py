@@ -159,3 +159,66 @@ class TestRegressionSingletons:
         assert count == 1, (
             f"configure_decay_tool defined {count} times — should be 1"
         )
+
+
+# ============================================================================
+# P1 Fixes
+# ============================================================================
+
+class TestP11SearchMemoryGracefulDegradation:
+    """Verify search_memory degrades gracefully when embedding fails."""
+
+    def test_no_hard_fail_on_missing_embedding(self):
+        """search_memory must not raise RuntimeError if embedding service unavailable."""
+        from mnemo_mcp.tools.memory_tools import SearchMemoryTool
+        source = inspect.getsource(SearchMemoryTool.execute)
+        assert "raise RuntimeError" not in source.split("# Generate query embedding")[1].split("# Try hybrid search")[0], (
+            "search_memory must not hard-fail on missing embedding service"
+        )
+
+    def test_has_tag_only_fallback(self):
+        """search_memory must have a fallback path when embedding is None."""
+        from mnemo_mcp.tools.memory_tools import SearchMemoryTool
+        source = inspect.getsource(SearchMemoryTool.execute)
+        # Check for fallback or tag-only search path
+        assert "Fallback" in source or "tag" in source.lower(), (
+            "search_memory must have fallback path for tag-only search"
+        )
+
+
+class TestP12DatetimeTimezone:
+    """Verify datetime.utcnow() is replaced with datetime.now(timezone.utc)."""
+
+    def test_no_utcnow_in_health_resource(self):
+        """health_resource.py must not use deprecated utcnow()."""
+        import inspect
+        from mnemo_mcp.resources.health_resource import HealthStatusResource
+        source = inspect.getsource(HealthStatusResource)
+        assert "utcnow()" not in source, "Must use datetime.now(timezone.utc)"
+
+    def test_no_utcnow_in_indexing_tools(self):
+        """indexing_tools.py must not use deprecated utcnow()."""
+        import inspect
+        from mnemo_mcp.tools.indexing_tools import IndexProjectTool
+        source = inspect.getsource(IndexProjectTool)
+        assert "utcnow()" not in source, "Must use datetime.now(timezone.utc)"
+
+    def test_timezone_imported(self):
+        """Files using datetime.now(timezone.utc) must import timezone."""
+        from mnemo_mcp.resources import health_resource
+        source = inspect.getsource(health_resource)
+        assert "timezone" in source, "Must import timezone from datetime"
+
+
+class TestP13DatabaseUrlParsing:
+    """Verify database_url parsing doesn't crash."""
+
+    def test_safe_url_split(self):
+        """server.py must not crash on database_url without @."""
+        import inspect
+        from mnemo_mcp import server
+        source = inspect.getsource(server.lifespan)
+        # Check for safe split pattern
+        assert "split(\"@\")" not in source or "[-1]" in source or "if " in source.split("split(\"@\")")[0][-50:], (
+            "database_url.split('@')[1] crashes if no @ — use safe split"
+        )

@@ -4,7 +4,7 @@ MCP Test Tool - Ping
 Simple ping/pong tool for testing MCP server connectivity.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from mcp.server.fastmcp import Context
 from pydantic import BaseModel, Field
 
@@ -66,7 +66,7 @@ class PingTool(BaseMCPComponent):
         return PingResponse(
             success=True,
             message="pong",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             latency_ms=0.1,  # Simulated latency
             metadata={
                 "server_name": "mnemolite",

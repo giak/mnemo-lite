@@ -85,7 +85,9 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     try:
         import asyncpg
 
-        logger.info("mcp.db.connecting", url=config.database_url.split("@")[1])
+        # P1-3 FIX: Safe URL parsing (crashes if no @ in URL)
+        safe_url = config.database_url.split("@")[-1] if "@" in config.database_url else config.database_url
+        logger.info("mcp.db.connecting", url=safe_url)
 
         db_pool = await asyncpg.create_pool(
             config.database_url,

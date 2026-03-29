@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -68,7 +68,7 @@ class IndexProjectTool(BaseMCPComponent):
         Returns:
             IndexResult with statistics
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         # Check services availability
         if not self._services.get("code_indexing_service"):
@@ -234,7 +234,7 @@ class IndexProjectTool(BaseMCPComponent):
                                 "total_files": len(files),
                                 "indexed_files": result.indexed_files,
                                 "started_at": start_time.isoformat(),
-                                "completed_at": datetime.utcnow().isoformat(),
+                                "completed_at": datetime.now(timezone.utc).isoformat(),
                                 "repository": repository,
                                 "errors": result.errors if result.errors else []
                             }),
@@ -281,7 +281,7 @@ class IndexProjectTool(BaseMCPComponent):
                         json.dumps({
                             "status": "failed",
                             "started_at": start_time.isoformat(),
-                            "completed_at": datetime.utcnow().isoformat(),
+                            "completed_at": datetime.now(timezone.utc).isoformat(),
                             "repository": repository,
                             "error": str(e)
                         }),

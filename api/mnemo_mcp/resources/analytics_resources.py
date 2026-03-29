@@ -4,7 +4,7 @@ MCP Analytics Resources (EPIC-23 Story 23.6).
 Resources for cache statistics and search analytics.
 """
 import structlog
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from mnemo_mcp.base import BaseMCPComponent
@@ -95,7 +95,7 @@ class CacheStatsResource(BaseMCPComponent):
                 "l2": l2_stats.model_dump(),
                 "cascade": stats["cascade"],
                 "overall_hit_rate": overall_hit_rate,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "message": "Cache statistics retrieved successfully"
             }
 
@@ -185,7 +185,7 @@ class SearchAnalyticsResource(BaseMCPComponent):
                 "requests_per_second": api_metrics["requests_per_second"],
                 "error_count": api_metrics["error_count"],
                 "error_rate": api_metrics["error_rate"],
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "message": f"Search analytics for last {period_hours}h retrieved successfully"
             }
 

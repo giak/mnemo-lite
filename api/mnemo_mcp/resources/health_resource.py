@@ -4,7 +4,7 @@ MCP Health Resource - Server Health Status
 Read-only resource for checking MCP server health and connectivity.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from mcp.server.fastmcp import Context
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -59,7 +59,7 @@ class HealthStatusResource(BaseMCPComponent):
 
     def __init__(self):
         super().__init__()
-        self._start_time = datetime.utcnow()
+        self._start_time = datetime.now(timezone.utc)
 
     def get_name(self) -> str:
         return "health://status"
@@ -110,7 +110,7 @@ class HealthStatusResource(BaseMCPComponent):
                 logger.error("health.redis.failed", error=str(e))
 
         # Calculate uptime
-        uptime = (datetime.utcnow() - self._start_time).total_seconds()
+        uptime = (datetime.now(timezone.utc) - self._start_time).total_seconds()
 
         # Determine overall status
         if db_connected and redis_connected:
@@ -130,7 +130,7 @@ class HealthStatusResource(BaseMCPComponent):
 
         return HealthStatus(
             status=overall_status,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             database_connected=db_connected,
             redis_connected=redis_connected,
             uptime_seconds=uptime,

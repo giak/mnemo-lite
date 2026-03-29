@@ -675,18 +675,20 @@ class SearchMemoryTool(BaseMCPComponent):
                         f"Invalid memory_type '{memory_type}'. Valid: {', '.join(valid_types)}"
                     )
 
-            # Generate query embedding
-            if not self.embedding_service:
-                raise RuntimeError("Embedding service not available")
-
-            query_embedding_raw = await self.embedding_service.generate_embedding(query)
-            # DualEmbeddingService returns {"text": [...], "code": [...]} — extract TEXT
-            query_embedding = query_embedding_raw.get("text") if isinstance(query_embedding_raw, dict) else query_embedding_raw
+            # Generate query embedding (graceful degradation if unavailable)
+            query_embedding = None
+            if self.embedding_service:
+                try:
+                    query_embedding_raw = await self.embedding_service.generate_embedding(query)
+                    # DualEmbeddingService returns {"text": [...], "code": [...]} — extract TEXT
+                    query_embedding = query_embedding_raw.get("text") if isinstance(query_embedding_raw, dict) else query_embedding_raw
+                except Exception as e:
+                    logger.warning(f"Embedding generation failed, falling back to tag-only search: {e}")
 
             embedding_ms = (time.time() - start_time) * 1000
 
-            # Try hybrid search if available
-            if hasattr(self, 'hybrid_memory_search_service') and self.hybrid_memory_search_service:
+            # Try hybrid search if available AND embedding exists
+            if hasattr(self, 'hybrid_memory_search_service') and self.hybrid_memory_search_service and query_embedding:
                 from mnemo_mcp.models.memory_models import MemoryFilters
 
                 filters = MemoryFilters(
