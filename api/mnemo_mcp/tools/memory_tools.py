@@ -1131,32 +1131,36 @@ class SystemSnapshotTool(BaseMCPComponent):
             import asyncio
             from sqlalchemy import text
 
-            async def fetch_group(conn, query_tag, limit):
-                """Fetch memories matching a tag group."""
+            # P2-2 FIX: Each task creates its own connection for true parallelism
+            # SQLAlchemy serializes queries on a shared connection
+            async def fetch_group(engine, query_tag, limit):
+                """Fetch memories matching a tag group (own connection)."""
                 try:
-                    result = await conn.execute(
-                        text("""
-                            SELECT id::text, title, memory_type, tags, created_at::text
-                            FROM memories
-                            WHERE (:tag = ANY(tags) OR :tag2 = ANY(tags))
-                              AND deleted_at IS NULL
-                            ORDER BY created_at DESC
-                            LIMIT :limit
-                        """),
-                        {"tag": query_tag, "tag2": query_tag, "limit": limit}
-                    )
-                    rows = result.fetchall()
-                    return [
+                    async with engine.connect() as conn:
+                        result = await conn.execute(
+                            text("""
+                                SELECT id::text, title, memory_type, tags, created_at::text
+                                FROM memories
+                                WHERE (:tag = ANY(tags) OR :tag2 = ANY(tags))
+                                  AND deleted_at IS NULL
+                                ORDER BY created_at DESC
+                                LIMIT :limit
+                            """),
+                            {"tag": query_tag, "tag2": query_tag, "limit": limit}
+                        )
+                        rows = result.fetchall()
+                        return [
                         {"id": r[0], "title": r[1], "type": r[2], "tags": r[3], "created_at": r[4]}
                         for r in rows
                     ]
                 except Exception:
                     return []
 
-            async def fetch_health(conn):
-                """Fetch health metrics in one query."""
+            async def fetch_health(engine):
+                """Fetch health metrics in one query (own connection)."""
                 try:
-                    result = await conn.execute(text("""
+                    async with engine.connect() as conn:
+                        result = await conn.execute(text("""
                         SELECT
                             (SELECT COUNT(*) FROM memories WHERE 'sys:history' = ANY(tags) AND deleted_at IS NULL) as history_count,
                             (SELECT COUNT(*) FROM memories WHERE 'sys:drift' = ANY(tags) AND consumed_at IS NULL AND deleted_at IS NULL) as fresh_drifts,
@@ -1178,20 +1182,19 @@ class SystemSnapshotTool(BaseMCPComponent):
                 except Exception as e:
                     return {"error": str(e)}
 
-            # Run all queries in parallel (4 concurrent)
-            async with engine.connect() as conn:
-                core_task = fetch_group(conn, "sys:core", 20)
-                anchor_task = fetch_group(conn, "sys:anchor", 20)
-                pattern_task = fetch_group(conn, "sys:pattern", 20)
-                extension_task = fetch_group(conn, "sys:extension", 10)
-                profile_task = fetch_group(conn, "sys:user:profile", 5)
-                project_task = fetch_group(conn, f"sys:project:{repository}", 1)
-                health_task = fetch_health(conn)
+            # Run all queries in parallel (each on its own connection)
+            core_task = fetch_group(engine, "sys:core", 20)
+            anchor_task = fetch_group(engine, "sys:anchor", 20)
+            pattern_task = fetch_group(engine, "sys:pattern", 20)
+            extension_task = fetch_group(engine, "sys:extension", 10)
+            profile_task = fetch_group(engine, "sys:user:profile", 5)
+            project_task = fetch_group(engine, f"sys:project:{repository}", 1)
+            health_task = fetch_health(engine)
 
-                core, anchors, patterns, extensions, profile, project, health = await asyncio.gather(
-                    core_task, anchor_task, pattern_task, extension_task,
-                    profile_task, project_task, health_task
-                )
+            core, anchors, patterns, extensions, profile, project, health = await asyncio.gather(
+                core_task, anchor_task, pattern_task, extension_task,
+                profile_task, project_task, health_task
+            )
 
             # Merge core + anchors (deduplicate)
             seen_ids = set()

@@ -380,6 +380,24 @@ class ReindexFileTool(BaseMCPComponent):
                 except Exception as e:
                     logger.warning(f"Failed to invalidate cache: {e}")
 
+            # P2-4 FIX: Invalidate search code cache (Redis keys search:v1:*)
+            redis = self._services.get("redis")
+            if redis:
+                try:
+                    cursor = 0
+                    deleted = 0
+                    while True:
+                        cursor, keys = await redis.scan(cursor, match="search:v1:*", count=100)
+                        if keys:
+                            await redis.delete(*keys)
+                            deleted += len(keys)
+                        if cursor == 0:
+                            break
+                    if deleted:
+                        logger.info(f"Invalidated {deleted} search cache keys after reindex")
+                except Exception as e:
+                    logger.warning(f"Failed to invalidate search cache: {e}")
+
             # Reindex file
             logger.info(f"Reindexing file: {file_path}")
 
@@ -596,6 +614,24 @@ class IndexIncrementalTool(BaseMCPComponent):
                         await graph_service.build_graph_for_repository(repository=repository)
                 except Exception as e:
                     logger.warning(f"Graph build after incremental failed: {e}")
+
+                # P2-4: Invalidate search cache after reindex
+                redis = services.get("redis")
+                if redis:
+                    try:
+                        cursor = 0
+                        deleted = 0
+                        while True:
+                            cursor, keys = await redis.scan(cursor, match="search:v1:*", count=100)
+                            if keys:
+                                await redis.delete(*keys)
+                                deleted += len(keys)
+                            if cursor == 0:
+                                break
+                        if deleted:
+                            logger.info(f"Invalidated {deleted} search cache keys after incremental reindex")
+                    except Exception:
+                        pass
 
             result = {
                 "success": True,

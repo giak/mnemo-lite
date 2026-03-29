@@ -200,9 +200,11 @@ class SearchCodeTool(BaseMCPComponent):
             if not engine:
                 raise RuntimeError("SQLAlchemy engine not available")
 
-            hybrid_service = HybridCodeSearchService(engine=engine)
+            # P2-1 FIX: Cache HybridCodeSearchService instance (reuse across calls)
+            if not hasattr(self, '_hybrid_search_service') or self._hybrid_search_service is None:
+                self._hybrid_search_service = HybridCodeSearchService(engine=engine)
 
-            hybrid_response: HybridSearchResponse = await hybrid_service.search(
+            hybrid_response: HybridSearchResponse = await self._hybrid_search_service.search(
                     query=query,
                     embedding_text=embedding_text,
                     embedding_code=embedding_code,
