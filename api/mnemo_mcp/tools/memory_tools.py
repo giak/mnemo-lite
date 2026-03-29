@@ -734,10 +734,10 @@ class SearchMemoryTool(BaseMCPComponent):
             else:
                 # Fallback to vector-only search
                 from mnemo_mcp.models.memory_models import MemoryFilters
+                # P0-3 FIX: project_id was undefined — removed from fallback
                 fallback_filters = MemoryFilters(
                     memory_type=memory_type_enum,
                     tags=tags or None,
-                    project_id=project_id,
                     consumed=consumed,
                     lifecycle_state=lifecycle_state,
                 )
@@ -943,7 +943,9 @@ class ConsolidateMemoryTool(BaseMCPComponent):
             embedding = None
             if embedding_svc:
                 try:
-                    embedding = await embedding_svc.generate_embedding(embedding_text)
+                    embedding_raw = await embedding_svc.generate_embedding(embedding_text)
+                    # P0-2 FIX: DualEmbeddingService returns dict, extract TEXT
+                    embedding = embedding_raw.get("text") if isinstance(embedding_raw, dict) else embedding_raw
                 except Exception as e:
                     logger.warning("Embedding generation failed for consolidation", error=str(e))
 

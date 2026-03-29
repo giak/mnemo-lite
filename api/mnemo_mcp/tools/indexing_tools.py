@@ -78,6 +78,12 @@ class IndexProjectTool(BaseMCPComponent):
         redis = self._services.get("redis")  # May be None (graceful degradation)
 
         try:
+            # P0-6 FIX: Validate project path (prevent path traversal)
+            import os
+            project_path = os.path.realpath(project_path)
+            if not project_path.startswith("/"):
+                return {"success": False, "message": "Invalid project path", "error": "SecurityError"}
+
             # Step 1: Scan project directory
             logger.info(f"Scanning project: {project_path}")
 
@@ -333,6 +339,12 @@ class ReindexFileTool(BaseMCPComponent):
         chunk_cache = self._services.get("chunk_cache")  # CascadeCache L1/L2
 
         try:
+            # P0-5 FIX: Validate file path (prevent path traversal)
+            import os
+            file_path = os.path.realpath(file_path)
+            if not file_path.startswith("/"):
+                return {"success": False, "message": "Invalid file path", "error": "SecurityError"}
+
             # Validate file exists
             file_path_obj = Path(file_path)
 
@@ -461,7 +473,8 @@ class IndexIncrementalTool(BaseMCPComponent):
         try:
             services = self._services
             engine = services.get("engine")
-            indexing_service = services.get("indexing_service")
+            # P0-4 FIX: correct service key is "code_indexing_service" (server.py:226)
+            indexing_service = services.get("code_indexing_service")
 
             if not engine:
                 raise RuntimeError("Database engine not available")
@@ -710,7 +723,8 @@ class IndexMarkdownWorkspaceTool(BaseMCPComponent):
             if embedding_service:
                 try:
                     texts = [f"{c.name}\n{c.source_code[:500]}" for c in all_chunks]
-                    embeddings = await embedding_service.batch_generate_embeddings(texts)
+                    # P0-1 FIX: correct method name is generate_embeddings_batch
+                    embeddings = await embedding_service.generate_embeddings_batch(texts)
                     for chunk, emb in zip(all_chunks, embeddings):
                         if isinstance(emb, dict):
                             chunk.embedding_text = emb.get("text")
