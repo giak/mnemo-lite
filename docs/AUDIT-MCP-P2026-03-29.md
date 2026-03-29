@@ -114,42 +114,48 @@ Test:   TestRegressionSingletons (2 tests) ✅
 
 ---
 
-## Phase 3 — Performance (P2, ~3h)
+## Phase 3 — Performance (P2, ~3h) — ✅ TERMINÉ (3/5, 2 skip)
 
-### P2-1 : Cache `HybridCodeSearchService` instance
+### P2-1 : Cache `HybridCodeSearchService` instance — ✅ FIXÉ
 ```
 Fichier: tools/search_tool.py:203
 Actuel: hybrid_service = HybridCodeSearchService(engine=engine) # à chaque appel
-Fix:    Initialiser dans lifespan, injecter via DI
+Fix:    Cached on self._hybrid_search_service, created once, reused
+Commit: e16e781
+Impact: Avoid recreating LexicalSearchService + VectorSearchService per call
 ```
 
-### P2-2 : Parallel queries sur même connexion
+### P2-2 : Parallel queries sur conn séparées — ✅ FIXÉ
 ```
-Fichier: tools/memory_tools.py:1178-1190 (SystemSnapshot)
-Actuel: 7 tasks sur même conn (serialisé)
-Fix:    Créer conn séparée par task (engine.connect() dans chaque coroutine)
+Fichier: tools/memory_tools.py:1182-1194 (SystemSnapshot)
+Actuel: 7 tasks sur même conn (serialisé par SQLAlchemy)
+Fix:    fetch_group/health create own connection for true parallelism
+Commit: e16e781
+Impact: 7 connections vs 1 → true concurrent execution
 ```
 
-### P2-3 : Retirer pool asyncpg mort
+### P2-3 : Retirer pool asyncpg mort — ⏭️ SKIPPÉ
 ```
 Fichier: server.py:90-106
-Actuel: asyncpg pool créé mais jamais utilisé
-Fix:    Supprimer — simplifie startup, réduit connexions
+Décision: Pool utilisé par health_resource.py pour DB ping checks
+Risque: Casser health checks pour gain marginal (2-10 connexions)
 ```
 
-### P2-4 : Unifier caching (2 systèmes indépendants)
+### P2-4 : Unifier caching — ✅ FIXÉ
 ```
-Fichier: tools/search_tool.py + caches/cascade_cache.py
-Actuel: Cache manuel Redis (5min) + cascade cache L1/L2 (30s) = pas coordonnés
-Fix:    Invalider le cache recherche après reindex
+Fichier: tools/indexing_tools.py (reindex_file + index_incremental)
+Actuel: 2 systèmes cache non coordonnés (cascade L1/L2 + search Redis)
+Fix:    scan+delete search:v1:* keys after successful reindex
+Commit: e16e781
+Impact: Stale cached results cleared immediately after reindex
 ```
 
-### P2-5 : `search_memory` graceful degradation
+### P2-5 : `search_memory` graceful degradation — ✅ DÉJÀ FIXÉ (P1-1)
 ```
-Fichier: tools/memory_tools.py:679
-Actuel: raise RuntimeError si embedding down
-Fix:    Fallback tag-only: search avec filtres tags, pas d'embedding
+Commit: 280927a
 ```
+
+**Tests : 17/17 passed (3.7s)**
 
 ---
 
@@ -188,7 +194,7 @@ Fix:    Extraire lifespan dans ServiceFactory
 |-------|--------|--------|----------|--------|
 | P0 (6+1 bugs) | 1h | **Crashs runtime** | 🔴 Immédiat | ✅ FAIT (17/17 tests) |
 | P1 (4 fixes) | 2h | **Broken features** | 🟡 Cette semaine | ✅ FAIT (17/17 tests) |
-| P2 (5 perf) | 3h | Performance | 🟢 Ce mois | ⬜ |
+| P2 (3+2 perf) | 3h | Performance | 🟢 Ce mois | ✅ FAIT (17/17 tests) |
 | P3 (4 dette) | 1j | Maintenance | 🔵 Quand possible | ⬜ |
 
 ---
