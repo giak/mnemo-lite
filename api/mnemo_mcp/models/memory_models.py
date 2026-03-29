@@ -12,6 +12,30 @@ import uuid
 from enum import Enum
 
 
+def _normalize_tags(tags: Optional[List[str]]) -> Optional[List[str]]:
+    """
+    Normalize tags: trim, lowercase, deduplicate. (P3-2: extracted from 3 duplicates)
+
+    Args:
+        tags: Raw tag list or None
+
+    Returns:
+        Cleaned tag list or None
+    """
+    if tags is None:
+        return None
+    if not tags:
+        return []
+    cleaned = [tag.strip().lower() for tag in tags if tag.strip()]
+    seen: set = set()
+    unique_tags = []
+    for tag in cleaned:
+        if tag not in seen:
+            seen.add(tag)
+            unique_tags.append(tag)
+    return unique_tags
+
+
 class MemoryType(str, Enum):
     """Memory classification types."""
     NOTE = "note"                    # General observations, thoughts
@@ -70,18 +94,8 @@ class MemoryBase(BaseModel):
     @classmethod
     def validate_tags(cls, v: List[str]) -> List[str]:
         """Validate tags: trim whitespace, remove duplicates, lowercase."""
-        if not v:
-            return []
-        # Trim, lowercase, remove empty strings
-        cleaned = [tag.strip().lower() for tag in v if tag.strip()]
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_tags = []
-        for tag in cleaned:
-            if tag not in seen:
-                seen.add(tag)
-                unique_tags.append(tag)
-        return unique_tags
+        result = _normalize_tags(v)
+        return result if result is not None else []
 
     @field_validator('resource_links')
     @classmethod
@@ -147,17 +161,7 @@ class MemoryUpdate(BaseModel):
     @classmethod
     def validate_tags(cls, v: Optional[List[str]]) -> Optional[List[str]]:
         """Validate tags if provided."""
-        if v is None:
-            return None
-        # Same validation as MemoryBase
-        cleaned = [tag.strip().lower() for tag in v if tag.strip()]
-        seen = set()
-        unique_tags = []
-        for tag in cleaned:
-            if tag not in seen:
-                seen.add(tag)
-                unique_tags.append(tag)
-        return unique_tags
+        return _normalize_tags(v)
 
 
 class Memory(MemoryBase):
@@ -356,19 +360,6 @@ class MemoryFilters(BaseModel):
     @field_validator('tags')
     @classmethod
     def validate_tags(cls, v: List[str]) -> List[str]:
-        """Validate tags: trim whitespace, lowercase, remove duplicates.
-
-        Must match MemoryBase.validate_tags() to ensure consistent filtering.
-        """
-        if not v:
-            return []
-        # Trim, lowercase, remove empty strings
-        cleaned = [tag.strip().lower() for tag in v if tag.strip()]
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_tags = []
-        for tag in cleaned:
-            if tag not in seen:
-                seen.add(tag)
-                unique_tags.append(tag)
-        return unique_tags
+        """Validate tags: trim whitespace, lowercase, remove duplicates."""
+        result = _normalize_tags(v)
+        return result if result is not None else []

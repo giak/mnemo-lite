@@ -23,6 +23,23 @@ from mnemo_mcp.models.graph_models import (
 from models.graph_models import NodeModel, EdgeModel
 
 
+def _convert_to_mcp_node(node) -> "MCPNode":
+    """Convert NodeModel to MCPNode with resource links. (P3-1: extracted from 3 duplicates)"""
+    resource_links = build_node_resource_links(
+        node_id=node.node_id,
+        node_type=node.node_type,
+        label=node.label
+    )
+    return MCPNode(
+        node_id=node.node_id,
+        node_type=node.node_type,
+        label=node.label,
+        properties=node.properties,
+        created_at=node.created_at,
+        resource_links=resource_links,
+    )
+
+
 class GraphNodeDetailsResource(BaseMCPComponent):
     """
     Resource: graph://nodes/{chunk_id}
@@ -175,21 +192,8 @@ class GraphNodeDetailsResource(BaseMCPComponent):
         return response.model_dump(mode='json')
 
     def _convert_to_mcp_node(self, node: NodeModel) -> MCPNode:
-        """Convert NodeModel to MCPNode."""
-        resource_links = build_node_resource_links(
-            node_id=node.node_id,
-            node_type=node.node_type,
-            label=node.label
-        )
-
-        return MCPNode(
-            node_id=node.node_id,
-            node_type=node.node_type,
-            label=node.label,
-            properties=node.properties,
-            created_at=node.created_at,
-            resource_links=resource_links,
-        )
+        """Convert NodeModel to MCPNode. (Delegates to module-level helper)"""
+        return _convert_to_mcp_node(node)
 
     def _convert_to_mcp_edge(self, edge: EdgeModel) -> MCPEdge:
         """Convert EdgeModel to MCPEdge."""
@@ -373,21 +377,8 @@ class FindCallersResource(BaseMCPComponent):
         return response.model_dump(mode='json')
 
     def _convert_to_mcp_node(self, node: NodeModel) -> MCPNode:
-        """Convert NodeModel to MCPNode."""
-        resource_links = build_node_resource_links(
-            node_id=node.node_id,
-            node_type=node.node_type,
-            label=node.label
-        )
-
-        return MCPNode(
-            node_id=node.node_id,
-            node_type=node.node_type,
-            label=node.label,
-            properties=node.properties,
-            created_at=node.created_at,
-            resource_links=resource_links,
-        )
+        """Convert NodeModel to MCPNode. (Delegates to module-level helper)"""
+        return _convert_to_mcp_node(node)
 
 
 class FindCalleesResource(BaseMCPComponent):
@@ -560,21 +551,8 @@ class FindCalleesResource(BaseMCPComponent):
         return response.model_dump(mode='json')
 
     def _convert_to_mcp_node(self, node: NodeModel) -> MCPNode:
-        """Convert NodeModel to MCPNode."""
-        resource_links = build_node_resource_links(
-            node_id=node.node_id,
-            node_type=node.node_type,
-            label=node.label
-        )
-
-        return MCPNode(
-            node_id=node.node_id,
-            node_type=node.node_type,
-            label=node.label,
-            properties=node.properties,
-            created_at=node.created_at,
-            resource_links=resource_links,
-        )
+        """Convert NodeModel to MCPNode. (Delegates to module-level helper)"""
+        return _convert_to_mcp_node(node)
 
 
 # ============================================================================
