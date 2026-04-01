@@ -70,7 +70,7 @@ services:
       context: .
       dockerfile: api/Dockerfile
     container_name: mnemo-api
-    restart: unless-stopped  # Best practice: restart except manual stop
+    restart: unless-stopped
     ports:
       - "127.0.0.1:${API_PORT:-8001}:8000"
     environment:
@@ -82,7 +82,6 @@ services:
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
       EMBEDDING_MODE: ${EMBEDDING_MODE:-real}
       ENVIRONMENT: ${ENVIRONMENT:-development}
-      # Conversation Auto-Save Daemon (EPIC-24)
       CLAUDE_PROJECTS_DIR: /host/.claude/projects
       POLL_INTERVAL: ${POLL_INTERVAL:-30}
       IMPORT_HISTORICAL: ${IMPORT_HISTORICAL:-false}
@@ -102,18 +101,17 @@ services:
       - ./logs:/app/logs
       - ./templates:/app/templates
       - ./static:/app/static
-      - ./.claude:/app/.claude:ro  # Claude Code hooks for auto-save conversations
-      - ${CLAUDE_PROJECTS_DIR:-/home/giak/.claude/projects}:/host/.claude/projects:ro  # Claude Code transcripts (all projects for historical import)
-      - /home/giak/projects:/external/projects:ro  # External projects for indexing
-      - hf_cache:/root/.cache/huggingface  # Shared model cache with MCP
-      # REMOVED: postgres_data volume (SECURITY: API should NOT access DB files directly)
+      - ./.claude:/app/.claude:ro
+      - ${CLAUDE_PROJECTS_DIR:-/home/giak/.claude/projects}:/host/.claude/projects:ro
+      - /home/giak/projects:/external/projects:ro
+      - hf_cache:/root/.cache/huggingface
     deploy:
       resources:
         limits:
-          cpus: '2'        # Increased for parallel embedding generation
-          memory: 24G      # Increased for large repository indexing with embeddings
+          cpus: '2'
+          memory: 24G
         reservations:
-          memory: 16G      # Reserve memory for stable operation during indexing
+          memory: 16G
     networks:
       backend:
       frontend:
@@ -154,9 +152,6 @@ services:
     command: python -m workers.conversation_worker
     logging: *default-logging
 
-  # MCP Server — HTTP transport (Streamable HTTP)
-  # Accessible at http://localhost:8002/mcp
-  # No docker exec needed — clients connect via URL
   mcp:
     build:
       context: .
@@ -185,7 +180,7 @@ services:
       - backend
     volumes:
       - ./api:/app
-      - hf_cache:/root/.cache/huggingface  # Shared model cache with API
+      - hf_cache:/root/.cache/huggingface
     deploy:
       resources:
         limits:
@@ -202,12 +197,33 @@ services:
     command: python3 -u -m mnemo_mcp.server
     logging: *default-logging
 
+  # Frontend — Vite dev server (HMR)
+  # Accessible at http://localhost:3000
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    container_name: mnemo-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      VITE_API_URL: http://api:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    networks:
+      - frontend
+    logging: *default-logging
+
   openobserve:
     image: public.ecr.aws/zinclabs/openobserve:latest
     container_name: mnemo-openobserve
     restart: unless-stopped
     ports:
-      - "5080:5080"  # UI + API
+      - "5080:5080"
     environment:
       - ZO_ROOT_USER_EMAIL=admin@mnemolite.local
       - ZO_ROOT_USER_PASSWORD=Complexpass#123
@@ -215,15 +231,15 @@ services:
     volumes:
       - openobserve_data:/data
     networks:
-      - frontend  # For web UI access
-      - backend   # For receiving traces/metrics from services
+      - frontend
+      - backend
     logging: *default-logging
 
 volumes:
   postgres_data:
   redis_data:
   openobserve_data:
-  hf_cache:  # Shared HuggingFace model cache (embedding models)
+  hf_cache:
 
 networks:
   frontend:
