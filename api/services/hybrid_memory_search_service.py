@@ -151,7 +151,7 @@ class HybridMemorySearchService:
         decay_service: Optional["MemoryDecayService"] = None,
         default_lexical_weight: float = 0.5,
         default_vector_weight: float = 0.5,
-        default_enable_reranking: bool = True,
+        default_enable_reranking: bool = False,
         default_enable_decay: bool = True,
     ):
         """

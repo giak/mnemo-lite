@@ -146,7 +146,7 @@ class HybridCodeSearchService:
         fusion_service: Optional[RRFFusionService] = None,
         redis_cache: Optional[RedisCache] = None,
         reranker_service: Optional["CrossEncoderRerankService"] = None,
-        default_enable_reranking: bool = True,
+        default_enable_reranking: bool = False,
     ):
         """
         Initialize hybrid search service.

@@ -183,13 +183,26 @@ class CrossEncoderRerankService:
                 raise RuntimeError(f"Failed to load cross-encoder model: {e}") from e
 
     def _load_model_sync(self):
-        """Load model synchronously (for executor)."""
-        from sentence_transformers import CrossEncoder
-        return CrossEncoder(
-            self.model_name,
-            device=self.device,
-            max_length=self.max_length,
-        )
+        """Load model synchronously (for executor).
+
+        EPIC-24 Fix: The accelerate integration in transformers 4.51.x has a
+        recursion bug in register_empty_parameter(). We work around it by:
+        1. Temporarily increasing recursion limit
+        2. Using a fresh import context to avoid state contamination
+        3. Forcing device='cpu' to bypass accelerate device mapping
+        """
+        import sys
+        old_limit = sys.getrecursionlimit()
+        try:
+            sys.setrecursionlimit(3000)  # Default is 1000, bug needs ~1500+
+            from sentence_transformers import CrossEncoder
+            return CrossEncoder(
+                self.model_name,
+                device=self.device,
+                max_length=self.max_length,
+            )
+        finally:
+            sys.setrecursionlimit(old_limit)
 
     async def rerank(
         self,
