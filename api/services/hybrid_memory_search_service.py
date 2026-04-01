@@ -4,7 +4,7 @@ Hybrid Memory Search Service.
 EPIC-24 P0: Combines lexical (pg_trgm) and vector (pgvector) search for memories
 using RRF (Reciprocal Rank Fusion) for optimal retrieval.
 
-EPIC-24 P2: Optional cross-encoder reranking for +20-30% quality improvement.
+EPIC-24 P2: Optional BM25 reranking for +20-30% quality improvement.
 
 Performance target: <100ms P95 (without reranking), <200ms P95 (with reranking)
 
@@ -91,7 +91,7 @@ class HybridMemorySearchResult:
     # Score breakdown
     lexical_score: Optional[float] = None
     vector_similarity: Optional[float] = None
-    rerank_score: Optional[float] = None  # EPIC-24 P2: Cross-encoder score
+    rerank_score: Optional[float] = None  # EPIC-24 P2: BM25 score
     contribution: Dict[str, float] = field(default_factory=dict)
 
 
@@ -134,24 +134,24 @@ class HybridMemorySearchService:
     - Lexical search: pg_trgm trigram similarity on title + content
     - Vector search: pgvector HNSW cosine distance on embeddings
     - RRF fusion: Reciprocal Rank Fusion for combining results
-    - Cross-encoder reranking (optional, EPIC-24 P2): +20-30% quality
+    - BM25 reranking (optional, EPIC-24 P2): +20-30% quality
 
     Benefits:
     - Lexical catches exact matches (proper nouns like "Bardella")
     - Vector catches semantic similarity (synonyms, paraphrases)
     - RRF combines both without score normalization issues
-    - Cross-encoder reranking provides fine-grained relevance scoring
+    - BM25 reranking provides fine-grained relevance scoring
     """
 
     def __init__(
         self,
         engine: AsyncEngine,
         fusion_service: Optional[RRFFusionService] = None,
-        reranker_service: Optional["CrossEncoderRerankService"] = None,
+        reranker_service: Optional["BM25RerankService"] = None,
         decay_service: Optional["MemoryDecayService"] = None,
         default_lexical_weight: float = 0.5,
         default_vector_weight: float = 0.5,
-        default_enable_reranking: bool = False,
+        default_enable_reranking: bool = True,
         default_enable_decay: bool = True,
     ):
         """
@@ -160,11 +160,11 @@ class HybridMemorySearchService:
         Args:
             engine: SQLAlchemy async engine
             fusion_service: Optional RRF fusion service (created if not provided)
-            reranker_service: Optional cross-encoder reranker (EPIC-24 P2)
+            reranker_service: Optional BM25 reranker (EPIC-24 P2)
             decay_service: Optional temporal decay service
             default_lexical_weight: Default weight for lexical results (0.5)
             default_vector_weight: Default weight for vector results (0.5)
-            default_enable_reranking: Enable cross-encoder reranking by default (True)
+            default_enable_reranking: Enable BM25 reranking by default (True)
             default_enable_decay: Enable temporal decay scoring by default (True)
         """
         self.engine = engine
@@ -212,7 +212,7 @@ class HybridMemorySearchService:
             offset: Pagination offset (default: 0)
             enable_lexical: Enable lexical/trigram search (default: True)
             enable_vector: Enable vector search (default: True)
-            enable_reranking: Enable cross-encoder reranking (EPIC-24 P2)
+            enable_reranking: Enable BM25 reranking (EPIC-24 P2)
                             If None, uses default_enable_reranking
             lexical_weight: Weight for lexical in RRF (default: 0.5)
             vector_weight: Weight for vector in RRF (default: 0.5)
@@ -305,7 +305,7 @@ class HybridMemorySearchService:
         )
         fusion_time = (time.time() - fusion_start) * 1000
 
-        # EPIC-24 P2: Cross-encoder reranking (optional)
+        # EPIC-24 P2: BM25 reranking (optional)
         reranking_time = None
         rerank_scores = {}  # memory_id -> rerank_score
         should_rerank = enable_reranking if enable_reranking is not None else self.default_enable_reranking
@@ -350,14 +350,14 @@ class HybridMemorySearchService:
                 reranking_time = (time.time() - reranking_start) * 1000
 
                 logger.debug(
-                    "Cross-encoder reranking completed",
+                    "BM25 reranking completed",
                     candidates=len(rerank_candidates),
                     time_ms=f"{reranking_time:.2f}",
                 )
 
             except Exception as e:
                 logger.warning(
-                    "Cross-encoder reranking failed, using RRF order",
+                    "BM25 reranking failed, using RRF order",
                     error=str(e),
                 )
                 should_rerank = False
@@ -452,10 +452,10 @@ class HybridMemorySearchService:
         )
 
     async def _ensure_reranker_loaded(self):
-        """Lazy-load the cross-encoder reranker on first use."""
+        """Lazy-load the BM25 reranker on first use."""
         if self.reranker is None:
-            from services.cross_encoder_rerank_service import CrossEncoderRerankService
-            self.reranker = CrossEncoderRerankService()
+            from services.bm25_rerank_service import BM25RerankService
+            self.reranker = BM25RerankService()
 
     async def _ensure_decay_loaded(self):
         """Lazy-load the decay service on first use."""

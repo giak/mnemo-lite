@@ -5,7 +5,7 @@ Orchestrates a complete hybrid search pipeline combining:
 - Lexical search (pg_trgm trigram similarity)
 - Vector search (HNSW semantic similarity)
 - RRF fusion (reciprocal rank fusion)
-- Cross-encoder reranking (optional, EPIC-24 P2)
+- BM25 reranking (optional, EPIC-24 P2)
 - Optional graph expansion (dependency traversal)
 - L2 Redis caching for performance (EPIC-10 Story 10.2)
 
@@ -63,7 +63,7 @@ class HybridSearchResult:
     lexical_score: Optional[float] = None
     vector_similarity: Optional[float] = None
     vector_distance: Optional[float] = None
-    rerank_score: Optional[float] = None  # EPIC-24 P2: Cross-encoder score
+    rerank_score: Optional[float] = None  # EPIC-24 P2: BM25 score
 
     # RRF contribution breakdown
     contribution: Dict[str, float] = field(default_factory=dict)
@@ -145,7 +145,7 @@ class HybridCodeSearchService:
         vector_service: Optional[VectorSearchService] = None,
         fusion_service: Optional[RRFFusionService] = None,
         redis_cache: Optional[RedisCache] = None,
-        reranker_service: Optional["CrossEncoderRerankService"] = None,
+        reranker_service: Optional["BM25RerankService"] = None,
         default_enable_reranking: bool = False,
     ):
         """
@@ -157,8 +157,8 @@ class HybridCodeSearchService:
             vector_service: Optional VectorSearchService (created if not provided)
             fusion_service: Optional RRFFusionService (created if not provided)
             redis_cache: Optional RedisCache for L2 caching (EPIC-10 Story 10.2)
-            reranker_service: Optional cross-encoder reranker (EPIC-24 P2)
-            default_enable_reranking: Enable cross-encoder reranking by default (True)
+            reranker_service: Optional BM25 reranker (EPIC-24 P2)
+            default_enable_reranking: Enable BM25 reranking by default (True)
         """
         self.engine = engine
 
@@ -180,7 +180,7 @@ class HybridCodeSearchService:
         # L2 Redis cache (optional - graceful degradation)
         self.redis_cache = redis_cache
 
-        # EPIC-24 P2: Cross-encoder reranking (lazy-loaded)
+        # EPIC-24 P2: BM25 reranking (lazy-loaded)
         self.reranker = reranker_service
         self.default_enable_reranking = default_enable_reranking
 
@@ -221,7 +221,7 @@ class HybridCodeSearchService:
             top_k: Number of final results to return (default: 10)
             enable_lexical: Enable lexical search (default: True)
             enable_vector: Enable vector search (default: True)
-            enable_reranking: Enable cross-encoder reranking (EPIC-24 P2)
+            enable_reranking: Enable BM25 reranking (EPIC-24 P2)
                             If None, uses default_enable_reranking
             lexical_weight: Weight for lexical results in RRF (default: 0.4)
             vector_weight: Weight for vector results in RRF (default: 0.6)
@@ -325,7 +325,7 @@ class HybridCodeSearchService:
         )
         fusion_time = (time.time() - fusion_start) * 1000
 
-        # EPIC-24 P2: Cross-encoder reranking (optional)
+        # EPIC-24 P2: BM25 reranking (optional)
         reranking_time = None
         rerank_scores = {}  # chunk_id -> rerank_score
         should_rerank = enable_reranking if enable_reranking is not None else self.default_enable_reranking
@@ -370,11 +370,11 @@ class HybridCodeSearchService:
                 reranking_time = (time.time() - reranking_start) * 1000
 
                 logger.info(
-                    f"Cross-encoder reranking completed: {len(rerank_candidates)} candidates, {reranking_time:.2f}ms"
+                    f"BM25 reranking completed: {len(rerank_candidates)} candidates, {reranking_time:.2f}ms"
                 )
 
             except Exception as e:
-                logger.warning(f"Cross-encoder reranking failed, using RRF order: {e}")
+                logger.warning(f"BM25 reranking failed, using RRF order: {e}")
                 should_rerank = False
 
         # Limit to top_k (after reranking)
@@ -526,10 +526,10 @@ class HybridCodeSearchService:
         return self.fusion.fuse_with_weights(weighted_results)
 
     async def _ensure_reranker_loaded(self):
-        """Lazy-load the cross-encoder reranker on first use."""
+        """Lazy-load the BM25 reranker on first use."""
         if self.reranker is None:
-            from services.cross_encoder_rerank_service import CrossEncoderRerankService
-            self.reranker = CrossEncoderRerankService()
+            from services.bm25_rerank_service import BM25RerankService
+            self.reranker = BM25RerankService()
 
     def _build_hybrid_results(
         self,
