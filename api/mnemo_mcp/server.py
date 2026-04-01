@@ -1003,9 +1003,11 @@ def register_memory_components(mcp: FastMCP):
             patterns: sys:pattern (sealed, excludes candidates)
             candidates: sys:pattern:candidate (pending approval)
             extensions: sys:extension
+            protocols: sys:protocol (operational rules)
+            traces: sys:trace (agent execution traces)
             profile: sys:user:profile
             project: sys:project:{repository}
-            health: {history_count, needs_consolidation, fresh_drifts, fresh_traces, candidates_pending, total_memories}
+            health: {history_count, needs_consolidation, fresh_drifts, fresh_traces, candidates_pending, total_memories, protocol_count, trace_count}
             budget: {allocated, items_returned}
 
         Example:

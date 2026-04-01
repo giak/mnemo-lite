@@ -1166,7 +1166,9 @@ class SystemSnapshotTool(BaseMCPComponent):
                             (SELECT COUNT(*) FROM memories WHERE 'sys:drift' = ANY(tags) AND consumed_at IS NULL AND deleted_at IS NULL) as fresh_drifts,
                             (SELECT COUNT(*) FROM memories WHERE tags @> ARRAY['trace:fresh'] AND consumed_at IS NULL AND deleted_at IS NULL) as fresh_traces,
                             (SELECT COUNT(*) FROM memories WHERE 'sys:pattern:candidate' = ANY(tags) AND consumed_at IS NULL AND deleted_at IS NULL) as candidates_pending,
-                            (SELECT COUNT(*) FROM memories WHERE deleted_at IS NULL) as total_memories
+                            (SELECT COUNT(*) FROM memories WHERE deleted_at IS NULL) as total_memories,
+                            (SELECT COUNT(*) FROM memories WHERE 'sys:protocol' = ANY(tags) AND deleted_at IS NULL) as protocol_count,
+                            (SELECT COUNT(*) FROM memories WHERE 'sys:trace' = ANY(tags) AND deleted_at IS NULL) as trace_count
                     """))
                     row = result.fetchone()
                     if row:
@@ -1177,8 +1179,10 @@ class SystemSnapshotTool(BaseMCPComponent):
                             "fresh_traces": row[2],
                             "candidates_pending": row[3],
                             "total_memories": row[4],
+                            "protocol_count": row[5],
+                            "trace_count": row[6],
                         }
-                    return {"history_count": 0, "needs_consolidation": False, "fresh_drifts": 0, "fresh_traces": 0, "candidates_pending": 0, "total_memories": 0}
+                    return {"history_count": 0, "needs_consolidation": False, "fresh_drifts": 0, "fresh_traces": 0, "candidates_pending": 0, "total_memories": 0, "protocol_count": 0, "trace_count": 0}
                 except Exception as e:
                     return {"error": str(e)}
 
@@ -1189,11 +1193,13 @@ class SystemSnapshotTool(BaseMCPComponent):
             extension_task = fetch_group(engine, "sys:extension", 10)
             profile_task = fetch_group(engine, "sys:user:profile", 5)
             project_task = fetch_group(engine, f"sys:project:{repository}", 1)
+            protocol_task = fetch_group(engine, "sys:protocol", 10)
+            trace_task = fetch_group(engine, "sys:trace", 10)
             health_task = fetch_health(engine)
 
-            core, anchors, patterns, extensions, profile, project, health = await asyncio.gather(
+            core, anchors, patterns, extensions, profile, project, protocols, traces, health = await asyncio.gather(
                 core_task, anchor_task, pattern_task, extension_task,
-                profile_task, project_task, health_task
+                profile_task, project_task, protocol_task, trace_task, health_task
             )
 
             # Merge core + anchors (deduplicate)
@@ -1213,12 +1219,14 @@ class SystemSnapshotTool(BaseMCPComponent):
                 "patterns": sealed_patterns[:20],
                 "candidates": candidates[:5],
                 "extensions": extensions,
+                "protocols": protocols,
+                "traces": traces,
                 "profile": profile,
                 "project": project,
                 "health": health,
                 "budget": {
                     "allocated": context_budget,
-                    "items_returned": len(merged_core) + len(sealed_patterns) + len(extensions) + len(profile),
+                    "items_returned": len(merged_core) + len(sealed_patterns) + len(extensions) + len(protocols) + len(traces) + len(profile),
                 }
             }
 
@@ -1228,8 +1236,10 @@ class SystemSnapshotTool(BaseMCPComponent):
                 core=len(merged_core),
                 patterns=len(sealed_patterns),
                 extensions=len(extensions),
+                protocols=len(protocols),
+                traces=len(traces),
                 drifts=health.get("fresh_drifts", 0),
-                traces=health.get("fresh_traces", 0),
+                fresh_traces=health.get("fresh_traces", 0),
             )
 
             return result
