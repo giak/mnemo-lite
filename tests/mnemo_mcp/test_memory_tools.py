@@ -190,20 +190,23 @@ class TestWriteMemoryTool:
     async def test_execute_invalid_project_id(self, mock_ctx):
         """Test execution with invalid project_id UUID."""
         tool = WriteMemoryTool()
+        mock_repo = AsyncMock()
+        mock_repo.engine = None  # Prevent project name resolution via DB
         tool.inject_services({
-            "memory_repository": AsyncMock(),
+            "memory_repository": mock_repo,
             "embedding_service": AsyncMock()
         })
 
-        # Execute and assert
-        with pytest.raises(ValueError) as exc_info:
+        # Execute and assert - RuntimeError because project_id is not a valid UUID
+        # and no engine available to resolve as project name
+        with pytest.raises(RuntimeError) as exc_info:
             await tool.execute(
                 ctx=mock_ctx,
                 title="Test",
                 content="Content",
                 project_id="not-a-uuid"
             )
-        assert "project_id" in str(exc_info.value).lower()
+        assert "failed" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
     async def test_execute_invalid_related_chunks(self, mock_ctx):

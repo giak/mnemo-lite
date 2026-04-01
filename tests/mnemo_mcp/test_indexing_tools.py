@@ -56,7 +56,7 @@ class TestIndexProjectTool:
 
         mock_indexing_service.index_repository = AsyncMock(return_value=mock_result)
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "redis": None  # Test without Redis
         }
@@ -76,7 +76,7 @@ class TestIndexProjectTool:
     @pytest.mark.asyncio
     async def test_index_project_service_unavailable(self):
         """Test indexing fails gracefully when service unavailable."""
-        self.tool.services = {}  # No services
+        self.tool._services = {}  # No services
 
         result = await self.tool.execute(
             project_path="/some/path",
@@ -91,7 +91,7 @@ class TestIndexProjectTool:
         """Test indexing fails for nonexistent project path."""
         mock_indexing_service = AsyncMock()
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "redis": None
         }
@@ -131,7 +131,7 @@ class TestIndexProjectTool:
         mock_elicit_response.value = "yes"
         mock_ctx.elicit = AsyncMock(return_value=mock_elicit_response)
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "redis": None
         }
@@ -162,7 +162,7 @@ class TestIndexProjectTool:
         mock_elicit_response.value = "no"
         mock_ctx.elicit = AsyncMock(return_value=mock_elicit_response)
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "redis": None
         }
@@ -200,7 +200,7 @@ class TestIndexProjectTool:
 
         mock_indexing_service.index_repository = AsyncMock(return_value=mock_result)
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "redis": mock_redis
         }
@@ -230,7 +230,7 @@ class TestIndexProjectTool:
 
         mock_indexing_service = AsyncMock()
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "redis": mock_redis
         }
@@ -266,7 +266,7 @@ class TestIndexProjectTool:
 
         mock_indexing_service.index_repository = AsyncMock(return_value=mock_result)
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "redis": mock_redis
         }
@@ -316,7 +316,7 @@ class TestIndexProjectTool:
 
         mock_indexing_service.index_repository = capture_callback
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "redis": None
         }
@@ -373,7 +373,7 @@ class TestReindexFileTool:
 
         mock_indexing_service._index_file = AsyncMock(return_value=mock_result)
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "chunk_cache": None
         }
@@ -391,7 +391,7 @@ class TestReindexFileTool:
     @pytest.mark.asyncio
     async def test_reindex_file_service_unavailable(self):
         """Test reindexing fails when service unavailable."""
-        self.tool.services = {}  # No services
+        self.tool._services = {}  # No services
 
         result = await self.tool.execute(
             file_path="/some/file.py",
@@ -406,7 +406,7 @@ class TestReindexFileTool:
         """Test reindexing fails for nonexistent file."""
         mock_indexing_service = AsyncMock()
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "chunk_cache": None
         }
@@ -424,7 +424,7 @@ class TestReindexFileTool:
         """Test reindexing fails when path is a directory."""
         mock_indexing_service = AsyncMock()
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "chunk_cache": None
         }
@@ -446,7 +446,7 @@ class TestReindexFileTool:
 
         mock_indexing_service = AsyncMock()
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "chunk_cache": None
         }
@@ -479,7 +479,7 @@ class TestReindexFileTool:
 
         mock_indexing_service._index_file = AsyncMock(return_value=mock_result)
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "chunk_cache": mock_cache
         }
@@ -511,7 +511,7 @@ class TestReindexFileTool:
 
         mock_indexing_service._index_file = AsyncMock(return_value=mock_result)
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "chunk_cache": None  # No cache
         }
@@ -540,7 +540,7 @@ class TestReindexFileTool:
 
         mock_indexing_service._index_file = AsyncMock(return_value=mock_result)
 
-        self.tool.services = {
+        self.tool._services = {
             "code_indexing_service": mock_indexing_service,
             "chunk_cache": None
         }

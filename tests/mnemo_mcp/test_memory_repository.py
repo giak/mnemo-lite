@@ -512,7 +512,8 @@ class TestMemoryRepositorySearchByVector:
         ]
 
         mock_search_result.fetchall.return_value = mock_rows
-        mock_conn.execute = AsyncMock(side_effect=[mock_count_result, mock_search_result])
+        mock_set_result = MagicMock()
+        mock_conn.execute = AsyncMock(side_effect=[mock_set_result, mock_set_result, mock_count_result, mock_search_result])
 
         # Use proper async context manager
         mock_engine.begin.return_value = AsyncContextManagerMock(mock_conn)
@@ -542,7 +543,8 @@ class TestMemoryRepositorySearchByVector:
         mock_search_result = MagicMock()
         mock_search_result.fetchall.return_value = []
 
-        mock_conn.execute = AsyncMock(side_effect=[mock_count_result, mock_search_result])
+        mock_set_result = MagicMock()
+        mock_conn.execute = AsyncMock(side_effect=[mock_set_result, mock_set_result, mock_count_result, mock_search_result])
 
         # Use proper async context manager
         mock_engine.begin.return_value = AsyncContextManagerMock(mock_conn)
