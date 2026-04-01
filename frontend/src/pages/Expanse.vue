@@ -51,11 +51,13 @@ function getTagCount(tag: string): number {
 
 const expanseTags = [
   'sys:pattern',
+  'sys:protocol',
   'sys:drift',
   'sys:extension',
   'sys:history',
-  'sys:anchor',
+  'sys:trace',
   'trace:fresh',
+  'sys:anchor',
   'sys:core'
 ]
 
