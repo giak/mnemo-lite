@@ -2,12 +2,67 @@
 /**
  * Expanse Memory — État cognitif complet de la mémoire d'Expanse
  * 4 sections: Taxonomie, Cycle de vie, Santé, Memories filtrées
+ * + Modal détail memory au clic
  */
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useExpanseMemory } from '@/composables/useExpanseMemory'
 
 const { data, loading, error, lastUpdated, refresh, selectedTag, fetchByTag } = useExpanseMemory({
   refreshInterval: 30000
+})
+
+// Modal state
+const selectedMemory = ref<any>(null)
+const loadingDetail = ref(false)
+
+async function openMemoryDetail(memory: any) {
+  // If we already have full content, show directly
+  if (memory.content && memory.content.length > (memory.content_preview?.length || 0)) {
+    selectedMemory.value = memory
+    return
+  }
+  // Fetch full content
+  loadingDetail.value = true
+  try {
+    const resp = await fetch(`http://localhost:8001/api/v1/memories/${memory.id}`)
+    if (resp.ok) {
+      selectedMemory.value = await resp.json()
+    } else {
+      selectedMemory.value = memory // fallback to preview
+    }
+  } catch {
+    selectedMemory.value = memory
+  }
+  loadingDetail.value = false
+}
+
+function closeModal() {
+  selectedMemory.value = null
+}
+
+function handleOverlayClick(e: MouseEvent) {
+  if ((e.target as HTMLElement).classList.contains('modal-overlay')) {
+    closeModal()
+  }
+}
+
+function copyId(id: string) {
+  navigator.clipboard.writeText(id)
+}
+
+// ESC to close modal
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && selectedMemory.value) {
+    closeModal()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown)
 })
 
 // Taxonomie par groupe
@@ -31,9 +86,11 @@ const tagLedColors: Record<string, string> = {
   'sys:core': 'scada-led-green',
   'sys:anchor': 'scada-led-green',
   'sys:pattern': 'scada-led-cyan',
+  'sys:protocol': 'scada-led-blue',
   'sys:extension': 'scada-led-cyan',
   'sys:history': 'scada-led-yellow',
   'sys:drift': 'scada-led-red',
+  'sys:trace': 'scada-led-yellow',
   'trace:fresh': 'scada-led-yellow',
 }
 
@@ -192,7 +249,8 @@ const formattedTime = computed(() => {
           <div
             v-for="memory in data.filteredMemories"
             :key="memory.id"
-            class="bg-slate-800/50 border border-slate-700 rounded px-3 py-2"
+            class="bg-slate-800/50 border border-slate-700 rounded px-3 py-2 cursor-pointer hover:border-cyan-600 hover:bg-slate-800/80 transition-colors"
+            @click="openMemoryDetail(memory)"
           >
             <div class="flex items-center gap-2 mb-1">
               <span class="scada-led scada-led-green"></span>
@@ -215,5 +273,112 @@ const formattedTime = computed(() => {
       </div>
 
     </div>
+
+    <!-- Memory Detail Modal -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="selectedMemory"
+          class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          @click="handleOverlayClick"
+        >
+          <div class="bg-[#0d1424] border-2 border-cyan-700 rounded-lg shadow-2xl shadow-cyan-900/30 w-full max-w-3xl max-h-[85vh] flex flex-col mx-4">
+            <!-- Header -->
+            <div class="flex items-center gap-3 px-5 py-4 border-b-2 border-slate-700 flex-shrink-0">
+              <span class="scada-led scada-led-cyan"></span>
+              <h3 class="text-lg font-mono font-bold text-cyan-400 truncate flex-1">{{ selectedMemory.title }}</h3>
+              <span class="px-2 py-0.5 text-[10px] font-mono uppercase bg-slate-800 border border-slate-600 text-slate-400 rounded">
+                {{ selectedMemory.memory_type }}
+              </span>
+              <button
+                @click="closeModal"
+                class="text-slate-500 hover:text-cyan-400 transition-colors text-xl font-mono ml-2"
+                title="Fermer (ESC)"
+              >
+                ✕
+              </button>
+            </div>
+
+            <!-- Metadata bar -->
+            <div class="flex items-center gap-4 px-5 py-3 bg-slate-900/50 border-b border-slate-800 text-[11px] font-mono text-slate-500 flex-shrink-0 flex-wrap">
+              <div class="flex items-center gap-1.5">
+                <span class="text-slate-600">ID:</span>
+                <code class="text-cyan-600 cursor-pointer hover:text-cyan-400" @click="copyId(selectedMemory.id)" title="Copier l'ID">
+                  {{ selectedMemory.id?.slice(0, 8) }}...
+                </code>
+              </div>
+              <div class="flex items-center gap-1.5" v-if="selectedMemory.author">
+                <span class="text-slate-600">Author:</span>
+                <span class="text-slate-400">{{ selectedMemory.author }}</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-slate-600">Created:</span>
+                <span class="text-slate-400">{{ formatDate(selectedMemory.created_at) }}</span>
+              </div>
+              <div class="flex items-center gap-1.5" v-if="selectedMemory.updated_at && selectedMemory.updated_at !== selectedMemory.created_at">
+                <span class="text-slate-600">Updated:</span>
+                <span class="text-slate-400">{{ formatDate(selectedMemory.updated_at) }}</span>
+              </div>
+              <div class="flex items-center gap-1.5" v-if="selectedMemory.score">
+                <span class="text-slate-600">Score:</span>
+                <span class="text-emerald-400">{{ selectedMemory.score?.toFixed(3) }}</span>
+              </div>
+            </div>
+
+            <!-- Tags -->
+            <div class="flex items-center gap-1.5 px-5 py-3 flex-wrap flex-shrink-0" v-if="selectedMemory.tags?.length">
+              <span
+                v-for="tag in selectedMemory.tags"
+                :key="tag"
+                class="text-[10px] font-mono px-2 py-0.5 rounded border"
+                :class="tagLedColors[tag]
+                  ? 'border-cyan-700 bg-cyan-900/30 text-cyan-300'
+                  : 'border-slate-700 bg-slate-800 text-slate-400'"
+              >{{ tag }}</span>
+            </div>
+
+            <!-- Content -->
+            <div class="flex-1 overflow-y-auto px-5 py-4">
+              <div class="bg-slate-900 border border-slate-700 rounded p-4">
+                <pre class="text-sm text-slate-300 font-mono whitespace-pre-wrap break-words leading-relaxed">{{ selectedMemory.content || selectedMemory.content_preview || '(empty)' }}</pre>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="flex items-center justify-between px-5 py-3 border-t-2 border-slate-700 flex-shrink-0">
+              <div class="flex items-center gap-2 text-[10px] font-mono text-slate-600">
+                <span v-if="selectedMemory.has_embedding" class="text-emerald-600">● embedding</span>
+                <span v-else class="text-red-600">○ no embedding</span>
+              </div>
+              <button
+                @click="closeModal"
+                class="scada-btn scada-btn-ghost text-xs"
+              >
+                CLOSE
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
   </div>
 </template>
+
+<style scoped>
+.modal-enter-active,
+.modal-leave-active {
+  transition: all 0.2s ease;
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-from > div,
+.modal-leave-to > div {
+  transform: scale(0.95);
+  opacity: 0;
+}
+</style>
