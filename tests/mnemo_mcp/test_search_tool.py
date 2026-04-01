@@ -134,6 +134,7 @@ class TestSearchCodeTool:
         # Inject services
         services = {
             "db": mock_db_pool,
+            "engine": mock_db_pool,  # Code needs engine for HybridCodeSearchService
             "redis": mock_redis,
             "embedding_service": mock_embedding_service,
         }
@@ -340,6 +341,7 @@ class TestSearchCodeTool:
 
         services = {
             "db": mock_db_pool,
+            "engine": mock_db_pool,
             "redis": mock_redis,
             "embedding_service": mock_embedding_service,
         }
@@ -430,6 +432,7 @@ class TestSearchCodeTool:
 
         services = {
             "db": mock_db_pool,
+            "engine": mock_db_pool,
             "redis": mock_redis,
             "embedding_service": mock_embedding_service,
         }

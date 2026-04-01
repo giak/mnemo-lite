@@ -73,7 +73,7 @@ def mock_db_engine():
 async def test_switch_project_success(mock_context, mock_db_engine):
     """Test successful project switch."""
     tool = SwitchProjectTool()
-    tool.engine = mock_db_engine
+    tool.inject_services({"engine": mock_db_engine})
 
     request = SwitchProjectRequest(repository="test_project")
 
@@ -95,7 +95,7 @@ async def test_switch_project_success(mock_context, mock_db_engine):
 async def test_switch_project_case_insensitive(mock_context, mock_db_engine):
     """Test case-insensitive repository matching."""
     tool = SwitchProjectTool()
-    tool.engine = mock_db_engine
+    tool.inject_services({"engine": mock_db_engine})
 
     # Query with different case
     request = SwitchProjectRequest(repository="TEST_PROJECT")
@@ -123,7 +123,7 @@ async def test_switch_project_not_found(mock_context, mock_db_engine):
     mock_engine.connect = Mock(return_value=mock_conn)
 
     tool = SwitchProjectTool()
-    tool.engine = mock_engine
+    tool.inject_services({"engine": mock_engine})
 
     request = SwitchProjectRequest(repository="nonexistent_repo")
 
@@ -138,7 +138,7 @@ async def test_switch_project_not_found(mock_context, mock_db_engine):
 async def test_switch_project_no_engine(mock_context):
     """Test error when database engine is unavailable."""
     tool = SwitchProjectTool()
-    tool.engine = None  # No engine available
+    tool.inject_services({"engine": None})  # No engine available
 
     request = SwitchProjectRequest(repository="test_project")
 
@@ -152,7 +152,7 @@ async def test_switch_project_no_engine(mock_context):
 async def test_switch_project_with_confirm_flag(mock_context, mock_db_engine):
     """Test confirm parameter (for future elicitation bypass)."""
     tool = SwitchProjectTool()
-    tool.engine = mock_db_engine
+    tool.inject_services({"engine": mock_db_engine})
 
     # Request with confirm=True (for automation)
     request = SwitchProjectRequest(repository="test_project", confirm=True)
@@ -187,7 +187,7 @@ async def test_switch_project_empty_languages(mock_context, mock_db_engine):
     mock_engine.connect = Mock(return_value=mock_conn)
 
     tool = SwitchProjectTool()
-    tool.engine = mock_engine
+    tool.inject_services({"engine": mock_engine})
 
     request = SwitchProjectRequest(repository="empty_project")
 

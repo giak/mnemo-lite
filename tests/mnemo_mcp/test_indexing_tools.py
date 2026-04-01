@@ -106,12 +106,15 @@ class TestIndexProjectTool:
 
     @pytest.mark.asyncio
     async def test_index_project_elicitation_yes(self, tmp_path):
-        """Test indexing proceeds when user confirms elicitation."""
-        # Create >100 files to trigger elicitation
+        """Test indexing proceeds for large project (>100 files).
+
+        Note: Elicitation was removed (FastMCP API changed). Code now logs
+        a warning and proceeds without confirmation for large projects.
+        """
+        # Create >100 files to trigger large-project warning
         for i in range(101):
             (tmp_path / f"file{i}.py").write_text(f"# File {i}")
 
-        # Mock services
         mock_indexing_service = AsyncMock()
         mock_result = MagicMock()
         mock_result.repository = "test-repo"
@@ -125,11 +128,45 @@ class TestIndexProjectTool:
 
         mock_indexing_service.index_repository = AsyncMock(return_value=mock_result)
 
-        # Mock context with elicitation
-        mock_ctx = AsyncMock()
-        mock_elicit_response = MagicMock()
-        mock_elicit_response.value = "yes"
-        mock_ctx.elicit = AsyncMock(return_value=mock_elicit_response)
+        self.tool._services = {
+            "code_indexing_service": mock_indexing_service,
+            "redis": None
+        }
+
+        result = await self.tool.execute(
+            project_path=str(tmp_path),
+            repository="test-repo",
+            include_gitignored=False,
+            ctx=None
+        )
+
+        assert result["success"] is True
+        assert result["indexed_files"] == 101
+        assert mock_indexing_service.index_repository.called
+
+    @pytest.mark.asyncio
+    async def test_index_project_elicitation_no(self, tmp_path):
+        """Test large project indexing proceeds without elicitation.
+
+        Note: Elicitation was removed (FastMCP API changed). Code now logs
+        a warning and proceeds without confirmation for large projects.
+        """
+        # Create >100 files
+        for i in range(101):
+            (tmp_path / f"file{i}.py").write_text(f"# File {i}")
+
+        mock_indexing_service = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.repository = "test-repo"
+        mock_result.indexed_files = 101
+        mock_result.indexed_chunks = 101
+        mock_result.indexed_nodes = 101
+        mock_result.indexed_edges = 0
+        mock_result.failed_files = 0
+        mock_result.processing_time_ms = 500.0
+        mock_result.errors = []
+
+        mock_indexing_service.index_repository = AsyncMock(return_value=mock_result)
 
         self.tool._services = {
             "code_indexing_service": mock_indexing_service,
@@ -140,42 +177,13 @@ class TestIndexProjectTool:
             project_path=str(tmp_path),
             repository="test-repo",
             include_gitignored=False,
-            ctx=mock_ctx
+            ctx=None
         )
 
+        # Code proceeds without elicitation (no cancellation)
         assert result["success"] is True
-        assert mock_ctx.elicit.called
+        assert result["indexed_files"] == 101
         assert mock_indexing_service.index_repository.called
-
-    @pytest.mark.asyncio
-    async def test_index_project_elicitation_no(self, tmp_path):
-        """Test indexing cancelled when user rejects elicitation."""
-        # Create >100 files
-        for i in range(101):
-            (tmp_path / f"file{i}.py").write_text(f"# File {i}")
-
-        mock_indexing_service = AsyncMock()
-
-        # Mock context - user says NO
-        mock_ctx = AsyncMock()
-        mock_elicit_response = MagicMock()
-        mock_elicit_response.value = "no"
-        mock_ctx.elicit = AsyncMock(return_value=mock_elicit_response)
-
-        self.tool._services = {
-            "code_indexing_service": mock_indexing_service,
-            "redis": None
-        }
-
-        result = await self.tool.execute(
-            project_path=str(tmp_path),
-            repository="test-repo",
-            ctx=mock_ctx
-        )
-
-        assert result["success"] is False
-        assert "cancelled" in result["message"].lower()
-        assert not mock_indexing_service.index_repository.called
 
     @pytest.mark.asyncio
     async def test_index_project_with_redis_lock(self, tmp_path):

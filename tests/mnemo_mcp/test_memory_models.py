@@ -37,7 +37,7 @@ class TestMemoryType:
 
     def test_memory_type_count(self):
         """Test number of memory types."""
-        assert len(list(MemoryType)) == 5
+        assert len(list(MemoryType)) == 6
 
 
 class TestMemoryBase:

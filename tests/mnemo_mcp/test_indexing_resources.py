@@ -41,9 +41,9 @@ class TestIndexStatusResource:
         mock_result.scalar.return_value = 0
         mock_conn.execute = AsyncMock(return_value=mock_result)
 
-        self.resource.services = {
+        self.resource._services = {
             "redis": mock_redis,
-            "sqlalchemy_engine": mock_engine,
+            "engine": mock_engine,
             "chunk_cache": None
         }
 
@@ -94,9 +94,9 @@ class TestIndexStatusResource:
 
         mock_conn.execute = mock_execute
 
-        self.resource.services = {
+        self.resource._services = {
             "redis": mock_redis,
-            "sqlalchemy_engine": mock_engine,
+            "engine": mock_engine,
             "chunk_cache": None
         }
 
@@ -141,9 +141,9 @@ class TestIndexStatusResource:
 
         mock_conn.execute = mock_execute
 
-        self.resource.services = {
+        self.resource._services = {
             "redis": mock_redis,
-            "sqlalchemy_engine": mock_engine,
+            "engine": mock_engine,
             "chunk_cache": None
         }
 
@@ -181,9 +181,9 @@ class TestIndexStatusResource:
 
         mock_conn.execute = mock_execute
 
-        self.resource.services = {
+        self.resource._services = {
             "redis": mock_redis,
-            "sqlalchemy_engine": mock_engine,
+            "engine": mock_engine,
             "chunk_cache": None
         }
 
@@ -224,9 +224,9 @@ class TestIndexStatusResource:
             "total_requests": 1000
         }
 
-        self.resource.services = {
+        self.resource._services = {
             "redis": mock_redis,
-            "sqlalchemy_engine": mock_engine,
+            "engine": mock_engine,
             "chunk_cache": mock_cache
         }
 
@@ -258,9 +258,9 @@ class TestIndexStatusResource:
 
         mock_conn.execute = mock_execute
 
-        self.resource.services = {
+        self.resource._services = {
             "redis": None,  # No Redis
-            "sqlalchemy_engine": mock_engine,
+            "engine": mock_engine,
             "chunk_cache": None
         }
 
@@ -273,9 +273,9 @@ class TestIndexStatusResource:
     @pytest.mark.asyncio
     async def test_status_database_unavailable(self):
         """Test status returns error when database unavailable."""
-        self.resource.services = {
+        self.resource._services = {
             "redis": None,
-            "sqlalchemy_engine": None,  # No database
+            "engine": None,  # No database
             "chunk_cache": None
         }
 

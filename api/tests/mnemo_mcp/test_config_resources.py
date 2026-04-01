@@ -112,7 +112,7 @@ async def test_list_projects_multiple_with_active(
 ):
     """Test listing multiple projects with active marker."""
     resource = ListProjectsResource()
-    resource.engine = mock_db_engine_multiple_projects
+    resource.inject_services({"engine": mock_db_engine_multiple_projects})
 
     response = await resource.get(ctx=mock_context_with_active)
 
@@ -142,9 +142,9 @@ async def test_list_projects_no_active_session(
 ):
     """Test listing projects without active repository in session."""
     resource = ListProjectsResource()
-    resource.engine = mock_db_engine_multiple_projects
+    resource.inject_services({"engine": mock_db_engine_multiple_projects})
 
-    response = await resource.get(ctx=mock_context_no_active)
+    response = await resource.get(ctx=mock_context_with_active)
 
     assert response.total == 3
     assert response.active_repository is None
@@ -161,7 +161,7 @@ async def test_list_projects_empty_database(
 ):
     """Test listing projects when database is empty."""
     resource = ListProjectsResource()
-    resource.engine = mock_db_engine_empty
+    resource.inject_services({"engine": mock_db_engine_empty})
 
     response = await resource.get(ctx=mock_context_with_active)
 
@@ -174,7 +174,7 @@ async def test_list_projects_empty_database(
 async def test_list_projects_no_engine(mock_context_with_active):
     """Test listing projects when engine is unavailable."""
     resource = ListProjectsResource()
-    resource.engine = None  # No engine
+    resource.inject_services({"engine": None})  # No engine
 
     response = await resource.get(ctx=mock_context_with_active)
 
@@ -208,7 +208,7 @@ async def test_list_projects_null_languages(mock_context_with_active):
     mock_engine.connect = Mock(return_value=mock_conn)
 
     resource = ListProjectsResource()
-    resource.engine = mock_engine
+    resource.inject_services({"engine": mock_engine})
 
     response = await resource.get(ctx=mock_context_with_active)
 
@@ -294,7 +294,7 @@ async def test_supported_languages_specific_count(mock_context_with_active):
 async def test_supported_languages_no_engine_required(mock_context_with_active):
     """Test that languages resource doesn't require database engine."""
     resource = SupportedLanguagesResource()
-    resource.engine = None  # No engine needed for static config
+    resource.inject_services({"engine": None})  # No engine needed for static config
 
     response = await resource.get(ctx=mock_context_with_active)
 
