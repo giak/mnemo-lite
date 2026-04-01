@@ -10,9 +10,12 @@ Formula:
 
 Decay rate presets (Expanse):
     decay_rate=0.001  → sys:core, sys:anchor (months of relevance)
-    decay_rate=0.005  → sys:pattern (weeks of relevance)
-    decay_rate=0.01   → sys:extension (default, moderate decay)
+    decay_rate=0.002  → sys:protocol (~1 year, operational rules)
+    decay_rate=0.005  → sys:pattern, sys:user:profile (weeks of relevance)
+    decay_rate=0.01   → sys:extension, sys:project (default, moderate decay)
+    decay_rate=0.02   → sys:drift (35 days)
     decay_rate=0.05   → sys:history (days of relevance)
+    decay_rate=0.08   → sys:trace (~9 days, agent execution traces)
     decay_rate=0.1    → ephemeral (hours of relevance)
 
 Usage:
@@ -38,11 +41,13 @@ DECAY_PRESETS = {
     "sys:core": 0.001,       # ~2 years half-life
     "sys:anchor": 0.001,     # ~2 years half-life
     "sys:pattern": 0.005,    # ~140 days half-life
+    "sys:protocol": 0.002,   # ~1 year half-life (operational rules)
     "sys:extension": 0.01,   # ~70 days half-life (default)
     "sys:project": 0.01,     # ~70 days half-life
     "sys:user:profile": 0.005,  # ~140 days half-life
     "sys:history": 0.05,     # ~14 days half-life
     "sys:drift": 0.02,       # ~35 days half-life
+    "sys:trace": 0.08,       # ~9 days half-life (agent execution traces)
     "ephemeral": 0.1,        # ~7 days half-life
 }
 
