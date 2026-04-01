@@ -391,13 +391,13 @@ class DualEmbeddingService:
             try:
                 # Check RAM before loading CODE model
                 ram_usage = self.get_ram_usage_mb()
-                if ram_usage['process_rss_mb'] > 2500:  # > 2.5 GB (increased for 4GB container)
+                if ram_usage['process_rss_mb'] > 6000:  # > 6 GB (for 8GB container limit)
                     logger.warning(
                         "⚠️ RAM limit approaching, refusing to load CODE model",
                         extra={"ram_mb": ram_usage['process_rss_mb']}
                     )
                     raise RuntimeError(
-                        f"RAM budget exceeded ({ram_usage['process_rss_mb']:.1f} MB > 2500 MB). "
+                        f"RAM budget exceeded ({ram_usage['process_rss_mb']:.1f} MB > 6000 MB). "
                         "CODE model loading disabled to prevent OOM."
                     )
 

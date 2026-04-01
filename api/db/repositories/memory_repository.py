@@ -555,6 +555,104 @@ class MemoryRepository:
         except Exception as e:
             raise RepositoryError(f"Failed to search memories by vector: {e}") from e
 
+    async def search_by_tags(
+        self,
+        filters: Optional[MemoryFilters] = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> Tuple[List[Memory], int]:
+        """
+        Search memories by tags/filters only (no vector similarity).
+
+        Fast path for tag-only queries like "sys:protocol" — avoids
+        loading embedding models and pgvector computation.
+
+        Args:
+            filters: Optional filters (tags, memory_type, consumed, etc.)
+            limit: Max results (1-50)
+            offset: Pagination offset
+
+        Returns:
+            Tuple of (list of Memory objects, total count)
+        """
+        try:
+            where_clauses = ["deleted_at IS NULL"]
+            params: Dict[str, Any] = {"limit": limit, "offset": offset}
+
+            if filters:
+                if filters.project_id:
+                    where_clauses.append("project_id = :project_id")
+                    params["project_id"] = str(filters.project_id)
+
+                if filters.memory_type:
+                    where_clauses.append("memory_type = :memory_type")
+                    params["memory_type"] = filters.memory_type.value
+
+                if filters.tags:
+                    tag_conditions = [f":tag{i} = ANY(tags)" for i in range(len(filters.tags))]
+                    where_clauses.append(f"({' AND '.join(tag_conditions)})")
+                    for i, tag in enumerate(filters.tags):
+                        params[f"tag{i}"] = tag
+
+                if filters.consumed is not None:
+                    if filters.consumed:
+                        where_clauses.append("consumed_at IS NOT NULL")
+                    else:
+                        where_clauses.append("consumed_at IS NULL")
+
+                if filters.lifecycle_state:
+                    if filters.lifecycle_state == "sealed":
+                        where_clauses.append("NOT EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:candidate')")
+                        where_clauses.append("NOT EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
+                    elif filters.lifecycle_state == "candidate":
+                        where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:candidate')")
+                    elif filters.lifecycle_state == "doubt":
+                        where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
+                    elif filters.lifecycle_state == "summary":
+                        where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:summary')")
+
+            where_sql = " AND ".join(where_clauses)
+
+            query = text(f"""
+                SELECT
+                    id, title, content, created_at, updated_at,
+                    memory_type, tags, author, project_id,
+                    embedding, embedding_model, related_chunks, resource_links,
+                    deleted_at
+                FROM memories
+                WHERE {where_sql}
+                ORDER BY created_at DESC
+                LIMIT :limit OFFSET :offset
+            """)
+
+            count_query = text(f"""
+                SELECT COUNT(*) as total
+                FROM memories
+                WHERE {where_sql}
+            """)
+
+            async with self.engine.begin() as conn:
+                count_result = await conn.execute(count_query, params)
+                total_row = count_result.fetchone()
+                total_count = total_row[0] if total_row else 0
+
+                result = await conn.execute(query, params)
+                rows = result.fetchall()
+
+            memories = [self._row_to_memory(row) for row in rows]
+
+            self.logger.info(
+                "Tag-only search completed",
+                count=len(memories),
+                total=total_count,
+                tags=filters.tags if filters else None,
+            )
+
+            return memories, total_count
+
+        except Exception as e:
+            raise RepositoryError(f"Failed to search memories by tags: {e}") from e
+
     def _row_to_memory(
         self,
         row,

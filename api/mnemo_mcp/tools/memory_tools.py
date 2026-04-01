@@ -676,8 +676,16 @@ class SearchMemoryTool(BaseMCPComponent):
                     )
 
             # Generate query embedding (graceful degradation if unavailable)
+            # OPTIMIZATION: Skip embedding for tag-only searches — use lexical search only.
+            # A query is considered "tag-only" if:
+            #   1. It starts with "sys:" or "trace:" and is short (<50 chars), OR
+            #   2. Tags filter is explicitly provided
+            # This avoids 8-10s model load for simple tag lookups like "sys:protocol".
             query_embedding = None
-            if self.embedding_service:
+            query_stripped = query.strip()
+            is_tag_query = query_stripped.startswith(('sys:', 'trace:')) and len(query_stripped) < 50
+            is_tag_only = is_tag_query or bool(tags)
+            if not is_tag_only and self.embedding_service:
                 try:
                     query_embedding_raw = await self.embedding_service.generate_embedding(query)
                     # DualEmbeddingService returns {"text": [...], "code": [...]} — extract TEXT
@@ -734,23 +742,38 @@ class SearchMemoryTool(BaseMCPComponent):
                 }
 
             else:
-                # Fallback to vector-only search
+                # Fallback: tag-only or lexical search (no embedding needed)
                 from mnemo_mcp.models.memory_models import MemoryFilters
                 # P0-3 FIX: project_id was undefined — removed from fallback
+                # For tag-only queries, use the query string itself as the tag filter
+                # when no explicit tags were provided (e.g. query="sys:protocol")
+                effective_tags = tags if tags else ([query_stripped] if is_tag_query else [])
                 fallback_filters = MemoryFilters(
                     memory_type=memory_type_enum,
-                    tags=tags or None,
+                    tags=effective_tags,
                     consumed=consumed,
                     lifecycle_state=lifecycle_state,
                 )
 
-                memories_list, total_count = await self.memory_repository.search_by_vector(
-                    vector=query_embedding,
-                    filters=fallback_filters,
-                    limit=limit,
-                    offset=offset,
-                    distance_threshold=0.7
-                )
+                if query_embedding:
+                    # Vector search with embedding
+                    memories_list, total_count = await self.memory_repository.search_by_vector(
+                        vector=query_embedding,
+                        filters=fallback_filters,
+                        limit=limit,
+                        offset=offset,
+                        distance_threshold=0.7
+                    )
+                    search_mode = "vector_only"
+                else:
+                    # Pure tag/lexical search — no embedding needed
+                    # Query is a tag like "sys:protocol", filter by tags directly
+                    memories_list, total_count = await self.memory_repository.search_by_tags(
+                        filters=fallback_filters,
+                        limit=limit,
+                        offset=offset,
+                    )
+                    search_mode = "tag_only"
 
                 memories = []
                 for m in memories_list:
@@ -772,7 +795,7 @@ class SearchMemoryTool(BaseMCPComponent):
                     "offset": offset,
                     "has_more": offset + len(memories) < total_count,
                     "metadata": {
-                        "search_mode": "vector_only",
+                        "search_mode": search_mode,
                         "embedding_time_ms": round(embedding_ms, 2),
                     }
                 }

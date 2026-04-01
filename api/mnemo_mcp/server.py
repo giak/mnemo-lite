@@ -141,12 +141,11 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     # Story 23.2: Initialize EmbeddingService
     # DualEmbeddingService is required because CodeIndexingService expects
     # generate_embedding(domain=EmbeddingDomain) returning Dict[str, List[float]].
-    # Models are lazy-loaded on first use (not preloaded at startup for speed).
+    # Models are lazy-loaded on first use. First search will be ~15-20s (cold start),
+    # subsequent searches ~2-5s (models stay in memory).
     try:
         from services.dual_embedding_service import DualEmbeddingService
         embedding_service = DualEmbeddingService()
-        # Don't preload models — lazy load on first tool call
-        # await embedding_service.preload_models()  # ~12s, too slow for MCP startup
         services["embedding_service"] = embedding_service
         logger.info(
             "mcp.embedding_service.initialized",
