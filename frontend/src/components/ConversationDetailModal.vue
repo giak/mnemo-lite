@@ -3,6 +3,7 @@
  * EPIC-27: Conversation Detail Modal - SCADA Industrial Style
  * Modal dialog with LED indicators, Markdown rendering, and monospace formatting
  */
+import { API } from '@/config/api'
 import { ref, watch, computed } from 'vue'
 import type { MemoryDetail } from '@/types/memories'
 import { useMarkdown } from '@/composables/useMarkdown'
@@ -38,7 +39,7 @@ async function fetchMemoryDetail() {
   error.value = null
 
   try {
-    const response = await fetch(`http://localhost:8001/api/v1/memories/${props.memoryId}`)
+    const response = await fetch(`${API}/memories/${props.memoryId}`)
 
     if (!response.ok) {
       if (response.status === 404) {

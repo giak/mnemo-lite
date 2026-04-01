@@ -2,6 +2,7 @@
  * EPIC-27: Projects Management Composable
  * Centralized state and API calls for projects management
  */
+import { API } from '@/config/api'
 import { ref, computed } from 'vue'
 import type {
   Project,
@@ -12,7 +13,7 @@ import type {
   DeleteProjectResponse
 } from '@/types/projects'
 
-const API_BASE = 'http://localhost:8001/api/v1'
+const API_BASE = API
 
 // Global state for active project
 const activeProject = ref<string>('default')

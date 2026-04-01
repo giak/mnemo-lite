@@ -3,10 +3,11 @@
  * Fetches ALL MnemoLite data for the Brain page
  */
 
+import { API, API_V1 } from '@/config/api'
 import { ref, onMounted, onUnmounted } from 'vue'
 
-const API = 'http://localhost:8001/api/v1'
-const API_V1 = 'http://localhost:8001/v1'
+import { API, API_V1 } from '@/config/api'
+
 
 export interface BrainData {
   // Counts

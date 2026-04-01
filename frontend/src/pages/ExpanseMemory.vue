@@ -4,6 +4,7 @@
  * 4 sections: Taxonomie, Cycle de vie, Santé, Memories filtrées
  * + Modal détail memory au clic
  */
+import { API } from '@/config/api'
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useExpanseMemory } from '@/composables/useExpanseMemory'
 
@@ -24,7 +25,7 @@ async function openMemoryDetail(memory: any) {
   // Fetch full content
   loadingDetail.value = true
   try {
-    const resp = await fetch(`http://localhost:8001/api/v1/memories/${memory.id}`)
+    const resp = await fetch(`${API}/memories/${memory.id}`)
     if (resp.ok) {
       selectedMemory.value = await resp.json()
     } else {

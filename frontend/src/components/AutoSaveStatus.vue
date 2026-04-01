@@ -4,6 +4,7 @@
  * Displays real-time auto-save system metrics from queue monitoring
  */
 
+import { API_V1 } from '@/config/api'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import DashboardCard from '@/components/DashboardCard.vue'
 
@@ -24,7 +25,7 @@ let refreshInterval: number | null = null
 // Fetch metrics from API
 async function fetchMetrics() {
   try {
-    const response = await fetch('http://localhost:8001/v1/conversations/metrics')
+    const response = await fetch(`${API_V1}/conversations/metrics`)
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
     }

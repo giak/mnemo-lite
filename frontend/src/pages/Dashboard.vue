@@ -240,7 +240,7 @@ const hasErrors = computed(() => errors.value.length > 0)
         <p>
           AUTO-REFRESH ENABLED (30S INTERVAL) |
           <a
-            href="http://localhost:8001/docs"
+            :href="`${API_BASE}/docs`"
             target="_blank"
             class="text-cyan-400 hover:text-cyan-300 underline"
           >

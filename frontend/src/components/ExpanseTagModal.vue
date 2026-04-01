@@ -4,6 +4,7 @@
  * Shows memories with a specific Expanse tag
  * Draggable, transparent backdrop
  */
+import { API } from '@/config/api'
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 
 interface Props {
@@ -52,7 +53,7 @@ async function fetchMemories() {
   loading.value = true
   error.value = null
   try {
-    const response = await fetch('http://localhost:8001/api/v1/memories/search', {
+    const response = await fetch(`${API}/memories/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: props.tag, tags: [props.tag], limit: 20 })

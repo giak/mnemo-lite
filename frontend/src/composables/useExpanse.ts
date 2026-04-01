@@ -3,9 +3,10 @@
  * Vue 3 composable for fetching Expanse data from the MnemoLite API
  */
 
+import { API } from '@/config/api'
 import { ref, onMounted, onUnmounted } from 'vue'
 
-const API_BASE_URL = 'http://localhost:8001/api/v1/memories'
+const API_BASE_URL = `${API}/memories`
 
 export interface ExpanseMemory {
   id: string

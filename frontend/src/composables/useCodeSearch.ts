@@ -5,6 +5,7 @@
  * Combines lexical (pg_trgm) and semantic (HNSW) search with RRF fusion.
  */
 
+import { API_V1 } from '@/config/api'
 import { ref, computed } from 'vue'
 
 export interface SearchResult {
@@ -78,7 +79,7 @@ export function useCodeSearch(): UseCodeSearchReturn {
         filters: options.filters ?? {}
       }
 
-      const response = await fetch('http://localhost:8001/v1/code/search/hybrid', {
+      const response = await fetch(`${API_V1}/code/search/hybrid`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

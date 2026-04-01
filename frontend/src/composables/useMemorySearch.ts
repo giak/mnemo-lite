@@ -4,9 +4,10 @@
  * Provides search, filtering, multi-selection, and ID copying functionality.
  */
 
+import { API } from '@/config/api'
 import { ref, computed } from 'vue'
 
-const API_BASE_URL = 'http://localhost:8001/api/v1/memories'
+const API_BASE_URL = `${API}/memories`
 
 export interface MemorySearchResult {
   id: string

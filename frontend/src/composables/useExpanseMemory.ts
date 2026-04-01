@@ -3,9 +3,10 @@
  * Fetches Expanse-specific cognitive state from MnemoLite API
  */
 
+import { API } from '@/config/api'
 import { ref, onMounted, onUnmounted } from 'vue'
 
-const API = 'http://localhost:8001/api/v1'
+import { API } from '@/config/api'
 
 export interface ExpanseTag {
   tag: string

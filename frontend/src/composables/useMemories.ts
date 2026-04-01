@@ -3,13 +3,14 @@
  * Vue 3 composable for fetching and managing memories data
  */
 
+import { API } from '@/config/api'
 import { ref, onMounted, onUnmounted } from 'vue'
 import type {
   MemoriesData,
   MemoriesError
 } from '@/types/memories'
 
-const API_BASE_URL = 'http://localhost:8001/api/v1/memories'
+const API_BASE_URL = `${API}/memories`
 
 export function useMemories(options: { refreshInterval?: number } = {}) {
   const { refreshInterval = 30000 } = options // Default: 30 seconds

@@ -3,10 +3,11 @@
  * Vue 3 composable for fetching and managing dashboard data
  */
 
+import { API } from '@/config/api'
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { DashboardData, DashboardError } from '@/types/dashboard'
 
-const API_BASE_URL = 'http://localhost:8001/api/v1/dashboard'
+const API_BASE_URL = `${API}/dashboard`
 
 export function useDashboard(options: { refreshInterval?: number } = {}) {
   const { refreshInterval = 30000 } = options // Default: 30 seconds
