@@ -1,6 +1,6 @@
 # EPIC-37: Documentation Rewrite & Cleanup
 
-**Status**: DRAFT | **Created**: 2026-04-03 | **Effort**: ~40 points | **Stories**: 12
+**Status**: ✅ COMPLETE | **Created**: 2026-04-03 | **Completed**: 2026-04-03 | **Commits**: 3
 
 ---
 
@@ -49,10 +49,10 @@ L'audit de la documentation révèle un état critique :
 - Tout le contenu de `docs/agile/serena-evolution/` sauf ADRs uniques
 
 **Critères de complétion** :
-- [ ] `docs/` < 1 MB (was 32 MB)
-- [ ] `docs/` < 50 fichiers (was 375)
-- [ ] 0 fichiers dans `99_TEMP/`, `todo/`
-- [ ] `serena-evolution/` archivé
+- [x] `docs/` < 1 MB (was 32 MB)
+- [x] `docs/` < 50 fichiers (was 375)
+- [x] 0 fichiers dans `99_TEMP/`, `todo/`
+- [x] `serena-evolution/` archivé
 
 ---
 
@@ -77,11 +77,11 @@ L'audit de la documentation révèle un état critique :
 - Liens vers la nouvelle structure docs/
 
 **Critères de complétion** :
-- [ ] 0 référence HTMX
-- [ ] Version correcte
-- [ ] Compteurs de tests corrects
-- [ ] 0 lien cassé
-- [ ] Description UI précise (Vue 3 SPA)
+- [x] 0 référence HTMX
+- [x] Version correcte
+- [x] Compteurs de tests corrects
+- [x] 0 lien cassé
+- [x] Description UI précise (Vue 3 SPA)
 
 ---
 
@@ -102,10 +102,10 @@ L'audit de la documentation révèle un état critique :
 - Docker profiles (dev/prod)
 
 **Critères de complétion** :
-- [ ] Guidelines frontend Vue 3
-- [ ] Compteurs de tests corrects
-- [ ] 0 lien cassé
-- [ ] PostgreSQL 18
+- [x] Guidelines frontend Vue 3
+- [x] Compteurs de tests corrects
+- [x] 0 lien cassé
+- [x] PostgreSQL 18
 
 ---
 
@@ -125,10 +125,10 @@ L'audit de la documentation révèle un état critique :
 - Extraire les ADRs uniques de `serena-evolution/`
 
 **Critères de complétion** :
-- [ ] UI architecture décrit Vue 3
-- [ ] 1 seul doc Docker
-- [ ] Versions à jour
-- [ ] ADRs uniques conservés
+- [x] UI architecture décrit Vue 3
+- [x] 1 seul doc Docker
+- [x] Versions à jour
+- [x] ADRs uniques conservés
 
 ---
 
@@ -171,9 +171,9 @@ docs/
 ```
 
 **Critères de complétion** :
-- [ ] Structure créée
-- [ ] Fichiers déplacés
-- [ ] `docs/README.md` créé comme index de navigation
+- [x] Structure créée
+- [x] Fichiers déplacés
+- [x] `docs/README.md` créé comme index de navigation
 
 ---
 
@@ -186,9 +186,9 @@ docs/
 - `CLAUDE_CODE_INTEGRATION.md` — Idem
 
 **Critères de complétion** :
-- [ ] 0 chemin `/home/giak/` dans les guides
-- [ ] Utiliser des variables (`<project-root>`, `<user>`)
-- [ ] Instructions génériques, reproductibles
+- [x] 0 chemin `/home/giak/` dans les guides
+- [x] Utiliser des variables (`<project-root>`, `<user>`)
+- [x] Instructions génériques, reproductibles
 
 ---
 
@@ -204,9 +204,9 @@ docs/
 - Supprimer les références à des fonctionnalités supprimées
 
 **Critères de complétion** :
-- [ ] Version correcte
-- [ ] Skills references valides
-- [ ] DSL à jour
+- [x] Version correcte
+- [x] Skills references valides
+- [x] DSL à jour
 
 ---
 
@@ -218,8 +218,8 @@ docs/
 - `.claude/skills/mnemolite-architecture/SKILL.md` — Vérifier l'exactitude
 
 **Critères de complétion** :
-- [ ] 0 référence HTMX dans les skills
-- [ ] Vue 3 debugging gotchas ajoutés
+- [x] 0 référence HTMX dans les skills
+- [x] Vue 3 debugging gotchas ajoutés
 
 ---
 
@@ -232,8 +232,8 @@ docs/
 - Corriger ou supprimer les liens cassés
 
 **Critères de complétion** :
-- [ ] 0 lien cassé dans la doc active
-- [ ] 0 lien vers `88_ARCHIVE/` depuis la doc active (sauf référence historique)
+- [x] 0 lien cassé dans la doc active
+- [x] 0 lien vers `88_ARCHIVE/` depuis la doc active (sauf référence historique)
 
 ---
 
@@ -262,16 +262,16 @@ Phase 4 — Validation (1h)
 
 ## Critères de complétion (EPIC-level)
 
-- [ ] **0 référence HTMX** dans la documentation active (88_ARCHIVE exclu)
-- [ ] **Toutes les versions correspondent** au code actuel
-- [ ] **Compteur de tests exact** — correspond au vrai nombre
-- [ ] **0 lien interne cassé** — tous les liens `docs/` résolvent
-- [ ] **0 chemin hardcodé** — pas de `/home/giak/` dans les docs user-facing
-- [ ] **docs/ < 1 MB** — down from 32 MB
-- [ ] **docs/ < 50 fichiers** — down from 375
-- [ ] **docs/README.md** sert d'index de navigation
-- [ ] **CONTRIBUTING.md** inclut guidelines Vue 3
-- [ ] **README.md** décrit précisément la Vue 3 SPA
+- [x] **0 référence HTMX** dans la documentation active (88_ARCHIVE exclu)
+- [x] **Toutes les versions correspondent** au code actuel
+- [x] **Compteur de tests exact** — correspond au vrai nombre
+- [x] **0 lien interne cassé** — tous les liens `docs/` résolvent
+- [x] **0 chemin hardcodé** — pas de `/home/giak/` dans les docs user-facing
+- [x] **docs/ < 1 MB** — down from 32 MB
+- [x] **docs/ < 50 fichiers** — down from 375
+- [x] **docs/README.md** sert d'index de navigation
+- [x] **CONTRIBUTING.md** inclut guidelines Vue 3
+- [x] **README.md** décrit précisément la Vue 3 SPA
 
 ---
 
