@@ -371,6 +371,9 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     )
     from mnemo_mcp.tools.analytics_tools import (
         clear_cache_tool,
+        get_indexing_stats_tool,
+        get_memory_health_tool,
+        get_cache_stats_tool,
     )
     from mnemo_mcp.resources.analytics_resources import (
         cache_stats_resource,
@@ -416,6 +419,9 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
 
     # Story 23.6: Inject services into analytics components
     clear_cache_tool.inject_services(services)
+    get_indexing_stats_tool.inject_services(services)
+    get_memory_health_tool.inject_services(services)
+    get_cache_stats_tool.inject_services(services)
     cache_stats_resource.inject_services(services)
     search_analytics_resource.inject_services(services)
 
@@ -1501,6 +1507,9 @@ def register_analytics_components(mcp: FastMCP) -> None:
     """
     from mnemo_mcp.tools.analytics_tools import (
         clear_cache_tool,
+        get_indexing_stats_tool,
+        get_memory_health_tool,
+        get_cache_stats_tool,
     )
     from mnemo_mcp.resources.analytics_resources import (
         cache_stats_resource,
@@ -1636,9 +1645,66 @@ def register_analytics_components(mcp: FastMCP) -> None:
 
     logger.info(
         "mcp.components.analytics.registered",
-        tools=["clear_cache"],
+        tools=["clear_cache", "get_indexing_stats", "get_memory_health", "get_cache_stats"],
         resources=["cache://stats", "analytics://search"]
     )
+
+    # EPIC-31 Story 31.2: Register additional analytics tools
+    @mcp.tool()
+    async def get_indexing_stats(
+        ctx: Context,
+        repository: str = "default",
+    ) -> dict:
+        """
+        Get indexing statistics for a repository.
+
+        Returns file counts, chunk counts, node/edge counts, languages,
+        and last indexed time.
+
+        Args:
+            repository: Repository name (default: "default")
+
+        Returns:
+            Dict with total_files, total_chunks, total_nodes, total_edges,
+            languages, last_indexed, modules, indexing_status
+
+        Examples:
+            - get_indexing_stats(repository="mnemolite")
+            - get_indexing_stats()  # default repository
+        """
+        return await get_indexing_stats_tool.execute(repository=repository, ctx=ctx)
+
+    @mcp.tool()
+    async def get_memory_health(ctx: Context) -> dict:
+        """
+        Get memory system health.
+
+        Returns total memories, embedding coverage, memories by type,
+        consolidation status, and unconsumed drifts.
+
+        Returns:
+            Dict with total_memories, with_embeddings, embedding_coverage_pct,
+            by_type, history_count, needs_consolidation, unconsumed_drifts
+
+        Examples:
+            - get_memory_health()
+        """
+        return await get_memory_health_tool.execute(ctx=ctx)
+
+    @mcp.tool()
+    async def get_cache_stats(ctx: Context) -> dict:
+        """
+        Get cache layer statistics (L1 in-memory + L2 Redis).
+
+        Returns hit rates, entry counts, memory usage, and Redis key counts.
+
+        Returns:
+            Dict with l1 stats, l2 stats, and redis_keys counts
+
+        Examples:
+            - get_cache_stats()
+        """
+        return await get_cache_stats_tool.execute(ctx=ctx)
 
 
 def register_config_components(mcp: FastMCP) -> None:

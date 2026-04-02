@@ -1,9 +1,10 @@
 """
-MCP Analytics Tools (EPIC-23 Story 23.6).
+MCP Analytics Tools (EPIC-23 Story 23.6 + EPIC-31 Story 31.2).
 
-Tools for cache management and observability.
+Tools for cache management, indexing stats, and memory health observability.
 """
 import structlog
+import json
 from typing import Optional
 
 from mcp.server.fastmcp import Context
@@ -164,3 +165,527 @@ class ClearCacheTool(BaseMCPComponent):
 
 # Singleton instance for registration
 clear_cache_tool = ClearCacheTool()
+
+
+class GetIndexingStatsTool(BaseMCPComponent):
+    """
+    Tool: get_indexing_stats — Get indexing statistics for a repository.
+    """
+
+    def get_name(self) -> str:
+        return "get_indexing_stats"
+
+    def get_description(self) -> str:
+        return (
+            "Get indexing statistics for a repository including file counts, "
+            "chunk counts, node/edge counts, and last indexed time."
+        )
+
+    async def execute(
+        self,
+        repository: str = "default",
+        ctx: Optional[Context] = None
+    ) -> dict:
+        """Get indexing stats for a repository."""
+        engine = self._services.get("engine") if self._services else None
+        redis = self._services.get("redis") if self._services else None
+
+        if not engine:
+            return {"success": False, "message": "Database engine not available"}
+
+        try:
+            from sqlalchemy import text
+
+            async with engine.connect() as conn:
+                # Get chunk stats
+                chunk_result = await conn.execute(text("""
+                    SELECT
+                        COUNT(*) as total_chunks,
+                        COUNT(DISTINCT file_path) as total_files,
+                        MAX(indexed_at) as last_indexed,
+                        MIN(indexed_at) as first_indexed,
+                        COUNT(DISTINCT language) as languages
+                    FROM code_chunks
+                    WHERE repository = :repo
+                """), {"repo": repository})
+                chunk_row = chunk_result.fetchone()
+
+                # Get graph stats (table may not exist if graph not built)
+                try:
+                    graph_result = await conn.execute(text("""
+                        SELECT COUNT(*) as total_nodes,
+                               COUNT(DISTINCT module) as modules
+                        FROM graph_nodes
+                        WHERE repository = :repo
+                    """), {"repo": repository})
+                    graph_row = graph_result.fetchone()
+                except Exception:
+                    graph_row = (0, 0)
+
+                # Get edge count
+                try:
+                    edge_result = await conn.execute(text("""
+                        SELECT COUNT(*) as total_edges
+                        FROM graph_edges
+                        WHERE repository = :repo
+                    """), {"repo": repository})
+                    edge_row = edge_result.fetchone()
+                except Exception:
+                    edge_row = (0,)
+
+            # Get indexing status from Redis
+            indexing_status = None
+            if redis:
+                try:
+                    status_data = await redis.get(f"indexing:status:{repository}")
+                    if status_data:
+                        indexing_status = json.loads(status_data)
+                except Exception:
+                    pass
+
+            chunks = chunk_row[0] if chunk_row else 0
+            files = chunk_row[1] if chunk_row else 0
+            nodes = graph_row[0] if graph_row else 0
+            edges = edge_row[0] if edge_row else 0
+
+            return {
+                "success": True,
+                "repository": repository,
+                "total_chunks": chunks,
+                "total_files": files,
+                "total_nodes": nodes,
+                "total_edges": edges,
+                "languages": chunk_row[4] if chunk_row else 0,
+                "last_indexed": str(chunk_row[2]) if chunk_row and chunk_row[2] else None,
+                "first_indexed": str(chunk_row[3]) if chunk_row and chunk_row[3] else None,
+                "modules": graph_row[1] if graph_row else 0,
+                "indexing_status": indexing_status,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get indexing stats: {e}", exc_info=True)
+            return {"success": False, "message": f"Failed to get indexing stats: {e}"}
+
+
+class GetMemoryHealthTool(BaseMCPComponent):
+    """
+    Tool: get_memory_health — Get health of the memory system.
+    """
+
+    def get_name(self) -> str:
+        return "get_memory_health"
+
+    def get_description(self) -> str:
+        return (
+            "Get memory system health including total memories, "
+            "embedding coverage, decay stats, and consolidation status."
+        )
+
+    async def execute(
+        self,
+        ctx: Optional[Context] = None
+    ) -> dict:
+        """Get memory system health."""
+        engine = self._services.get("engine") if self._services else None
+
+        if not engine:
+            return {"success": False, "message": "Database engine not available"}
+
+        try:
+            from sqlalchemy import text
+
+            async with engine.connect() as conn:
+                # Total memories
+                total_result = await conn.execute(text("""
+                    SELECT COUNT(*) FROM memories WHERE deleted_at IS NULL
+                """))
+                total = total_result.fetchone()[0]
+
+                # Memories with embeddings
+                embedding_result = await conn.execute(text("""
+                    SELECT COUNT(*) FROM memories
+                    WHERE deleted_at IS NULL AND embedding IS NOT NULL
+                """))
+                with_embedding = embedding_result.fetchone()[0]
+
+                # Memories by type
+                type_result = await conn.execute(text("""
+                    SELECT memory_type, COUNT(*) as cnt
+                    FROM memories WHERE deleted_at IS NULL
+                    GROUP BY memory_type
+                    ORDER BY cnt DESC
+                """))
+                by_type = {row[0]: row[1] for row in type_result.fetchall()}
+
+                # Memories needing consolidation (sys:history > 20)
+                history_result = await conn.execute(text("""
+                    SELECT COUNT(*) FROM memories
+                    WHERE 'sys:history' = ANY(tags) AND deleted_at IS NULL
+                """))
+                history_count = history_result.fetchone()[0]
+
+                # Unconsumed drifts
+                drift_result = await conn.execute(text("""
+                    SELECT COUNT(*) FROM memories
+                    WHERE 'sys:drift' = ANY(tags) AND consumed_at IS NULL AND deleted_at IS NULL
+                """))
+                drift_count = drift_result.fetchone()[0]
+
+                # Decay config count
+                decay_result = await conn.execute(text("""
+                    SELECT COUNT(*) FROM memory_decay_config
+                """))
+                decay_rules = decay_result.fetchone()[0]
+
+            embedding_pct = round(with_embedding / total * 100, 1) if total > 0 else 0
+
+            return {
+                "success": True,
+                "total_memories": total,
+                "with_embeddings": with_embedding,
+                "embedding_coverage_pct": embedding_pct,
+                "by_type": by_type,
+                "history_count": history_count,
+                "needs_consolidation": history_count > 20,
+                "unconsumed_drifts": drift_count,
+                "decay_rules": decay_rules,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get memory health: {e}", exc_info=True)
+            return {"success": False, "message": f"Failed to get memory health: {e}"}
+
+
+class GetCacheStatsTool(BaseMCPComponent):
+    """
+    Tool: get_cache_stats — Get cache layer statistics.
+    """
+
+    def get_name(self) -> str:
+        return "get_cache_stats"
+
+    def get_description(self) -> str:
+        return (
+            "Get cache layer statistics including L1 (in-memory) and L2 (Redis) "
+            "hit rates, sizes, and entry counts."
+        )
+
+    async def execute(
+        self,
+        ctx: Optional[Context] = None
+    ) -> dict:
+        """Get cache statistics."""
+        chunk_cache = self._services.get("chunk_cache") if self._services else None
+        redis = self._services.get("redis") if self._services else None
+
+        stats = {"success": True, "l1": {}, "l2": {}, "redis_keys": {}}
+
+        # L1 stats
+        if chunk_cache:
+            try:
+                l1_stats = chunk_cache.l1.stats()
+                stats["l1"] = {
+                    "entries": l1_stats.get("entries", 0),
+                    "hits": l1_stats.get("hits", 0),
+                    "misses": l1_stats.get("misses", 0),
+                    "hit_rate": l1_stats.get("hit_rate", 0),
+                    "max_size": l1_stats.get("max_size", 0),
+                }
+            except Exception as e:
+                stats["l1_error"] = str(e)
+
+        # L2 (Redis) stats
+        if redis:
+            try:
+                info = await redis.info("memory")
+                stats["l2"] = {
+                    "used_memory_human": info.get("used_memory_human", "unknown"),
+                    "connected_clients": info.get("connected_clients", 0),
+                }
+
+                # Count search cache keys
+                cursor, search_keys = await redis.scan(0, match="search:v1:*", count=0)
+                stats["redis_keys"]["search_cache"] = search_keys
+
+                # Count indexing status keys
+                cursor, idx_keys = await redis.scan(0, match="indexing:status:*", count=0)
+                stats["redis_keys"]["indexing_status"] = idx_keys
+
+                # Count lock keys
+                cursor, lock_keys = await redis.scan(0, match="indexing:lock:*", count=0)
+                stats["redis_keys"]["locks"] = lock_keys
+
+            except Exception as e:
+                stats["l2_error"] = str(e)
+        else:
+            stats["l2"] = {"status": "redis not available"}
+
+        return stats
+
+
+# Singleton instances for registration
+get_indexing_stats_tool = GetIndexingStatsTool()
+get_memory_health_tool = GetMemoryHealthTool()
+get_cache_stats_tool = GetCacheStatsTool()
+
+
+class GetIndexingStatsTool(BaseMCPComponent):
+    """
+    Tool: get_indexing_stats — Get indexing statistics for a repository.
+    """
+
+    def get_name(self) -> str:
+        return "get_indexing_stats"
+
+    def get_description(self) -> str:
+        return (
+            "Get indexing statistics for a repository including file counts, "
+            "chunk counts, node/edge counts, and last indexed time."
+        )
+
+    async def execute(
+        self,
+        repository: str = "default",
+        ctx: Optional[Context] = None
+    ) -> dict:
+        """Get indexing stats for a repository."""
+        engine = self._services.get("engine") if self._services else None
+        redis = self._services.get("redis") if self._services else None
+
+        if not engine:
+            return {"success": False, "message": "Database engine not available"}
+
+        try:
+            from sqlalchemy import text
+
+            async with engine.connect() as conn:
+                # Get chunk stats
+                chunk_result = await conn.execute(text("""
+                    SELECT
+                        COUNT(*) as total_chunks,
+                        COUNT(DISTINCT file_path) as total_files,
+                        MAX(indexed_at) as last_indexed,
+                        MIN(indexed_at) as first_indexed,
+                        COUNT(DISTINCT language) as languages
+                    FROM code_chunks
+                    WHERE repository = :repo
+                """), {"repo": repository})
+                chunk_row = chunk_result.fetchone()
+
+                # Get graph stats (table may not exist if graph not built)
+                try:
+                    graph_result = await conn.execute(text("""
+                        SELECT COUNT(*) as total_nodes,
+                               COUNT(DISTINCT module) as modules
+                        FROM graph_nodes
+                        WHERE repository = :repo
+                    """), {"repo": repository})
+                    graph_row = graph_result.fetchone()
+                except Exception:
+                    graph_row = (0, 0)
+
+                # Get edge count
+                try:
+                    edge_result = await conn.execute(text("""
+                        SELECT COUNT(*) as total_edges
+                        FROM graph_edges
+                        WHERE repository = :repo
+                    """), {"repo": repository})
+                    edge_row = edge_result.fetchone()
+                except Exception:
+                    edge_row = (0,)
+
+            # Get indexing status from Redis
+            indexing_status = None
+            if redis:
+                try:
+                    status_data = await redis.get(f"indexing:status:{repository}")
+                    if status_data:
+                        indexing_status = json.loads(status_data)
+                except Exception:
+                    pass
+
+            chunks = chunk_row[0] if chunk_row else 0
+            files = chunk_row[1] if chunk_row else 0
+            nodes = graph_row[0] if graph_row else 0
+            edges = edge_row[0] if edge_row else 0
+
+            return {
+                "success": True,
+                "repository": repository,
+                "total_chunks": chunks,
+                "total_files": files,
+                "total_nodes": nodes,
+                "total_edges": edges,
+                "languages": chunk_row[4] if chunk_row else 0,
+                "last_indexed": str(chunk_row[2]) if chunk_row and chunk_row[2] else None,
+                "first_indexed": str(chunk_row[3]) if chunk_row and chunk_row[3] else None,
+                "modules": graph_row[1] if graph_row else 0,
+                "indexing_status": indexing_status,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get indexing stats: {e}", exc_info=True)
+            return {"success": False, "message": f"Failed to get indexing stats: {e}"}
+
+
+class GetMemoryHealthTool(BaseMCPComponent):
+    """
+    Tool: get_memory_health — Get health of the memory system.
+    """
+
+    def get_name(self) -> str:
+        return "get_memory_health"
+
+    def get_description(self) -> str:
+        return (
+            "Get memory system health including total memories, "
+            "embedding coverage, decay stats, and consolidation status."
+        )
+
+    async def execute(
+        self,
+        ctx: Optional[Context] = None
+    ) -> dict:
+        """Get memory system health."""
+        engine = self._services.get("engine") if self._services else None
+
+        if not engine:
+            return {"success": False, "message": "Database engine not available"}
+
+        try:
+            from sqlalchemy import text
+
+            async with engine.connect() as conn:
+                # Total memories
+                total_result = await conn.execute(text("""
+                    SELECT COUNT(*) FROM memories WHERE deleted_at IS NULL
+                """))
+                total = total_result.fetchone()[0]
+
+                # Memories with embeddings
+                embedding_result = await conn.execute(text("""
+                    SELECT COUNT(*) FROM memories
+                    WHERE deleted_at IS NULL AND embedding IS NOT NULL
+                """))
+                with_embedding = embedding_result.fetchone()[0]
+
+                # Memories by type
+                type_result = await conn.execute(text("""
+                    SELECT memory_type, COUNT(*) as cnt
+                    FROM memories WHERE deleted_at IS NULL
+                    GROUP BY memory_type
+                    ORDER BY cnt DESC
+                """))
+                by_type = {row[0]: row[1] for row in type_result.fetchall()}
+
+                # Memories needing consolidation (sys:history > 20)
+                history_result = await conn.execute(text("""
+                    SELECT COUNT(*) FROM memories
+                    WHERE 'sys:history' = ANY(tags) AND deleted_at IS NULL
+                """))
+                history_count = history_result.fetchone()[0]
+
+                # Unconsumed drifts
+                drift_result = await conn.execute(text("""
+                    SELECT COUNT(*) FROM memories
+                    WHERE 'sys:drift' = ANY(tags) AND consumed_at IS NULL AND deleted_at IS NULL
+                """))
+                drift_count = drift_result.fetchone()[0]
+
+                # Decay config count
+                decay_result = await conn.execute(text("""
+                    SELECT COUNT(*) FROM memory_decay_config
+                """))
+                decay_rules = decay_result.fetchone()[0]
+
+            embedding_pct = round(with_embedding / total * 100, 1) if total > 0 else 0
+
+            return {
+                "success": True,
+                "total_memories": total,
+                "with_embeddings": with_embedding,
+                "embedding_coverage_pct": embedding_pct,
+                "by_type": by_type,
+                "history_count": history_count,
+                "needs_consolidation": history_count > 20,
+                "unconsumed_drifts": drift_count,
+                "decay_rules": decay_rules,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get memory health: {e}", exc_info=True)
+            return {"success": False, "message": f"Failed to get memory health: {e}"}
+
+
+class GetCacheStatsTool(BaseMCPComponent):
+    """
+    Tool: get_cache_stats — Get cache layer statistics.
+    """
+
+    def get_name(self) -> str:
+        return "get_cache_stats"
+
+    def get_description(self) -> str:
+        return (
+            "Get cache layer statistics including L1 (in-memory) and L2 (Redis) "
+            "hit rates, sizes, and entry counts."
+        )
+
+    async def execute(
+        self,
+        ctx: Optional[Context] = None
+    ) -> dict:
+        """Get cache statistics."""
+        chunk_cache = self._services.get("chunk_cache") if self._services else None
+        redis = self._services.get("redis") if self._services else None
+
+        stats = {"success": True, "l1": {}, "l2": {}, "redis_keys": {}}
+
+        # L1 stats
+        if chunk_cache:
+            try:
+                l1_stats = chunk_cache.l1.stats()
+                stats["l1"] = {
+                    "entries": l1_stats.get("entries", 0),
+                    "hits": l1_stats.get("hits", 0),
+                    "misses": l1_stats.get("misses", 0),
+                    "hit_rate": l1_stats.get("hit_rate", 0),
+                    "max_size": l1_stats.get("max_size", 0),
+                }
+            except Exception as e:
+                stats["l1_error"] = str(e)
+
+        # L2 (Redis) stats
+        if redis:
+            try:
+                info = await redis.info("memory")
+                stats["l2"] = {
+                    "used_memory_human": info.get("used_memory_human", "unknown"),
+                    "connected_clients": info.get("connected_clients", 0),
+                }
+
+                # Count search cache keys
+                cursor, search_keys = await redis.scan(0, match="search:v1:*", count=0)
+                stats["redis_keys"]["search_cache"] = search_keys
+
+                # Count indexing status keys
+                cursor, idx_keys = await redis.scan(0, match="indexing:status:*", count=0)
+                stats["redis_keys"]["indexing_status"] = idx_keys
+
+                # Count lock keys
+                cursor, lock_keys = await redis.scan(0, match="indexing:lock:*", count=0)
+                stats["redis_keys"]["locks"] = lock_keys
+
+            except Exception as e:
+                stats["l2_error"] = str(e)
+        else:
+            stats["l2"] = {"status": "redis not available"}
+
+        return stats
+
+
+# Singleton instances for registration
+get_indexing_stats_tool = GetIndexingStatsTool()
+get_memory_health_tool = GetMemoryHealthTool()
+get_cache_stats_tool = GetCacheStatsTool()
