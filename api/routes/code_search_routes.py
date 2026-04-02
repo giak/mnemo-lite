@@ -111,6 +111,7 @@ class SearchMetadataModel(BaseModel):
     lexical_enabled: bool
     vector_enabled: bool
     graph_expansion_enabled: bool
+    reranking_enabled: bool = False  # EPIC-32 Story 32.3
 
     lexical_weight: float
     vector_weight: float
@@ -120,6 +121,7 @@ class SearchMetadataModel(BaseModel):
     vector_time_ms: Optional[float] = None
     fusion_time_ms: Optional[float] = None
     graph_time_ms: Optional[float] = None
+    reranking_time_ms: Optional[float] = None  # EPIC-32 Story 32.3
 
 
 class HybridSearchResponseModel(BaseModel):
@@ -277,6 +279,7 @@ async def hybrid_search(
                 lexical_enabled=response.metadata.lexical_enabled,
                 vector_enabled=response.metadata.vector_enabled,
                 graph_expansion_enabled=response.metadata.graph_expansion_enabled,
+                reranking_enabled=response.metadata.reranking_enabled,
                 lexical_weight=response.metadata.lexical_weight,
                 vector_weight=response.metadata.vector_weight,
                 execution_time_ms=response.metadata.execution_time_ms,
@@ -284,6 +287,7 @@ async def hybrid_search(
                 vector_time_ms=response.metadata.vector_time_ms,
                 fusion_time_ms=response.metadata.fusion_time_ms,
                 graph_time_ms=response.metadata.graph_time_ms,
+                reranking_time_ms=response.metadata.reranking_time_ms,
             ),
         )
 
