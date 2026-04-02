@@ -66,6 +66,11 @@ const router = createRouter({
       path: '/alerts',
       name: 'alerts',
       component: () => import('@/pages/Alerts.vue')
+    },
+    {
+      path: '/search-analytics',
+      name: 'search-analytics',
+      component: () => import('@/pages/SearchAnalytics.vue')
     }
   ]
 })
