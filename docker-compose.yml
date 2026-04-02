@@ -96,11 +96,8 @@ services:
       - ./workers:/app/workers
       - ./scripts:/app/scripts
       - ./db/migrations:/app/db/migrations:ro
-      - ./certs:/app/certs:ro
       - ./tests:/app/tests
-      - ./logs:/app/logs
-      - ./templates:/app/templates
-      - ./static:/app/static
+      - ./ap./api/templates:/app/templates
       - ./.claude:/app/.claude:ro
       - ${CLAUDE_PROJECTS_DIR:-/home/giak/.claude/projects}:/host/.claude/projects:ro
       - /home/giak/projects:/external/projects:ro
