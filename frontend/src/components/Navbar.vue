@@ -2,9 +2,11 @@
 /**
  * EPIC-27: Navbar Component - SCADA Industrial Style
  * Navigation with LED indicator, monospace UPPERCASE labels, and dropdown menu
+ * EPIC-30: Added Alerts link with active alert count badge
  */
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { API } from '@/config/api'
 
 const route = useRoute()
 
@@ -22,6 +24,7 @@ const links: MenuItem[] = [
   { name: 'EXPANSE', path: '/expanse' },
   { name: 'EXP. MEMORY', path: '/expanse-memory' },
   { name: 'MONITORING', path: '/monitoring' },
+  { name: 'ALERTS', path: '/alerts' },
   { name: 'BRAIN', path: '/brain' },
   {
     name: 'GRAPH',
@@ -34,6 +37,7 @@ const links: MenuItem[] = [
 ]
 
 const openSubmenu = ref<string | null>(null)
+const activeAlertCount = ref(0)
 
 const isActive = (path: string) => route.path === path
 
@@ -49,6 +53,25 @@ const isSubmenuActive = (children?: MenuItem[]) => {
   if (!children) return false
   return children.some(child => child.path && isActive(child.path))
 }
+
+async function fetchActiveAlertCount() {
+  try {
+    const resp = await fetch(`${API}/alerts/summary`)
+    if (!resp.ok) return
+    const data = await resp.json()
+    const alerts = data.data || []
+    activeAlertCount.value = alerts.reduce((sum: number, a: { unacked: number }) => sum + a.unacked, 0)
+  } catch {
+    // Silently fail — badge not critical
+  }
+}
+
+onMounted(() => {
+  fetchActiveAlertCount()
+})
+
+const alertRefreshInterval = setInterval(fetchActiveAlertCount, 30000)
+onUnmounted(() => clearInterval(alertRefreshInterval))
 </script>
 
 <template>
@@ -73,10 +96,15 @@ const isSubmenuActive = (children?: MenuItem[]) => {
                 :to="link.path!"
                 :class="[
                   isActive(link.path!) ? 'nav-link-active' : 'nav-link',
-                  'font-mono text-xs tracking-wide'
+                  'font-mono text-xs tracking-wide flex items-center gap-1.5'
                 ]"
               >
                 {{ link.name }}
+                <!-- Alert badge -->
+                <span
+                  v-if="link.name === 'ALERTS' && activeAlertCount > 0"
+                  class="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold font-mono text-white bg-red-600 rounded-full"
+                >{{ activeAlertCount > 99 ? '99+' : activeAlertCount }}</span>
               </router-link>
 
               <!-- Links with submenu -->
