@@ -155,6 +155,52 @@ class CodeChunkCache:
             self._evict(file_path)
             logger.info("L1 cache invalidated", file_path=file_path)
 
+    def invalidate_by_prefix(self, prefix: str) -> int:
+        """
+        Invalidate all entries whose file_path starts with prefix.
+
+        EPIC-32 Story 32.5: Per-repository L1 invalidation instead of
+        clearing the entire cache.
+
+        Args:
+            prefix: File path prefix to match (e.g., "repo_name/" or "/path/to/repo")
+
+        Returns:
+            Number of entries invalidated
+        """
+        keys_to_remove = [k for k in self.cache if k.startswith(prefix)]
+        for key in keys_to_remove:
+            self._evict(key)
+        logger.info(
+            "L1 cache invalidated by prefix",
+            prefix=prefix,
+            entries_removed=len(keys_to_remove),
+        )
+        return len(keys_to_remove)
+
+    def invalidate_by_prefix(self, prefix: str) -> int:
+        """
+        Invalidate all entries whose file_path starts with prefix.
+
+        EPIC-32 Story 32.5: Per-repository L1 invalidation instead of
+        clearing the entire cache.
+
+        Args:
+            prefix: File path prefix to match (e.g., "repo_name/" or "/path/to/repo")
+
+        Returns:
+            Number of entries invalidated
+        """
+        keys_to_remove = [k for k in self.cache if k.startswith(prefix)]
+        for key in keys_to_remove:
+            self._evict(key)
+        logger.info(
+            "L1 cache invalidated by prefix",
+            prefix=prefix,
+            entries_removed=len(keys_to_remove),
+        )
+        return len(keys_to_remove)
+
     def clear(self):
         """Clear entire cache."""
         count = len(self.cache)

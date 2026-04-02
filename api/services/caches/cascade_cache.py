@@ -208,24 +208,30 @@ class CascadeCache:
         """
         Invalidate all chunks for a repository.
 
-        Use case: Repository re-indexed → flush all old data
+        EPIC-32 Story 32.5: Per-repository L1 invalidation instead of
+        clearing the entire cache. Only evicts entries matching the
+        repository prefix, preserving other repos' cached data.
+
+        Use case: Repository re-indexed → flush repo-specific data
 
         Args:
             repository: Repository name
         """
 
-        # L1: Clear entire cache (no repository-level granularity)
-        # NOTE: This is aggressive but ensures consistency
-        self.l1.clear()
+        # L1: Invalidate by repository prefix (not full clear)
+        # File paths are typically "repository/path/to/file.ext"
+        l1_count = self.l1.invalidate_by_prefix(repository)
 
-        # L2: Flush all chunk keys (Redis pattern matching)
-        pattern = "chunks:*"
-        await self.l2.flush_pattern(pattern)
+        # L2: Flush only this repository's keys
+        pattern = f"chunks:{repository}:*"
+        l2_count = await self.l2.flush_pattern(pattern)
 
         logger.info(
             "Repository cache invalidated (L1+L2)",
             repository=repository,
-            strategy="full_flush"
+            l1_entries_removed=l1_count,
+            l2_keys_removed=l2_count,
+            strategy="per_repository_prefix",
         )
 
     async def stats(self) -> dict:
