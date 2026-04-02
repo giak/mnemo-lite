@@ -16,6 +16,10 @@ export default defineConfig({
       '/api': {
         target: process.env.API_TARGET || 'http://localhost:8001',
         changeOrigin: true
+      },
+      '/v1': {
+        target: process.env.API_TARGET || 'http://localhost:8001',
+        changeOrigin: true
       }
     }
   }

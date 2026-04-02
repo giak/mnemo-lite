@@ -8,6 +8,11 @@ import { computed } from 'vue'
 import { useDashboard } from '@/composables/useDashboard'
 import DashboardCard from '@/components/DashboardCard.vue'
 import AutoSaveStatus from '@/components/AutoSaveStatus.vue'
+import { API_BASE } from '@/config/api'
+
+// Expose API_BASE for template use
+// Expose API_BASE for template use
+const apiBase = API_BASE
 
 // Use dashboard composable with 30-second refresh
 const { data, loading, errors, lastUpdated, refresh } = useDashboard({
@@ -240,7 +245,7 @@ const hasErrors = computed(() => errors.value.length > 0)
         <p>
           AUTO-REFRESH ENABLED (30S INTERVAL) |
           <a
-            :href="`${API_BASE}/docs`"
+            :href="`${apiBase}/docs`"
             target="_blank"
             class="text-cyan-400 hover:text-cyan-300 underline"
           >
