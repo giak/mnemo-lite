@@ -4,7 +4,7 @@
  * Navigation with LED indicator, monospace UPPERCASE labels, and dropdown menu
  * EPIC-30: Added Alerts link with active alert count badge
  */
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { API } from '@/config/api'
 
@@ -16,25 +16,48 @@ interface MenuItem {
   children?: MenuItem[]
 }
 
-const links: MenuItem[] = [
-  { name: 'DASHBOARD', path: '/dashboard' },
-  { name: 'SEARCH', path: '/search' },
-  { name: 'MEMORIES', path: '/memories' },
-  { name: 'PROJECTS', path: '/projects' },
-  { name: 'EXPANSE', path: '/expanse' },
-  { name: 'EXP. MEMORY', path: '/expanse-memory' },
-  { name: 'MONITORING', path: '/monitoring' },
-  { name: 'ALERTS', path: '/alerts' },
-  { name: 'BRAIN', path: '/brain' },
+const links: { group: string; items: MenuItem[] }[] = [
   {
-    name: 'GRAPH',
-    children: [
-      { name: 'CODE GRAPH', path: '/graph' },
-      { name: 'ORGANIGRAMME', path: '/orgchart' }
+    group: 'Data',
+    items: [
+      { name: 'DASHBOARD', path: '/dashboard' },
+      { name: 'SEARCH', path: '/search' },
+      { name: 'MEMORIES', path: '/memories' },
     ]
   },
-  { name: 'LOGS', path: '/logs' }
+  {
+    group: 'Cognitive',
+    items: [
+      { name: 'PROJECTS', path: '/projects' },
+      { name: 'EXPANSE', path: '/expanse' },
+      { name: 'EXP. MEMORY', path: '/expanse-memory' },
+    ]
+  },
+  {
+    group: 'Ops',
+    items: [
+      { name: 'MONITORING', path: '/monitoring' },
+      { name: 'ALERTS', path: '/alerts' },
+    ]
+  },
+  {
+    group: 'Tools',
+    items: [
+      { name: 'BRAIN', path: '/brain' },
+      {
+        name: 'GRAPH',
+        children: [
+          { name: 'CODE GRAPH', path: '/graph' },
+          { name: 'ORGANIGRAMME', path: '/orgchart' }
+        ]
+      },
+      { name: 'LOGS', path: '/logs' },
+    ]
+  },
 ]
+
+// Flatten for iteration
+const allLinks = computed(() => links.flatMap(g => g.items))
 
 const openSubmenu = ref<string | null>(null)
 const activeAlertCount = ref(0)
@@ -87,66 +110,71 @@ onUnmounted(() => clearInterval(alertRefreshInterval))
             </h1>
           </div>
 
-          <!-- Navigation Links avec style industriel -->
-          <div class="flex space-x-4 items-center">
-            <template v-for="link in links" :key="link.name">
-              <!-- Regular links without children -->
-              <router-link
-                v-if="!link.children"
-                :to="link.path!"
-                :class="[
-                  isActive(link.path!) ? 'nav-link-active' : 'nav-link',
-                  'font-mono text-xs tracking-wide flex items-center gap-1.5'
-                ]"
-              >
-                {{ link.name }}
-                <!-- Alert badge -->
-                <span
-                  v-if="link.name === 'ALERTS' && activeAlertCount > 0"
-                  class="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold font-mono text-white bg-red-600 rounded-full"
-                >{{ activeAlertCount > 99 ? '99+' : activeAlertCount }}</span>
-              </router-link>
+          <!-- Navigation Links avec regroupement visuel -->
+          <div class="flex items-center">
+            <template v-for="(group, gi) in links" :key="group.group">
+              <!-- Group separator -->
+              <div v-if="gi > 0" class="w-px h-6 bg-slate-700 mx-3"></div>
 
-              <!-- Links with submenu -->
-              <div v-else class="relative">
-                <button
-                  @click="toggleSubmenu(link.name)"
+              <template v-for="link in group.items" :key="link.name">
+                <!-- Regular links without children -->
+                <router-link
+                  v-if="!link.children"
+                  :to="link.path!"
                   :class="[
-                    'flex items-center gap-1 font-mono text-xs tracking-wide',
-                    isSubmenuActive(link.children) ? 'nav-link-active' : 'nav-link'
+                    isActive(link.path!) ? 'nav-link-active' : 'nav-link',
+                    'font-mono text-xs tracking-wide flex items-center gap-1.5 px-2 py-1 rounded transition-colors'
                   ]"
                 >
                   {{ link.name }}
-                  <svg
-                    class="w-4 h-4 transition-transform"
-                    :class="{ 'rotate-180': openSubmenu === link.name }"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
+                  <!-- Alert badge — only show when there are active alerts -->
+                  <span
+                    v-if="link.name === 'ALERTS' && activeAlertCount > 0"
+                    class="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold font-mono text-white bg-red-600 rounded-full"
+                  >{{ activeAlertCount > 99 ? '99+' : activeAlertCount }}</span>
+                </router-link>
 
-                <!-- Submenu dropdown avec border industriel -->
-                <div
-                  v-if="openSubmenu === link.name"
-                  @click="closeSubmenu"
-                  class="absolute left-0 mt-2 w-48 bg-slate-800 border-2 border-slate-600 rounded shadow-lg z-50"
-                >
-                  <router-link
-                    v-for="child in link.children"
-                    :key="child.path"
-                    :to="child.path!"
+                <!-- Links with submenu -->
+                <div v-else class="relative">
+                  <button
+                    @click="toggleSubmenu(link.name)"
                     :class="[
-                      'block px-4 py-2 text-xs font-mono tracking-wide hover:bg-slate-700 transition-colors border-b border-slate-700 last:border-b-0',
-                      isActive(child.path!) ? 'text-cyan-400 bg-slate-700' : 'text-gray-300'
+                      'flex items-center gap-1 font-mono text-xs tracking-wide px-2 py-1 rounded transition-colors',
+                      isSubmenuActive(link.children) ? 'nav-link-active' : 'nav-link'
                     ]"
                   >
-                    {{ child.name }}
-                  </router-link>
+                    {{ link.name }}
+                    <svg
+                      class="w-3 h-3 transition-transform"
+                      :class="{ 'rotate-180': openSubmenu === link.name }"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  <!-- Submenu dropdown avec border industriel -->
+                  <div
+                    v-if="openSubmenu === link.name"
+                    @click="closeSubmenu"
+                    class="absolute left-0 mt-2 w-48 bg-slate-800 border-2 border-slate-600 rounded shadow-lg z-50"
+                  >
+                    <router-link
+                      v-for="child in link.children"
+                      :key="child.path"
+                      :to="child.path!"
+                      :class="[
+                        'block px-4 py-2 text-xs font-mono tracking-wide hover:bg-slate-700 transition-colors border-b border-slate-700 last:border-b-0',
+                        isActive(child.path!) ? 'text-cyan-400 bg-slate-700' : 'text-gray-300'
+                      ]"
+                    >
+                      {{ child.name }}
+                    </router-link>
+                  </div>
                 </div>
-              </div>
+              </template>
             </template>
           </div>
         </div>
