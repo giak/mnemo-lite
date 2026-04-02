@@ -220,19 +220,22 @@ function isActionLoading(action: string, repository: string): boolean {
                 <!-- Languages -->
                 <td class="px-4 py-3 border-r border-slate-700">
                   <div class="flex flex-wrap gap-1">
-                    <span
-                      v-for="lang in project.languages.slice(0, 3)"
-                      :key="lang"
-                      class="px-2 py-0.5 text-xs font-mono bg-slate-700 border border-slate-600 text-gray-300 uppercase"
-                    >
-                      {{ lang }}
-                    </span>
-                    <span
-                      v-if="project.languages.length > 3"
-                      class="px-2 py-0.5 text-xs font-mono bg-slate-700 border border-slate-600 text-gray-400"
-                    >
-                      +{{ project.languages.length - 3 }}
-                    </span>
+                    <template v-if="project.languages.length > 0">
+                      <span
+                        v-for="lang in project.languages.slice(0, 3)"
+                        :key="lang"
+                        class="px-2 py-0.5 text-xs font-mono bg-slate-700 border border-slate-600 text-gray-300 uppercase"
+                      >
+                        {{ lang }}
+                      </span>
+                      <span
+                        v-if="project.languages.length > 3"
+                        class="px-2 py-0.5 text-xs font-mono bg-slate-700 border border-slate-600 text-gray-400"
+                      >
+                        +{{ project.languages.length - 3 }}
+                      </span>
+                    </template>
+                    <span v-else class="text-xs font-mono text-slate-600">—</span>
                   </div>
                 </td>
 
@@ -247,7 +250,7 @@ function isActionLoading(action: string, repository: string): boolean {
                           'bg-yellow-500': project.graph_coverage >= 0.4 && project.graph_coverage < 0.7,
                           'bg-red-500': project.graph_coverage < 0.4
                         }"
-                        :style="{ width: `${project.graph_coverage * 100}%` }"
+                        :style="{ width: `${Math.max(4, project.graph_coverage * 100)}%` }"
                       ></div>
                     </div>
                     <span class="text-xs font-mono text-gray-400 font-bold">{{ Math.round(project.graph_coverage * 100) }}%</span>
