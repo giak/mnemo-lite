@@ -55,30 +55,6 @@ async function checkServices() {
     loading.value = false
   }
 }
-    } catch {
-      apiStatus.value = 'down'
-      dbStatus.value = 'unknown'
-      redisStatus.value = 'unknown'
-    }
-
-    // MCP health
-    try {
-      const resp = await fetch('/mcp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'logs-page', version: '1.0' } }, id: 1 })
-      })
-      mcpStatus.value = resp.ok ? 'healthy' : 'degraded'
-    } catch {
-      mcpStatus.value = 'down'
-    }
-
-    lastChecked.value = new Date()
-  } finally {
-    loading.value = false
-  }
-}
-
 function statusLed(status: string): string {
   switch (status) {
     case 'healthy': return 'scada-led-green'
