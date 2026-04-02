@@ -29,7 +29,7 @@ const filterStatus = ref<string>('all') // all, active, acknowledged
 
 // Pagination
 const currentPage = ref(1)
-const pageSize = 50
+const pageSize = 20
 const totalAlerts = ref(0)
 
 const severityLed: Record<string, string> = {
@@ -88,7 +88,7 @@ function formatAlertType(type: string): string {
 async function fetchAlerts() {
   loading.value = true
   try {
-    const resp = await fetch(`${API}/alerts/recent?limit=500`)
+    const resp = await fetch(`${API}/alerts/recent?limit=100`)
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     const data = await resp.json()
     alerts.value = data.data || []
@@ -257,7 +257,7 @@ onUnmounted(() => clearInterval(refreshInterval))
               <button
                 v-if="!alert.acknowledged"
                 @click="ackAlert(alert.id)"
-                class="scada-btn scada-btn-ghost text-[10px] px-2 py-0.5"
+                class="scada-btn scada-btn-ghost text-xs px-3 py-1"
                 title="Acknowledge this alert"
               >
                 ACK

@@ -134,7 +134,7 @@ const chartMax = computed(() => {
           class="scada-btn scada-btn-primary flex items-center gap-2"
         >
           <span v-if="loading">⏳</span>
-          <span v-else>🔄</span>
+          <span v-else>REFRESH</span>
           {{ loading ? 'LOADING...' : 'REFRESH' }}
         </button>
       </div>
@@ -172,7 +172,7 @@ const chartMax = computed(() => {
             <div class="text-cyan-400 uppercase text-xs mb-2">Actions</div>
             <div class="space-y-1 text-slate-400">
               <div><span class="scada-btn text-[10px] px-2 py-0.5">ACK</span> — Acquitter une alerte (marquer comme vue)</div>
-              <div>🔄 REFRESH — Recharger les données (auto: 30s)</div>
+              <div>REFRESH — Recharger les données (auto: 30s)</div>
               <div>? — Afficher/masquer cette aide</div>
             </div>
           </div>
