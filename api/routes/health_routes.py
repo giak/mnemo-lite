@@ -1,7 +1,7 @@
 import os
 import psutil
 import time
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Request
 import httpx
 from prometheus_client import (
     generate_latest,
@@ -91,7 +91,10 @@ async def readiness(db_engine: AsyncEngine = Depends(get_db_engine)) -> Dict[str
 
 
 @router.get("/health")
-async def health_check(db_engine: AsyncEngine = Depends(get_db_engine)):
+async def health_check(
+    request: Request,
+    db_engine: AsyncEngine = Depends(get_db_engine)
+):
     """Endpoint de vérification de santé."""
     start_time = time.time()
 
@@ -102,18 +105,14 @@ async def health_check(db_engine: AsyncEngine = Depends(get_db_engine)):
     # Vérification de la santé de PostgreSQL via engine
     pg_status = await check_postgres_via_engine(db_engine)
 
-    # Vérification Redis (from app state or dependency)
+    # Vérification Redis (from app state)
     redis_status = {"status": "unknown"}
     try:
-        from dependencies import get_redis
-        # Try to ping Redis from app state
-        redis_client = None
-        try:
-            redis_client = await get_redis(None)
-        except Exception:
-            pass
-        if redis_client:
-            await redis_client.ping()
+        redis_cache = None
+        if hasattr(request.app.state, "redis_cache"):
+            redis_cache = request.app.state.redis_cache
+        if redis_cache and redis_cache.client:
+            redis_cache.client.ping()  # sync method
             redis_status = {"status": "ok"}
         else:
             redis_status = {"status": "unavailable", "message": "Redis client not initialized"}
