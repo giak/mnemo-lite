@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.env.local
+.env.*.local
+tsconfig.tsbuildinfo
+.env.local
+.env.*.local
+tsconfig.tsbuildinfo

@@ -197,9 +197,10 @@ services:
     command: python3 -u -m mnemo_mcp.server
     logging: *default-logging
 
-  # Frontend — Vite dev server (HMR)
+  # Frontend — Vite dev server (HMR) — dev profile only
   # Accessible at http://localhost:3000
   frontend:
+    profiles: ["dev"]
     build:
       context: ./frontend
       dockerfile: ../docker/Dockerfile.frontend
@@ -212,6 +213,25 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    depends_on:
+      - api
+    networks:
+      - frontend
+    logging: *default-logging
+
+  # Frontend — Nginx production build — prod profile only
+  # Built with `npm run build`, served by Nginx
+  frontend-prod:
+    profiles: ["prod"]
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend.prod
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://api:8000}
+    container_name: mnemo-frontend-prod
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:80:80"
     depends_on:
       - api
     networks:
