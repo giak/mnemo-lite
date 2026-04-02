@@ -36,38 +36,26 @@ L'audit du système de recherche MCP a révélé **15 issues** (3 P0, 4 P1, 5 P2
 
 **Problème** : Deux stratégies de cache key coexistent :
 - `SearchCodeTool` génère SHA256 de TOUS les paramètres (correct)
-- `HybridCodeSearchService` utilise `cache_keys.py` avec query+repo+limit seulement (incorrect)
+- `HybridCodeSearchService` utilise une clé simple avec query+repo+limit seulement (incorrect)
 
 **Impact** : Des requêtes avec des filtres différents peuvent retourner le même résultat caché.
 
 **Fichiers à modifier** :
-- `api/cache/cache_keys.py` — Ajouter tous les paramètres (filters, offset, weights, enable_lexical, enable_vector)
-- `api/services/hybrid_code_search_service.py` — Utiliser la clé unifiée
+- `api/services/hybrid_code_search_service.py` — Utiliser une clé complète
 - `api/mnemo_mcp/tools/search_tool.py` — Supprimer la génération de clé locale (doublon)
 
 **Implémentation** :
 ```python
-# cache_keys.py
+# Nouvelle clé de cache complète
 def generate_search_cache_key(
-    query: str,
-    filters: dict,
-    limit: int,
-    offset: int,
-    enable_lexical: bool,
-    enable_vector: bool,
-    lexical_weight: float,
-    vector_weight: float,
+    query: str, filters: dict, limit: int, offset: int,
+    enable_lexical: bool, enable_vector: bool,
+    lexical_weight: float, vector_weight: float,
 ) -> str:
-    """Generate comprehensive cache key including ALL search parameters."""
     params = {
-        "q": query,
-        "f": filters or {},
-        "l": limit,
-        "o": offset,
-        "el": enable_lexical,
-        "ev": enable_vector,
-        "lw": lexical_weight,
-        "vw": vector_weight,
+        "q": query, "f": filters or {}, "l": limit, "o": offset,
+        "el": enable_lexical, "ev": enable_vector,
+        "lw": lexical_weight, "vw": vector_weight,
     }
     raw = json.dumps(params, sort_keys=True)
     return f"search:v2:{hashlib.sha256(raw.encode()).hexdigest()[:16]}"
@@ -89,31 +77,7 @@ def generate_search_cache_key(
 
 **Fichiers à modifier** :
 - `api/mnemo_mcp/tools/memory_tools.py` — Ajouter cache lookup/write
-- `api/cache/cache_keys.py` — Ajouter `generate_memory_search_cache_key()`
-
-**Implémentation** :
-```python
-# memory_tools.py — dans search_memory.execute()
-async def execute(self, query, tags, ...):
-    # 1. Generate cache key
-    cache_key = generate_memory_search_cache_key(query, tags, memory_type, limit, offset)
-
-    # 2. Check Redis cache
-    if self.redis:
-        cached = await self.redis.get(cache_key)
-        if cached:
-            return json.loads(cached)
-
-    # 3. Perform search (existing logic)
-    result = await self._perform_search(...)
-
-    # 4. Write to cache (TTL depends on query type)
-    if self.redis:
-        ttl = 300 if tags else 60  # 5min for tag queries, 1min for natural language
-        await self.redis.setex(cache_key, ttl, json.dumps(result))
-
-    return result
-```
+- `api/cache/cache_keys.py` — Créer (nouveau fichier)
 
 **TTL strategy** :
 | Query type | TTL | Rationale |
@@ -138,7 +102,7 @@ async def execute(self, query, tags, ...):
 **Solution** : Activer par défaut — overhead <2ms, +10-20% pertinence.
 
 **Fichiers à modifier** :
-- `api/services/hybrid_code_search_service.py` — `default_enable_reranking=False` → `True`
+- `api/services/hybrid_code_search_service.py` — `default_enable_reranking=True`
 
 **Critères de complétion** :
 - [ ] BM25 activé par défaut pour code search
@@ -163,14 +127,15 @@ async def execute(self, query, tags, ...):
 
 **Implémentation** :
 ```sql
--- Migration
 ALTER TABLE code_chunks
-  ADD COLUMN IF NOT EXISTS repository TEXT GENERATED ALWAYS AS (metadata->>'repository') STORED,
-  ADD COLUMN IF NOT EXISTS file_path TEXT GENERATED ALWAYS AS (metadata->>'file_path') STORED;
+  ADD COLUMN IF NOT EXISTS repository TEXT
+    GENERATED ALWAYS AS (metadata->>'repository') STORED,
+  ADD COLUMN IF NOT EXISTS file_path TEXT
+    GENERATED ALWAYS AS (metadata->>'file_path') STORED;
 
-CREATE INDEX IF NOT EXISTS idx_code_chunks_repository ON code_chunks(repository);
-CREATE INDEX IF NOT EXISTS idx_code_chunks_file_path ON code_chunks(file_path);
-CREATE INDEX IF NOT EXISTS idx_code_chunks_metadata_gin ON code_chunks USING GIN(metadata);
+CREATE INDEX idx_code_chunks_repository ON code_chunks(repository);
+CREATE INDEX idx_code_chunks_file_path ON code_chunks(file_path);
+CREATE INDEX idx_code_chunks_metadata_gin ON code_chunks USING GIN(metadata);
 ```
 
 **Critères de complétion** :
@@ -184,32 +149,13 @@ CREATE INDEX IF NOT EXISTS idx_code_chunks_metadata_gin ON code_chunks USING GIN
 #### Story 32.5: Fixer l'invalidation L1 per-repository
 **Priority**: P1 | **Effort**: 1.5 pts | **Value**: Medium
 
-**Problème** : `cascade_cache.py:219` appelle `self.l1.clear()` — efface TOUT le cache L1, pas juste le repo ciblé.
+**Problème** : `cascade_cache.py` appelle `self.l1.clear()` — efface TOUT le cache L1.
 
 **Solution** : Invalider par préfixe de file_path.
 
 **Fichiers à modifier** :
 - `api/cache/cascade_cache.py` — `invalidate_repository()` → filtrage par préfixe
 - `api/cache/l1_cache.py` — Ajouter `invalidate_by_prefix()`
-
-**Implémentation** :
-```python
-# l1_cache.py
-def invalidate_by_prefix(self, prefix: str) -> int:
-    """Remove all entries whose key starts with prefix."""
-    keys_to_remove = [k for k in self._cache if k.startswith(prefix)]
-    for key in keys_to_remove:
-        del self._cache[key]
-    return len(keys_to_remove)
-
-# cascade_cache.py
-async def invalidate_repository(self, repository: str) -> int:
-    """Invalidate cache for a specific repository only."""
-    prefix = f"chunk:{repository}:"
-    l1_count = self.l1.invalidate_by_prefix(prefix)
-    l2_count = await self.l2.invalidate_by_pattern(f"chunk:{repository}:*")
-    return l1_count + l2_count
-```
 
 **Critères de complétion** :
 - [ ] `invalidate_repository()` ne touche que le repo ciblé
@@ -227,29 +173,6 @@ async def invalidate_repository(self, repository: str) -> int:
 
 **Fichiers à modifier** :
 - `api/services/dual_embedding_service.py` — Ajouter cache lookup/write
-- `api/cache/cache_keys.py` — Ajouter `generate_embedding_cache_key()`
-
-**Implémentation** :
-```python
-# dual_embedding_service.py
-async def generate_embedding(self, text: str, domain: str = "text") -> dict:
-    cache_key = f"embed:{domain}:{hashlib.sha256(text.encode()).hexdigest()[:16]}"
-
-    # Check cache
-    if self.redis:
-        cached = await self.redis.get(cache_key)
-        if cached:
-            return json.loads(cached)
-
-    # Generate
-    result = await self._generate(text, domain)
-
-    # Cache (5 min TTL)
-    if self.redis:
-        await self.redis.setex(cache_key, 300, json.dumps(result))
-
-    return result
-```
 
 **Critères de complétion** :
 - [ ] Embeddings cachés 5 min dans Redis
@@ -261,32 +184,18 @@ async def generate_embedding(self, text: str, domain: str = "text") -> dict:
 #### Story 32.7: Pagination par curseur (keyset)
 **Priority**: P1 | **Effort**: 1 pt | **Value**: Medium
 
-**Problème** : Pagination in-memory fetch `limit + offset` puis slice. offset=900 = 900 résultats gaspillés.
+**Problème** : Pagination in-memory fetch `limit + offset` puis slice.
 
-**Solution** : Pagination par curseur (keyset) — utilise le dernier ID vu.
+**Solution** : Pagination par curseur — utilise le dernier score vu.
 
 **Fichiers à modifier** :
 - `api/services/hybrid_code_search_service.py` — Ajouter `search_with_cursor()`
 - `api/mnemo_mcp/tools/search_tool.py` — Supporter le paramètre `cursor`
 
-**Implémentation** :
-```python
-# Au lieu de: LIMIT 10 OFFSET 900
-# On fait: WHERE score < last_score ORDER BY score DESC LIMIT 10
-async def search_with_cursor(self, query, cursor_score=None, limit=10):
-    if cursor_score:
-        query += " AND rrf_score < :cursor_score"
-        params["cursor_score"] = cursor_score
-
-    results = await conn.execute(query + f" ORDER BY rrf_score DESC LIMIT {limit}")
-    # Retourner le dernier score comme next_cursor
-    return results, results[-1].rrf_score if results else None
-```
-
 **Critères de complétion** :
 - [ ] Pagination par curseur fonctionnelle
 - [ ] Réponse inclut `next_cursor`
-- [ ] Tests de pagination profonde (offset=1000+)
+- [ ] Tests de pagination profonde
 
 ---
 
@@ -295,59 +204,38 @@ async def search_with_cursor(self, query, cursor_score=None, limit=10):
 #### Story 32.8: Ajouter les analytics de recherche
 **Priority**: P2 | **Effort**: 1.5 pts | **Value**: Medium
 
-**Problème** : Aucun tracking des patterns de requête, hit rates, ou qualité des résultats.
+**Problème** : Aucun tracking des patterns de requête, hit rates, ou qualité.
 
 **Solution** : Logging structuré + endpoint analytics.
 
 **Fichiers à créer** :
-- `api/routes/search_analytics_routes.py` — Endpoints analytics
-- `api/services/search_analytics_service.py` — Collecte et agrégation
-
-**Fichiers à modifier** :
-- `api/mnemo_mcp/tools/search_tool.py` — Ajouter logging de métriques
-- `api/mnemo_mcp/tools/memory_tools.py` — Ajouter logging de métriques
-
-**Implémentation** :
-```python
-# Structured logging à chaque search
-logger.info(
-    "search.executed",
-    query_hash=sha256(query)[:16],
-    result_count=len(results),
-    execution_ms=elapsed_ms,
-    cache_hit=cache_hit,
-    reranking_applied=reranking,
-    filters_applied=filters,
-)
-```
+- `api/routes/search_analytics_routes.py`
+- `api/services/search_analytics_service.py`
 
 **Endpoints** :
-- `GET /api/v1/search/analytics/summary` — Résumé des dernières 24h
+- `GET /api/v1/search/analytics/summary` — Résumé 24h
 - `GET /api/v1/search/analytics/popular` — Requêtes populaires
 - `GET /api/v1/search/analytics/slow` — Requêtes lentes (>500ms)
-- `GET /api/v1/search/analytics/zero-results` — Requêtes sans résultats
+- `GET /api/v1/search/analytics/zero-results` — Sans résultats
 
 **Critères de complétion** :
 - [ ] Logging structuré pour chaque search
 - [ ] 4 endpoints analytics fonctionnels
-- [ ] Dashboard frontend (optionnel)
 
 ---
 
 #### Story 32.9: Augmenter le TTL du cache L2
 **Priority**: P2 | **Effort**: 0.5 pt | **Value**: Medium
 
-**Problème** : TTL de 30s pour les résultats de search → cache misses fréquents.
+**Problème** : TTL de 30s trop court → cache misses fréquents.
 
-**Solution** : Augmenter à 2-5 minutes pour les codebases stables.
+**Solution** : Augmenter à 2-5 minutes.
 
 **Fichiers à modifier** :
 - `api/services/hybrid_code_search_service.py` — TTL 30s → 120s
-- `api/mnemo_mcp/tools/search_tool.py` — TTL cohérent
 
 **Critères de complétion** :
-- [ ] TTL augmenté à 120s (2 min)
-- [ ] Tests passent
+- [ ] TTL augmenté à 120s
 - [ ] Pas de stale data observée
 
 ---
@@ -355,170 +243,71 @@ logger.info(
 #### Story 32.10: Ajouter le mode OR pour les filtres de tags
 **Priority**: P2 | **Effort**: 1 pt | **Value**: Medium
 
-**Problème** : `search_by_tags` requiert TOUS les tags (AND). Pas de mode OR.
+**Problème** : `search_by_tags` requiert TOUS les tags (AND).
 
 **Solution** : Ajouter un paramètre `tag_mode: "and" | "or"`.
 
 **Fichiers à modifier** :
-- `api/db/repositories/memory_repository.py` — Ajouter `tag_mode` parameter
-- `api/mnemo_mcp/tools/memory_tools.py` — Exposer `tag_mode` dans l'API
+- `api/db/repositories/memory_repository.py` — Ajouter `tag_mode`
+- `api/mnemo_mcp/tools/memory_tools.py` — Exposer `tag_mode`
 
 **Implémentation** :
 ```sql
--- AND (actuel)
-WHERE :tag0 = ANY(tags) AND :tag1 = ANY(tags)
-
--- OR (nouveau)
-WHERE tags && ARRAY[:tag0, :tag1]  -- PostgreSQL array overlap operator
+-- OR: tags && ARRAY[:tag0, :tag1]  (PostgreSQL array overlap)
 ```
 
 **Critères de complétion** :
-- [ ] Mode OR fonctionnel (`tags && ARRAY[...]`)
+- [ ] Mode OR fonctionnel
 - [ ] Mode AND par défaut (backward compatible)
-- [ ] Tests pour les deux modes
 
 ---
 
 #### Story 32.11: Index GIN trigram sur memories.content
 **Priority**: P2 | **Effort**: 1.5 pts | **Value**: Medium
 
-**Problème** : La recherche lexicale skip le contenu des memories (trop lent sans index).
+**Problème** : La recherche lexicale skip le contenu des memories.
 
 **Solution** : Ajouter un index GIN trigram sur `content`.
 
 **Fichiers à modifier** :
-- `api/alembic/versions/..._add_memory_content_index.py` — nouvelle migration
-- `api/services/hybrid_memory_search_service.py` — Inclure content dans lexical search
-
-**Implémentation** :
-```sql
-CREATE INDEX IF NOT EXISTS idx_memories_content_trgm
-  ON memories USING GIN (content gin_trgm_ops);
-```
+- `api/alembic/versions/..._add_memory_content_index.py`
+- `api/services/hybrid_memory_search_service.py` — Inclure content
 
 **Critères de complétion** :
 - [ ] Index GIN créé sur content
 - [ ] Lexical search inclut content
-- [ ] EXPLAIN ANALYZE montre index scan
 
 ---
 
-#### Story 32.12: Augmenter le threshold de similarité vectorielle
+#### Story 32.12: Augmenter le threshold de similarité
 **Priority**: P2 | **Effort**: 0.5 pt | **Value**: Low
 
-**Problème** : Threshold de 0.1 trop bas — retourne des résultats peu pertinents.
+**Problème** : Threshold de 0.1 trop bas — résultats peu pertinents.
 
-**Solution** : Augmenter à 0.3 pour code, 0.2 pour memory.
+**Solution** : 0.3 pour code, 0.2 pour memory.
 
 **Fichiers à modifier** :
-- `api/services/hybrid_code_search_service.py` — threshold 0.1 → 0.3
-- `api/services/hybrid_memory_search_service.py` — threshold 0.1 → 0.2
-
-**Critères de complétion** :
-- [ ] Threshold augmenté
-- [ ] Tests passent
-- [ ] Moins de faux positifs dans les résultats
+- `api/services/hybrid_code_search_service.py` — 0.1 → 0.3
+- `api/services/hybrid_memory_search_service.py` — 0.1 → 0.2
 
 ---
 
 ### Phase 4: Features (P3, ~8 pts)
 
 #### Story 32.13: Search result highlighting
-**Priority**: P3 | **Effort**: 2 pts | **Value**: Medium
+**Priority**: P3 | **Effort**: 2 pts
 
-**Fonctionnalité** : Surligner les termes correspondants dans les résultats.
-
-**Fichiers à créer** :
-- `api/services/highlight_service.py` — Extraction des spans correspondants
-
-**Fichiers à modifier** :
-- `api/mnemo_mcp/tools/search_tool.py` — Ajouter `highlights` dans la réponse
-
-**Implémentation** :
-```python
-def highlight_matches(text: str, query: str, max_highlights: int = 3) -> list[dict]:
-    """Find matching spans in text for query terms."""
-    tokens = re.findall(r'\w+', query.lower())
-    matches = []
-    for token in tokens:
-        for match in re.finditer(re.escape(token), text, re.IGNORECASE):
-            matches.append({
-                "start": match.start(),
-                "end": match.end(),
-                "text": match.group(),
-            })
-    return matches[:max_highlights]
-```
-
-**Critères de complétion** :
-- [ ] Highlights retournés dans la réponse
-- [ ] Frontend peut les afficher (optionnel)
-
----
+Surligner les termes correspondants dans les résultats.
 
 #### Story 32.14: Search result deduplication
-**Priority**: P3 | **Effort**: 1.5 pts | **Value**: Medium
+**Priority**: P3 | **Effort**: 1.5 pts
 
-**Fonctionnalité** : Éviter qu'un même fichier apparaisse plusieurs fois.
-
-**Fichiers à modifier** :
-- `api/services/hybrid_code_search_service.py` — Ajouter `deduplicate_by_file`
-- `api/mnemo_mcp/tools/search_tool.py` — Exposer `deduplicate` parameter
-
-**Implémentation** :
-```python
-def deduplicate_by_file(results: list, keep_best: bool = True) -> list:
-    """Remove duplicate file paths, keeping the best-scoring chunk."""
-    seen = {}
-    for r in results:
-        fp = r.get("file_path")
-        if fp not in seen or r.get("score", 0) > seen[fp].get("score", 0):
-            seen[fp] = r
-    return list(seen.values())
-```
-
-**Critères de complétion** :
-- [ ] Deduplication fonctionnelle
-- [ ] Paramètre `deduplicate` exposé
-- [ ] Par défaut: désactivé (backward compatible)
-
----
+Éviter qu'un même fichier apparaisse plusieurs fois.
 
 #### Story 32.15: Query rewriting / synonym support
-**Priority**: P3 | **Effort**: 2 pts | **Value**: Medium
+**Priority**: P3 | **Effort**: 2 pts
 
-**Fonctionnalité** : "auth" → "authentication", "db" → "database".
-
-**Fichiers à créer** :
-- `api/services/query_rewriter.py` — Dictionnaire de synonymes + expansion
-
-**Fichiers à modifier** :
-- `api/mnemo_mcp/tools/search_tool.py` — Appliquer query rewriting avant search
-
-**Implémentation** :
-```python
-# query_rewriter.py
-SYNONYMS = {
-    "auth": ["authentication", "authorization", "login"],
-    "db": ["database", "db", "postgres", "postgresql"],
-    "cache": ["cache", "redis", "memcached"],
-    "api": ["api", "endpoint", "route", "handler"],
-}
-
-def rewrite_query(query: str) -> str:
-    """Expand query with synonyms."""
-    tokens = query.lower().split()
-    expanded = []
-    for token in tokens:
-        expanded.append(token)
-        expanded.extend(SYNONYMS.get(token, []))
-    return " ".join(expanded)
-```
-
-**Critères de complétion** :
-- [ ] Dictionnaire de synonymes (min 20 entrées)
-- [ ] Query rewriting appliqué avant search
-- [ ] Paramètre `rewrite` pour activer/désactiver
+"auth" → "authentication", "db" → "database".
 
 ---
 
@@ -553,14 +342,14 @@ Phase 4 (Features, ~8h)
 
 ## Critères de complétion
 
-- [ ] 3 P0 fixes implémentés (cache key, memory cache, BM25)
-- [ ] 4 P1 fixes implémentés (JSONB index, L1 per-repo, embedding cache, cursor pagination)
-- [ ] 5 P2 fixes implémentés (analytics, TTL, OR tags, content index, threshold)
-- [ ] 3 P3 features implémentées (highlighting, dedup, rewriting)
+- [ ] 3 P0 fixes implémentés
+- [ ] 4 P1 fixes implémentés
+- [ ] 5 P2 fixes implémentés
+- [ ] 3 P3 features implémentées
 - [ ] 358+ tests MCP passing
-- [ ] Performance target: code search <100ms uncached, memory search <50ms uncached
-- [ ] Cache hit rate >50% pour les requêtes répétées
-- [ ] Search analytics endpoint fonctionnel
+- [ ] Code search <100ms uncached
+- [ ] Memory search <50ms uncached
+- [ ] Cache hit rate >50%
 
 ---
 
@@ -575,4 +364,3 @@ Phase 4 (Features, ~8h)
 | Cache hit rate | ~30% | >50% | >50% |
 | BM25 code search | ❌ | ✅ | ✅ |
 | Search analytics | ❌ | ✅ | ✅ |
-| Tests passing | 358/358 | 358+/358+ | 100% |

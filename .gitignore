@@ -70,3 +70,99 @@ docs/sessions/
 
 # External projects (not part of MnemoLite)
 api/cv/
+
+# Runtime directories
+logs/
+api/logs/
+*.log
+
+# Generated certs
+certs/
+api/certs/
+*.pem
+*.key
+*.crt
+
+# Empty static dirs
+static/
+api/static/
+
+# Coverage
+.coverage
+coverage.json
+api/.coverage
+api/coverage.json
+
+# Orphaned directories
+src/
+
+# Demonstration artifacts
+demonstration/
+
+# Frontend env
+frontend/.env
+
+# Backup files
+*.bak
+*.backup
+*.final.bak
+
+# Disabled tests
+_DISABLED_*.py
+
+# Python cache (comprehensive)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Node
+node_modules/
+
+# Runtime directories
+logs/
+api/logs/
+*.log
+
+# Generated certs
+certs/
+api/certs/
+*.pem
+*.key
+*.crt
+
+# Empty static dirs
+static/
+api/static/
+
+# Coverage
+.coverage
+coverage.json
+api/.coverage
+api/coverage.json
+
+# Orphaned directories
+src/
+
+# Demonstration artifacts
+demonstration/
+
+# Frontend env
+frontend/.env
+
+# Backup files
+*.bak
+*.backup
+*.final.bak
+
+# Disabled tests
+_DISABLED_*.py
+
+# Python cache (comprehensive)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Node
+node_modules/

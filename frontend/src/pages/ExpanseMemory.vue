@@ -138,9 +138,9 @@ const formattedTime = computed(() => {
           <span class="scada-led scada-led-cyan"></span>
           <h2 class="scada-label text-cyan-400">Taxonomie (11 tags)</h2>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div v-for="[group, items] in taxonomieByGroup" :key="group">
-            <div class="text-[10px] font-mono uppercase tracking-wider text-slate-600 mb-2">
+            <div class="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-3 pb-2 border-b border-slate-700">
               {{ group }}
             </div>
             <div class="space-y-2">
