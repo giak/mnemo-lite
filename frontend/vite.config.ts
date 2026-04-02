@@ -20,6 +20,14 @@ export default defineConfig({
       '/v1': {
         target: process.env.API_TARGET || 'http://localhost:8001',
         changeOrigin: true
+      },
+      '/health': {
+        target: process.env.API_TARGET || 'http://localhost:8001',
+        changeOrigin: true
+      },
+      '/mcp': {
+        target: process.env.API_TARGET || 'http://localhost:8002',
+        changeOrigin: true
       }
     }
   }

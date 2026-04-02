@@ -21,17 +21,26 @@ const openObserveUrl = 'http://localhost:5080'
 async function checkServices() {
   loading.value = true
   try {
-    // API health
+    // API health (includes DB and Redis status)
     try {
-      const resp = await fetch(`${API_BASE}/api/v1/health`)
-      apiStatus.value = resp.ok ? 'healthy' : 'degraded'
+      const resp = await fetch('/health')
+      if (resp.ok) {
+        const data = await resp.json()
+        apiStatus.value = data.status === 'healthy' ? 'healthy' : 'degraded'
+        dbStatus.value = data.services?.postgres?.status === 'ok' ? 'healthy' : 'down'
+        redisStatus.value = data.services?.redis?.status === 'ok' ? 'healthy' : 'down'
+      } else {
+        apiStatus.value = 'degraded'
+      }
     } catch {
       apiStatus.value = 'down'
+      dbStatus.value = 'unknown'
+      redisStatus.value = 'unknown'
     }
 
     // MCP health
     try {
-      const resp = await fetch(`${API_BASE}/mcp`, {
+      const resp = await fetch('/mcp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'logs-page', version: '1.0' } }, id: 1 })
@@ -41,15 +50,27 @@ async function checkServices() {
       mcpStatus.value = 'down'
     }
 
-    // DB health (via API)
-    try {
-      const resp = await fetch(`${API_BASE}/api/v1/health`)
-      const data = await resp.json()
-      dbStatus.value = data?.services?.database ? 'healthy' : 'down'
-      redisStatus.value = data?.services?.redis ? 'healthy' : 'down'
+    lastChecked.value = new Date()
+  } finally {
+    loading.value = false
+  }
+}
     } catch {
+      apiStatus.value = 'down'
       dbStatus.value = 'unknown'
       redisStatus.value = 'unknown'
+    }
+
+    // MCP health
+    try {
+      const resp = await fetch('/mcp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'logs-page', version: '1.0' } }, id: 1 })
+      })
+      mcpStatus.value = resp.ok ? 'healthy' : 'degraded'
+    } catch {
+      mcpStatus.value = 'down'
     }
 
     lastChecked.value = new Date()
