@@ -1,6 +1,6 @@
 # EPIC-30: Complete Observability — Alerting UI
 
-**Status**: DRAFT | **Created**: 2026-04-02 | **Effort**: ~6 points | **Stories**: 3
+**Status**: ✅ COMPLETE | **Created**: 2026-04-02 | **Completed**: 2026-04-02
 
 ---
 
