@@ -6,7 +6,6 @@
 import { API } from '@/config/api'
 import { ref, onMounted, onUnmounted } from 'vue'
 
-import { API } from '@/config/api'
 
 export interface ExpanseTag {
   tag: string

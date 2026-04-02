@@ -6,7 +6,6 @@
 import { API, API_V1 } from '@/config/api'
 import { ref, onMounted, onUnmounted } from 'vue'
 
-import { API, API_V1 } from '@/config/api'
 
 
 export interface BrainData {

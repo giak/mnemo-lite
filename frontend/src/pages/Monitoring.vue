@@ -8,7 +8,6 @@ import { computed, ref } from 'vue'
 import { useMonitoring } from '@/composables/useMonitoring'
 import LatencyChart from '@/components/LatencyChart.vue'
 import AlertRuleEditor from '@/components/AlertRuleEditor.vue'
-import AlertRuleEditor from '@/components/AlertRuleEditor.vue'
 
 const { latency, alertSummary, recentAlerts, loading, error, lastUpdated, refresh, ackAlert } = useMonitoring({
   refreshInterval: 30000

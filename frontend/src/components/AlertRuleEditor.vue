@@ -56,6 +56,17 @@ const emptyRule: Omit<AlertRule, 'id' | 'created_at' | 'updated_at'> = {
 
 const newRule = ref({ ...emptyRule })
 
+// Form data for create/edit (bind directly to v-model)
+interface FormData {
+  name: string
+  alert_type: string
+  threshold: number
+  severity: string
+  cooldown_seconds: number
+  enabled: boolean
+}
+const formData = ref<FormData>({ ...emptyRule })
+
 async function fetchRules() {
   loading.value = true
   try {
@@ -92,13 +103,14 @@ async function deleteRule(rule: AlertRule) {
 }
 
 function startEdit(rule: AlertRule) {
-  editingRule.value = { ...rule }
+  editingRule.value = rule
+  formData.value = { ...rule }
   showForm.value = true
 }
 
 function startCreate() {
-  newRule.value = { ...emptyRule }
   editingRule.value = null
+  formData.value = { ...emptyRule }
   showForm.value = true
 }
 
@@ -108,7 +120,6 @@ function cancelForm() {
 }
 
 async function saveRule() {
-  const rule = editingRule.value || newRule.value
   try {
     const url = editingRule.value
       ? `${API}/monitoring/advanced/alert-rules/${editingRule.value.id}`
@@ -117,7 +128,7 @@ async function saveRule() {
     const resp = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(rule)
+      body: JSON.stringify(formData.value)
     })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     showForm.value = false
@@ -162,13 +173,13 @@ onMounted(() => {
         <div class="space-y-3">
           <div>
             <label class="scada-label text-xs">Name</label>
-            <input v-model="editingRule ? editingRule.name : newRule.name"
+            <input v-model="formData.name"
               class="w-full bg-slate-800 border border-slate-600 text-slate-300 text-sm font-mono px-3 py-2 rounded focus:border-cyan-500 focus:outline-none"
               placeholder="Rule name" />
           </div>
           <div>
             <label class="scada-label text-xs">Alert Type</label>
-            <select v-model="editingRule ? editingRule.alert_type : newRule.alert_type"
+            <select v-model="formData.alert_type"
               class="w-full bg-slate-800 border border-slate-600 text-slate-300 text-sm font-mono px-3 py-2 rounded focus:border-cyan-500 focus:outline-none">
               <option v-for="t in ALERT_TYPES" :key="t" :value="t">{{ formatType(t) }}</option>
             </select>
@@ -176,13 +187,13 @@ onMounted(() => {
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="scada-label text-xs">Threshold</label>
-              <input v-model.number="editingRule ? editingRule.threshold : newRule.threshold"
+              <input v-model.number="formData.threshold"
                 type="number" step="0.01"
                 class="w-full bg-slate-800 border border-slate-600 text-slate-300 text-sm font-mono px-3 py-2 rounded focus:border-cyan-500 focus:outline-none" />
             </div>
             <div>
               <label class="scada-label text-xs">Severity</label>
-              <select v-model="editingRule ? editingRule.severity : newRule.severity"
+              <select v-model="formData.severity"
                 class="w-full bg-slate-800 border border-slate-600 text-slate-300 text-sm font-mono px-3 py-2 rounded focus:border-cyan-500 focus:outline-none">
                 <option v-for="s in SEVERITIES" :key="s" :value="s">{{ s.toUpperCase() }}</option>
               </select>
@@ -190,7 +201,7 @@ onMounted(() => {
           </div>
           <div>
             <label class="scada-label text-xs">Cooldown (seconds)</label>
-            <input v-model.number="editingRule ? editingRule.cooldown_seconds : newRule.cooldown_seconds"
+            <input v-model.number="formData.cooldown_seconds"
               type="number" step="60"
               class="w-full bg-slate-800 border border-slate-600 text-slate-300 text-sm font-mono px-3 py-2 rounded focus:border-cyan-500 focus:outline-none" />
           </div>
