@@ -815,3 +815,216 @@ index_project_tool = IndexProjectTool()
 reindex_file_tool = ReindexFileTool()
 index_incremental_tool = IndexIncrementalTool()
 index_markdown_workspace_tool = IndexMarkdownWorkspaceTool()
+
+# ============================================================================
+# EPIC-31 Story 31.3: Indexing Observability Tools
+# ============================================================================
+
+class GetIndexingStatusTool(BaseMCPComponent):
+    """Tool: get_indexing_status — Get current indexing status for a repository."""
+
+    def get_name(self) -> str:
+        return "get_indexing_status"
+
+    def get_description(self) -> str:
+        return (
+            "Get current indexing status for a repository. "
+            "Returns status (idle, in_progress, completed, failed), "
+            "progress info, and last completion time."
+        )
+
+    async def execute(
+        self,
+        repository: str = "default",
+        ctx: Optional[Context] = None,
+    ) -> dict:
+        """Get indexing status from Redis."""
+        redis = self._services.get("redis") if self._services else None
+        engine = self._services.get("engine") if self._services else None
+
+        if not redis and not engine:
+            return {"success": False, "message": "No backend available"}
+
+        try:
+            status_data = None
+            if redis:
+                try:
+                    raw = await redis.get(f"indexing:status:{repository}")
+                    if raw:
+                        status_data = json.loads(raw) if isinstance(raw, str) else raw
+                except Exception:
+                    pass
+
+            if status_data:
+                return {
+                    "success": True,
+                    "repository": repository,
+                    "status": status_data.get("status", "unknown"),
+                    "total_files": status_data.get("total_files", 0),
+                    "indexed_files": status_data.get("indexed_files", 0),
+                    "started_at": status_data.get("started_at"),
+                    "completed_at": status_data.get("completed_at"),
+                    "error": status_data.get("error"),
+                }
+
+            # Fallback: check DB for last indexed time
+            if engine:
+                from sqlalchemy import text
+                async with engine.connect() as conn:
+                    result = await conn.execute(text("""
+                        SELECT MAX(indexed_at) as last_indexed,
+                               COUNT(*) as total_chunks,
+                               COUNT(DISTINCT file_path) as total_files
+                        FROM code_chunks
+                        WHERE repository = :repo
+                    """), {"repo": repository})
+                    row = result.fetchone()
+                    if row and row[0]:
+                        return {
+                            "success": True,
+                            "repository": repository,
+                            "status": "completed",
+                            "total_files": row[2],
+                            "total_chunks": row[1],
+                            "last_indexed": str(row[0]),
+                        }
+
+            return {
+                "success": True,
+                "repository": repository,
+                "status": "never_indexed",
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get indexing status: {e}", exc_info=True)
+            return {"success": False, "message": f"Failed to get indexing status: {e}"}
+
+
+class GetIndexingErrorsTool(BaseMCPComponent):
+    """Tool: get_indexing_errors — Get recent indexing errors."""
+
+    def get_name(self) -> str:
+        return "get_indexing_errors"
+
+    def get_description(self) -> str:
+        return (
+            "Get recent indexing errors for a repository. "
+            "Returns error messages, file paths, and timestamps."
+        )
+
+    async def execute(
+        self,
+        repository: str = "default",
+        limit: int = 10,
+        ctx: Optional[Context] = None,
+    ) -> dict:
+        """Get recent indexing errors."""
+        redis = self._services.get("redis") if self._services else None
+        engine = self._services.get("engine") if self._services else None
+
+        errors = []
+
+        if redis:
+            try:
+                raw = await redis.get(f"indexing:status:{repository}")
+                if raw:
+                    sd = json.loads(raw) if isinstance(raw, str) else raw
+                    if sd.get("error"):
+                        errors.append({"timestamp": sd.get("completed_at"), "error": sd["error"], "source": "redis"})
+                    for err in sd.get("errors", []):
+                        errors.append({"timestamp": sd.get("completed_at"), "error": str(err), "source": "redis_errors"})
+            except Exception:
+                pass
+
+        if engine:
+            try:
+                from sqlalchemy import text
+                async with engine.connect() as conn:
+                    result = await conn.execute(text("""
+                        SELECT file_path, error_message, indexed_at
+                        FROM code_chunks
+                        WHERE repository = :repo AND error_message IS NOT NULL
+                        ORDER BY indexed_at DESC LIMIT :limit
+                    """), {"repo": repository, "limit": limit})
+                    for row in result.fetchall():
+                        errors.append({
+                            "file_path": row[0], "error": row[1],
+                            "timestamp": str(row[2]) if row[2] else None, "source": "database",
+                        })
+            except Exception as e:
+                logger.warning(f"Failed to query DB for indexing errors: {e}")
+
+        return {"success": True, "repository": repository, "errors": errors[:limit], "total_errors": len(errors)}
+
+
+class RetryIndexingTool(BaseMCPComponent):
+    """Tool: retry_indexing — Re-index specific files after fixing errors."""
+
+    def get_name(self) -> str:
+        return "retry_indexing"
+
+    def get_description(self) -> str:
+        return "Re-index specific files in a repository. Use after fixing indexing errors."
+
+    async def execute(
+        self,
+        file_paths: list[str],
+        repository: str = "default",
+        ctx: Optional[Context] = None,
+    ) -> dict:
+        """Re-index specific files."""
+        if not file_paths:
+            return {"success": False, "message": "No file paths provided"}
+
+        indexing_service = self._services.get("code_indexing_service")
+        chunk_cache = self._services.get("chunk_cache")
+        redis = self._services.get("redis")
+
+        if not indexing_service:
+            return {"success": False, "message": "CodeIndexingService not available"}
+
+        results = []
+        for file_path in file_paths:
+            try:
+                if chunk_cache:
+                    try:
+                        await chunk_cache.invalidate(file_path)
+                    except Exception:
+                        pass
+
+                from pathlib import Path
+                content = Path(file_path).read_text(encoding='utf-8')
+                file_input = FileInput(path=file_path, content=content, language=None)
+                result = await indexing_service._index_file(
+                    file_input=file_input,
+                    options=ServiceIndexingOptions(
+                        extract_metadata=True, generate_embeddings=True,
+                        build_graph=False, repository=repository,
+                        repository_root=str(Path(file_path).parent)
+                    )
+                )
+                results.append({"file_path": file_path, "success": result.success,
+                                "chunks": result.chunks_created, "error": result.error})
+            except Exception as e:
+                results.append({"file_path": file_path, "success": False, "error": str(e)})
+
+        if redis:
+            try:
+                cursor, keys = await redis.scan(0, match="search:v1:*", count=100)
+                if keys:
+                    await redis.delete(*keys)
+            except Exception:
+                pass
+
+        successful = sum(1 for r in results if r.get("success"))
+        return {
+            "success": True, "repository": repository,
+            "total_files": len(file_paths), "successful": successful,
+            "failed": len(file_paths) - successful, "results": results,
+        }
+
+
+# Singleton instances for observability tools
+get_indexing_status_tool = GetIndexingStatusTool()
+get_indexing_errors_tool = GetIndexingErrorsTool()
+retry_indexing_tool = RetryIndexingTool()

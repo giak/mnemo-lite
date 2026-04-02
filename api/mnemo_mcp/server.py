@@ -369,6 +369,15 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     from mnemo_mcp.resources.indexing_resources import (
         index_status_resource,
     )
+    from mnemo_mcp.tools.indexing_tools import (
+        index_project_tool,
+        reindex_file_tool,
+        index_incremental_tool,
+        index_markdown_workspace_tool,
+        get_indexing_status_tool,
+        get_indexing_errors_tool,
+        retry_indexing_tool,
+    )
     from mnemo_mcp.tools.analytics_tools import (
         clear_cache_tool,
         get_indexing_stats_tool,
@@ -416,6 +425,11 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     index_incremental_tool.inject_services(services)
     index_markdown_workspace_tool.inject_services(services)
     index_status_resource.inject_services(services)
+
+    # EPIC-31 Story 31.3: Inject services into indexing observability tools
+    get_indexing_status_tool.inject_services(services)
+    get_indexing_errors_tool.inject_services(services)
+    retry_indexing_tool.inject_services(services)
 
     # Story 23.6: Inject services into analytics components
     clear_cache_tool.inject_services(services)
@@ -1484,9 +1498,81 @@ def register_indexing_components(mcp: FastMCP) -> None:
         response = await index_status_resource.get(repository=repository)
         return response
 
+    # EPIC-31 Story 31.3: Register indexing observability tools
+    @mcp.tool()
+    async def get_indexing_status(
+        ctx: Context,
+        repository: str = "default",
+    ) -> dict:
+        """
+        Get current indexing status for a repository.
+
+        Returns status (idle, in_progress, completed, failed),
+        progress info, and last completion time.
+
+        Args:
+            repository: Repository name (default: "default")
+
+        Returns:
+            Dict with status, total_files, indexed_files, started_at, completed_at, error
+
+        Examples:
+            - get_indexing_status(repository="mnemolite")
+            - get_indexing_status()  # default repository
+        """
+        return await get_indexing_status_tool.execute(repository=repository, ctx=ctx)
+
+    @mcp.tool()
+    async def get_indexing_errors(
+        ctx: Context,
+        repository: str = "default",
+        limit: int = 10,
+    ) -> dict:
+        """
+        Get recent indexing errors for a repository.
+
+        Returns error messages, file paths, and timestamps from Redis and DB.
+
+        Args:
+            repository: Repository name (default: "default")
+            limit: Max errors to return (default: 10)
+
+        Returns:
+            Dict with errors list, total_errors count
+
+        Examples:
+            - get_indexing_errors(repository="mnemolite")
+            - get_indexing_errors(limit=50)
+        """
+        return await get_indexing_errors_tool.execute(repository=repository, limit=limit, ctx=ctx)
+
+    @mcp.tool()
+    async def retry_indexing(
+        ctx: Context,
+        file_paths: list[str],
+        repository: str = "default",
+    ) -> dict:
+        """
+        Re-index specific files after fixing errors.
+
+        Invalidates cache, re-indexes files, and clears search cache.
+
+        Args:
+            file_paths: List of file paths to re-index
+            repository: Repository name (default: "default")
+
+        Returns:
+            Dict with total_files, successful, failed, results per file
+
+        Examples:
+            - retry_indexing(file_paths=["/src/main.py", "/src/utils.py"])
+        """
+        return await retry_indexing_tool.execute(file_paths=file_paths, repository=repository, ctx=ctx)
+
     logger.info(
         "mcp.components.indexing.registered",
-        tools=["index_project", "reindex_file"],
+        tools=["index_project", "reindex_file", "index_incremental", "index_markdown_workspace",
+               "get_indexing_status", "get_indexing_errors", "retry_indexing"],
         resources=["index://status/{repository}"]
     )
 
