@@ -676,3 +676,40 @@ async def search_memories(
             status_code=500,
             detail="Memory search failed. Please try again later."
         )
+
+
+@router.get("/decay/config")
+async def get_decay_config(engine: AsyncEngine = Depends(get_db_engine)) -> Dict[str, Any]:
+    """
+    EPIC-34 Story 34.1: Get all decay configuration rules.
+    Used by Brain page to display taxonomy decay settings.
+    """
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(text("""
+                SELECT tag_pattern, decay_rate, half_life_days,
+                       auto_consolidate_threshold, priority_boost
+                FROM memory_decay_config
+                ORDER BY decay_rate ASC
+            """))
+            rows = result.fetchall()
+
+        return {
+            "data": [
+                {
+                    "tag_pattern": r[0],
+                    "decay_rate": r[1],
+                    "half_life_days": r[2],
+                    "auto_consolidate_threshold": r[3],
+                    "priority_boost": r[4],
+                }
+                for r in rows
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to fetch decay config: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch decay configuration."
+        )
