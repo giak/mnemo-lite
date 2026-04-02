@@ -32,6 +32,52 @@ import structlog
 from mnemo_mcp.config import config
 from mnemo_mcp.prompts import register_prompts
 
+# EPIC-31: Import tool singletons at module level for @mcp.tool() decorators
+from mnemo_mcp.tools.graph_tools import (
+    get_graph_stats_tool,
+    traverse_graph_tool,
+    find_path_tool,
+    get_module_data_tool,
+)
+from mnemo_mcp.tools.indexing_tools import (
+    index_project_tool,
+    reindex_file_tool,
+    index_incremental_tool,
+    index_markdown_workspace_tool,
+    get_indexing_status_tool,
+    get_indexing_errors_tool,
+    retry_indexing_tool,
+)
+from mnemo_mcp.tools.analytics_tools import (
+    clear_cache_tool,
+    get_indexing_stats_tool,
+    get_memory_health_tool,
+    get_cache_stats_tool,
+)
+
+# EPIC-31: Import tool singletons at module level for @mcp.tool() decorators
+from mnemo_mcp.tools.graph_tools import (
+    get_graph_stats_tool,
+    traverse_graph_tool,
+    find_path_tool,
+    get_module_data_tool,
+)
+from mnemo_mcp.tools.indexing_tools import (
+    index_project_tool,
+    reindex_file_tool,
+    index_incremental_tool,
+    index_markdown_workspace_tool,
+    get_indexing_status_tool,
+    get_indexing_errors_tool,
+    retry_indexing_tool,
+)
+from mnemo_mcp.tools.analytics_tools import (
+    clear_cache_tool,
+    get_indexing_stats_tool,
+    get_memory_health_tool,
+    get_cache_stats_tool,
+)
+
 # Setup structured logging - MUST use stderr for MCP stdio transport
 # stdout is reserved for JSONRPC protocol messages only
 structlog.configure(
