@@ -7,7 +7,7 @@
 ## 1. Démarrer MnemoLite (30 secondes)
 
 ```bash
-cd /home/giak/Work/MnemoLite
+cd <project-root>
 docker compose up -d
 
 # Vérifier
@@ -29,7 +29,7 @@ curl http://localhost:8001/health
   "mcpServers": {
     "mnemolite": {
       "command": "bash",
-      "args": ["/home/giak/Work/MnemoLite/scripts/mcp_server.sh"],
+      "args": ["<project-root>/scripts/mcp_server.sh"],
       "env": {
         "DOCKER_COMPOSE_PROJECT": "mnemolite"
       }
@@ -44,7 +44,7 @@ curl http://localhost:8001/health
 
 ```bash
 # Copier hooks depuis MnemoLite master
-cp -r /home/giak/Work/MnemoLite/.claude/hooks /path/to/your/project/.claude/
+cp -r <project-root>/.claude/hooks /path/to/your/project/.claude/
 
 # OU créer manuellement
 mkdir -p /path/to/your/project/.claude/hooks/{SessionStart,Stop,UserPromptSubmit}
@@ -154,7 +154,7 @@ Vous avez maintenant :
 **MCP tools not available ?**
 ```bash
 # Vérifier Docker up
-cd /home/giak/Work/MnemoLite && docker compose ps
+cd <project-root> && docker compose ps
 
 # Vérifier .mcp.json existe
 cat /path/to/your/project/.mcp.json

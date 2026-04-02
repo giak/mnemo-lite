@@ -16,7 +16,7 @@ mnemo-setup .
 
 **Ou sans alias** :
 ```bash
-bash /home/giak/Work/MnemoLite/scripts/setup-new-project.sh .
+bash <project-root>/scripts/setup-new-project.sh .
 ```
 
 ### Ce que ça fait
@@ -56,7 +56,7 @@ cat .claude/settings.local.json | jq '.hooks'
 ### Vérifier conversations sauvegardées
 
 ```bash
-cd /home/giak/Work/MnemoLite
+cd <project-root>
 docker compose exec -T db psql -U mnemolite -d mnemolite \
   -c "SELECT COUNT(*) FROM memories WHERE author = 'AutoSave';"
 ```
@@ -89,11 +89,11 @@ cat /tmp/mnemo-saved-exchanges.txt | wc -l
 **Symptômes** : Hook s'exécute mais pas de mémoires en DB
 
 **Solutions** :
-1. Vérifier MnemoLite running : `cd /home/giak/Work/MnemoLite && docker compose ps`
+1. Vérifier MnemoLite running : `cd <project-root> && docker compose ps`
 2. Vérifier logs Docker : `docker compose logs api --tail 50`
 3. Test manuel :
 ```bash
-cd /home/giak/Work/MnemoLite
+cd <project-root>
 docker compose exec -T api python3 /app/.claude/hooks/Stop/save-direct.py \
   "Test user message" "Test assistant response" "test_session"
 ```
@@ -133,7 +133,7 @@ Voir documentation détaillée :
 
 ## 🛠️ Script Source
 
-**Location** : `/home/giak/Work/MnemoLite/scripts/setup-new-project.sh`
+**Location** : `<project-root>/scripts/setup-new-project.sh`
 
 **Contenu** :
 ```bash
@@ -237,10 +237,10 @@ Ajouter à `~/.bashrc` :
 
 ```bash
 # MnemoLite shortcuts
-alias mnemo-setup='/home/giak/Work/MnemoLite/scripts/setup-new-project.sh'
+alias mnemo-setup='<project-root>/scripts/setup-new-project.sh'
 alias mnemo-logs='tail -f /tmp/hook-autosave-debug.log'
 alias mnemo-check='cat /tmp/mnemo-saved-exchanges.txt | wc -l'
-alias mnemo-db='cd /home/giak/Work/MnemoLite && docker compose exec -T db psql -U mnemolite -d mnemolite'
+alias mnemo-db='cd <project-root> && docker compose exec -T db psql -U mnemolite -d mnemolite'
 ```
 
 ### Template Custom
@@ -248,7 +248,7 @@ alias mnemo-db='cd /home/giak/Work/MnemoLite && docker compose exec -T db psql -
 Créer variant du script :
 
 ```bash
-# /home/giak/Work/MnemoLite/scripts/setup-python-project.sh
+# <project-root>/scripts/setup-python-project.sh
 # Ajoute permissions pytest, mypy, etc.
 ```
 

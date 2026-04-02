@@ -10,7 +10,7 @@
 ## ⚠️ IMPORTANT
 
 Ce guide documente **uniquement ce qui existe réellement** dans le code MnemoLite.
-Toute information est vérifiée contre le code source dans `/home/giak/Work/MnemoLite/api/mnemo_mcp/`.
+Toute information est vérifiée contre le code source dans `<project-root>/api/mnemo_mcp/`.
 
 ---
 
@@ -35,7 +35,7 @@ Toute information est vérifiée contre le code source dans `/home/giak/Work/Mne
 - Cache Redis L2
 
 **MCP Server** expose MnemoLite à Claude Code via le **Model Context Protocol** :
-- **Path**: `/home/giak/Work/MnemoLite/api/mnemo_mcp/server.py`
+- **Path**: `<project-root>/api/mnemo_mcp/server.py`
 - **Framework**: FastMCP (mcp==1.12.3)
 - **Transport**: stdio (Claude Code CLI/VSCode)
 - **Spec**: MCP 2025-06-18
@@ -57,14 +57,14 @@ docker compose version  # >= 2.20
 claude --version  # >= 2.0
 
 # MnemoLite
-cd /home/giak/Work/MnemoLite
+cd <project-root>
 ```
 
 ### Étape 1 : Démarrer MnemoLite Docker
 
 ```bash
 # Dans le dossier MnemoLite
-cd /home/giak/Work/MnemoLite
+cd <project-root>
 
 # Démarrer services
 docker compose up -d
@@ -89,7 +89,7 @@ Créer `.mcp.json` à la racine de votre projet :
   "mcpServers": {
     "mnemolite": {
       "command": "bash",
-      "args": ["/home/giak/Work/MnemoLite/scripts/mcp_server.sh"],
+      "args": ["<project-root>/scripts/mcp_server.sh"],
       "env": {
         "DOCKER_COMPOSE_PROJECT": "mnemolite"
       }
@@ -129,7 +129,7 @@ Claude devrait utiliser automatiquement l'outil `ping` de MnemoLite.
 
 ### Liste Complète (9 Tools)
 
-Extrait depuis `/home/giak/Work/MnemoLite/api/mnemo_mcp/tools/*.py` :
+Extrait depuis `<project-root>/api/mnemo_mcp/tools/*.py` :
 
 | # | Tool Name | Fichier | Description |
 |---|-----------|---------|-------------|
@@ -661,14 +661,14 @@ user> Cherche composant LoginForm
 cat /path/to/your/project/.mcp.json
 
 # 2. Vérifier MnemoLite Docker up
-cd /home/giak/Work/MnemoLite && docker compose ps
+cd <project-root> && docker compose ps
 # Expected: api, db, redis all "Up (healthy)"
 ```
 
 **Fix** :
 ```bash
 # Si Docker down
-cd /home/giak/Work/MnemoLite
+cd <project-root>
 docker compose up -d
 
 # Si .mcp.json manquant
@@ -705,7 +705,7 @@ user> Indexe le projet /path/to/project avec repository="my-repo"
 **Vérification manuelle** :
 ```bash
 # 1. MnemoLite Docker
-cd /home/giak/Work/MnemoLite && docker compose ps
+cd <project-root> && docker compose ps
 
 # 2. Health endpoint
 curl http://localhost:8001/api/v1/autosave/health | jq .
@@ -720,10 +720,10 @@ tail -20 /tmp/hook-autosave-debug.log
 
 ### Documentation Technique
 
-- **MnemoLite README** : `/home/giak/Work/MnemoLite/README.md`
-- **Architecture** : `/home/giak/Work/MnemoLite/docs/Document Architecture.md`
-- **MCP Server Code** : `/home/giak/Work/MnemoLite/api/mnemo_mcp/`
-- **Auto-Save System** : `/home/giak/projects/truth-engine/AUTOSAVE_COMPLETE.md`
+- **MnemoLite README** : `<project-root>/README.md`
+- **Architecture** : `<project-root>/docs/Document Architecture.md`
+- **MCP Server Code** : `<project-root>/api/mnemo_mcp/`
+- **Auto-Save System** : `<user-home>/projects/truth-engine/AUTOSAVE_COMPLETE.md`
 
 ### Fichiers Clés
 
@@ -737,7 +737,7 @@ tail -20 /tmp/hook-autosave-debug.log
 
 ```bash
 # Tous les tests MCP
-cd /home/giak/Work/MnemoLite
+cd <project-root>
 pytest tests/integration/mcp/ -v
 
 # Stats : 149/149 tests passing (100%)
