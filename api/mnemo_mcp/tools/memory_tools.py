@@ -742,15 +742,20 @@ class SearchMemoryTool(BaseMCPComponent):
 
                 # Convert HybridResult to memory format
                 memories = []
-                for hr in response.results:
+                from services.highlight_service import highlight_matches
+                for m in memories_list:
+                    content_preview = m.content[:300] + "..." if len(m.content) > 300 else m.content
+                    # EPIC-35 Story 35.1: Add highlighting snippets
+                    highlights = highlight_matches(m.content, query, max_snippets=2) if query else []
                     memories.append({
-                        "id": str(hr.memory_id),
-                        "title": hr.title,
-                        "content_preview": hr.content_preview,
-                        "memory_type": hr.memory_type,
-                        "tags": hr.tags or [],
-                        "similarity_score": hr.rrf_score,
-                        "created_at": hr.created_at,
+                        "id": str(m.id),
+                        "title": m.title,
+                        "content_preview": content_preview,
+                        "highlights": highlights,
+                        "memory_type": m.memory_type.value if hasattr(m.memory_type, 'value') else m.memory_type,
+                        "tags": m.tags or [],
+                        "similarity_score": m.similarity_score if hasattr(m, 'similarity_score') else None,
+                        "created_at": m.created_at.isoformat() if m.created_at else None,
                     })
 
                 result = {
@@ -802,11 +807,16 @@ class SearchMemoryTool(BaseMCPComponent):
                     search_mode = "tag_only"
 
                 memories = []
+                from services.highlight_service import highlight_matches
                 for m in memories_list:
+                    content_preview = m.content[:300] + "..." if len(m.content) > 300 else m.content
+                    # EPIC-35 Story 35.1: Add highlighting snippets
+                    highlights = highlight_matches(m.content, query, max_snippets=2) if query else []
                     memories.append({
                         "id": str(m.id),
                         "title": m.title,
-                        "content_preview": m.content[:300] + "..." if len(m.content) > 300 else m.content,
+                        "content_preview": content_preview,
+                        "highlights": highlights,
                         "memory_type": m.memory_type.value if hasattr(m.memory_type, 'value') else m.memory_type,
                         "tags": m.tags or [],
                         "similarity_score": m.similarity_score if hasattr(m, 'similarity_score') else None,
