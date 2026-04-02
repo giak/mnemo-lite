@@ -1,12 +1,12 @@
 # MnemoLite – Document d'Architecture (ARCH) détaillé
 
 > 📅 **Dernière mise à jour**: 2025-10-17
-> 📝 **Version**: v2.0.0
+> 📝 **Version**: v5.0.0-dev
 > ✅ **Statut**: À jour avec le code (PostgreSQL 18, Dual-Purpose System, Code Intelligence, Performance Optimizations)
 
 ## 1. Vue d'ensemble
 
-MnemoLite v2.0.0 est un **système dual-purpose** combinant:
+MnemoLite v5.0.0-dev est un **système dual-purpose** combinant:
 1. **Agent Memory** - Mémoire cognitive pour agents IA (événements, recherche sémantique, graphe causal)
 2. **Code Intelligence** - Indexation et recherche sémantique de code (AST parsing, dual embeddings, dependency graph)
 
@@ -17,9 +17,9 @@ L'architecture adopte une approche **CQRS cognitive et modulaire**, optimisée p
 - **Tâches asynchrones** - Infrastructure `pgmq` (désactivée en Phase 3, mais disponible)
 - **Graphe relationnel** - Graphes causaux (Agent Memory) et dépendances (Code Intelligence) via tables + CTE récursives
 
-L'interface utilisateur Web utilise **FastAPI + HTMX 2.0** pour une expérience réactive sans SPA complexe, avec un **design SCADA industriel** unifié.
+L'interface utilisateur Web utilise **FastAPI + Vue 3 SPA** pour une expérience réactive sans SPA complexe, avec un **design SCADA industriel** unifié.
 
-**Performance Highlights (v2.0.0)**:
+**Performance Highlights (v5.0.0-dev)**:
 - **Agent Memory**: 245 tests passing, P95 search 11ms, throughput 100 req/s
 - **Code Intelligence**: Graph traversal 0.155ms (129× faster than target), hybrid search <200ms P95
 - **Optimizations**: Cache system (80%+ hit rate), connection pool 3 → 20, image size -84%
@@ -56,7 +56,7 @@ flowchart TD
 ### Query Side (Lecture)
 ```mermaid
 flowchart TD
-  UI["HTMX/Jinja2 UI"] --> FastAPI_Query["FastAPI Query Handler (Routes -> Services -> Repositories)"]
+  UI["Vue 3/Jinja2 UI"] --> FastAPI_Query["FastAPI Query Handler (Routes -> Services -> Repositories)"]
   
   subgraph PostgreSQL_18 ["(PostgreSQL 18)"]
      direction LR
@@ -120,7 +120,7 @@ PostgreSQL INSERT
 
 ### Architecture Code Intelligence (EPIC-06/07)
 
-MnemoLite v2.0.0 intègre un système complet d'intelligence de code permettant l'indexation, la recherche sémantique et l'analyse de dépendances de repositories de code.
+MnemoLite v5.0.0-dev intègre un système complet d'intelligence de code permettant l'indexation, la recherche sémantique et l'analyse de dépendances de repositories de code.
 
 #### Pipeline d'Indexation 7-Steps
 
@@ -562,7 +562,7 @@ networks:
 
 ---
 
-## 10. Structure du projet (v2.0.0 - Alignée)
+## 10. Structure du projet (v5.0.0-dev - Alignée)
 ```
 mnemo-lite/
 ├── api/                # Code FastAPI (Agent Memory + Code Intelligence)
@@ -598,7 +598,7 @@ mnemo-lite/
 │   │   ├── graph_construction_service.py   # NEW: Build dependency graph
 │   │   ├── graph_traversal_service.py      # NEW: Recursive CTE traversal
 │   │   └── ...
-│   └── templates/      # Jinja2/HTMX 2.0 templates (SCADA design)
+│   └── templates/      # Jinja2/Vue 3 SPA templates (SCADA design)
 │       ├── agent_memory/                   # Agent Memory UI
 │       │   ├── dashboard.html
 │       │   ├── search.html
@@ -628,9 +628,9 @@ mnemo-lite/
 │   ├── DOCKER_OPTIMIZATIONS_SUMMARY.md     # NEW: Docker optimization results
 │   ├── DOCKER_ULTRATHINKING.md             # NEW: Deep dive Docker analysis
 │   ├── DOCKER_VALIDATION_2025.md           # NEW: 2025 best practices validation
-│   ├── docker_setup.md                     # Docker setup guide (v2.0.0)
-│   ├── Document Architecture.md            # Architecture overview (v2.0.0)
-│   ├── Specification_API.md                # API specification (v2.0.0)
+│   ├── docker_setup.md                     # Docker setup guide (v5.0.0-dev)
+│   ├── Document Architecture.md            # Architecture overview (v5.0.0-dev)
+│   ├── Specification_API.md                # API specification (v5.0.0-dev)
 │   └── ...
 ├── tests/              # Tests automatisés (pytest-asyncio)
 │   ├── conftest.py     # Fixtures (async engine, test DB)
@@ -646,10 +646,10 @@ mnemo-lite/
 ├── .dockerignore       # NEW: Build context optimization (847 MB → 23 MB)
 ├── docker-compose.yml  # Orchestration (db + api, worker disabled)
 ├── Makefile            # Development commands
-└── README.md           # Project overview (v2.0.0)
+└── README.md           # Project overview (v5.0.0-dev)
 ```
 
-**Changements v2.0.0**:
+**Changements v5.0.0-dev**:
 - ✅ Worker désactivé (Phase 3 consolidation)
 - ✅ Code Intelligence services & routes ajoutés (EPIC-06)
 - ✅ Code Intelligence UI templates ajoutés (EPIC-07)
@@ -685,7 +685,7 @@ mnemo-lite/
 
 ---
 
-**Version**: v2.0.0
+**Version**: v5.0.0-dev
 **Dernière mise à jour**: 2025-10-17
 **Changements majeurs**:
 - PostgreSQL 17 → 18 (EPIC-06 migration)

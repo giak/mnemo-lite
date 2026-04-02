@@ -1,11 +1,11 @@
 # MnemoLite – Schéma SQL Raffiné
 
 > 📅 **Dernière mise à jour**: 2025-10-17
-> 📝 **Version**: v2.0.0
+> 📝 **Version**: v5.0.0-dev
 > ✅ **Statut**: À jour avec le code (PostgreSQL 18, Dual-Purpose: Agent Memory + Code Intelligence)
 
 ## Contexte
-Ce schéma documente la structure de la base de données MnemoLite v2.0.0, un **système dual-purpose** combinant:
+Ce schéma documente la structure de la base de données MnemoLite v5.0.0-dev, un **système dual-purpose** combinant:
 1. **Agent Memory** - Table `events` partitionnée (temps/vecteur) pour mémoire cognitive d'agents IA
 2. **Code Intelligence** - Table `code_chunks` avec dual embeddings (TEXT + CODE) pour indexation sémantique de code
 
@@ -292,11 +292,11 @@ Les compromis (absence de FK sur `edges`, performance limitée des CTE pour grap
 
 ---
 
-**Version :** v2.0.0
+**Version :** v5.0.0-dev
 **Date :** 2025-10-17
 **Auteur :** Giak
 
-**Changements majeurs v2.0.0** :
+**Changements majeurs v5.0.0-dev** :
 - Migration PostgreSQL 17 → 18 (EPIC-06)
 - Ajout table `code_chunks` avec dual embeddings (TEXT + CODE, 768D chacun)
 - Extension pg_trgm pour recherche lexicale sur code

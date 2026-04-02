@@ -1,7 +1,7 @@
 # MnemoLite - Configuration Docker (100% PostgreSQL)
 
 > 📅 **Dernière mise à jour**: 2025-10-17
-> 📝 **Version**: v2.0.0
+> 📝 **Version**: v5.0.0-dev
 > ✅ **Statut**: À jour avec le code (PostgreSQL 18, Docker optimisé, Code Intelligence)
 
 ## Vue d'ensemble
@@ -203,7 +203,7 @@ networks:
     driver: bridge
 ```
 
-### Explication des optimisations et choix (v2.0.0)
+### Explication des optimisations et choix (v5.0.0-dev)
 
 *   **PostgreSQL 18** : MnemoLite utilise PostgreSQL 18 (migration depuis PG17 dans EPIC-06). L'image `pgvector/pgvector:pg18` inclut l'extension `pgvector` préconfigurée.
 
@@ -388,7 +388,7 @@ health:
 
 ---
 
-**Version**: v2.0.0
+**Version**: v5.0.0-dev
 **Dernière mise à jour**: 2025-10-17
 **Changements majeurs**:
 - PostgreSQL 17 → 18 (EPIC-06 migration)

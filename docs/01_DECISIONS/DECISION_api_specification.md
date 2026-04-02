@@ -1,7 +1,7 @@
 # MnemoLite – Spécification API
 
 > 📅 **Dernière mise à jour**: 2025-10-20
-> 📝 **Version**: v3.0.0
+> 📝 **Version**: v5.0.0-dev
 > ✅ **Statut**: À jour avec le code (Agent Memory + Code Intelligence + Triple-Layer Cache)
 
 > **Objectif (Ω)** : Définir un contrat clair, versionné, testable et documenté pour intégrer MnemoLite à Expanse et à tout client externe, basé sur REST/JSON et OpenAPI 3.1.
@@ -41,7 +41,7 @@
 | GET     | `/v1/search/`                | Recherche hybride (vecteur + filtres)         | none       |
 | GET     | `/v1/events/cache/stats`     | Statistiques cache (EPIC-08)                  | none       |
 
-### Code Intelligence Endpoints (NEW in v2.0.0)
+### Code Intelligence Endpoints (NEW in v5.0.0-dev)
 | Méthode | Route                        | Fonction                                      | Auth       |
 |---------|------------------------------|-----------------------------------------------|------------|
 | POST    | `/v1/code/index`             | Indexer un repository (7-step pipeline)       | none (dev) |
@@ -57,7 +57,7 @@
 | DELETE  | `/v1/code/chunks/{chunk_id}` | Supprimer un chunk de code                    | none       |
 | GET     | `/v1/code/repositories`      | Lister les repositories indexés              | none       |
 
-### Cache Administration Endpoints (NEW in v3.0.0 - EPIC-10)
+### Cache Administration Endpoints (NEW in v5.0.0-dev - EPIC-10)
 | Méthode | Route                        | Fonction                                      | Auth       |
 |---------|------------------------------|-----------------------------------------------|------------|
 | GET     | `/v1/cache/stats`            | Statistiques triple-layer cache (L1/L2/L3)    | none       |
@@ -354,7 +354,7 @@ paths:
                   ...
 
   # ============================================
-  # Code Intelligence Endpoints (NEW in v2.0.0)
+  # Code Intelligence Endpoints (NEW in v5.0.0-dev)
   # ============================================
   /code/index:
     post:
@@ -577,7 +577,7 @@ components:
               type: { type: string }
 
     # ============================================
-    # Code Intelligence Schemas (NEW in v2.0.0)
+    # Code Intelligence Schemas (NEW in v5.0.0-dev)
     # ============================================
     CodeChunk:
       type: object
@@ -688,7 +688,7 @@ En résumé, MnemoLite agit comme une **base de connaissances contextuelle et fa
 ```
 ---
 
-**Version**: v2.0.0
+**Version**: v5.0.0-dev
 **Dernière mise à jour**: 2025-10-17
 **Changements majeurs**:
 - Ajout de 12 endpoints Code Intelligence (`/v1/code/*`)
