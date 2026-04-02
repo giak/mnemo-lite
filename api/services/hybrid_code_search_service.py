@@ -253,7 +253,12 @@ class HybridCodeSearchService:
             cache_key = cache_keys.search_result_key(
                 query=query,
                 repository=repository,
-                limit=top_k
+                limit=top_k,
+                filters=filters_dict,
+                enable_lexical=enable_lexical,
+                enable_vector=enable_vector,
+                lexical_weight=lexical_weight,
+                vector_weight=vector_weight,
             )
             cached_response = await self.redis_cache.get(cache_key)
 
@@ -428,16 +433,21 @@ class HybridCodeSearchService:
             cache_key = cache_keys.search_result_key(
                 query=query,
                 repository=repository,
-                limit=top_k
+                limit=top_k,
+                filters=filters_dict,
+                enable_lexical=enable_lexical,
+                enable_vector=enable_vector,
+                lexical_weight=lexical_weight,
+                vector_weight=vector_weight,
             )
             serialized = self._serialize_search_response(response)
-            # Cache for 30 seconds (search results)
-            await self.redis_cache.set(cache_key, serialized, ttl_seconds=30)
+            # Cache for 120 seconds (EPIC-32: increased from 30s)
+            await self.redis_cache.set(cache_key, serialized, ttl_seconds=120)
             logger.debug(
                 "L2 cache populated for search",
                 query=query[:50],
                 repository=repository,
-                ttl_seconds=30,
+                ttl_seconds=120,
             )
 
         return response

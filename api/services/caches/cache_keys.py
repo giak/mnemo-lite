@@ -9,29 +9,51 @@ import json
 from typing import Any, Dict, List, Optional
 
 
-def search_result_key(query: str, repository: Optional[str] = None, limit: int = 10) -> str:
+def search_result_key(
+    query: str,
+    repository: Optional[str] = None,
+    limit: int = 10,
+    offset: int = 0,
+    filters: Optional[Dict[str, Any]] = None,
+    enable_lexical: bool = True,
+    enable_vector: bool = True,
+    lexical_weight: float = 0.5,
+    vector_weight: float = 0.5,
+) -> str:
     """
-    Generate cache key for search results.
+    Generate cache key for search results — includes ALL parameters.
+
+    EPIC-32 Story 32.1: Fixed to include filters, offset, weights, and
+    enable flags to prevent returning wrong cached results.
 
     Args:
         query: Search query text
         repository: Optional repository filter
         limit: Result limit
+        offset: Pagination offset
+        filters: Optional filter dict (language, chunk_type, file_path, etc.)
+        enable_lexical: Whether lexical search is enabled
+        enable_vector: Whether vector search is enabled
+        lexical_weight: Weight for lexical results in RRF
+        vector_weight: Weight for vector results in RRF
 
     Returns:
-        Cache key in format: search:{md5_hash}
-
-    Example:
-        search:a3f2b9c1d4e5f6a7b8c9d0e1f2a3b4c5
+        Cache key in format: search:v2:{sha256_hash}
     """
-    filters = {
-        "query": query,
-        "repository": repository,
-        "limit": limit,
+    params = {
+        "q": query,
+        "r": repository,
+        "l": limit,
+        "o": offset,
+        "f": filters or {},
+        "el": enable_lexical,
+        "ev": enable_vector,
+        "lw": lexical_weight,
+        "vw": vector_weight,
     }
-    filter_str = json.dumps(filters, sort_keys=True)
-    key_hash = hashlib.md5(filter_str.encode()).hexdigest()
-    return f"search:{key_hash}"
+    param_str = json.dumps(params, sort_keys=True)
+    key_hash = hashlib.sha256(param_str.encode()).hexdigest()[:16]
+    return f"search:v2:{key_hash}"
 
 
 def graph_traversal_key(
