@@ -14,11 +14,13 @@ New endpoints:
 
 import asyncio
 import structlog
-from fastapi import APIRouter, Depends, Query, Path
+from fastapi import APIRouter, Depends, Query, Path, HTTPException
+from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine
 from fastapi.responses import StreamingResponse
 from services.metrics_collector import MetricsCollector
 from services.logs_buffer import get_logs_buffer
-from dependencies import get_metrics_collector, get_endpoint_performance_service, get_monitoring_alert_service
+from dependencies import get_metrics_collector, get_endpoint_performance_service, get_monitoring_alert_service, get_db_engine, get_db_engine
 import json
 
 logger = structlog.get_logger()
@@ -339,3 +341,122 @@ async def acknowledge_alert(
         return {"success": False, "error": "Alert not found or already acknowledged"}
 
     return {"success": True, "alert_id": alert_id}
+
+
+# ============================================================================
+
+# ============================================================================
+
+# ============================================================================
+# EPIC-30 Story 30.1: Alert Rules CRUD
+# ============================================================================
+
+@router.get("/alert-rules")
+async def list_alert_rules(engine: AsyncEngine = Depends(get_db_engine)):
+    """List all alert rules."""
+    try:
+        from sqlalchemy import text
+        async with engine.connect() as conn:
+            result = await conn.execute(text("""
+                SELECT id, name, alert_type, threshold, severity,
+                       cooldown_seconds, enabled, metadata,
+                       created_at, updated_at
+                FROM alert_rules ORDER BY alert_type
+            """))
+            rows = result.fetchall()
+        return {
+            "data": [
+                {
+                    "id": str(r[0]), "name": r[1], "alert_type": r[2],
+                    "threshold": r[3], "severity": r[4],
+                    "cooldown_seconds": r[5], "enabled": r[6],
+                    "metadata": r[7], "created_at": str(r[8]),
+                    "updated_at": str(r[9]),
+                }
+                for r in rows
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/alert-rules")
+async def create_alert_rule(rule: dict, engine: AsyncEngine = Depends(get_db_engine)):
+    """Create a new alert rule."""
+    try:
+        from sqlalchemy import text
+        async with engine.begin() as conn:
+            await conn.execute(text("""
+                INSERT INTO alert_rules
+                    (name, alert_type, threshold, severity, cooldown_seconds, enabled, metadata)
+                VALUES
+                    (:name, :alert_type, :threshold, :severity, :cooldown_seconds, :enabled, :metadata::jsonb)
+            """), {
+                "name": rule.get("name", ""),
+                "alert_type": rule.get("alert_type", ""),
+                "threshold": rule.get("threshold", 0),
+                "severity": rule.get("severity", "warning"),
+                "cooldown_seconds": rule.get("cooldown_seconds", 300),
+                "enabled": rule.get("enabled", True),
+                "metadata": json.dumps(rule.get("metadata", {})),
+            })
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/alert-rules/{rule_id}")
+async def update_alert_rule(rule_id: str, rule: dict, engine: AsyncEngine = Depends(get_db_engine)):
+    """Update an alert rule."""
+    try:
+        from sqlalchemy import text
+        async with engine.begin() as conn:
+            await conn.execute(text("""
+                UPDATE alert_rules SET
+                    name = :name, alert_type = :alert_type,
+                    threshold = :threshold, severity = :severity,
+                    cooldown_seconds = :cooldown_seconds,
+                    enabled = :enabled, metadata = :metadata::jsonb,
+                    updated_at = now()
+                WHERE id = :id
+            """), {
+                "id": rule_id,
+                "name": rule.get("name", ""),
+                "alert_type": rule.get("alert_type", ""),
+                "threshold": rule.get("threshold", 0),
+                "severity": rule.get("severity", "warning"),
+                "cooldown_seconds": rule.get("cooldown_seconds", 300),
+                "enabled": rule.get("enabled", True),
+                "metadata": json.dumps(rule.get("metadata", {})),
+            })
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/alert-rules/{rule_id}")
+async def delete_alert_rule(rule_id: str, engine: AsyncEngine = Depends(get_db_engine)):
+    """Delete an alert rule."""
+    try:
+        from sqlalchemy import text
+        async with engine.begin() as conn:
+            await conn.execute(text("DELETE FROM alert_rules WHERE id = :id"), {"id": rule_id})
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/alert-rules/{rule_id}/toggle")
+async def toggle_alert_rule(rule_id: str, engine: AsyncEngine = Depends(get_db_engine)):
+    """Toggle enabled status of an alert rule."""
+    try:
+        from sqlalchemy import text
+        async with engine.begin() as conn:
+            await conn.execute(text("""
+                UPDATE alert_rules SET
+                    enabled = NOT enabled, updated_at = now()
+                WHERE id = :id
+            """), {"id": rule_id})
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
