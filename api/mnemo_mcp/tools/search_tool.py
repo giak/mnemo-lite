@@ -71,6 +71,7 @@ class SearchCodeTool(BaseMCPComponent):
         enable_vector: bool = True,
         lexical_weight: float = 0.4,
         vector_weight: float = 0.6,
+        deduplicate: bool = False,
     ) -> CodeSearchResponse:
         """
         Execute code search with hybrid lexical+vector search.
@@ -230,6 +231,28 @@ class SearchCodeTool(BaseMCPComponent):
                 if query and mcp_result.source_code:
                     mcp_result.highlighted_code = highlight_text(mcp_result.source_code, query)
                 mcp_results.append(mcp_result)
+
+            # EPIC-35 Story 35.2: Deduplicate by file path
+            if deduplicate:
+                seen_files = {}
+                deduped = []
+                for r in mcp_results:
+                    fp = r.file_path
+                    if fp not in seen_files:
+                        seen_files[fp] = True
+                        deduped.append(r)
+                mcp_results = deduped
+
+            # EPIC-35 Story 35.2: Deduplicate by file path
+            if deduplicate:
+                seen_files = {}
+                deduped = []
+                for r in mcp_results:
+                    fp = r.file_path
+                    if fp not in seen_files:
+                        seen_files[fp] = True
+                        deduped.append(r)
+                mcp_results = deduped
 
             # Build response
             total = len(hybrid_response.results)
