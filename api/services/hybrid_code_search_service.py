@@ -165,7 +165,7 @@ class HybridCodeSearchService:
         # Initialize services (use provided or create new)
         self.lexical = lexical_service or LexicalSearchService(
             engine=engine,
-            similarity_threshold=0.1,  # Low threshold for high recall
+            similarity_threshold=0.3,  # EPIC-32 Story 32.12: Increased from 0.1 for better precision
         )
 
         self.vector = vector_service or VectorSearchService(

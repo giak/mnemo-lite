@@ -844,10 +844,16 @@ class SearchMemoryTool(BaseMCPComponent):
                     logger.warning(f"Memory search cache write failed: {e}")
 
             logger.info(
-                "Memory search completed",
+                "search_memory.complete",
                 query=query,
                 count=len(result["memories"]),
-                elapsed_ms=f"{elapsed_ms:.2f}"
+                total=result["total"],
+                elapsed_ms=round(elapsed_ms, 2),
+                search_mode=result["metadata"].get("search_mode", "unknown"),
+                is_tag_only=is_tag_only,
+                cache_hit=cache_key is not None and redis is not None,
+                tags=tags,
+                memory_type=memory_type,
             )
 
             return result

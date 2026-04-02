@@ -281,7 +281,12 @@ class SearchCodeTool(BaseMCPComponent):
                 "search_code.complete",
                 total_results=total,
                 returned_results=len(mcp_results),
-                execution_time_ms=execution_time_ms,
+                execution_time_ms=round(execution_time_ms, 2),
+                cache_hit=response.metadata.cache_hit if hasattr(response.metadata, 'cache_hit') else False,
+                query_hash=cache_key[-16:],
+                enable_lexical=enable_lexical,
+                enable_vector=enable_vector,
+                repository=filters.repository if filters else None,
             )
 
             return response

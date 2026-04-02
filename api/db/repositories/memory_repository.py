@@ -473,10 +473,20 @@ class MemoryRepository:
                     params["memory_type"] = filters.memory_type.value
 
                 if filters.tags:
-                    tag_conditions = [f":tag{i} = ANY(tags)" for i in range(len(filters.tags))]
-                    where_clauses.append(f"({' AND '.join(tag_conditions)})")
-                    for i, tag in enumerate(filters.tags):
-                        params[f"tag{i}"] = tag
+                    # EPIC-32 Story 32.10: Support AND and OR tag matching
+                    tag_mode = getattr(filters, 'tag_mode', 'and') or 'and'
+                    if tag_mode == 'or':
+                        # PostgreSQL array overlap: tags && ARRAY[...]
+                        tag_placeholders = ", ".join([f":tag{i}" for i in range(len(filters.tags))])
+                        where_clauses.append(f"tags && ARRAY[{tag_placeholders}]")
+                        for i, tag in enumerate(filters.tags):
+                            params[f"tag{i}"] = tag
+                    else:
+                        # AND mode (default): all tags must match
+                        tag_conditions = [f":tag{i} = ANY(tags)" for i in range(len(filters.tags))]
+                        where_clauses.append(f"({' AND '.join(tag_conditions)})")
+                        for i, tag in enumerate(filters.tags):
+                            params[f"tag{i}"] = tag
 
                 if filters.consumed is not None:
                     if filters.consumed:
@@ -589,10 +599,20 @@ class MemoryRepository:
                     params["memory_type"] = filters.memory_type.value
 
                 if filters.tags:
-                    tag_conditions = [f":tag{i} = ANY(tags)" for i in range(len(filters.tags))]
-                    where_clauses.append(f"({' AND '.join(tag_conditions)})")
-                    for i, tag in enumerate(filters.tags):
-                        params[f"tag{i}"] = tag
+                    # EPIC-32 Story 32.10: Support AND and OR tag matching
+                    tag_mode = getattr(filters, 'tag_mode', 'and') or 'and'
+                    if tag_mode == 'or':
+                        # PostgreSQL array overlap: tags && ARRAY[...]
+                        tag_placeholders = ", ".join([f":tag{i}" for i in range(len(filters.tags))])
+                        where_clauses.append(f"tags && ARRAY[{tag_placeholders}]")
+                        for i, tag in enumerate(filters.tags):
+                            params[f"tag{i}"] = tag
+                    else:
+                        # AND mode (default): all tags must match
+                        tag_conditions = [f":tag{i} = ANY(tags)" for i in range(len(filters.tags))]
+                        where_clauses.append(f"({' AND '.join(tag_conditions)})")
+                        for i, tag in enumerate(filters.tags):
+                            params[f"tag{i}"] = tag
 
                 if filters.consumed is not None:
                     if filters.consumed:
