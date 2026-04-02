@@ -219,10 +219,17 @@ class SearchCodeTool(BaseMCPComponent):
             # Apply pagination
             paginated_results = hybrid_response.results[offset : offset + limit]
 
+            # EPIC-35 Story 35.1: Add highlighting to results
+            from services.highlight_service import highlight_text
+
             # Convert HybridSearchResult to CodeSearchResult
-            mcp_results = [
-                self._convert_result(result) for result in paginated_results
-            ]
+            mcp_results = []
+            for result in paginated_results:
+                mcp_result = self._convert_result(result)
+                # Add highlighted source code
+                if query and mcp_result.source_code:
+                    mcp_result.highlighted_code = highlight_text(mcp_result.source_code, query)
+                mcp_results.append(mcp_result)
 
             # Build response
             total = len(hybrid_response.results)

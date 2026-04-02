@@ -156,6 +156,16 @@ class CodeSearchResult(BaseModel):
         description="Source code of the chunk"
     )
 
+    highlighted_code: Optional[str] = Field(
+        None,
+        description="Source code with query terms wrapped in <mark> tags (EPIC-35)"
+    )
+
+    highlighted_code: Optional[str] = Field(
+        None,
+        description="Source code with query terms wrapped in <mark> tags (EPIC-35)"
+    )
+
     name: str = Field(
         ...,
         description="Symbol name (function, class, method, etc.)"
