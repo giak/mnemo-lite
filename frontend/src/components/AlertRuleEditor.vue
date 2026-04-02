@@ -70,7 +70,7 @@ const formData = ref<FormData>({ ...emptyRule })
 async function fetchRules() {
   loading.value = true
   try {
-    const resp = await fetch(`${API}/monitoring/advanced/alert-rules`)
+    const resp = await fetch(`/api/monitoring/advanced/alert-rules`)
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     const data = await resp.json()
     rules.value = data.data || []
@@ -83,7 +83,7 @@ async function fetchRules() {
 
 async function toggleRule(rule: AlertRule) {
   try {
-    const resp = await fetch(`${API}/monitoring/advanced/alert-rules/${rule.id}/toggle`, { method: 'POST' })
+    const resp = await fetch(`/api/monitoring/advanced/alert-rules/${rule.id}/toggle`, { method: 'POST' })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     await fetchRules()
   } catch (err) {
@@ -94,7 +94,7 @@ async function toggleRule(rule: AlertRule) {
 async function deleteRule(rule: AlertRule) {
   if (!confirm(`Delete rule "${rule.name}"?`)) return
   try {
-    const resp = await fetch(`${API}/monitoring/advanced/alert-rules/${rule.id}`, { method: 'DELETE' })
+    const resp = await fetch(`/api/monitoring/advanced/alert-rules/${rule.id}`, { method: 'DELETE' })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     await fetchRules()
   } catch (err) {
@@ -122,8 +122,8 @@ function cancelForm() {
 async function saveRule() {
   try {
     const url = editingRule.value
-      ? `${API}/monitoring/advanced/alert-rules/${editingRule.value.id}`
-      : `${API}/monitoring/advanced/alert-rules`
+      ? `/api/monitoring/advanced/alert-rules/${editingRule.value.id}`
+      : `/api/monitoring/advanced/alert-rules`
     const method = editingRule.value ? 'PUT' : 'POST'
     const resp = await fetch(url, {
       method,
