@@ -120,7 +120,7 @@ const formattedTime = computed(() => {
       <div class="flex items-center gap-4">
         <span class="text-xs font-mono text-slate-500">{{ formattedTime }}</span>
         <button @click="refresh" :disabled="loading" class="scada-btn scada-btn-primary">
-          {{ loading ? '⏳' : '🔄' }}
+          {{ loading ? 'LOADING' : 'REFRESH' }}
         </button>
       </div>
     </div>

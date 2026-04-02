@@ -85,8 +85,8 @@ const formattedTime = computed(() => {
           :disabled="loading"
           class="scada-btn scada-btn-primary flex items-center gap-2"
         >
-          <span v-if="loading">⏳</span>
-          <span v-else>🔄</span>
+          <span v-if="loading">LOADING</span>
+          <span v-else>REFRESH</span>
           {{ loading ? 'LOADING...' : 'REFRESH' }}
         </button>
       </div>

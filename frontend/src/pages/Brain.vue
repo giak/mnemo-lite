@@ -94,7 +94,7 @@ const currentGroup = computed(() => groups.value.find(g => g.id === activeGroup.
           {{ lastUpdated.toLocaleTimeString() }}
         </span>
         <button @click="refresh" :disabled="loading" class="scada-btn scada-btn-primary">
-          {{ loading ? '⏳' : '🔄' }}
+          {{ loading ? 'LOADING' : 'REFRESH' }}
         </button>
       </div>
     </div>
