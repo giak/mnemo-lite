@@ -138,6 +138,9 @@ class DualEmbeddingService:
         self._text_lock = asyncio.Lock()
         self._code_lock = asyncio.Lock()
 
+        # EPIC-32 Story 32.6: Redis client for embedding cache (set via inject)
+        self._redis_client = None
+
         # EPIC-12 Story 12.3: Circuit breaker per model (TEXT + CODE separate)
         # Before: single circuit breaker — if CODE fails, TEXT also blocked
         # After: independent circuit breakers — failures don't cascade
@@ -541,6 +544,20 @@ class DualEmbeddingService:
 
         result = {}
 
+        # EPIC-32 Story 32.6: Check Redis cache for embeddings
+        cache_key = None
+        if self._redis_client:
+            try:
+                import hashlib as _hashlib
+                cache_key = f"embed:{domain.value}:{_hashlib.sha256(text.encode()).hexdigest()[:16]}"
+                cached = await self._redis_client.get(cache_key)
+                if cached:
+                    import json as _json
+                    logger.debug("Embedding cache HIT", domain=domain.value, cache_key=cache_key[:40])
+                    return _json.loads(cached)
+            except Exception as e:
+                logger.warning(f"Embedding cache read failed: {e}")
+
         # EPIC-18 Fix: Use mock embeddings in mock mode
         if self._mock_mode:
             if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
@@ -608,6 +625,24 @@ class DualEmbeddingService:
                     extra={"text_length": len(text), "error": str(e)}
                 )
                 raise
+
+        # EPIC-32 Story 32.6: Write to Redis cache
+        if cache_key and self._redis_client:
+            try:
+                import json as _json
+                await self._redis_client.setex(cache_key, 300, _json.dumps(result))
+                logger.debug("Embedding cache WRITE", cache_key=cache_key[:40], ttl=300)
+            except Exception as e:
+                logger.warning(f"Embedding cache write failed: {e}")
+
+        # EPIC-32 Story 32.6: Write to Redis cache
+        if cache_key and self._redis_client:
+            try:
+                import json as _json
+                await self._redis_client.setex(cache_key, 300, _json.dumps(result))
+                logger.debug("Embedding cache WRITE", cache_key=cache_key[:40], ttl=300)
+            except Exception as e:
+                logger.warning(f"Embedding cache write failed: {e}")
 
         return result
 
