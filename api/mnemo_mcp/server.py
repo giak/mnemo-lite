@@ -360,14 +360,11 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         find_callers_resource,
         find_callees_resource,
     )
-    from mnemo_mcp.tools.indexing_tools import (
-        index_project_tool,
-        reindex_file_tool,
-        index_incremental_tool,
-        index_markdown_workspace_tool,
-    )
-    from mnemo_mcp.resources.indexing_resources import (
-        index_status_resource,
+    from mnemo_mcp.tools.graph_tools import (
+        get_graph_stats_tool,
+        traverse_graph_tool,
+        find_path_tool,
+        get_module_data_tool,
     )
     from mnemo_mcp.tools.indexing_tools import (
         index_project_tool,
@@ -377,6 +374,12 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         get_indexing_status_tool,
         get_indexing_errors_tool,
         retry_indexing_tool,
+    )
+    from mnemo_mcp.resources.indexing_resources import (
+        index_status_resource,
+    )
+    from mnemo_mcp.resources.indexing_resources import (
+        index_status_resource,
     )
     from mnemo_mcp.tools.analytics_tools import (
         clear_cache_tool,
@@ -418,6 +421,12 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     graph_node_details_resource.inject_services(services)
     find_callers_resource.inject_services(services)
     find_callees_resource.inject_services(services)
+
+    # EPIC-31 Story 31.1: Inject services into graph tools
+    get_graph_stats_tool.inject_services(services)
+    traverse_graph_tool.inject_services(services)
+    find_path_tool.inject_services(services)
+    get_module_data_tool.inject_services(services)
 
     # Story 23.5: Inject services into indexing components
     index_project_tool.inject_services(services)
@@ -1261,13 +1270,122 @@ def register_graph_components(mcp: FastMCP) -> None:
         )
         return response
 
+    # EPIC-31 Story 31.1: Register graph tools
+    from mcp.server.fastmcp import Context
+
+    @mcp.tool()
+    async def get_graph_stats(ctx: Context, repository: str = "default") -> dict:
+        """
+        Get code graph statistics for a repository.
+
+        Returns node count, edge count, module count, languages, and top hubs.
+
+        Args:
+            repository: Repository name (default: "default")
+
+        Returns:
+            Dict with total_nodes, total_edges, modules, languages, top_hubs
+
+        Examples:
+            - get_graph_stats(repository="mnemolite")
+            - get_graph_stats()  # default repository
+        """
+        return await get_graph_stats_tool.execute(repository=repository, ctx=ctx)
+
+    @mcp.tool()
+    async def traverse_graph(
+        ctx: Context,
+        node_id: str,
+        direction: str = "outgoing",
+        depth: int = 1,
+        repository: str = "default",
+    ) -> dict:
+        """
+        Traverse the code graph from a given node.
+
+        Returns connected nodes (callers/callees/imports).
+
+        Args:
+            node_id: Starting node ID
+            direction: "outgoing", "incoming", or "both" (default: "outgoing")
+            depth: Traversal depth (default: 1)
+            repository: Repository name (default: "default")
+
+        Returns:
+            Dict with source_node, connected_nodes, total_connections
+
+        Examples:
+            - traverse_graph(node_id="abc-123")
+            - traverse_graph(node_id="abc-123", direction="incoming")
+        """
+        return await traverse_graph_tool.execute(
+            node_id=node_id, direction=direction, depth=depth,
+            repository=repository, ctx=ctx,
+        )
+
+    @mcp.tool()
+    async def find_path(
+        ctx: Context,
+        source_id: str,
+        target_id: str,
+        repository: str = "default",
+        max_depth: int = 5,
+    ) -> dict:
+        """
+        Find a path between two nodes in the code graph.
+
+        Uses BFS to find shortest path.
+
+        Args:
+            source_id: Starting node ID
+            target_id: Target node ID
+            repository: Repository name (default: "default")
+            max_depth: Maximum path length (default: 5)
+
+        Returns:
+            Dict with path_found, nodes, edges, path_length
+
+        Examples:
+            - find_path(source_id="abc-123", target_id="def-456")
+        """
+        return await find_path_tool.execute(
+            source_id=source_id, target_id=target_id,
+            repository=repository, max_depth=max_depth, ctx=ctx,
+        )
+
+    @mcp.tool()
+    async def get_module_data(
+        ctx: Context,
+        module_path: str,
+        repository: str = "default",
+    ) -> dict:
+        """
+        Get detailed data for a module.
+
+        Returns all nodes, internal/external connections, and complexity metrics.
+
+        Args:
+            module_path: Module path (e.g., "api/services/memory_tools.py")
+            repository: Repository name (default: "default")
+
+        Returns:
+            Dict with total_nodes, nodes, internal_edges, external_connections
+
+        Examples:
+            - get_module_data(module_path="api/services/memory_tools.py")
+        """
+        return await get_module_data_tool.execute(
+            module_path=module_path, repository=repository, ctx=ctx,
+        )
+
     logger.info(
         "mcp.components.graph.registered",
         resources=[
             "graph://nodes/{chunk_id}",
             "graph://callers/{qualified_name}",
-            "graph://callees/{qualified_name}"
-        ]
+            "graph://callees/{qualified_name}",
+        ],
+        tools=["get_graph_stats", "traverse_graph", "find_path", "get_module_data"],
     )
 
 
