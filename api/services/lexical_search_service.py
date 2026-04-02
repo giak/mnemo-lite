@@ -134,7 +134,8 @@ class LexicalSearchService:
                 params["chunk_type"] = filters["chunk_type"]
 
             if "repository" in filters:
-                where_clauses.append("metadata->>'repository' = :repository")
+                # EPIC-32 Story 32.4: Use computed column instead of JSONB extraction
+                where_clauses.append("repository = :repository")
                 params["repository"] = filters["repository"]
 
             if "file_path" in filters:
@@ -143,7 +144,8 @@ class LexicalSearchService:
 
             # EPIC-14 Story 14.4: LSP type-aware filters
             if "return_type" in filters:
-                where_clauses.append("metadata->>'return_type' ILIKE :return_type")
+                # EPIC-32 Story 32.4: Use computed column instead of JSONB extraction
+                where_clauses.append("return_type ILIKE :return_type")
                 params["return_type"] = f"%{filters['return_type']}%"
 
             if "param_type" in filters:
