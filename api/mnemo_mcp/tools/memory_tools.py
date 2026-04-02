@@ -14,6 +14,9 @@ Consolidation (Expanse Apex §V):
 """
 
 import time
+import json
+import json
+import json
 from typing import Optional, List, Dict, Any, Union
 import uuid
 from datetime import datetime, timezone
@@ -503,23 +506,23 @@ class DeleteMemoryTool(BaseMCPComponent):
                 if not success:
                     raise RuntimeError(f"Failed to soft delete memory {id}")
 
-                elapsed_ms = (time.time() - start_time) * 1000
+            elapsed_ms = (time.time() - start_time) * 1000
 
-                logger.info(
-                    "Memory soft deleted",
-                    memory_id=id,
-                    title=existing_memory.title,
-                    elapsed_ms=f"{elapsed_ms:.2f}"
-                )
+            logger.info(
+                "Memory soft deleted",
+                memory_id=id,
+                title=existing_memory.title,
+                elapsed_ms=f"{elapsed_ms:.2f}"
+            )
 
-                response = DeleteMemoryResponse(
-                    id=memory_uuid,
-                    deleted_at=datetime.now(timezone.utc),
-                    permanent=False,
-                    can_restore=True,
-                )
+            response = DeleteMemoryResponse(
+                id=memory_uuid,
+                deleted_at=datetime.now(timezone.utc),
+                permanent=False,
+                can_restore=True,
+            )
 
-                return response.model_dump(mode='json')
+            return response.model_dump(mode='json')
 
             # Hard delete (requires elicitation - EPIC-23 Story 23.11)
 
@@ -685,6 +688,29 @@ class SearchMemoryTool(BaseMCPComponent):
             query_stripped = query.strip()
             is_tag_query = query_stripped.startswith(('sys:', 'trace:')) and len(query_stripped) < 50
             is_tag_only = is_tag_query or bool(tags)
+
+            # EPIC-32 Story 32.2: Check Redis cache for memory search
+            redis = self._services.get("redis") if self._services else None
+            if redis:
+                try:
+                    import hashlib as _hashlib
+                    cache_params = {
+                        "q": query_stripped,
+                        "t": memory_type,
+                        "tags": sorted(tags) if tags else [],
+                        "c": consumed,
+                        "ls": lifecycle_state,
+                        "l": limit,
+                        "o": offset,
+                    }
+                    cache_key = f"memsearch:{_hashlib.sha256(json.dumps(cache_params, sort_keys=True).encode()).hexdigest()[:16]}"
+                    cached = await redis.get(cache_key)
+                    if cached:
+                        logger.info("search_memory.cache_hit", cache_key=cache_key)
+                        return json.loads(cached)
+                except Exception as e:
+                    logger.warning(f"Memory search cache read failed: {e}")
+
             if not is_tag_only and self.embedding_service:
                 try:
                     query_embedding_raw = await self.embedding_service.generate_embedding(query)
@@ -801,6 +827,21 @@ class SearchMemoryTool(BaseMCPComponent):
                 }
 
             elapsed_ms = (time.time() - start_time) * 1000
+
+            # EPIC-32 Story 32.2: Write to Redis cache
+            if redis:
+                try:
+                    # TTL depends on query type: tag-only=5min, natural=1min
+                    ttl = 300 if is_tag_only else 60
+                    await redis.setex(cache_key, ttl, json.dumps(result))
+                    logger.debug(
+                        "search_memory.cache_write",
+                        cache_key=cache_key,
+                        ttl=ttl,
+                        is_tag_only=is_tag_only,
+                    )
+                except Exception as e:
+                    logger.warning(f"Memory search cache write failed: {e}")
 
             logger.info(
                 "Memory search completed",
