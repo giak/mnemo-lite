@@ -72,6 +72,7 @@ class SearchCodeTool(BaseMCPComponent):
         lexical_weight: float = 0.4,
         vector_weight: float = 0.6,
         deduplicate: bool = False,
+        rewrite: bool = False,
     ) -> CodeSearchResponse:
         """
         Execute code search with hybrid lexical+vector search.
@@ -86,6 +87,8 @@ class SearchCodeTool(BaseMCPComponent):
             enable_vector: Enable vector search
             lexical_weight: Weight for lexical results in RRF fusion (0.0-1.0)
             vector_weight: Weight for vector results in RRF fusion (0.0-1.0)
+            deduplicate: Remove duplicate file paths (default: False)
+            rewrite: Expand query with synonyms (default: False)
 
         Returns:
             CodeSearchResponse with results, metadata, and pagination info
@@ -113,7 +116,20 @@ class SearchCodeTool(BaseMCPComponent):
             offset=offset,
             enable_lexical=enable_lexical,
             enable_vector=enable_vector,
+            deduplicate=deduplicate,
+            rewrite=rewrite,
         )
+
+        # EPIC-35 Story 35.3: Query rewriting with synonyms
+        original_query = query
+        if rewrite:
+            from services.query_rewriter import rewrite_query
+            query = rewrite_query(query)
+            logger.info(
+                "search_code.query_rewritten",
+                original=original_query,
+                rewritten=query,
+            )
 
         # Get services
         db_pool = self._services.get("db")
