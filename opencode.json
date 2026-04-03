@@ -1,0 +1,63 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "autoupdate": true,
+  "default_agent": "build",
+  "command": {
+    "diagram": {
+      "description": "Generate an HTML diagram for any technical topic",
+      "template": "Generate a self-contained HTML page that visually explains: $ARGUMENTS\n\nUse the visual-explainer skill. Read the relevant template first from .opencode/skills/visual-explainer/templates/.\n\nRules:\n1. Pick a constrained aesthetic (Blueprint, Editorial, Paper/ink, Monochrome terminal)\n2. Use a distinctive font pairing (NOT Inter/Roboto/Arial/system-ui)\n3. For Mermaid: theme 'base', zoom controls, center diagram\n4. Write to ~/.agent/diagrams/ with descriptive filename\n5. Open with xdg-open\n6. Tell me the file path"
+    },
+    "diff-review": {
+      "description": "Visual diff review with architecture comparison",
+      "template": "Perform a visual diff review.\n1. Run: !`git diff --stat`\n2. Run: !`git diff HEAD~1`\n3. Generate an HTML page with: KPI cards (files/lines), architecture impact, before/after panels, risk table.\n4. Write to ~/.agent/diagrams/diff-review.html, open with xdg-open.\n5. Tell me the file path."
+    },
+    "plan-review": {
+      "description": "Compare a plan against the codebase with risk assessment",
+      "template": "Compare the implementation plan against the actual codebase. Generate an HTML page with: plan summary, implementation status table (planned vs actual), risk assessment, gap analysis. Write to ~/.agent/diagrams/plan-review.html, open with xdg-open."
+    },
+    "project-recap": {
+      "description": "Mental model snapshot for context-switching back to a project",
+      "template": "Generate a visual project recap: architecture diagram, directory structure, recent activity, open TODOs, key decisions. Write to ~/.agent/diagrams/project-recap.html, open with xdg-open."
+    }
+  },
+  "permission": {
+    "skill": {
+      "*": "allow"
+    },
+    "bash": {
+      "xdg-open *": "allow",
+      "git *": "allow",
+      "mkdir *": "allow",
+      "ls *": "allow",
+      "cat *": "allow",
+      "find *": "allow",
+      "grep *": "allow",
+      "wc *": "allow",
+      "head *": "allow",
+      "tail *": "allow",
+      "stat *": "allow"
+    }
+  },
+  "mcp": {
+    "mnemolite": {
+      "command": "bash",
+      "args": ["./scripts/mcp_server.sh"],
+      "description": "MnemoLite MCP Server - Code intelligence with hybrid search, graph traversal, and semantic memories"
+    }
+  },
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "model": "anthropic/claude-sonnet-4-20250514"
+    },
+    "plan": {
+      "mode": "primary",
+      "model": "anthropic/claude-haiku-4-20250514",
+      "permission": {
+        "edit": "ask",
+        "bash": "ask"
+      }
+    }
+  }
+}
