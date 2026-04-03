@@ -117,6 +117,11 @@ class HybridMemorySearchMetadata:
     vector_time_ms: Optional[float] = None
     fusion_time_ms: Optional[float] = None
     reranking_time_ms: Optional[float] = None  # EPIC-24 P2
+    entity_count: int = 0
+    tag_count: int = 0
+    entity_time_ms: Optional[float] = None
+    tag_time_ms: Optional[float] = None
+    keywords_extracted: bool = False
 
 
 @dataclass
@@ -188,6 +193,7 @@ class HybridMemorySearchService:
         self,
         query: str,
         embedding: Optional[List[float]] = None,
+        keywords: Optional[Any] = None,  # QueryKeywords from QueryUnderstandingService
         filters: Optional[MemoryFilters] = None,
         limit: int = 10,
         offset: int = 0,
@@ -243,37 +249,56 @@ class HybridMemorySearchService:
             logger.warning("Vector search enabled but no embedding provided, using lexical-only")
             enable_vector = False
 
-        # Execute searches in parallel
-        tasks = []
+        # Execute searches (parallel for lexical + vector)
         lexical_results = None
         vector_results = None
+        entity_results = None
+        tag_results = None
         lexical_time = None
         vector_time = None
+        entity_time = None
+        tag_time = None
+
+        # Build search tasks
+        search_tasks = []
+        task_map = {}
+        task_idx = 0
 
         if enable_lexical:
-            tasks.append(self._lexical_search(
-                query=query,
-                filters=filters,
-                limit=candidate_pool_size,
-            ))
+            search_tasks.append(self._lexical_search(query=query, filters=filters, limit=candidate_pool_size))
+            task_map[task_idx] = "lexical"
+            task_idx += 1
 
         if enable_vector:
-            tasks.append(self._vector_search(
-                embedding=embedding,
-                filters=filters,
-                limit=candidate_pool_size,
-            ))
+            search_tasks.append(self._vector_search(embedding=embedding, filters=filters, limit=candidate_pool_size))
+            task_map[task_idx] = "vector"
+            task_idx += 1
 
-        # Execute parallel searches
-        if tasks:
-            results = await asyncio.gather(*tasks)
+        # Entity and tag search only if keywords available
+        ll_keywords = keywords.ll_keywords if keywords else []
+        if enable_lexical and ll_keywords:
+            search_tasks.append(self._entity_search(keywords=ll_keywords, filters=filters, limit=candidate_pool_size))
+            task_map[task_idx] = "entity"
+            task_idx += 1
 
-            if enable_lexical and enable_vector:
-                (lexical_results, lexical_time), (vector_results, vector_time) = results
-            elif enable_lexical:
-                lexical_results, lexical_time = results[0]
-            elif enable_vector:
-                vector_results, vector_time = results[0]
+        if ll_keywords:
+            search_tasks.append(self._tag_search(keywords=ll_keywords, filters=filters, limit=candidate_pool_size))
+            task_map[task_idx] = "tag"
+            task_idx += 1
+
+        # Execute all searches in parallel
+        if search_tasks:
+            results = await asyncio.gather(*search_tasks)
+            for i, (search_results, search_time) in enumerate(results):
+                method = task_map.get(i)
+                if method == "lexical":
+                    lexical_results, lexical_time = search_results, search_time
+                elif method == "vector":
+                    vector_results, vector_time = search_results, search_time
+                elif method == "entity":
+                    entity_results, entity_time = search_results, search_time
+                elif method == "tag":
+                    tag_results, tag_time = search_results, search_time
 
         # Filter low-quality vector results to prevent semantic noise
         # from dominating exact lexical matches
@@ -297,12 +322,38 @@ class HybridMemorySearchService:
 
         # RRF Fusion
         fusion_start = time.time()
-        fused_results = self._fuse_results(
-            lexical_results=lexical_results,
-            vector_results=vector_results,
-            lexical_weight=lexical_weight,
-            vector_weight=vector_weight,
-        )
+
+        # Build results and weights lists dynamically
+        fusion_results = []
+        fusion_weights = []
+
+        if lexical_results:
+            fusion_results.append(lexical_results)
+            fusion_weights.append(lexical_weight)
+        if vector_results:
+            fusion_results.append(vector_results)
+            fusion_weights.append(vector_weight)
+        if entity_results:
+            fusion_results.append(entity_results)
+            entity_w = 0.15 if (lexical_results and vector_results) else 0.3
+            fusion_weights.append(entity_w)
+        if tag_results:
+            fusion_results.append(tag_results)
+            tag_w = 0.15 if (lexical_results and vector_results) else 0.3
+            fusion_weights.append(tag_w)
+
+        # Normalize weights
+        total_w = sum(fusion_weights)
+        if total_w > 0:
+            fusion_weights = [w / total_w for w in fusion_weights]
+
+        if fusion_results:
+            fused_results = self.fusion.fuse(
+                results=fusion_results,
+                weights=fusion_weights,
+            )
+        else:
+            fused_results = []
         fusion_time = (time.time() - fusion_start) * 1000
 
         # EPIC-24 P2: BM25 reranking (optional)
@@ -432,6 +483,11 @@ class HybridMemorySearchService:
             execution_time_ms=total_time,
             lexical_time_ms=lexical_time,
             vector_time_ms=vector_time,
+            entity_count=len(entity_results) if entity_results else 0,
+            tag_count=len(tag_results) if tag_results else 0,
+            entity_time_ms=entity_time,
+            tag_time_ms=tag_time,
+            keywords_extracted=bool(keywords and (keywords.hl_keywords or keywords.ll_keywords)),
             fusion_time_ms=fusion_time,
             reranking_time_ms=reranking_time,
         )
@@ -667,6 +723,180 @@ class HybridMemorySearchService:
 
         except Exception as e:
             logger.error("Vector search failed", error=str(e))
+            return [], (time.time() - start_time) * 1000
+
+    async def _entity_search(
+        self,
+        keywords: List[str],
+        filters: Optional[MemoryFilters],
+        limit: int,
+    ) -> Tuple[List[MemorySearchResult], float]:
+        """Search memories by entity containment in JSONB column."""
+        start_time = time.time()
+
+        if not keywords:
+            return [], (time.time() - start_time) * 1000
+
+        where_clauses = ["deleted_at IS NULL", "entities != '[]'::jsonb"]
+        params: Dict[str, Any] = {"limit": limit}
+
+        if filters:
+            if filters.project_id:
+                where_clauses.append("project_id = :project_id")
+                params["project_id"] = str(filters.project_id)
+            if filters.memory_type:
+                where_clauses.append("memory_type = :memory_type")
+                params["memory_type"] = filters.memory_type.value
+            if filters.tags:
+                for i, tag in enumerate(filters.tags):
+                    where_clauses.append(f":tag{i} = ANY(tags)")
+                    params[f"tag{i}"] = tag
+
+            if filters.consumed is not None:
+                if filters.consumed:
+                    where_clauses.append("consumed_at IS NOT NULL")
+                else:
+                    where_clauses.append("consumed_at IS NULL")
+
+        where_sql = " AND ".join(where_clauses)
+
+        # Build JSONB containment conditions for each keyword
+        entity_conditions = []
+        for i, kw in enumerate(keywords[:5]):  # Limit to 5 keywords for performance
+            params[f"kw{i}"] = json.dumps([{"name": kw}])
+            entity_conditions.append(f"entities @> :kw{i}::jsonb")
+
+        if not entity_conditions:
+            return [], (time.time() - start_time) * 1000
+
+        entity_where = " OR ".join(entity_conditions)
+
+        query_sql = text(f"""
+            SELECT
+                id::text as memory_id,
+                title,
+                content as content_preview,
+                memory_type,
+                tags,
+                created_at::text,
+                author,
+                1.0 as entity_score
+            FROM memories
+            WHERE {where_sql} AND ({entity_where})
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """)
+
+        try:
+            async with self.engine.begin() as conn:
+                result = await conn.execute(query_sql, params)
+                rows = result.fetchall()
+
+            results = []
+            for rank, row in enumerate(rows, start=1):
+                r = MemorySearchResult(
+                    memory_id=row[0],
+                    title=row[1],
+                    content_preview=row[2],
+                    memory_type=row[3],
+                    tags=self._parse_pg_array(row[4]),
+                    created_at=row[5],
+                    author=row[6],
+                    similarity_score=float(row[7]) if row[7] else 0.0,
+                )
+                r.rank = rank
+                results.append(r)
+
+            elapsed = (time.time() - start_time) * 1000
+            return results, elapsed
+
+        except Exception as e:
+            logger.error("Entity search failed", error=str(e))
+            return [], (time.time() - start_time) * 1000
+
+    async def _tag_search(
+        self,
+        keywords: List[str],
+        filters: Optional[MemoryFilters],
+        limit: int,
+    ) -> Tuple[List[MemorySearchResult], float]:
+        """Search memories by tag/auto_tag matching."""
+        start_time = time.time()
+
+        if not keywords:
+            return [], (time.time() - start_time) * 1000
+
+        where_clauses = ["deleted_at IS NULL"]
+        params: Dict[str, Any] = {"limit": limit}
+
+        if filters:
+            if filters.project_id:
+                where_clauses.append("project_id = :project_id")
+                params["project_id"] = str(filters.project_id)
+            if filters.memory_type:
+                where_clauses.append("memory_type = :memory_type")
+                params["memory_type"] = filters.memory_type.value
+
+            if filters.consumed is not None:
+                if filters.consumed:
+                    where_clauses.append("consumed_at IS NOT NULL")
+                else:
+                    where_clauses.append("consumed_at IS NULL")
+
+        where_sql = " AND ".join(where_clauses)
+
+        # Build tag overlap conditions
+        tag_conditions = []
+        for i, kw in enumerate(keywords[:5]):
+            params[f"kw{i}"] = kw.lower()
+            tag_conditions.append(f":kw{i} = ANY(tags) OR :kw{i} = ANY(auto_tags)")
+
+        if not tag_conditions:
+            return [], (time.time() - start_time) * 1000
+
+        tag_where = " OR ".join(tag_conditions)
+
+        query_sql = text(f"""
+            SELECT
+                id::text as memory_id,
+                title,
+                content as content_preview,
+                memory_type,
+                tags,
+                created_at::text,
+                author,
+                1.0 as tag_score
+            FROM memories
+            WHERE {where_sql} AND ({tag_where})
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """)
+
+        try:
+            async with self.engine.begin() as conn:
+                result = await conn.execute(query_sql, params)
+                rows = result.fetchall()
+
+            results = []
+            for rank, row in enumerate(rows, start=1):
+                r = MemorySearchResult(
+                    memory_id=row[0],
+                    title=row[1],
+                    content_preview=row[2],
+                    memory_type=row[3],
+                    tags=self._parse_pg_array(row[4]),
+                    created_at=row[5],
+                    author=row[6],
+                    similarity_score=float(row[7]) if row[7] else 0.0,
+                )
+                r.rank = rank
+                results.append(r)
+
+            elapsed = (time.time() - start_time) * 1000
+            return results, elapsed
+
+        except Exception as e:
+            logger.error("Tag search failed", error=str(e))
             return [], (time.time() - start_time) * 1000
 
     def _fuse_results(
