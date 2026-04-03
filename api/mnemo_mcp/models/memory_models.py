@@ -360,10 +360,6 @@ class MemoryFilters(BaseModel):
         "and",
         description="Tag matching mode: 'and' (all tags must match, default) or 'or' (any tag matches)"
     )
-    tag_mode: Optional[str] = Field(
-        "and",
-        description="Tag matching mode: 'and' (all tags must match, default) or 'or' (any tag matches)"
-    )
 
     @field_validator('tags')
     @classmethod

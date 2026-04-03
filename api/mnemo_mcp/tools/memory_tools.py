@@ -743,19 +743,20 @@ class SearchMemoryTool(BaseMCPComponent):
                 # Convert HybridResult to memory format
                 memories = []
                 from services.highlight_service import highlight_matches
-                for m in memories_list:
-                    content_preview = m.content[:300] + "..." if len(m.content) > 300 else m.content
+                for m in response.results:
+                    content_text = getattr(m, 'content', m.content_preview)
+                    content_preview = content_text[:300] + "..." if len(content_text) > 300 else content_text
                     # EPIC-35 Story 35.1: Add highlighting snippets
-                    highlights = highlight_matches(m.content, query, max_snippets=2) if query else []
+                    highlights = highlight_matches(content_text, query, max_snippets=2) if query else []
                     memories.append({
-                        "id": str(m.id),
+                        "id": str(m.memory_id),
                         "title": m.title,
                         "content_preview": content_preview,
                         "highlights": highlights,
-                        "memory_type": m.memory_type.value if hasattr(m.memory_type, 'value') else m.memory_type,
+                        "memory_type": m.memory_type,
                         "tags": m.tags or [],
-                        "similarity_score": m.similarity_score if hasattr(m, 'similarity_score') else None,
-                        "created_at": m.created_at.isoformat() if m.created_at else None,
+                        "similarity_score": m.rrf_score,
+                        "created_at": m.created_at,
                     })
 
                 result = {
@@ -769,70 +770,6 @@ class SearchMemoryTool(BaseMCPComponent):
                         "search_mode": "hybrid",
                         "embedding_time_ms": round(embedding_ms, 2),
                         "execution_time_ms": round(response.metadata.execution_time_ms, 2),
-                    }
-                }
-
-            else:
-                # Fallback: tag-only or lexical search (no embedding needed)
-                from mnemo_mcp.models.memory_models import MemoryFilters
-                # P0-3 FIX: project_id was undefined — removed from fallback
-                # For tag-only queries, use the query string itself as the tag filter
-                # when no explicit tags were provided (e.g. query="sys:protocol")
-                effective_tags = tags if tags else ([query_stripped] if is_tag_query else [])
-                fallback_filters = MemoryFilters(
-                    memory_type=memory_type_enum,
-                    tags=effective_tags,
-                    consumed=consumed,
-                    lifecycle_state=lifecycle_state,
-                )
-
-                if query_embedding:
-                    # Vector search with embedding
-                    memories_list, total_count = await self.memory_repository.search_by_vector(
-                        vector=query_embedding,
-                        filters=fallback_filters,
-                        limit=limit,
-                        offset=offset,
-                        distance_threshold=0.7
-                    )
-                    search_mode = "vector_only"
-                else:
-                    # Pure tag/lexical search — no embedding needed
-                    # Query is a tag like "sys:protocol", filter by tags directly
-                    memories_list, total_count = await self.memory_repository.search_by_tags(
-                        filters=fallback_filters,
-                        limit=limit,
-                        offset=offset,
-                    )
-                    search_mode = "tag_only"
-
-                memories = []
-                from services.highlight_service import highlight_matches
-                for m in memories_list:
-                    content_preview = m.content[:300] + "..." if len(m.content) > 300 else m.content
-                    # EPIC-35 Story 35.1: Add highlighting snippets
-                    highlights = highlight_matches(m.content, query, max_snippets=2) if query else []
-                    memories.append({
-                        "id": str(m.id),
-                        "title": m.title,
-                        "content_preview": content_preview,
-                        "highlights": highlights,
-                        "memory_type": m.memory_type.value if hasattr(m.memory_type, 'value') else m.memory_type,
-                        "tags": m.tags or [],
-                        "similarity_score": m.similarity_score if hasattr(m, 'similarity_score') else None,
-                        "created_at": m.created_at.isoformat() if m.created_at else None,
-                    })
-
-                result = {
-                    "query": query,
-                    "memories": memories,
-                    "total": total_count,
-                    "limit": limit,
-                    "offset": offset,
-                    "has_more": offset + len(memories) < total_count,
-                    "metadata": {
-                        "search_mode": search_mode,
-                        "embedding_time_ms": round(embedding_ms, 2),
                     }
                 }
 
