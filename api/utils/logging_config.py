@@ -69,6 +69,9 @@ def configure_logging():
     """
     # Import logs_buffer_processor to add logs to buffer
     from services.logs_buffer import logs_buffer_processor
+    from utils.otel_log_processor import get_log_processor
+
+    log_processor = get_log_processor()
 
     structlog.configure(
         processors=[
@@ -77,6 +80,9 @@ def configure_logging():
 
             # Add logs to buffer for SSE streaming (before rendering)
             logs_buffer_processor,
+
+            # Send logs to OpenObserve (non-blocking, fire-and-forget)
+            log_processor,
 
             # Structlog default processors
             structlog.stdlib.add_log_level,

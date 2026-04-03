@@ -19,6 +19,8 @@ Usage:
 import sys
 import asyncio
 import warnings
+import os
+import base64
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -97,6 +99,67 @@ logger = structlog.get_logger()
 
 
 # ============================================================================
+# OpenTelemetry Configuration for MCP
+# ============================================================================
+
+def _configure_mcp_otel():
+    """Configure OpenTelemetry for MCP server."""
+    try:
+        from opentelemetry import trace, metrics
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+        from opentelemetry.sdk.resources import Resource
+
+        otlp_endpoint = os.getenv(
+            "OTLP_ENDPOINT",
+            "http://openobserve:5080/api/default/v1/traces"
+        )
+        otlp_metrics_endpoint = os.getenv(
+            "OTLP_METRICS_ENDPOINT",
+            "http://openobserve:5080/api/default/v1/metrics"
+        )
+
+        user = os.getenv("O2_USER", "admin@mnemolite.local")
+        password = os.getenv("O2_PASSWORD", "Complexpass#123")
+        auth_string = f"{user}:{password}"
+        auth_bytes = base64.b64encode(auth_string.encode("utf-8")).decode("utf-8")
+        otlp_headers = {"Authorization": f"Basic {auth_bytes}"}
+
+        resource = Resource.create({
+            "service.name": "mnemolite-mcp",
+            "deployment.environment": os.getenv("ENVIRONMENT", "development"),
+        })
+
+        trace.set_tracer_provider(TracerProvider(resource=resource))
+        trace.get_tracer_provider().add_span_processor(
+            BatchSpanProcessor(
+                OTLPSpanExporter(endpoint=otlp_endpoint, headers=otlp_headers)
+            )
+        )
+
+        metrics.set_meter_provider(MeterProvider(
+            resource=resource,
+            metric_readers=[
+                PeriodicExportingMetricReader(
+                    OTLPMetricExporter(
+                        endpoint=otlp_metrics_endpoint,
+                        headers=otlp_headers,
+                    ),
+                    export_interval_millis=5000,
+                )
+            ],
+        ))
+
+        logger.info("mcp_opentelemetry_configured", otlp_endpoint=otlp_endpoint)
+    except Exception as e:
+        logger.warning("mcp_opentelemetry_config_failed", error=str(e))
+
+
+# ============================================================================
 # Server Lifespan Management
 # ============================================================================
 
@@ -121,6 +184,9 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         version=config.server_version,
         transport=config.transport
     )
+
+    # Configure OpenTelemetry
+    _configure_mcp_otel()
 
     # Services dict for dependency injection
     services = {}
@@ -517,6 +583,15 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         yield
     finally:
         logger.info("mcp.server.shutdown")
+
+        # Shutdown OpenTelemetry
+        try:
+            from opentelemetry import trace, metrics
+            trace.get_tracer_provider().shutdown()
+            metrics.get_meter_provider().shutdown()
+            logger.info("mcp_opentelemetry_shutdown")
+        except Exception as e:
+            logger.warning("mcp_otel_shutdown_error", error=str(e))
 
         # --------------------------------------------------------------------
         # Cleanup: Close Connections

@@ -293,7 +293,9 @@ async def main():
 
     # OpenObserve authentication
     import base64
-    auth_string = "admin@mnemolite.local:Complexpass#123"
+    o2_user = os.getenv("O2_USER", "admin@mnemolite.local")
+    o2_password = os.getenv("O2_PASSWORD", "Complexpass#123")
+    auth_string = f"{o2_user}:{o2_password}"
     auth_bytes = base64.b64encode(auth_string.encode('utf-8')).decode('utf-8')
     otlp_headers = {"Authorization": f"Basic {auth_bytes}"}
 
