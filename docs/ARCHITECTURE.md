@@ -385,7 +385,7 @@ Le serveur MCP n'est **pas** un wrapper autour de l'API REST. C'est un processus
 flowchart TD
     subgraph "Processus Serveur MCP"
         FMCP[FastMCP Server]
-        LSP[server_lifespan()]
+        LSP[server_lifespan]
         TO[Outils 28]
         RE[Ressources 12]
         PR[Prompts]

@@ -68,9 +68,6 @@ scripts/profile_*.py
 # Debug sessions
 docs/sessions/
 
-# External projects (not part of MnemoLite)
-api/cv/
-
 # Runtime directories
 logs/
 api/logs/
