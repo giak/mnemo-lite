@@ -715,6 +715,33 @@ class MemoryRepository:
         if isinstance(row_dict.get("resource_links"), str):
             row_dict["resource_links"] = json.loads(row_dict["resource_links"])
 
+        # Parse new entity extraction columns (JSONB)
+        for col in ("entities", "concepts"):
+            val = row_dict.get(col)
+            if val is None:
+                row_dict[col] = []
+            elif isinstance(val, str):
+                try:
+                    row_dict[col] = json.loads(val)
+                except json.JSONDecodeError:
+                    row_dict[col] = []
+            # If already a list/dict (SQLAlchemy parsed it), leave as-is
+
+        # Parse auto_tags (TEXT/ARRAY)
+        val = row_dict.get("auto_tags")
+        if val is None:
+            row_dict["auto_tags"] = []
+        elif isinstance(val, str):
+            if val == "{}":
+                row_dict["auto_tags"] = []
+            elif val.startswith("["):
+                try:
+                    row_dict["auto_tags"] = json.loads(val)
+                except json.JSONDecodeError:
+                    row_dict["auto_tags"] = []
+            else:
+                row_dict["auto_tags"] = [t.strip() for t in val.strip("{}").split(",") if t.strip()]
+
         # Parse embedding if present
         if "embedding" in row_dict and row_dict["embedding"]:
             if isinstance(row_dict["embedding"], str):

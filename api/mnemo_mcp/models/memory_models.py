@@ -195,6 +195,18 @@ class Memory(MemoryBase):
         None,
         description="Similarity score (only present in search results)"
     )
+    entities: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Extracted named entities from LM Studio (async)"
+    )
+    concepts: List[str] = Field(
+        default_factory=list,
+        description="Extracted abstract concepts from LM Studio (async)"
+    )
+    auto_tags: List[str] = Field(
+        default_factory=list,
+        description="Auto-generated tags from entity extraction (async)"
+    )
 
 
 class MemoryResponse(BaseModel):
