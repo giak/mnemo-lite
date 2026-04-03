@@ -1,7 +1,7 @@
 # Load .env file if it exists to potentially override defaults
 -include .env
 
-.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore api-shell api-test api-test-file api-test-one api-coverage api-debug worker-shell certs help db-create-test db-fill-test db-test-reset api-test-reset lint lint-fix
+.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore db-create-test db-fill-test db-test-reset api-test-reset api-shell api-test api-test-file api-test-one api-coverage api-debug worker-shell worker-run certs benchmark lint lint-fix frontend-dev frontend-build frontend-typecheck frontend-test mcp-test mcp-shell help
 
 # Variables
 COMPOSE_FILE := docker-compose.yml
@@ -17,16 +17,16 @@ TEST_DATABASE_URL_VALUE := "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PAS
 
 # Commandes de développement
 up:
-	docker compose -f $(COMPOSE_FILE) up -d
+	docker compose -f $(COMPOSE_FILE) --profile dev up -d
 
 down:
 	docker compose -f $(COMPOSE_FILE) down --remove-orphans
 
 build:
-	DOCKER_BUILDKIT=1 docker compose -f $(COMPOSE_FILE) build
+	DOCKER_BUILDKIT=1 docker compose -f $(COMPOSE_FILE) build --pull
 
 restart:
-	docker compose -f $(COMPOSE_FILE) restart
+	docker compose -f $(COMPOSE_FILE) --profile dev restart
 
 logs:
 	docker compose -f $(COMPOSE_FILE) logs -f
@@ -41,24 +41,21 @@ prune:
 	make clean
 	docker system prune -af --volumes
 
-# Commandes pour la production (Adapter si docker-compose.prod.yml existe)
+# Commandes pour la production (Docker profiles)
 prod-up:
-	docker compose -f $(COMPOSE_FILE) -f $(PROD_COMPOSE_FILE) up -d
+	docker compose -f $(COMPOSE_FILE) --profile prod up -d --build
 
 prod-down:
-	docker compose -f $(COMPOSE_FILE) -f $(PROD_COMPOSE_FILE) down
-
-prod-build:
-	docker compose -f $(COMPOSE_FILE) -f $(PROD_COMPOSE_FILE) build
+	docker compose -f $(COMPOSE_FILE) --profile prod down
 
 prod-restart:
-	docker compose -f $(COMPOSE_FILE) -f $(PROD_COMPOSE_FILE) restart
+	docker compose -f $(COMPOSE_FILE) --profile prod restart
 
 prod-logs:
-	docker compose -f $(COMPOSE_FILE) -f $(PROD_COMPOSE_FILE) logs -f
+	docker compose -f $(COMPOSE_FILE) --profile prod logs -f
 
 prod-clean:
-	docker compose -f $(COMPOSE_FILE) -f $(PROD_COMPOSE_FILE) down -v
+	docker compose -f $(COMPOSE_FILE) --profile prod down -v --remove-orphans
 
 # Commandes pour les bases de données
 db-up:
@@ -132,11 +129,53 @@ worker-run:
 	@test -n "$(task)" || (echo "Error: 'task' parameter is required"; exit 1)
 	docker compose -f $(COMPOSE_FILE) exec -w /app/workers -e PYTHONUNBUFFERED=1 worker python -m $(task)
 
+# Commandes pour le frontend (Vue 3)
+frontend-dev:
+	cd frontend && npm run dev
+
+frontend-build:
+	cd frontend && npm run build
+
+frontend-typecheck:
+	cd frontend && npx vue-tsc --noEmit
+
+frontend-test:
+	cd frontend && npx vitest run --reporter=verbose
+
+# Commandes MCP
+mcp-test:
+	@echo "Running MCP tests (358 tests)..."
+	docker compose -f $(COMPOSE_FILE) exec api python -m pytest tests/mnemo_mcp/ -v --tb=short
+
+mcp-shell:
+	docker compose -f $(COMPOSE_FILE) exec api /bin/bash -c "cd /app && python -m mnemo_mcp.server"
+
+# Commandes pour le frontend (Vue 3)
+frontend-dev:
+	cd frontend && npm run dev
+
+frontend-build:
+	cd frontend && npm run build
+
+frontend-typecheck:
+	cd frontend && npx vue-tsc --noEmit
+
+frontend-test:
+	cd frontend && npx vitest run --reporter=verbose
+
+# Commandes MCP
+mcp-test:
+	@echo "Running MCP tests (358 tests)..."
+	docker compose -f $(COMPOSE_FILE) exec api python -m pytest tests/mnemo_mcp/ -v --tb=short
+
+mcp-shell:
+	docker compose -f $(COMPOSE_FILE) exec api /bin/bash -c "cd /app && python -m mnemo_mcp.server"
+
 # Vérification de l'état des services (Nouvelle cible)
 health:
-	@echo "API Health (Port $(API_PORT)):'"
-	@curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:$(API_PORT)/health
-	@echo "PostgreSQL Health:'"
+	@echo "API Health (Port $(API_PORT)):"
+	@curl -s http://127.0.0.1:$(API_PORT)/health | python3 -m json.tool 2>/dev/null || echo "API not responding"
+	@echo "PostgreSQL Health:"
 	@docker compose -f $(COMPOSE_FILE) exec db pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB) -q && echo "OK" || echo "FAIL"
 
 # Création des certificats auto-signés (développement)
@@ -162,21 +201,26 @@ lint-fix:
 # Aide
 help:
 	@echo "Usage:"
-	@echo "  make up              - Start services in development mode"
+	@echo "  make up              - Start dev services (Vite HMR on :3000)"
 	@echo "  make down            - Stop services"
 	@echo "  make build           - Build services"
-	@echo "  make restart         - Restart services"
-	@echo "  make logs            - View logs"
+	@echo "  make restart         - Restart dev services"
+	@echo "  make logs            - View all logs"
 	@echo "  make ps              - List running containers"
 	@echo "  make clean           - Remove containers and volumes"
 	@echo "  make prune           - Remove all unused Docker resources"
 	@echo ""
 	@echo "Production:"
-	@echo "  make prod-up         - Start services in production mode"
+	@echo "  make prod-up         - Start prod services (Nginx on :80)"
 	@echo "  make prod-down       - Stop production services"
-	@echo "  make prod-build      - Build production services"
 	@echo "  make prod-logs       - View production logs"
 	@echo "  make prod-clean      - Remove production containers and volumes"
+	@echo ""
+	@echo "Frontend (Vue 3):"
+	@echo "  make frontend-dev    - Start Vite dev server (localhost:3000)"
+	@echo "  make frontend-build  - Build for production"
+	@echo "  make frontend-typecheck  - Run vue-tsc --noEmit"
+	@echo "  make frontend-test   - Run Vitest tests"
 	@echo ""
 	@echo "Database:"
 	@echo "  make db-up           - Start only database services"
@@ -189,12 +233,16 @@ help:
 	@echo ""
 	@echo "API:"
 	@echo "  make api-shell       - Connect to API container shell"
-	@echo "  make api-test-reset  - Reset containers and test database completely"
-	@echo "  make api-test        - Run all API tests with verbosity"
+	@echo "  make api-test-reset  - Reset containers and test database"
+	@echo "  make api-test        - Run all API tests with coverage"
 	@echo "  make api-test-file file=<path> - Run tests in specific file"
 	@echo "  make api-test-one test=<path>::<name> - Run specific test"
 	@echo "  make api-coverage    - Run tests with coverage report"
 	@echo "  make api-debug file=<path> - Debug Python script with pdb"
+	@echo ""
+	@echo "MCP:"
+	@echo "  make mcp-test        - Run MCP tests (358 tests)"
+	@echo "  make mcp-shell       - MCP server shell"
 	@echo ""
 	@echo "Worker:"
 	@echo "  make worker-shell    - Connect to worker container shell"
@@ -206,5 +254,6 @@ help:
 	@echo ""
 	@echo "Utils:"
 	@echo "  make certs           - Generate self-signed certificates"
-	@echo "  make health          - Check API (at /health) and PostgreSQL health"
-	@echo "  make benchmark       - Run performance benchmarks" 
+	@echo "  make health          - Check API and PostgreSQL health"
+	@echo "  make benchmark       - Run performance benchmarks"
+	@echo "  make help            - Show this help" 
