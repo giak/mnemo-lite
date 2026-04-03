@@ -1,0 +1,7 @@
+{
+  "function": "# Drop health check logs from the main stream\nif exists(.path) {\n    if .path == \"/health\" || .path == \"/healthz\" || .path == \"/ready\" || .path == \"/favicon.ico\" {\n        if exists(.http_status) && .http_status == 200 {\n            abort\n        }\n    }\n}\n\n# Drop OPTIONS preflight requests\nif exists(.method) && .method == \"OPTIONS\" {\n    abort\n} \n .",
+  "name": "filter_noise_logs",
+  "params": "",
+  "numArgs": 0,
+  "transType": 0
+}

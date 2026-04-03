@@ -1,0 +1,7 @@
+{
+  "function": "# Extract HTTP status code from various field names\nif exists(.http_status_code) {\n    .http_status = to_int!(.http_status_code)\n} else if exists(.status_code) {\n    .http_status = to_int!(.status_code)\n} else if exists(.status) {\n    .http_status = to_int!(.status)\n}\n\n# Categorize HTTP status\nif exists(.http_status) {\n    status = to_int!(.http_status)\n    .status_category = if status >= 500 {\n        \"5xx\"\n    } else if status >= 400 {\n        \"4xx\"\n    } else if status >= 300 {\n        \"3xx\"\n    } else if status >= 200 {\n        \"2xx\"\n    } else {\n        \"other\"\n    }\n}\n\n# Extract HTTP method\nif exists(.http_method) {\n    .method = to_string!(.http_method)\n} else if exists(.method) {\n    .method = to_string!(.method)\n}\n\n# Extract path/URL\nif exists(.http_path) {\n    .path = to_string!(.http_path)\n} else if exists(.path) {\n    .path = to_string!(.path)\n} else if exists(.url) {\n    .path = to_string!(.url)\n}\n\n# Extract duration/latency\nif exists(.duration_ms) {\n    .latency_ms = to_float!(.duration_ms)\n} else if exists(.duration) {\n    .latency_ms = to_float!(.duration) * 1000.0\n} else if exists(.latency) {\n    .latency_ms = to_float!(.latency)\n} \n .",
+  "name": "extract_http_fields",
+  "params": "",
+  "numArgs": 0,
+  "transType": 0
+}

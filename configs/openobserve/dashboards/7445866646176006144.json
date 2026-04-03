@@ -1,0 +1,33 @@
+{
+  "v1": null,
+  "v2": null,
+  "v3": null,
+  "v4": null,
+  "v5": null,
+  "v6": null,
+  "v7": null,
+  "v8": {
+    "version": 8,
+    "dashboardId": "7445866646176006144",
+    "title": "API Performance",
+    "description": "Request latency, error rates, cache performance, and DB query metrics for MnemoLite API",
+    "role": "",
+    "owner": "admin@mnemolite.local",
+    "created": "2026-04-03T16:15:45.961254104Z",
+    "tabs": [],
+    "variables": {
+      "list": []
+    }
+  },
+  "version": 8,
+  "hash": "6660397517794391990",
+  "folder_id": "default",
+  "folder_name": "default",
+  "dashboard_id": "7445866646176006144",
+  "title": "API Performance",
+  "description": "Request latency, error rates, cache performance, and DB query metrics for MnemoLite API",
+  "role": "",
+  "owner": "admin@mnemolite.local",
+  "created": "2026-04-03T16:15:45.961254104Z",
+  "updatedAt": 0
+}

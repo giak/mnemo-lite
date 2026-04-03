@@ -1,7 +1,7 @@
 # Load .env file if it exists to potentially override defaults
 -include .env
 
-.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore db-create-test db-fill-test db-test-reset api-test-reset api-shell api-test api-test-file api-test-one api-coverage api-debug worker-shell worker-run certs benchmark lint lint-fix frontend-dev frontend-build frontend-typecheck frontend-test mcp-test mcp-shell help
+.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore db-create-test db-fill-test db-test-reset api-test-reset api-shell api-test api-test-file api-test-one api-coverage api-debug worker-shell worker-run certs benchmark lint lint-fix frontend-dev frontend-build frontend-typecheck frontend-test mcp-test mcp-shell o2-setup o2-export o2-help help
 
 # Variables
 COMPOSE_FILE := docker-compose.yml
@@ -176,6 +176,27 @@ lint-fix:
 	@echo "Running autopep8 for additional fixes..."
 	docker compose -f $(COMPOSE_FILE) exec -w /app api autopep8 --in-place --aggressive --aggressive .
 
+# Commandes OpenObserve
+o2-setup:
+	@echo "Setting up OpenObserve via API (Functions, Streams, Dashboards)..."
+	python scripts/o2_setup_functions.py
+	python scripts/o2_setup_streams.py
+	python scripts/o2_setup_dashboards.py
+	@echo ""
+	@echo "API setup complete. Now configure via UI:"
+	@echo "  1. Open http://localhost:5080"
+	@echo "  2. See docs/O2_SETUP_GUIDE.md for Pipelines, Templates, Destinations, Alerts"
+
+o2-export:
+	@echo "Exporting OpenObserve configuration..."
+	python scripts/o2_export_configs.py
+
+o2-help:
+	@echo "OpenObserve Commands:"
+	@echo "  make o2-setup      - Configure Functions, Streams, Dashboards via API"
+	@echo "  make o2-export     - Export all O2 configs to configs/openobserve/"
+	@echo "  See docs/O2_SETUP_GUIDE.md for manual UI setup (Pipelines, Alerts, etc.)"
+
 # Aide
 help:
 	@echo "Usage:"
@@ -229,6 +250,11 @@ help:
 	@echo "Linting:"
 	@echo "  make lint            - Check code with flake8"
 	@echo "  make lint-fix        - Format code with black and autopep8"
+	@echo ""
+	@echo "OpenObserve:"
+	@echo "  make o2-setup      - Configure Functions, Streams, Dashboards via API"
+	@echo "  make o2-export     - Export all O2 configs to configs/openobserve/"
+	@echo "  make o2-help       - Show OpenObserve help"
 	@echo ""
 	@echo "Utils:"
 	@echo "  make certs           - Generate self-signed certificates"

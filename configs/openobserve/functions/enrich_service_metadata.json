@@ -1,0 +1,7 @@
+{
+  "function": "# Ensure service_name is always set\nif !exists(.service_name) {\n    .service_name = \"unknown\"\n}\n\n# Add environment tag\nif !exists(.environment) {\n    .environment = \"development\"\n}\n\n# Add component tag based on service name\n.component = if contains!(to_string!(.service_name), \"api\") {\n    \"backend-api\"\n} else if contains!(to_string!(.service_name), \"mcp\") {\n    \"mcp-server\"\n} else if contains!(to_string!(.service_name), \"worker\") || contains!(to_string!(.service_name), \"conversation\") {\n    \"background-worker\"\n} else {\n    .service_name\n} \n .",
+  "name": "enrich_service_metadata",
+  "params": "",
+  "numArgs": 0,
+  "transType": 0
+}

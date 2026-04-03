@@ -1,0 +1,33 @@
+{
+  "v1": null,
+  "v2": null,
+  "v3": null,
+  "v4": null,
+  "v5": null,
+  "v6": null,
+  "v7": null,
+  "v8": {
+    "version": 8,
+    "dashboardId": "7445866646184394752",
+    "title": "MCP Operations",
+    "description": "Tool invocations, search latency, indexing throughput for MnemoLite MCP server",
+    "role": "",
+    "owner": "admin@mnemolite.local",
+    "created": "2026-04-03T16:15:45.963519433Z",
+    "tabs": [],
+    "variables": {
+      "list": []
+    }
+  },
+  "version": 8,
+  "hash": "12237728656969333814",
+  "folder_id": "default",
+  "folder_name": "default",
+  "dashboard_id": "7445866646184394752",
+  "title": "MCP Operations",
+  "description": "Tool invocations, search latency, indexing throughput for MnemoLite MCP server",
+  "role": "",
+  "owner": "admin@mnemolite.local",
+  "created": "2026-04-03T16:15:45.963519433Z",
+  "updatedAt": 0
+}

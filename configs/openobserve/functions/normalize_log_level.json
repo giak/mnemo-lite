@@ -1,0 +1,7 @@
+{
+  "function": "# Normalize log levels\n# Handles: level, severity, _level, log_level, loglevel\nif exists(.level) {\n    .severity = to_string!(.level)\n} else if exists(.log_level) {\n    .severity = to_string!(.log_level)\n} else if exists(.loglevel) {\n    .severity = to_string!(.loglevel)\n} else if exists(._level) {\n    .severity = to_string!(._level)\n}\n\n# Normalize common variations\n.severity = downcase!(.severity)\n.severity = if contains!(.severity, \"error\") || contains!(.severity, \"err\") || contains!(.severity, \"crit\") || contains!(.severity, \"fatal\") || contains!(.severity, \"emerg\") || contains!(.severity, \"panic\") {\n    \"error\"\n} else if contains!(.severity, \"warn\") {\n    \"warning\"\n} else if contains!(.severity, \"info\") || contains!(.severity, \"notice\") {\n    \"info\"\n} else if contains!(.severity, \"debug\") || contains!(.severity, \"trace\") {\n    \"debug\"\n} else {\n    \"info\"\n} \n .",
+  "name": "normalize_log_level",
+  "params": "",
+  "numArgs": 0,
+  "transType": 0
+}
