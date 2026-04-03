@@ -99,12 +99,13 @@ curl http://localhost:8001/health
 
 | Topic | Location |
 |-------|----------|
-| Quick Start | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
-| Setup Guide | [docs/SETUP.md](docs/SETUP.md) |
-| MCP Guide | [docs/MCP-GUIDE.md](docs/MCP-GUIDE.md) |
+| Quick Start | [docs/02_GUIDES/QUICKSTART.md](docs/02_GUIDES/QUICKSTART.md) |
+| Setup Guide | [docs/02_GUIDES/SETUP.md](docs/02_GUIDES/SETUP.md) |
+| MCP Guide | [docs/02_GUIDES/MCP-GUIDE.md](docs/02_GUIDES/MCP-GUIDE.md) |
 | Docker Setup | [docs/deployment/README.md](docs/deployment/README.md) |
 | Architecture | [CLAUDE.md](CLAUDE.md) |
 | CI/CD | [.github/workflows/ci.yml](.github/workflows/ci.yml) |
+| All Docs | [docs/README.md](docs/README.md) |
 
 ## 🛠️ Development
 
@@ -131,7 +132,7 @@ docker compose --profile prod up -d  # Prod (Nginx)
 
 ## 📜 License
 
-MIT License — see [LICENSE](LICENSE)
+MIT License
 
 ---
 
