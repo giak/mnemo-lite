@@ -15,8 +15,6 @@ Consolidation (Expanse Apex §V):
 
 import time
 import json
-import json
-import json
 from typing import Optional, List, Dict, Any, Union
 import uuid
 from datetime import datetime, timezone
@@ -205,6 +203,9 @@ class WriteMemoryTool(BaseMCPComponent):
             # Save to database
             memory = await self.memory_repository.create(memory_create, embedding)
 
+            # EPIC-28: Trigger async entity extraction (non-blocking)
+            self._trigger_entity_extraction(memory)
+
             elapsed_ms = (time.time() - start_time) * 1000
 
             logger.info(
@@ -238,6 +239,34 @@ class WriteMemoryTool(BaseMCPComponent):
         except Exception as e:
             logger.error("Failed to create memory", error=str(e), title=title)
             raise RuntimeError(f"Failed to create memory: {e}") from e
+
+    def _trigger_entity_extraction(self, memory: Any) -> None:
+        """
+        Trigger async entity extraction for a newly created memory.
+
+        Uses asyncio.create_task to run extraction in the background.
+        Does not block the memory creation response.
+        """
+        try:
+            import asyncio
+            from services.entity_extraction_service import EntityExtractionService
+
+            extraction_service = self.services.get("entity_extraction_service")
+            if extraction_service is None:
+                return
+
+            asyncio.create_task(
+                extraction_service.extract_entities(
+                    memory_id=str(memory.id),
+                    title=memory.title,
+                    content=memory.content,
+                    memory_type=memory.memory_type.value if hasattr(memory.memory_type, "value") else str(memory.memory_type),
+                    tags=memory.tags or [],
+                )
+            )
+        except Exception as e:
+            # Never fail memory creation due to extraction issues
+            logger.debug("entity_extraction_trigger_failed", error=str(e))
 
 
 class UpdateMemoryTool(BaseMCPComponent):

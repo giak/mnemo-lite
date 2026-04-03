@@ -419,6 +419,30 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         logger.warning("mcp.hybrid_memory_search_service.initialization_failed", error=str(e))
         services["hybrid_memory_search_service"] = None
 
+    # EPIC-28: Initialize LMStudioClient and EntityExtractionService
+    try:
+        from services.lm_studio_client import LMStudioClient
+        from services.entity_extraction_service import EntityExtractionService
+
+        lm_client = LMStudioClient()
+        services["lm_studio_client"] = lm_client
+
+        if sqlalchemy_engine:
+            entity_extraction_service = EntityExtractionService(
+                engine=sqlalchemy_engine,
+                lm_client=lm_client,
+            )
+            services["entity_extraction_service"] = entity_extraction_service
+            logger.info("mcp.entity_extraction_service.initialized")
+        else:
+            logger.warning("mcp.entity_extraction_service.skipped", reason="no_engine")
+            services["entity_extraction_service"] = None
+
+    except Exception as e:
+        logger.warning("mcp.entity_extraction_service.initialization_failed", error=str(e))
+        services["lm_studio_client"] = None
+        services["entity_extraction_service"] = None
+
     # Story 23.4: Initialize NodeRepository and GraphTraversalService
     try:
         from db.repositories.node_repository import NodeRepository
