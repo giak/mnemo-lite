@@ -192,7 +192,7 @@ MNEMOLITE_PATH="/your/custom/path"
 **Features** :
 - `setup_project` MCP tool
 - Workflow conversationnel (pas de terminal)
-- Integration native Claude Code
+- Integration native LLM IDE
 
 **ETA** : Si 5+ projets utilisateurs (6h dev)
 

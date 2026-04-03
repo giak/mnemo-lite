@@ -103,7 +103,7 @@ curl http://localhost:8001/health
 | Setup Guide | [docs/02_GUIDES/SETUP.md](docs/02_GUIDES/SETUP.md) |
 | MCP Guide | [docs/02_GUIDES/MCP-GUIDE.md](docs/02_GUIDES/MCP-GUIDE.md) |
 | Docker Setup | [docs/deployment/README.md](docs/deployment/README.md) |
-| Architecture | [CLAUDE.md](CLAUDE.md) |
+| Architecture | See docs/01_DECISIONS/ |
 | CI/CD | [.github/workflows/ci.yml](.github/workflows/ci.yml) |
 | All Docs | [docs/README.md](docs/README.md) |
 

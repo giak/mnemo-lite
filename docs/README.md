@@ -4,7 +4,6 @@
 - [Quick Start](02_GUIDES/QUICKSTART.md) — Get running in minutes
 - [Setup Guide](02_GUIDES/SETUP.md) — Detailed configuration
 - [MCP Guide](02_GUIDES/MCP-GUIDE.md) — Model Context Protocol setup
-- [Claude Code Integration](02_GUIDES/CLAUDE_CODE_INTEGRATION.md) — AI agent setup
 
 ## 🏗️ Architecture & Decisions
 - [Control Documents](00_CONTROL/) — Project status and test inventory

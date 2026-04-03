@@ -2,7 +2,7 @@
 
 ## Quick Start Guide
 
-This guide walks you through setting up and testing the MnemoLite MCP server with Claude Desktop.
+This guide walks you through setting up and testing the MnemoLite MCP server with Desktop.
 
 ---
 
@@ -11,7 +11,7 @@ This guide walks you through setting up and testing the MnemoLite MCP server wit
 - Python 3.11+
 - PostgreSQL 18 with pgvector extension
 - Redis 7.x
-- Claude Desktop (for testing)
+- Desktop (for testing)
 
 ---
 
@@ -45,16 +45,16 @@ MCP_REDIS_URL=redis://localhost:6379/0
 # MCP Server
 MCP_SERVER_NAME=mnemolite
 MCP_LOG_LEVEL=INFO
-MCP_TRANSPORT=stdio  # stdio for Claude Desktop, http for web
+MCP_TRANSPORT=stdio  # stdio for Desktop, http for web
 ```
 
 ---
 
-## Claude Desktop Configuration
+## Desktop Configuration
 
 ### 1. Locate Config File
 
-Claude Desktop config is at:
+Desktop config is at:
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Linux**: `~/.config/claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -82,9 +82,9 @@ Edit `claude_desktop_config.json`:
 
 **Important**: Replace `<project-root>` with your actual project path.
 
-### 3. Restart Claude Desktop
+### 3. Restart Desktop
 
-Close and reopen Claude Desktop to load the new MCP server configuration.
+Close and reopen Desktop to load the new MCP server configuration.
 
 ---
 
@@ -92,7 +92,7 @@ Close and reopen Claude Desktop to load the new MCP server configuration.
 
 ### Option 1: Smoke Test with Python
 
-Before configuring Claude Desktop, test the server directly:
+Before configuring Desktop, test the server directly:
 
 ```bash
 # Activate virtual environment (if using)
@@ -114,18 +114,18 @@ Expected output:
 
 Server is now waiting for JSON-RPC commands on stdin. Press `Ctrl+C` to stop.
 
-### Option 2: Test in Claude Desktop
+### Option 2: Test in Desktop
 
-Once Claude Desktop is configured:
+Once Desktop is configured:
 
-1. Open Claude Desktop
+1. Open Desktop
 2. Start a new conversation
 3. Look for the "MCP" or "Tools" icon (usually bottom-right)
 4. Verify `mnemolite` server appears in the list
 
 #### Test Ping Tool
 
-In Claude Desktop chat:
+In Desktop chat:
 
 ```
 User: Use the mnemolite ping tool to test connectivity
@@ -207,18 +207,18 @@ redis-cli ping  # Should return PONG
 
 ---
 
-### Claude Desktop Not Seeing Server
+### Desktop Not Seeing Server
 
-**Problem**: MnemoLite doesn't appear in Claude Desktop
+**Problem**: MnemoLite doesn't appear in Desktop
 
 **Solutions**:
 
 1. Check config file path is correct
 2. Verify JSON syntax is valid (use https://jsonlint.com/)
-3. Check logs in Claude Desktop:
+3. Check logs in Desktop:
    - macOS: `~/Library/Logs/Claude/mcp*.log`
    - Linux: `~/.cache/claude/logs/mcp*.log`
-4. Restart Claude Desktop completely (quit, not just close window)
+4. Restart Desktop completely (quit, not just close window)
 
 ---
 
@@ -254,7 +254,7 @@ See `docs/agile/serena-evolution/03_EPICS/EPIC-23_README.md` for full roadmap.
 MCP_LOG_LEVEL=DEBUG python -m api.mcp.server
 ```
 
-### Test Without Claude Desktop
+### Test Without Desktop
 
 Use MCP Inspector (http://127.0.0.1:6274):
 

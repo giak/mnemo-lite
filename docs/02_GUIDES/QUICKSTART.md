@@ -1,6 +1,6 @@
-# MnemoLite + Claude Code — Quickstart
+# MnemoLite + LLM IDE — Quickstart
 
-**5 minutes setup** pour utiliser MnemoLite avec Claude Code.
+**5 minutes setup** pour utiliser MnemoLite avec LLM IDE.
 
 ---
 
@@ -73,7 +73,7 @@ mkdir -p /path/to/your/project/.claude/hooks/{SessionStart,Stop,UserPromptSubmit
 
 ---
 
-## 4. Démarrer Claude Code (10 secondes)
+## 4. Démarrer LLM IDE (10 secondes)
 
 ```bash
 cd /path/to/your/project
