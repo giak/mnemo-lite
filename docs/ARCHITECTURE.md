@@ -1,49 +1,49 @@
-# MnemoLite Architecture
+# Architecture MnemoLite
 
-> **Status:** DECISION | **Updated:** 2026-04-03
+> **Statut :** DECISION | **Mis à jour :** 2026-04-03
 
-## 1. System Topology
+## 1. Topologie du système
 
-MnemoLite is a **dual-persona system**: it serves both as a REST API for a web UI and as an MCP (Model Context Protocol) server for AI agents. Both personas share the same data layer but run as separate processes with independent lifecycles.
+MnemoLite est un **système à double visage** : il sert à la fois d'API REST pour une interface web et de serveur MCP (Model Context Protocol) pour les agents IA. Les deux partagent la même couche de données mais tournent dans des processus séparés avec des cycles de vie indépendants.
 
 ```mermaid
 graph TB
-    subgraph "External Clients"
-        Browser[Web Browser]
-        Claude[Claude / MCP Client]
+    subgraph "Clients externes"
+        Browser[Navigateur Web]
+        Claude[Client MCP / IA]
     end
 
-    subgraph "Network Boundary"
-        Frontend[Frontend<br/>Vite dev / Nginx prod<br/>:3000 / :80]
-        API[REST API<br/>FastAPI + uvicorn<br/>:8001]
-        MCP[MCP Server<br/>FastMCP<br/>:8002]
+    subgraph "Frontend"
+        FE[Frontend Vue 3 Vite dev :3000 Nginx prod :80]
     end
 
-    subgraph "Data Layer"
-        PG[(PostgreSQL 16<br/>pgvector 0.8+<br/>pg_trgm)]
-        Redis[(Redis 7<br/>L2 Cache + Streams)]
+    subgraph "Backend"
+        API[API REST FastAPI :8001]
+        MCP[Serveur MCP FastMCP :8002]
     end
 
-    subgraph "Background"
-        Worker[Conversation Worker<br/>Redis Streams consumer]
+    subgraph "Données"
+        PG[(PostgreSQL 18 pgvector 0.8 pg_trgm)]
+        Redis[(Redis 7 Cache L2)]
     end
 
-    subgraph "Observability"
-        OObserve[OpenObserve<br/>:5080]
+    subgraph "Arrière-plan"
+        Worker[Worker conversation]
     end
 
-    Browser --> Frontend
-    Frontend -->|/api, /v1 proxy| API
-    Frontend -->|/mcp proxy| MCP
+    subgraph "Observabilité"
+        OObserve[OpenObserve :5080]
+    end
+
+    Browser --> FE
+    FE --> API
     Claude --> MCP
-
     API --> PG
     API --> Redis
     MCP --> PG
     MCP --> Redis
     Worker --> Redis
-    Worker -->|HTTP| API
-
+    Worker --> API
     API -.-> OObserve
     MCP -.-> OObserve
 
@@ -51,253 +51,215 @@ graph TB
     style Redis fill:#DC382D,color:#fff
 ```
 
-**Why two separate processes?** The REST API needs to serve HTTP to browsers (CORS, sessions, templates). The MCP server speaks JSON-RPC over stdio or Streamable HTTP — a fundamentally different protocol. Running them separately means the MCP server can be used via stdio by Claude Desktop without needing the REST API at all, and the REST API can be deployed without MCP. They share **no code at runtime** — each initializes its own connection pools, services, and caches.
+**Pourquoi deux processus séparés ?** L'API REST parle HTTP aux navigateurs (CORS, sessions). Le serveur MCP parle JSON-RPC en stdio ou Streamable HTTP — un protocole fondamentalement différent. Les exécuter séparément signifie que le serveur MCP peut être utilisé par Claude Desktop sans avoir besoin de l'API REST, et inversement. Ils ne partagent **aucun code à l'exécution** — chacun initialise ses propres pools de connexion, services et caches.
 
-**Network topology:** Two Docker networks isolate traffic. `backend` connects API, MCP, Worker, PostgreSQL, and Redis. `frontend` connects Frontend, API, MCP, and OpenObserve. PostgreSQL and Redis are **never** exposed to the frontend network — only the API and MCP can reach them.
+**Isolation réseau :** Deux réseaux Docker isolent le trafic. `backend` connecte API, MCP, Worker, PostgreSQL et Redis. `frontend` connecte Frontend, API, MCP et OpenObserve. PostgreSQL et Redis ne sont **jamais** exposés au réseau frontend.
 
-## 2. The Lifespan Pattern — How Services Actually Initialize
+## 2. Le pattern Lifespan — Comment les services s'initialisent
 
-Both the REST API and MCP server use the **async lifespan pattern** — not module-level singletons, not lazy init on first request. This is a deliberate choice: it means every service is either fully ready before the first request arrives, or the startup fails fast (for critical services) or degrades gracefully (for optional ones).
+L'API et le serveur MCP utilisent le **pattern lifespan asynchrone** — pas de singletons au niveau module, pas d'initialisation paresseuse à la première requête. Chaque service est soit entièrement prêt avant la première requête, soit le démarrage échoue rapidement (services critiques) ou se dégrade gracieusement (services optionnels).
 
 ```mermaid
 sequenceDiagram
-    participant Uvicorn
-    participant Lifespan
-    participant PG as PostgreSQL
-    participant Redis
-    participant Embedding as Embedding Models
-    participant LSP as LSP Servers
-    participant Services as Services Dict
+    participant U as Uvicorn
+    participant L as Lifespan
+    participant P as PostgreSQL 18
+    participant R as Redis
+    participant E as Modèles d'embedding
+    participant S as Services
 
-    Uvicorn->>Lifespan: async with lifespan(app)
-    Lifespan->>PG: create_async_engine(pool=20, max_overflow=10)
-    PG-->>Lifespan: connection test OK
-    Lifespan->>Redis: RedisCache.connect()
-    Redis-->>Lifespan: PONG
-    Lifespan->>Embedding: preload_models() [if EMBEDDING_MODE=real]
-    Embedding-->>Lifespan: TEXT + CODE models loaded (~660MB)
-    Lifespan->>LSP: LSPLifecycleManager.start()
-    LSP-->>Lifespan: Python LSP ready (PID)
-    LSP-->>Lifespan: TypeScript LSP ready (PID)
-    Lifespan->>Services: alert_monitoring_task = create_task()
-    Lifespan-->>Uvicorn: yield (ready)
+    U->>L: async with lifespan(app)
+    L->>P: create_async_engine pool=20
+    P-->>L: connexion OK
+    L->>R: RedisCache.connect()
+    R-->>L: PONG
+    L->>E: preload_models()
+    E-->>L: TEXT + CODE chargés (~660 MB)
+    L->>S: alert_monitoring_task créé
+    L-->>U: prêt (yield)
 
-    Note over Uvicorn,Servers: Requests served here
+    Note over U,S: Requêtes servies ici
 
-    Uvicorn->>Lifespan: shutdown signal
-    Lifespan->>Embedding: del embedding_service
-    Lifespan->>Redis: disconnect()
-    Lifespan->>LSP: shutdown()
-    Lifespan->>PG: engine.dispose()
-    Lifespan->>Services: cancel alert_monitoring_task
-    Lifespan-->>Uvicorn: cleanup complete
+    U->>L: signal d'arrêt
+    L->>E: suppression modèles
+    L->>R: déconnexion
+    L->>P: engine.dispose()
+    L->>S: tâche annulée
+    L-->>U: nettoyage terminé
 ```
 
-**The critical design decision:** `app.state` is the service locator. Every service initialized during lifespan is stored on `app.state` and retrieved by FastAPI's `Depends()` functions. This is **not** a proper DI container — it's a pragmatic compromise. The MCP server does the same thing but with a plain `services` dict injected into tool objects via `inject_services()`.
+**Décision critique :** `app.state` est le localisateur de services. Chaque service initialisé pendant le lifespan est stocké sur `app.state` et récupéré par les fonctions `Depends()` de FastAPI. Le serveur MCP fait la même chose avec un dictionnaire `services` injecté via `inject_services()`.
 
-**Failure modes during startup:**
+**Modes de défaillance au démarrage :**
 
-| Service | Failure Behavior | Rationale |
-|---------|-----------------|-----------|
-| PostgreSQL | Engine set to `None`, requests get 503 | Can't function without DB |
-| Redis | Warning logged, `app.state.redis_cache = None` | Optional — cache degrades to DB-only |
-| Embedding models | In production: `RuntimeError` (fail fast). In dev: warning, continue | Production correctness vs dev velocity |
-| LSP servers | Warning logged, `None` | Optional — code indexing works without type info |
-| Alert service | Warning logged, background task not started | Observability is non-critical |
+| Service | Comportement en cas d'échec | Raison |
+|---------|---------------------------|--------|
+| PostgreSQL | Engine = `None`, requêtes → 503 | Impossible de fonctionner sans DB |
+| Redis | Warning loggé, `redis_cache = None` | Optionnel — le cache se rabat sur la DB |
+| Modèles d'embedding | Prod : `RuntimeError`. Dev : warning | Correction prod vs vélocité dev |
+| Serveurs LSP | Warning loggé, `None` | Optionnel — l'indexation fonctionne sans |
+| Service d'alertes | Warning, tâche non démarrée | L'observabilité n'est pas critique |
 
-## 3. The Hybrid Search Pipeline — How It Actually Works
+## 3. Le pipeline de recherche hybride
 
-This is the most architecturally significant part of the system. The search pipeline is **not** a simple query — it's a multi-stage orchestration with parallel execution, caching, and fallback paths.
+C'est la partie la plus significative architecturalement. Le pipeline de recherche n'est **pas** une simple requête — c'est une orchestration multi-étapes avec exécution parallèle, cache et chemins de repli.
 
-### 3.1 Code Search Data Flow
+### 3.1 Recherche de code
 
 ```mermaid
 flowchart TD
-    Query[Search Query] --> CacheCheck{L2 Cache<br/>Redis HIT?}
+    Q[Requête] --> CC{Cache L2 HIT?}
+    CC -->|HIT| RC[Réponse en cache]
+    CC -->|MISS| PE[Exécution parallèle]
 
-    CacheCheck -->|HIT| ReturnCached[Return cached<br/>response]
-    CacheCheck -->|MISS| Parallel[Parallel Execution]
-
-    subgraph "Parallel Search (asyncio.gather)"
-        Lexical[Lexical Search<br/>pg_trgm ILIKE<br/>+ similarity()]
-        Vector[Vector Search<br/>HNSW halfvec<br/>cosine distance]
+    subgraph "Recherche parallèle"
+        L[Recherche lexicale pg_trgm]
+        V[Recherche vectorielle HNSW]
     end
 
-    Parallel --> Lexical
-    Parallel --> Vector
+    PE --> L
+    PE --> V
+    L --> F[Fusion RRF k=60]
+    V --> F
+    F --> R{Rerank BM25?}
+    R -->|Oui| B[BM25 top-30]
+    R -->|Non| Res
+    B --> Res[Résultat final]
+    Res --> CP[Cache L2 TTL=120s]
+    CP --> Resp[Réponse]
+    RC --> Resp
 
-    Lexical --> Fuse[RRF Fusion<br/>k=60, weighted]
-    Vector --> Fuse
-
-    Fuse --> Rerank{BM25<br/>Rerank?}
-    Rerank -->|Yes| BM25[BM25 reranking<br/>top-30 candidates]
-    Rerank -->|No| Final
-    BM25 --> Final[Build HybridSearchResult<br/>with score breakdown]
-
-    Final --> CachePopulate[Populate L2 cache<br/>TTL=120s]
-    CachePopulate --> Response[HybridSearchResponse]
-    ReturnCached --> Response
-
-    style Lexical fill:#4CAF50,color:#fff
-    style Vector fill:#2196F3,color:#fff
-    style Fuse fill:#FF9800,color:#fff
-    style BM25 fill:#9C27B0,color:#fff
+    style L fill:#4CAF50,color:#fff
+    style V fill:#2196F3,color:#fff
+    style F fill:#FF9800,color:#fff
+    style B fill:#9C27B0,color:#fff
 ```
 
-**How parallel execution actually works:**
+**Exécution parallèle :** Les recherches lexicale et vectorielle démarrent simultanément via `asyncio.gather()`. Aucune n'attend l'autre.
 
-```python
-# Both searches start simultaneously — no waiting for one to finish
-tasks = []
-if enable_lexical:
-    tasks.append(_timed_lexical_search(query, filters, limit=100))
-if enable_vector:
-    tasks.append(_timed_vector_search(embedding, filters, limit=100))
+**Pourquoi RRF plutôt que la normalisation des scores ?** Les scores lexicaux (similarité trigramme 0.0–1.0) et vectoriels (distance cosinus 0.0–2.0) vivent sur des **échelles incomparables**. Les normaliser nécessiterait de connaître la distribution des scores de tout le corpus. RRF contourne le problème : il ne regarde que la **position dans le classement**, pas les scores absolus. La formule `1 / (k + rang)` avec `k=60` est le standard industriel.
 
-results = await asyncio.gather(*tasks)  # Both run concurrently
-```
+**Le compromis BM25 :** Après la fusion RRF, les 30 meilleurs candidats sont rerankés avec BM25 — une implémentation pure Python sans dépendances ML. Choisi plutôt qu'un cross-encoder car :
+- Le cross-encoder nécessiterait ~500 MB de modèle supplémentaire
+- Le cold start serait de 10-15 secondes
+- BM25 est ~100× plus rapide pour 20 documents
+- La différence de qualité est marginale pour la recherche de code
 
-The `candidate_pool_size` (default 100) is **not** the number of results returned — it's the number of candidates each search method fetches before fusion. RRF then fuses these 200 candidates (up to 100 from each method) down to the `top_k` (default 10) final results.
+### 3.2 Recherche de mémoires
 
-**Why RRF (Reciprocal Rank Fusion) instead of score normalization?** Lexical scores (trigram similarity 0.0–1.0) and vector scores (cosine distance 0.0–2.0, converted to similarity) live on **incomparable scales**. Normalizing them would require knowing the score distribution of the entire corpus. RRF sidesteps this entirely: it only cares about **rank position**, not absolute scores. The formula `1 / (k + rank)` with `k=60` is the industry standard — it gives diminishing returns for lower ranks while preventing any single method from dominating.
-
-**The BM25 reranking trade-off:** After RRF fusion, the top-30 candidates are reranked using BM25 — a pure-Python implementation with zero ML dependencies. This was chosen over a cross-encoder reranker because:
-- Cross-encoder would need another ~500MB model download
-- Cold start would be 10-15 seconds
-- BM25 is ~100x faster for top-20 documents
-- Quality difference is marginal for code search use cases
-
-### 3.2 Memory Search — Same Pipeline, Different Data
-
-Memory search uses the **identical RRF fusion architecture** but with different data sources:
+Même architecture RRF, mais avec des sources de données différentes :
 
 ```mermaid
 flowchart LR
-    subgraph "Memory Lexical"
-        ILIKE[ILIKE on title<br/>+ embedding_source]
-        TRGM[pg_trgm similarity<br/>GIN index]
+    subgraph "Lexical mémoires"
+        I[ILIKE titre + source]
+        T[pg_trgm similarité GIN]
     end
-
-    subgraph "Memory Vector"
-        HNSW[HNSW halfvec index<br/>embedding_half column]
+    subgraph "Vectoriel mémoires"
+        H[HNSW halfvec index]
     end
-
-    ILIKE --> MemFuse[RRF Fusion]
-    TRGM --> MemFuse
-    HNSW --> MemFuse
-
-    MemFuse --> MemDecay[Temporal Decay<br/>exponential scoring]
-    MemDecay --> MemRerank[BM25 Rerank<br/>optional]
-    MemRerank --> MemResult[HybridMemorySearchResult]
+    I --> MF[Fusion RRF]
+    T --> MF
+    H --> MF
+    MF --> MD[Decay temporel]
+    MD --> MR[Rerank BM25 optionnel]
+    MR --> ResM[Résultat mémoire]
 ```
 
-**Key difference from code search:** Memory search applies **temporal decay** after reranking. The `MemoryDecayService` applies exponential decay based on `created_at` — older memories get progressively lower scores. This is configurable per tag pattern via `configure_decay()`, allowing `sys:core` memories to be permanent (decay_rate=0.0) while `sys:history` memories decay with a ~7-day half-life.
+**Différence clé :** La recherche mémoire applique un **decay temporel** après le reranking. Le `MemoryDecayService` applique un decay exponentiel basé sur `created_at` — les anciennes mémoires obtiennent progressivement des scores plus bas. Configurable par tag via `configure_decay()`, permettant aux mémoires `sys:core` d'être permanentes (decay=0.0) tandis que `sys:history` decay avec une demi-vie de ~14 jours.
 
-**The vector similarity threshold filter:** Memory search filters out vector results below `0.1` similarity **before** fusion. This prevents semantic noise from polluting the RRF results — a crucial safeguard because low-similarity vector matches can rank higher than high-quality lexical matches in the fusion step.
+## 4. Architecture du cache à trois couches
 
-## 4. The Three-Layer Cache Architecture
-
-The cache is not a single layer — it's a **cascade** with automatic promotion:
+Le cache n'est pas une couche unique — c'est une **cascade** avec promotion automatique :
 
 ```mermaid
 flowchart TD
-    Request[Request for chunks] --> L1{L1 Check<br/>In-memory LRU<br/>100MB}
-
-    L1 -->|HIT <0.01ms| Return1[Return immediately]
-    L1 -->|MISS| L2{L2 Check<br/>Redis<br/>2GB, TTL=300s}
-
-    L2 -->|HIT 1-5ms| Promote[Promote to L1<br/>warm → hot migration]
-    Promote --> Return2[Return + track promotion]
-    L2 -->|MISS| L3[L3: PostgreSQL<br/>100-200ms]
-
-    L3 --> WriteThrough[Write-through:<br/>populate L1 + L2]
-    WriteThrough --> Return3[Return]
+    Req[Requête] --> L1{L1 Mémoire LRU 100 MB}
+    L1 -->|HIT <0,01ms| R1[Retour immédiat]
+    L1 -->|MISS| L2{L2 Redis 2 GB TTL=300s}
+    L2 -->|HIT 1-5ms| Pr[Promotion vers L1]
+    Pr --> R2[Retour]
+    L2 -->|MISS| L3[PostgreSQL 100-200ms]
+    L3 --> WT[Write-through L1 + L2]
+    WT --> R3[Retour]
 
     style L1 fill:#4CAF50,color:#fff
     style L2 fill:#FF9800,color:#fff
     style L3 fill:#2196F3,color:#fff
 ```
 
-**Cache key strategy:** The key is `chunks:{file_path}:{md5(source_code)}`. The MD5 hash of the source code is included so that **any code change invalidates the cache automatically** — no manual invalidation needed for content changes. Manual invalidation (via `invalidate()`) is only needed when the file path changes or for administrative flushes.
+**Stratégie de clé de cache :** `chunks:{chemin_fichier}:{md5(code_source)}`. Le hash MD5 du code source est inclus pour que **tout changement de code invalide le cache automatiquement** — pas d'invalidation manuelle nécessaire pour les changements de contenu.
 
-**The combined hit rate formula:** `L1 + (1 - L1) × L2`. If L1 has 70% hit rate and L2 has 80% hit rate on the remaining 30%, the effective combined rate is `70% + (30% × 80%) = 94%`. This is tracked and exposed via the `/v1/cache/stats` endpoint.
+**Taux de hit combiné :** `L1 + (1 - L1) × L2`. Si L1 a 70 % de hit rate et L2 a 80 % sur les 30 % restants, le taux effectif est `70 % + (30 % × 80 %) = 94 %`.
 
-**Search result caching (separate from chunk caching):** Search results are cached in Redis with a separate key format and TTL of 120 seconds. This is much shorter than chunk caching (300s) because search results are more likely to become stale as the index changes.
+## 5. Architecture duale d'embedding — Pourquoi deux modèles
 
-## 5. Dual Embedding Architecture — Why Two Models
+Le système utilise **deux modèles d'embedding simultanément**, chacun optimisé pour un domaine différent :
 
-The system uses **two embedding models simultaneously**, each optimized for a different domain:
+| Modèle | Domaine | Paramètres | Dimensions | RAM |
+|--------|---------|-----------|------------|-----|
+| nomic-ai/nomic-embed-text-v1.5 | Texte (docs, conversations) | 137M | 768 | ~260 MB |
+| jinaai/jina-embeddings-v2-base-code | Code (fonctions, classes) | 161M | 768 | ~400 MB |
 
-| Model | Domain | Parameters | Dimensions | RAM |
-|-------|--------|-----------|------------|-----|
-| nomic-ai/nomic-embed-text-v1.5 | Text (docs, conversations) | 137M | 768 | ~260MB |
-| jinaai/jina-embeddings-v2-base-code | Code (functions, classes) | 161M | 768 | ~400MB |
+**Pourquoi pas un seul modèle ?** Les modèles texte généraux performent mal sur le code car ils ne comprennent pas la sémantique des langages de programmation. Les modèles code ne comprennent pas bien les requêtes en langage naturel. En maintenant les deux, le système peut :
+- Rechercher du code avec des embeddings code (capture la structure sémantique)
+- Rechercher du code avec des embeddings texte (capture les docstrings, commentaires)
+- Fusionner les deux résultats via RRF pour une couverture complète
 
-**Why not a single model?** General-purpose text models perform poorly on code because they don't understand programming language semantics (variable names, API patterns, control flow). Code-specific models don't understand natural language queries well. By maintaining both, the system can:
-- Search code with code embeddings (captures semantic structure)
-- Search code with text embeddings (captures docstrings, comments)
-- Fuse both results via RRF for comprehensive coverage
+**L'optimisation halfvec :** Les embeddings sont stockés en `vector(768)` (float32, 3 KB par embedding) mais **recherchés** via des colonnes `halfvec(768)` (float16, 1,5 KB). Un trigger PostgreSQL (`sync_halfvec_embeddings`) convertit automatiquement float32 → halfvec à l'INSERT/UPDATE. Cela donne :
+- 50 % de réduction de stockage par ligne
+- 50 % de réduction de taille d'index HNSW
+- 99,2 % de rappel conservé
+- 2× d'amélioration du QPS des requêtes
 
-**The halfvec optimization:** Embeddings are stored in PostgreSQL as `vector(768)` (float32, 3KB per embedding) but **searched** via `halfvec(768)` columns (float16, 1.5KB). A database trigger (`sync_halfvec_embeddings`) auto-converts float32 to halfvec on INSERT/UPDATE. This gives:
-- 50% storage reduction per row
-- 50% HNSW index size reduction
-- 99.2% recall retained
-- 2x query QPS improvement
+**Circuit breakers indépendants :** Chaque modèle a son propre circuit breaker (seuil=5 échecs, récupération=60s). Si le modèle CODE échoue, le modèle TEXT continue de fonctionner.
 
-The application layer **doesn't know about halfvec** — it writes float32, PostgreSQL handles the conversion. This is a zero-code-change optimization.
+**Mode mock :** Quand `EMBEDDING_MODE=mock`, le service génère des vecteurs aléatoires déterministes à partir du hash du texte. Cela permet de tester sans télécharger 660 MB de modèles.
 
-**Circuit breakers per model:** Each model has an independent circuit breaker (threshold=5 failures, recovery=60s). If the CODE model fails repeatedly, the TEXT model continues working. Before this was a single circuit breaker — one model's failure would block both.
+## 6. Inversion de dépendance — La couche Protocol
 
-**Mock mode:** When `EMBEDDING_MODE=mock`, the service generates deterministic random vectors from the input text hash. This enables testing without downloading 660MB of models. The vectors are normalized to unit length so similarity calculations still produce valid cosine scores.
-
-## 6. Dependency Inversion — The Protocol Layer
-
-The system uses Python `Protocol` classes to define interfaces, then concrete implementations are injected via FastAPI's `Depends()`:
+Le système utilise des classes `Protocol` Python pour définir des interfaces, puis des implémentations concrètes sont injectées via `Depends()` de FastAPI :
 
 ```mermaid
 flowchart TD
-    subgraph "Interfaces (protocols)"
+    subgraph "Interfaces (protocoles)"
         EP[EventRepositoryProtocol]
         ESP[EmbeddingServiceProtocol]
         MSSP[MemorySearchServiceProtocol]
-        EPP[EventProcessorProtocol]
     end
 
-    subgraph "Concrete Implementations"
+    subgraph "Implémentations concrètes"
         ER[EventRepository]
         DES[DualEmbeddingService]
         DEA[DualEmbeddingServiceAdapter]
         MSS[MemorySearchService]
-        EProc[EventProcessor]
     end
 
     subgraph "Routes"
-        Routes[Route Handlers]
+        RT[Route Handlers]
     end
 
     EP -.-> ER
     ESP -.-> DES
     ESP -.-> DEA
     MSSP -.-> MSS
-    EPP -.-> EProc
 
-    Routes -->|Depends| EP
-    Routes -->|Depends| ESP
-    Routes -->|Depends| MSSP
-    Routes -->|Depends| EPP
+    RT -->|Depends| EP
+    RT -->|Depends| ESP
+    RT -->|Depends| MSSP
 
-    DEA -.->|wraps| DES
+    DEA -.->|enveloppe| DES
 
     style EP fill:#9C27B0,color:#fff
     style ESP fill:#9C27B0,color:#fff
     style DEA fill:#FF9800,color:#fff
 ```
 
-**The Adapter pattern for DualEmbeddingService:** The `DualEmbeddingService` has a different API (`generate_embedding(text, domain)` returning `Dict[str, List[float]]`) than the legacy `EmbeddingServiceProtocol` (`generate_embedding(text)` returning `List[float]`). The `DualEmbeddingServiceAdapter` wraps the dual service and translates calls — existing code (EventService, MemorySearchService) works without changes.
+**Le pattern Adapter pour DualEmbeddingService :** Le `DualEmbeddingService` a une API différente (`generate_embedding(text, domain)` retournant `Dict[str, List[float]]`) que le `EmbeddingServiceProtocol` legacy (`generate_embedding(text)` retournant `List[float]`). Le `DualEmbeddingServiceAdapter` enveloppe le service dual et traduit les appels — le code existant fonctionne sans changement.
 
-**The MCP server doesn't use FastAPI Depends:** Instead, it builds a `services` dict during lifespan and injects it into each tool/resource via `tool.inject_services(services)`. This is because FastMCP tools don't participate in FastAPI's dependency injection system.
+**Le serveur MCP n'utilise pas `Depends()` de FastAPI :** Il construit un dictionnaire `services` pendant le lifespan et l'injecte dans chaque outil/ressource via `tool.inject_services(services)`. C'est parce que les outils FastMCP ne participent pas au système d'injection de dépendances de FastAPI.
 
-## 7. The Database Schema — What's Actually Stored
+## 7. Schéma de base de données
 
 ```mermaid
 erDiagram
@@ -395,126 +357,123 @@ erDiagram
         TIMESTAMPTZ recorded_at
     }
 
-    events ||--o{ memories : "generates"
-    code_chunks ||--o{ graph_nodes : "linked to"
+    events ||--o{ memories : "génère"
+    code_chunks ||--o{ graph_nodes : "lié à"
     graph_nodes ||--o{ graph_edges : "source"
-    graph_nodes ||--o{ graph_edges : "target"
+    graph_nodes ||--o{ graph_edges : "cible"
 ```
 
-**Key schema decisions:**
+**Décisions clés du schéma :**
 
-- **`events` table** is the original data store — it was the first table. Memories were later derived from events via the `EventProcessor`. The `MemoryRepository` now uses SQLAlchemy Core (not ORM) for raw SQL control, especially for pgvector operations.
+- **Table `events`** est le store original — c'était la première table. Les mémoires ont été dérivées plus tard via l'`EventProcessor`. Le `MemoryRepository` utilise SQLAlchemy Core (pas d'ORM) pour le contrôle SQL brut, surtout pour les opérations pgvector.
 
-- **`memories` table** has both `embedding` (float32 vector) and `embedding_half` (float16 halfvec). The trigger keeps them in sync. The `embedding_source` field is a focused text summary used for computing embeddings — separate from the full `content` — enabling better embedding quality.
+- **Table `memories`** a à la fois `embedding` (float32 vector) et `embedding_half` (float16 halfvec). Le trigger les garde synchronisés. Le champ `embedding_source` est un résumé textuel focalisé utilisé pour calculer les embeddings — séparé du `content` complet — permettant une meilleure qualité d'embedding.
 
-- **`code_chunks`** has **four** embedding columns: `embedding_text`, `embedding_code` (float32, for writing) and `embedding_text_half`, `embedding_code_half` (float16, for reading/searching). The `repository` and `return_type` columns are **generated always as** from JSONB metadata — this turns O(n) JSONB extraction into O(log n) B-tree index lookups.
+- **Table `code_chunks`** a **quatre** colonnes d'embedding : `embedding_text`, `embedding_code` (float32, pour l'écriture) et `embedding_text_half`, `embedding_code_half` (float16, pour la lecture/recherche). Les colonnes `repository` et `return_type` sont **générées automatiquement** depuis les métadonnées JSONB — cela transforme une extraction JSONB O(n) en recherche B-tree O(log n).
 
-- **`graph_nodes` and `graph_edges`** form the code dependency graph. Nodes are extracted by tree-sitter (parsing) and LSP servers (type information). Edges represent `calls`, `imports`, `inherits` relationships. The graph is traversed via BFS for path-finding and DFS for caller/callee discovery.
+- **Tables `graph_nodes` et `graph_edges`** forment le graphe de dépendance de code. Les nœuds sont extraits par tree-sitter (parsing) et les serveurs LSP (informations de type). Les arêtes représentent les relations `calls`, `imports`, `inherits`. Le graphe est parcouru via BFS pour la recherche de chemin et DFS pour la découverte d'appelants/appelés.
 
-## 8. The MCP Server — A Second Entry Point
+## 8. Le serveur MCP — Un second point d'entrée
 
-The MCP server is **not** a wrapper around the REST API. It's a completely separate process with its own:
-- Database connection pool (asyncpg, not SQLAlchemy)
-- Redis client
-- Service instances
-- Lifecycle management
+Le serveur MCP n'est **pas** un wrapper autour de l'API REST. C'est un processus complètement séparé avec son propre :
+- Pool de connexions DB (asyncpg, pas SQLAlchemy)
+- Client Redis
+- Instances de services
+- Gestion du cycle de vie
 
 ```mermaid
 flowchart TD
-    subgraph "MCP Server Process"
-        FastMCP[FastMCP Server]
-        Lifespan[server_lifespan()]
-        Tools[Tools]
-        Resources[Resources]
-        Prompts[Prompts]
+    subgraph "Processus Serveur MCP"
+        FMCP[FastMCP Server]
+        LSP[server_lifespan()]
+        TO[Outils 28]
+        RE[Ressources 12]
+        PR[Prompts]
 
-        subgraph "Service Dict"
-            SDB[db: asyncpg pool]
-            SRedis[redis: aioredis client]
-            SEmbed[embedding_service: DualEmbeddingService]
-            SCodeIdx[code_indexing_service]
-            SChunkCache[chunk_cache: CascadeCache]
-            SMemRepo[memory_repository]
-            SMemSearch[hybrid_memory_search_service]
-            SGraph[graph_traversal_service]
-            SMetrics[metrics_collector]
+        subgraph "Dictionnaire de services"
+            SDB[db: pool asyncpg]
+            SR[redis: client aioredis]
+            SE[embedding_service]
+            SCI[code_indexing_service]
+            SCC[chunk_cache: CascadeCache]
+            SMR[memory_repository]
+            SMS[hybrid_memory_search]
+            SG[graph_traversal_service]
+            SM[metrics_collector]
         end
 
-        Lifespan --> SDB
-        Lifespan --> SRedis
-        Lifespan --> SEmbed
-        Lifespan --> SCodeIdx
-        Lifespan --> SChunkCache
-        Lifespan --> SMemRepo
-        Lifespan --> SMemSearch
-        Lifespan --> SGraph
-        Lifespan --> SMetrics
+        LSP --> SDB
+        LSP --> SR
+        LSP --> SE
+        LSP --> SCI
+        LSP --> SCC
+        LSP --> SMR
+        LSP --> SMS
+        LSP --> SG
+        LSP --> SM
 
-        SDB --> Tools
-        SRedis --> Tools
-        SEmbed --> Tools
-        SCodeIdx --> Tools
-        SChunkCache --> Tools
-        SMemRepo --> Tools
-        SMemSearch --> Tools
-        SGraph --> Tools
-        SMetrics --> Tools
+        SDB --> TO
+        SR --> TO
+        SE --> TO
+        SCI --> TO
+        SCC --> TO
+        SMR --> TO
+        SMS --> TO
+        SG --> TO
+        SM --> TO
 
-        Tools --> FastMCP
-        Resources --> FastMCP
-        Prompts --> FastMCP
+        TO --> FMCP
+        RE --> FMCP
+        PR --> FMCP
     end
 
-    ClaudeClient[Claude Desktop / Agent] -->|stdio or HTTP| FastMCP
+    Claude[Client IA / MCP] -->|stdio ou HTTP| FMCP
 ```
 
-**Why asyncpg directly instead of SQLAlchemy?** The MCP server uses raw asyncpg for its database pool because it doesn't need SQLAlchemy's ORM features — it only needs connection pooling and raw SQL execution. This reduces memory footprint (important for the 8GB container limit) and avoids the SQLAlchemy initialization overhead.
+**Pourquoi asyncpg directement plutôt que SQLAlchemy ?** Le serveur MCP utilise asyncpg brut car il n'a pas besoin des fonctionnalités ORM de SQLAlchemy — il a juste besoin d'un pool de connexions et d'exécution SQL brute. Cela réduit l'empreinte mémoire (important pour la limite de 8 GB du container) et évite le surcoût d'initialisation de SQLAlchemy.
 
-**Service injection pattern:** Each MCP tool/resource is a singleton with an `inject_services(services)` method and an `execute(...)` method. The lifespan builds the services dict, then calls `inject_services` on every registered component. This is essentially **manual constructor injection** — the tools receive their dependencies at startup, not at call time.
-
-## 9. Frontend-to-API Communication
+## 9. Communication Frontend vers API
 
 ```mermaid
 flowchart LR
-    Browser[Browser :3000] -->|GET /api/v1/*| Vite[Vite Dev Server]
-    Browser -->|GET /mcp| Vite
+    Br[Navigateur :3000] -->|GET /api/v1/*| Vi[Vite Dev Server]
+    Br -->|GET /mcp| Vi
+    Vi -->|proxy /api → :8001| AP[FastAPI :8001]
+    Vi -->|proxy /v1 → :8001| AP
+    Vi -->|proxy /health → :8001| AP
+    Vi -->|proxy /mcp → :8002| MC[FastMCP :8002]
 
-    Vite -->|proxy /api → :8001| API[FastAPI :8001]
-    Vite -->|proxy /v1 → :8001| API
-    Vite -->|proxy /health → :8001| API
-    Vite -->|proxy /mcp → :8002| MCP[FastMCP :8002]
-
-    style Vite fill:#646BFF,color:#fff
-    style API fill:#009688,color:#fff
-    style MCP fill:#9C27B0,color:#fff
+    style Vi fill:#646BFF,color:#fff
+    style AP fill:#009688,color:#fff
+    style MC fill:#9C27B0,color:#fff
 ```
 
-**The proxy strategy:** In development, the Vite dev server proxies all API requests to avoid CORS issues. The frontend code uses **relative paths** (`/api/v1/...`) — the Vite proxy rewrites these to `http://localhost:8001/api/v1/...`. In production, the Nginx container serves the built static files and proxies API requests directly.
+**Stratégie de proxy :** En développement, le serveur Vite proxy toutes les requêtes API pour éviter les problèmes CORS. Le code frontend utilise des **chemins relatifs** (`/api/v1/...`) — le proxy Vite les réécrit vers `http://localhost:8001/api/v1/...`. En production, le container Nginx sert les fichiers statiques construits et proxy les requêtes API directement.
 
-**Two frontend profiles:** `docker-compose --profile dev` runs the Vite dev server with HMR (Hot Module Replacement). `docker-compose --profile prod` runs a pre-built Nginx container. They're mutually exclusive — you never run both.
+**Deux profils frontend :** `docker compose --profile dev` lance le serveur Vite avec HMR. `docker compose --profile prod` lance un container Nginx pré-construit. Ils sont mutuellement exclusifs.
 
-## 10. Failure Modes and Graceful Degradation
+## 10. Modes de défaillance et dégradation gracieuse
 
-The system is designed to **degrade gracefully** at every layer:
+Le système est conçu pour **se dégrader gracieusement** à chaque couche :
 
 ```mermaid
 flowchart TD
-    subgraph "Failure Scenarios"
-        F1[PostgreSQL Down]
-        F2[Redis Down]
-        F3[Embedding Model OOM]
-        F4[LSP Server Crash]
-        F5[BM25 Rerank Error]
-        F6[Vector Search Timeout]
+    subgraph "Scénarios de panne"
+        F1[PostgreSQL HS]
+        F2[Redis HS]
+        F3[Modèle embedding OOM]
+        F4[LSP crash]
+        F5[BM25 erreur]
+        F6[Timeout vectoriel]
     end
 
-    subgraph "Degradation Paths"
-        D1[All requests → 503<br/>Health check fails]
-        D2[Cache miss → direct DB<br/>Slower but functional]
-        D3[Circuit breaker opens<br/>→ mock mode or error]
-        D4[Type extraction skipped<br/>Indexing continues]
-        D5[RRF order used<br/>Search still works]
-        D6[Lexical-only fallback<br/>if no embedding provided]
+    subgraph "Chemins de dégradation"
+        D1[Toutes requêtes → 503]
+        D2[Cache miss → DB directe]
+        D3[Circuit breaker ouvert → mode mock]
+        D4[Extraction type ignorée]
+        D5[Ordre RRF utilisé]
+        D6[Repli lexical seul]
     end
 
     F1 --> D1
@@ -525,44 +484,42 @@ flowchart TD
     F6 --> D6
 ```
 
-**The most important degradation path:** If vector search is enabled but no embedding is available (model not loaded, circuit breaker open, mock mode), the system **silently falls back to lexical-only search** with a warning log. The user gets results — just not the semantic ones. This is better than returning an error.
+**Le chemin de dégradation le plus important :** Si la recherche vectorielle est activée mais aucun embedding n'est disponible (modèle non chargé, circuit breaker ouvert, mode mock), le système **se rabat silencieusement sur la recherche lexicale seule** avec un warning dans les logs. L'utilisateur obtient des résultats — juste pas les sémantiques. C'est mieux que de retourner une erreur.
 
-**Redis failure is invisible:** If Redis is down at startup, the warning is logged and `app.state.redis_cache = None`. All cache checks become no-ops — the system queries PostgreSQL directly. No errors are thrown to the user.
+**L'échec Redis est invisible :** Si Redis est HS au démarrage, le warning est loggé et `app.state.redis_cache = None`. Tous les checks de cache deviennent des no-ops — le système interroge PostgreSQL directement. Aucune erreur n'est lancée à l'utilisateur.
 
-**The circuit breaker recovery:** When an embedding model fails 5 times, its circuit breaker opens. Subsequent requests get a clear error message: "TEXT embedding circuit breaker is OPEN. Model loading temporarily unavailable (will retry after 60s)." After 60 seconds, the breaker enters half-open state and allows one test request. If it succeeds, the breaker closes. If it fails, the breaker reopens.
+## 11. Caractéristiques de scaling
 
-## 11. Scaling Characteristics
+| Couche | Actuel | Limite de scaling | Goulot d'étranglement |
+|--------|--------|-------------------|----------------------|
+| API (uvicorn) | 1 worker, 2 CPU, 24 GB RAM | Horizontal (workers multiples) | CPU pour génération d'embeddings |
+| Serveur MCP | 1 instance, 1 CPU, 8 GB RAM | Horizontal (stateless) | Taille du pool de connexions (10) |
+| PostgreSQL 18 | 1 CPU, 2 GB RAM, pool=20 | Read replicas, pool de connexions | Scan d'index HNSW sur gros datasets |
+| Redis | 1 instance | Redis Cluster | Mémoire (config 2 GB) |
+| Modèles d'embedding | CPU-only, chargés à la demande | Accélération GPU | RAM (660 MB par instance) |
+| Serveurs LSP | 2 processus (Python + TS) | Isolation par workspace | Mémoire processus (~200 MB chacun) |
 
-| Layer | Current | Scaling Limit | Bottleneck |
-|-------|---------|--------------|------------|
-| API (uvicorn) | Single worker, 2 CPU, 24GB RAM | Horizontal (multiple workers) | CPU for embedding generation |
-| MCP Server | Single instance, 1 CPU, 8GB RAM | Horizontal (stateless) | Connection pool size (10) |
-| PostgreSQL | 1 CPU, 2GB RAM, pool=20 | Read replicas, connection pooling | HNSW index scan on large datasets |
-| Redis | Single instance | Redis Cluster | Memory (2GB config) |
-| Embedding Models | CPU-only, lazy-loaded | GPU offload | RAM (660MB per instance) |
-| LSP Servers | 2 processes (Python + TS) | Workspace isolation | Process memory (~200MB each) |
+**Le goulot d'étranglement de la génération d'embeddings :** Générer un seul embedding prend 50-200 ms sur CPU. Pour un projet de 1000 fichiers avec 50 000 chunks, l'indexation complète prend des heures. Le système mitige cela avec :
+- Encodage par batch (10-50× plus rapide que les appels individuels)
+- Indexation incrémentale (seulement les fichiers modifiés)
+- Redis Streams pour l'indexation en arrière-plan (EPIC-27)
+- `torch.no_grad()` pour empêcher l'accumulation de mémoire
 
-**The embedding generation bottleneck:** Generating a single embedding takes 50-200ms on CPU. For a 1000-file project with 50,000 chunks, full indexing takes hours. The system mitigates this with:
-- Batch encoding (10-50x faster than individual calls)
-- Incremental indexing (only re-index changed files)
-- Redis Streams for background indexing (EPIC-27)
-- `torch.no_grad()` to prevent memory accumulation
+**Scaling de l'index HNSW :** L'index HNSW sur les colonnes halfvec avec `m=16, ef_construction=128` gère ~100k chunks efficacement. Au-delà, `ef_search` doit être augmenté (actuellement 100) pour un meilleur rappel, ce qui augmente la latence linéairement.
 
-**The HNSW index scaling:** The HNSW index on halfvec columns with `m=16, ef_construction=128` handles ~100k chunks efficiently. Beyond that, `ef_search` should be increased (currently 100) for better recall, which increases query latency linearly.
+## 12. Résumé des compromis
 
-## 12. Trade-offs Summary
-
-| Decision | Sacrificed | Gained |
-|----------|-----------|--------|
-| SQLAlchemy Core over ORM | Developer ergonomics, type safety | Raw SQL control for pgvector, faster queries |
-| `app.state` service locator over DI container | Testability, explicitness | Simplicity, no extra dependency |
-| Two separate processes (API + MCP) | Resource efficiency | Independent lifecycles, protocol isolation |
-| RRF over score normalization | Theoretical optimality | No corpus-wide score distribution needed |
-| BM25 over cross-encoder reranker | Reranking quality | Zero ML deps, instant startup, 100x faster |
-| halfvec for search, vector for writes | Write-time CPU for conversion | 50% storage, 2x query QPS |
-| MD5 hash in cache keys | Hash computation overhead | Automatic content-based invalidation |
-| Lazy model loading over eager | Cold start on first request | Faster startup, models only loaded if needed |
-| Mock embedding mode | Test realism | No model download for CI/CD |
-| PostgreSQL triggers for halfvec sync | DB-side computation | Zero app code changes for halfvec |
-| Generated columns from JSONB | Storage overhead (redundant data) | O(log n) lookups instead of O(n) scans |
-| Independent circuit breakers per model | Slightly more complex state management | Failures don't cascade between domains |
+| Décision | Sacrifié | Gagné |
+|----------|----------|-------|
+| SQLAlchemy Core plutôt qu'ORM | Ergonomie développeur, sécurité des types | Contrôle SQL brut pour pgvector, requêtes plus rapides |
+| Localisateur `app.state` plutôt que container DI | Testabilité, explicitation | Simplicité, pas de dépendance supplémentaire |
+| Deux processus séparés (API + MCP) | Efficacité des ressources | Cycles de vie indépendants, isolation des protocoles |
+| RRF plutôt que normalisation des scores | Optimalité théorique | Pas besoin de distribution des scores du corpus |
+| BM25 plutôt que cross-encoder | Qualité de reranking | Zéro dépendance ML, démarrage instant, 100× plus rapide |
+| halfvec pour la recherche, vector pour l'écriture | CPU à la conversion | 50 % de stockage, 2× de QPS |
+| Hash MD5 dans les clés de cache | Surcoût de calcul | Invalidation automatique basée sur le contenu |
+| Chargement paresseux des modèles | Cold start à la première requête | Démarrage plus rapide, modèles chargés si nécessaire |
+| Mode mock d'embedding | Réalisme des tests | Pas de téléchargement de modèles pour CI/CD |
+| Triggers PostgreSQL pour sync halfvec | Calcul côté DB | Zéro changement de code app pour halfvec |
+| Colonnes générées depuis JSONB | Surcoût de stockage (données redondantes) | Recherches O(log n) au lieu de O(n) |
+| Circuit breakers indépendants par modèle | Gestion d'état légèrement plus complexe | Les échecs ne se propagent pas entre domaines |

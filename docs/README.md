@@ -1,8 +1,8 @@
 # MnemoLite Documentation
 
 ## 🏗️ Architecture
-- [Architecture Overview](ARCHITECTURE.md) — Complete system architecture
-- [Architecture Decisions](01_DECISIONS/) — ADRs and technical choices
+- [Architecture complète](ARCHITECTURE.md) — Topologie, pipelines, cache, DB, MCP, compromis
+- [Décisions d'architecture](01_DECISIONS/) — ADRs et choix techniques
 
 ## 🚀 Getting Started
 - [Quick Start](02_GUIDES/QUICKSTART.md) — Get running in minutes
