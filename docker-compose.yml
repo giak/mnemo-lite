@@ -91,6 +91,14 @@ services:
       OTLP_LOGS_ENDPOINT: http://openobserve:5080/api/default/logs/_json
       O2_USER: ${O2_USER:-admin@mnemolite.local}
       O2_PASSWORD: ${O2_PASSWORD:-Complexpass#123}
+      LM_STUDIO_URL: http://host.docker.internal:1234/v1
+      LM_STUDIO_MODEL: qwen2.5-7b-instruct
+      LM_STUDIO_TIMEOUT: "30"
+      ENTITY_EXTRACTION_ENABLED: ${ENTITY_EXTRACTION_ENABLED:-true}
+      ENTITY_EXTRACTION_MEMORY_TYPES: ${ENTITY_EXTRACTION_MEMORY_TYPES:-decision,reference,note,investigation}
+      ENTITY_EXTRACTION_SYSTEM_TAGS: ${ENTITY_EXTRACTION_SYSTEM_TAGS:-sys:core,sys:anchor,sys:pattern}
+      QUERY_UNDERSTANDING_ENABLED: ${QUERY_UNDERSTANDING_ENABLED:-true}
+      QUERY_UNDERSTANDING_FALLBACK: ${QUERY_UNDERSTANDING_FALLBACK:-true}
     depends_on:
       db:
         condition: service_healthy
