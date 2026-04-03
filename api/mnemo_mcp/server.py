@@ -455,11 +455,35 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
             logger.warning("mcp.query_understanding_service.initialization_failed", error=str(e))
             services["query_understanding_service"] = None
 
+        # EPIC-28: Register entity extraction MCP tools
+        try:
+            from mnemo_mcp.tools.entity_extraction_tool import ExtractEntitiesTool, SearchByEntityTool
+
+            if sqlalchemy_engine and services.get("lm_studio_client"):
+                extract_tool = ExtractEntitiesTool(
+                    engine=sqlalchemy_engine,
+                    lm_client=services["lm_studio_client"],
+                )
+                search_entity_tool = SearchByEntityTool(engine=sqlalchemy_engine)
+                services["extract_entities_tool"] = extract_tool
+                services["search_by_entity_tool"] = search_entity_tool
+                logger.info("mcp.entity_tools.registered")
+            else:
+                services["extract_entities_tool"] = None
+                services["search_by_entity_tool"] = None
+
+        except Exception as e:
+            logger.warning("mcp.entity_tools.registration_failed", error=str(e))
+            services["extract_entities_tool"] = None
+            services["search_by_entity_tool"] = None
+
     except Exception as e:
         logger.warning("mcp.entity_extraction_service.initialization_failed", error=str(e))
         services["lm_studio_client"] = None
         services["entity_extraction_service"] = None
         services["query_understanding_service"] = None
+        services["extract_entities_tool"] = None
+        services["search_by_entity_tool"] = None
 
     # Story 23.4: Initialize NodeRepository and GraphTraversalService
     try:
@@ -707,6 +731,9 @@ def create_mcp_server() -> FastMCP:
 
     # Story 23.7: Configuration tools and resources
     register_config_components(mcp)
+
+    # EPIC-28: Entity extraction tools
+    register_entity_tools(mcp)
 
     # Story 23.10: Prompts library
     register_prompts(mcp)
@@ -2219,6 +2246,41 @@ def register_config_components(mcp: FastMCP) -> None:
         tools=["switch_project"],
         resources=["projects://list", "config://languages"]
     )
+
+
+def register_entity_tools(mcp: FastMCP) -> None:
+    """
+    Register entity extraction tools (EPIC-28).
+
+    Tools:
+        - extract_entities: Re-extract entities from an existing memory
+        - search_by_entity: Search memories containing a specific entity
+
+    Args:
+        mcp: FastMCP server instance
+    """
+    from mcp.server.fastmcp import Context
+    from typing import Dict, Any
+
+    mcp_services = getattr(mcp, "_services", {})
+
+    if mcp_services.get("extract_entities_tool"):
+        @mcp.tool()
+        async def extract_entities(memory_id: str) -> Dict[str, Any]:
+            """Re-extract entities from an existing memory using LM Studio."""
+            tool = mcp_services["extract_entities_tool"]
+            return await tool.execute(memory_id=memory_id)
+
+        @mcp.tool()
+        async def search_by_entity(entity_name: str, limit: int = 10) -> Dict[str, Any]:
+            """Search memories containing a specific entity name."""
+            tool = mcp_services["search_by_entity_tool"]
+            return await tool.execute(entity_name=entity_name, limit=limit)
+
+        logger.info(
+            "mcp.components.entity_tools.registered",
+            tools=["extract_entities", "search_by_entity"]
+        )
 
 
 # ============================================================================
