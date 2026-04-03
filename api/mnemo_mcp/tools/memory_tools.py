@@ -772,6 +772,62 @@ class SearchMemoryTool(BaseMCPComponent):
                         "execution_time_ms": round(response.metadata.execution_time_ms, 2),
                     }
                 }
+            else:
+                # Fallback: tag-only or repository search (no hybrid service)
+                from mnemo_mcp.models.memory_models import MemoryFilters
+                effective_tags = tags if tags else ([query_stripped] if is_tag_query else [])
+                fallback_filters = MemoryFilters(
+                    memory_type=memory_type_enum,
+                    tags=effective_tags,
+                    consumed=consumed,
+                    lifecycle_state=lifecycle_state,
+                )
+
+                if query_embedding:
+                    memories_list, total_count = await self.memory_repository.search_by_vector(
+                        vector=query_embedding,
+                        filters=fallback_filters,
+                        limit=limit,
+                        offset=offset,
+                        distance_threshold=0.7,
+                    )
+                    search_mode = "vector_only"
+                else:
+                    memories_list, total_count = await self.memory_repository.search_by_tags(
+                        filters=fallback_filters,
+                        limit=limit,
+                        offset=offset,
+                    )
+                    search_mode = "tag_only"
+
+                memories = []
+                from services.highlight_service import highlight_matches
+                for m in memories_list:
+                    content_text = m.content[:300] + "..." if len(m.content) > 300 else m.content
+                    highlights = highlight_matches(content_text, query, max_snippets=2) if query else []
+                    memories.append({
+                        "id": str(m.id),
+                        "title": m.title,
+                        "content_preview": content_text,
+                        "highlights": highlights,
+                        "memory_type": m.memory_type.value if hasattr(m.memory_type, 'value') else m.memory_type,
+                        "tags": m.tags or [],
+                        "similarity_score": getattr(m, 'similarity_score', None),
+                        "created_at": m.created_at.isoformat() if hasattr(m.created_at, 'isoformat') else str(m.created_at),
+                    })
+
+                result = {
+                    "query": query,
+                    "memories": memories,
+                    "total": total_count,
+                    "limit": limit,
+                    "offset": offset,
+                    "has_more": offset + len(memories) < total_count,
+                    "metadata": {
+                        "search_mode": search_mode,
+                        "embedding_time_ms": round(embedding_ms, 2),
+                    }
+                }
 
             elapsed_ms = (time.time() - start_time) * 1000
 
