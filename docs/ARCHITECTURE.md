@@ -35,6 +35,10 @@ graph TB
         OObserve[OpenObserve :5080]
     end
 
+    subgraph "Hôte (non-Docker)"
+        LMStudio[LM Studio :1234]
+    end
+
     Browser --> FE
     FE --> API
     Claude --> MCP
@@ -46,9 +50,12 @@ graph TB
     Worker --> API
     API -.-> OObserve
     MCP -.-> OObserve
+    API -.->|http host.docker.internal:1234| LMStudio
+    MCP -.->|http host.docker.internal:1234| LMStudio
 
     style PG fill:#336791,color:#fff
     style Redis fill:#DC382D,color:#fff
+    style LMStudio fill:#FF6B35,color:#fff
 ```
 
 **Pourquoi deux processus séparés ?** L'API REST parle HTTP aux navigateurs (CORS, sessions). Le serveur MCP parle JSON-RPC en stdio ou Streamable HTTP — un protocole fondamentalement différent. Les exécuter séparément signifie que le serveur MCP peut être utilisé par Claude Desktop sans avoir besoin de l'API REST, et inversement. Ils ne partagent **aucun code à l'exécution** — chacun initialise ses propres pools de connexion, services et caches.
@@ -99,6 +106,7 @@ sequenceDiagram
 | Modèles d'embedding | Prod : `RuntimeError`. Dev : warning | Correction prod vs vélocité dev |
 | Serveurs LSP | Warning loggé, `None` | Optionnel — l'indexation fonctionne sans |
 | Service d'alertes | Warning, tâche non démarrée | L'observabilité n'est pas critique |
+| LM Studio | Skip silencieux, fallback recherche brute | L'extraction est optionnelle, la recherche fonctionne sans |
 
 ## 3. Le pipeline de recherche hybride
 
@@ -158,15 +166,23 @@ flowchart LR
     subgraph "Vectoriel mémoires"
         H[HNSW halfvec index]
     end
-    I --> MF[Fusion RRF]
+    subgraph "Entités et tags (EPIC-28)"
+        E[JSONB containment @>]
+        G[Tag overlap ANY]
+    end
+    I --> MF[Fusion RRF 4 sources]
     T --> MF
     H --> MF
+    E --> MF
+    G --> MF
     MF --> MD[Decay temporel]
     MD --> MR[Rerank BM25 optionnel]
     MR --> ResM[Résultat mémoire]
 ```
 
 **Différence clé :** La recherche mémoire applique un **decay temporel** après le reranking. Le `MemoryDecayService` applique un decay exponentiel basé sur `created_at` — les anciennes mémoires obtiennent progressivement des scores plus bas. Configurable par tag via `configure_decay()`, permettant aux mémoires `sys:core` d'être permanentes (decay=0.0) tandis que `sys:history` decay avec une demi-vie de ~14 jours.
+
+**Recherche intentionnelle (EPIC-28) :** Avant la recherche, un LLM local (LM Studio) décompose la requête en **HL keywords** (concepts abstraits) et **LL keywords** (entités concrètes). Les HL keywords orientent la recherche vectorielle, les LL keywords alimentent deux recherches supplémentaires — containment JSONB sur les entités et overlap sur les tags (manuels + auto-générés). La fusion RRF passe de 2 à 4 sources avec des poids normalisés dynamiquement. Si le LLM n'est pas disponible, le système se rabat silencieusement sur la recherche brute (comportement antérieur).
 
 ## 4. Architecture du cache à trois couches
 
@@ -290,6 +306,9 @@ erDiagram
         TIMESTAMPTZ consumed_at
         UUID[] related_chunks
         JSONB resource_links
+        JSONB entities
+        JSONB concepts
+        TEXT[] auto_tags
     }
 
     code_chunks {
@@ -367,7 +386,7 @@ erDiagram
 
 - **Table `events`** est le store original — c'était la première table. Les mémoires ont été dérivées plus tard via l'`EventProcessor`. Le `MemoryRepository` utilise SQLAlchemy Core (pas d'ORM) pour le contrôle SQL brut, surtout pour les opérations pgvector.
 
-- **Table `memories`** a à la fois `embedding` (float32 vector) et `embedding_half` (float16 halfvec). Le trigger les garde synchronisés. Le champ `embedding_source` est un résumé textuel focalisé utilisé pour calculer les embeddings — séparé du `content` complet — permettant une meilleure qualité d'embedding.
+- **Table `memories`** a à la fois `embedding` (float32 vector) et `embedding_half` (float16 halfvec). Le trigger les garde synchronisés. Le champ `embedding_source` est un résumé textuel focalisé utilisé pour calculer les embeddings — séparé du `content` complet — permettant une meilleure qualité d'embedding. Trois colonnes supplémentaires enrichissent les mémoires avec des métadonnées structurées : `entities` (JSONB, entités nommées), `concepts` (JSONB, concepts abstraits), et `auto_tags` (TEXT[], tags auto-générés). Les colonnes JSONB ont des index GIN `jsonb_path_ops` pour des requêtes de containment efficaces (`@>`).
 
 - **Table `code_chunks`** a **quatre** colonnes d'embedding : `embedding_text`, `embedding_code` (float32, pour l'écriture) et `embedding_text_half`, `embedding_code_half` (float16, pour la lecture/recherche). Les colonnes `repository` et `return_type` sont **générées automatiquement** depuis les métadonnées JSONB — cela transforme une extraction JSONB O(n) en recherche B-tree O(log n).
 
@@ -386,7 +405,7 @@ flowchart TD
     subgraph "Processus Serveur MCP"
         FMCP[FastMCP Server]
         LSP[server_lifespan]
-        TO[Outils 28]
+        TO[Outils 30]
         RE[Ressources 12]
         PR[Prompts]
 
@@ -400,6 +419,9 @@ flowchart TD
             SMS[hybrid_memory_search]
             SG[graph_traversal_service]
             SM[metrics_collector]
+            SLM[lm_studio_client]
+            SEE[entity_extraction_service]
+            SQU[query_understanding_service]
         end
 
         LSP --> SDB
@@ -411,6 +433,9 @@ flowchart TD
         LSP --> SMS
         LSP --> SG
         LSP --> SM
+        LSP --> SLM
+        LSP --> SEE
+        LSP --> SQU
 
         SDB --> TO
         SR --> TO
@@ -465,6 +490,7 @@ flowchart TD
         F4[LSP crash]
         F5[BM25 erreur]
         F6[Timeout vectoriel]
+        F7[LM Studio indisponible]
     end
 
     subgraph "Chemins de dégradation"
@@ -474,6 +500,7 @@ flowchart TD
         D4[Extraction type ignorée]
         D5[Ordre RRF utilisé]
         D6[Repli lexical seul]
+        D7[Recherche brute (sans HL/LL)]
     end
 
     F1 --> D1
@@ -482,6 +509,7 @@ flowchart TD
     F4 --> D4
     F5 --> D5
     F6 --> D6
+    F7 --> D7
 ```
 
 **Le chemin de dégradation le plus important :** Si la recherche vectorielle est activée mais aucun embedding n'est disponible (modèle non chargé, circuit breaker ouvert, mode mock), le système **se rabat silencieusement sur la recherche lexicale seule** avec un warning dans les logs. L'utilisateur obtient des résultats — juste pas les sémantiques. C'est mieux que de retourner une erreur.
@@ -523,3 +551,6 @@ flowchart TD
 | Triggers PostgreSQL pour sync halfvec | Calcul côté DB | Zéro changement de code app pour halfvec |
 | Colonnes générées depuis JSONB | Surcoût de stockage (données redondantes) | Recherches O(log n) au lieu de O(n) |
 | Circuit breakers indépendants par modèle | Gestion d'état légèrement plus complexe | Les échecs ne se propagent pas entre domaines |
+| LLM local (LM Studio) pour l'extraction | Dépendance externe, latence 1-2s | Entités/concepts structurés, recherche intentionnelle |
+| Extraction async non-bloquante | Délai entre création et extraction | Zéro impact sur la latence de création de mémoire |
+| RRF 4 sources au lieu de 2 | Complexité accrue du pipeline | Meilleur rappel via entités et tags auto-générés |
