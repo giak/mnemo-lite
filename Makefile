@@ -179,9 +179,9 @@ lint-fix:
 # Commandes OpenObserve
 o2-setup:
 	@echo "Setting up OpenObserve via API (Functions, Streams, Dashboards)..."
-	python scripts/o2_setup_functions.py
-	python scripts/o2_setup_streams.py
-	python scripts/o2_setup_dashboards.py
+	python3 scripts/o2_setup_functions.py
+	python3 scripts/o2_setup_streams.py
+	python3 scripts/o2_setup_dashboards.py
 	@echo ""
 	@echo "API setup complete. Now configure via UI:"
 	@echo "  1. Open http://localhost:5080"
@@ -189,7 +189,7 @@ o2-setup:
 
 o2-export:
 	@echo "Exporting OpenObserve configuration..."
-	python scripts/o2_export_configs.py
+	python3 scripts/o2_export_configs.py
 
 o2-help:
 	@echo "OpenObserve Commands:"
