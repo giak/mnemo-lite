@@ -13,6 +13,11 @@ from mnemo_mcp.tools.memory_tools import (
     WriteMemoryTool,
     UpdateMemoryTool,
     DeleteMemoryTool,
+    ReadMemoryTool,
+    ConsolidateMemoryTool,
+    MarkConsumedTool,
+    SystemSnapshotTool,
+    ConfigureDecayTool,
 )
 from mnemo_mcp.models.memory_models import (
     Memory,
