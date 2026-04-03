@@ -438,10 +438,28 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
             logger.warning("mcp.entity_extraction_service.skipped", reason="no_engine")
             services["entity_extraction_service"] = None
 
+        # EPIC-28: Initialize QueryUnderstandingService
+        try:
+            from services.query_understanding_service import QueryUnderstandingService
+
+            if services.get("lm_studio_client"):
+                query_understanding_service = QueryUnderstandingService(
+                    lm_client=services["lm_studio_client"],
+                )
+                services["query_understanding_service"] = query_understanding_service
+                logger.info("mcp.query_understanding_service.initialized")
+            else:
+                services["query_understanding_service"] = None
+
+        except Exception as e:
+            logger.warning("mcp.query_understanding_service.initialization_failed", error=str(e))
+            services["query_understanding_service"] = None
+
     except Exception as e:
         logger.warning("mcp.entity_extraction_service.initialization_failed", error=str(e))
         services["lm_studio_client"] = None
         services["entity_extraction_service"] = None
+        services["query_understanding_service"] = None
 
     # Story 23.4: Initialize NodeRepository and GraphTraversalService
     try:

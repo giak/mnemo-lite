@@ -251,7 +251,7 @@ class WriteMemoryTool(BaseMCPComponent):
             import asyncio
             from services.entity_extraction_service import EntityExtractionService
 
-            extraction_service = self.services.get("entity_extraction_service")
+            extraction_service = self._services.get("entity_extraction_service")
             if extraction_service is None:
                 return
 
@@ -761,9 +761,16 @@ class SearchMemoryTool(BaseMCPComponent):
                     lifecycle_state=lifecycle_state,
                 )
 
+                # EPIC-28: Extract HL/LL keywords for improved search
+                keywords = None
+                query_understanding = self._services.get("query_understanding_service")
+                if query_understanding:
+                    keywords = await query_understanding.extract_keywords(query)
+
                 response = await self.hybrid_memory_search_service.search(
                     query=query,
                     embedding=query_embedding,
+                    keywords=keywords,
                     filters=filters,
                     limit=limit,
                     offset=offset,

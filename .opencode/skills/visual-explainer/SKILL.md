@@ -1,11 +1,7 @@
 ---
 name: visual-explainer
-description: Generate beautiful, self-contained HTML pages for diagrams, code reviews, plans, data tables, and visual explanations. Use when asked for a diagram, architecture overview, diff review, plan audit, comparison table, or any visual explanation of technical concepts. Also use proactively when about to render a complex ASCII table (4+ rows or 3+ columns) — generate HTML instead.
+description: Generate beautiful self-contained HTML pages for diagrams, code reviews, plans, data tables, and visual explanations
 license: MIT
-compatibility: Requires a browser to view generated HTML files. Linux: uses xdg-open.
-metadata:
-  author: adapted from nicobailon/visual-explainer
-  version: "1.0.0"
 ---
 
 # Visual Explainer
