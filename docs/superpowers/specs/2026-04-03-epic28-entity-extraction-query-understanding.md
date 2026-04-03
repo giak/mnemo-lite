@@ -88,39 +88,97 @@ Avant chaque recherche mémoire, un LLM local extrait :
 
 ## 4. Stories
 
-### Story 28.1: Migration schéma — colonnes JSONB + index GIN
+### Story 28.1: Migration schéma — Alembic + colonnes JSONB + index GIN
 
-**Objectif** : Ajouter les colonnes de stockage d'entités à la table `memories`.
+**Objectif** : Ajouter les colonnes de stockage d'entités à la table `memories` via Alembic.
 
-**Migration** :
-```sql
--- Migration: 20260403_0000_add_memory_entities.sql
+**Pourquoi Alembic** : Les migrations récentes (`consumed_at`, `embedding_half`) utilisent Alembic. Suivre le pattern établi.
 
-ALTER TABLE memories
-  ADD COLUMN IF NOT EXISTS entities JSONB DEFAULT '[]'::jsonb,
-  ADD COLUMN IF NOT EXISTS concepts JSONB DEFAULT '[]'::jsonb,
-  ADD COLUMN IF NOT EXISTS auto_tags TEXT[] DEFAULT '{}';
+**Migration Alembic** :
+```python
+"""v10_to_v11: add entity extraction columns to memories
 
--- GIN index pour recherche par containment
-CREATE INDEX IF NOT EXISTS idx_memories_entities_gin
-  ON memories USING GIN (entities jsonb_path_ops);
+Revision ID: 20260403_0000
+Revises: 20260327_2315
+Create Date: 2026-04-03
+"""
+from alembic import op
+import sqlalchemy as sa
 
-CREATE INDEX IF NOT EXISTS idx_memories_concepts_gin
-  ON memories USING GIN (concepts jsonb_path_ops);
+revision = "20260403_0000"
+down_revision = "20260327_2315"
 
--- Expression index pour recherche d'entité spécifique
-CREATE INDEX IF NOT EXISTS idx_memories_entity_contains
-  ON memories USING GIN ((entities->>'entities') gin_trgm_ops);
+def upgrade():
+    op.add_column("memories", sa.Column("entities", sa.JSON, nullable=True, server_default="[]"))
+    op.add_column("memories", sa.Column("concepts", sa.JSON, nullable=True, server_default="[]"))
+    op.add_column("memories", sa.Column("auto_tags", sa.Text, nullable=True, server_default="{}"))
+
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS idx_memories_entities_gin
+        ON memories USING GIN (entities jsonb_path_ops)
+    """)
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS idx_memories_concepts_gin
+        ON memories USING GIN (concepts jsonb_path_ops)
+    """)
+
+def downgrade():
+    op.execute("DROP INDEX IF EXISTS idx_memories_concepts_gin")
+    op.execute("DROP INDEX IF EXISTS idx_memories_entities_gin")
+    op.drop_column("memories", "auto_tags")
+    op.drop_column("memories", "concepts")
+    op.drop_column("memories", "entities")
 ```
 
-**Pourquoi JSONB plutôt que TEXT[]** :
-- JSONB permet de stocker des objets structurés : `[{"name": "Redis", "type": "technology", "confidence": 0.95}]`
-- GIN `jsonb_path_ops` supporte les opérateurs `@>`, `?`, `@?` pour des requêtes complexes
-- PostgreSQL 18 optimise les opérations JSONB avec des indexes GIN partiels
+**Vérification non-régression** :
+
+| Zone | Vérification | Résultat |
+|------|-------------|----------|
+| **INSERT** (`memory_repository.py:73-87`) | Colonnes explicites — nouvelles colonnes reçoivent DEFAULT | ✅ SAFE |
+| **UPDATE** (`memory_repository.py:180-229`) | UPDATE dynamique — ne touche pas les nouvelles colonnes | ✅ SAFE |
+| **SELECT explicites** (search, list) | Listes de colonnes fixes — nouvelles colonnes ignorées | ✅ SAFE |
+| **`SELECT *` / `RETURNING *`** | Inclut nouvelles colonnes, Pydantic `extra='ignore'` les drop | ✅ SAFE |
+| **`_row_to_memory()`** | Reçoit nouvelles colonnes dans `row_dict` | ⚠️ À parser si on les expose |
+| **Delete/SoftDelete** | Ne touchent que `deleted_at` | ✅ SAFE |
+| **SystemSnapshotTool** | SELECT explicite — nouvelles colonnes non incluses | ✅ SAFE |
+| **MarkConsumedTool** | Opère sur `consumed_at`/`consumed_by` uniquement | ✅ SAFE |
+| **ConfigureDecayTool** | Table `memory_decay_config` séparée | ✅ SAFE |
+| **Service init** (`server.py`) | Pattern try/except avec graceful degradation | ✅ SAFE |
+
+**Modèles Pydantic à mettre à jour** (`api/mnemo_mcp/models/memory_models.py`) :
+
+```python
+# Memory model (line ~167) — ajouter :
+entities: Optional[list[dict]] = Field(default_factory=list)
+concepts: Optional[list[str]] = Field(default_factory=list)
+auto_tags: Optional[list[str]] = Field(default_factory=list)
+```
+
+**`_row_to_memory()` à mettre à jour** (`api/db/repositories/memory_repository.py`, line ~715) :
+
+```python
+# Ajouter après le parsing de resource_links (line 716) :
+for col in ("entities", "concepts"):
+    if isinstance(row_dict.get(col), str):
+        row_dict[col] = json.loads(row_dict[col])
+    elif row_dict.get(col) is None:
+        row_dict[col] = []
+
+if isinstance(row_dict.get("auto_tags"), str):
+    row_dict["auto_tags"] = json.loads(row_dict["auto_tags"])
+elif row_dict.get("auto_tags") is None:
+    row_dict["auto_tags"] = []
+```
+
+**Pourquoi JSON/Text plutôt que TEXT[]** :
+- SQLAlchemy `sa.JSON` se mappe nativement sur PostgreSQL JSONB
+- `auto_tags` en `sa.Text` (ARRAY en PG) — plus simple pour les opérations `&&` (overlap)
+- Les colonnes sont **nullable avec DEFAULT** — zero impact sur les lignes existantes
 
 **Fichiers** :
-- Créer : `db/migrations/20260403_0000_add_memory_entities.sql`
-- Modifier : `api/db/repositories/memory_repository.py` — méthodes `update_entities()`, `search_by_entity()`
+- Créer : `api/alembic/versions/20260403_0000_add_entity_extraction_columns.py`
+- Modifier : `api/mnemo_mcp/models/memory_models.py` — ajouter 3 champs au modèle `Memory`
+- Modifier : `api/db/repositories/memory_repository.py` — parsing JSONB dans `_row_to_memory()`
 
 ---
 
@@ -237,6 +295,11 @@ class LMStudioClient:
 ### Story 28.3: EntityExtractionService — Extraction async à l'indexation
 
 **Objectif** : Service qui extrait entités/concepts/tags d'une mémoire via LM Studio, de manière asynchrone.
+
+**Principe critique** : L'extraction est **100% automatique côté serveur**. Les agents ne gèrent pas les entités manuellement.
+- `MemoryCreate` et `MemoryUpdate` **ne changent pas** — pas de nouveaux paramètres
+- Les entités sont calculées après la création, en arrière-plan
+- Zero changement dans l'API des outils MCP existants
 
 **Flux** :
 ```
@@ -570,3 +633,71 @@ environment:
 - Expression index sur `entities->>'entities'` pour recherche substring
 - GIN index sur JSONB arrays est natif et performant
 - PostgreSQL 18 améliore les performances JSONB vs 17
+
+---
+
+## 11. Audit de non-régression
+
+### Analyse complète effectuée
+
+Fichiers audités :
+- `api/mnemo_mcp/tools/memory_tools.py` — 8 outils MCP analysés un par un
+- `api/db/repositories/memory_repository.py` — 9 méthodes analysées
+- `api/services/hybrid_memory_search_service.py` — pipeline de recherche complet
+- `api/mnemo_mcp/models/memory_models.py` — 5 modèles Pydantic vérifiés
+- `api/mnemo_mcp/server.py` — pattern d'initialisation des services
+- `db/migrations/` + `api/alembic/versions/` — convention de nommage vérifiée
+
+### Résultats par catégorie
+
+**✅ Safe Additions (zero risque, aucun changement de comportement)** :
+- INSERT avec colonnes explicites → nouvelles colonnes reçoivent DEFAULT `'[]'`
+- UPDATE dynamique → ne touche que les champs spécifiés dans `MemoryUpdate`
+- SELECT explicites (search, list, snapshot) → listes de colonnes fixes, nouvelles ignorées
+- Delete/SoftDelete → ne touchent que `deleted_at`
+- MarkConsumedTool → opère sur `consumed_at`/`consumed_by` uniquement
+- ConfigureDecayTool → table `memory_decay_config` séparée
+- SystemSnapshotTool → SELECT explicite sans nouvelles colonnes
+- Service init → pattern try/except avec graceful degradation déjà établi
+- WriteMemoryTool / UpdateMemoryTool → délèguent au repository, pas de référence directe aux nouvelles colonnes
+- Hybrid Search dataclasses → indépendantes du schéma DB
+
+**⚠️ Silent Failures (à corriger dans l'implémentation, pas de crash mais données manquantes)** :
+- `_row_to_memory()` reçoit les nouvelles colonnes dans `row_dict` mais ne les parse pas → **Fix** : ajouter parsing JSONB
+- Modèle `Memory` Pydantic n'a pas les nouveaux champs → Pydantic `extra='ignore'` les drop → **Fix** : ajouter les 3 champs `Optional`
+- SearchMemoryTool construit ses dicts de résultat manuellement → nouvelles colonnes absentes → **Acceptable** : les entités ne sont pas pertinentes dans les aperçus de recherche
+- ReadMemoryTool utilise `MemoryResponse` qui n'a pas les nouveaux champs → **Acceptable** : la réponse courte n'inclut pas le contenu complet
+
+**❌ Breaking Changes (aucun identifié)** :
+- Aucun changement dans les signatures de méthodes
+- Aucun changement dans les paramètres des outils MCP
+- Aucun changement dans les requêtes SQL existantes
+- Aucun changement dans les modèles de retour
+
+### Garantie MCP
+
+**Le serveur MCP continuera de fonctionner exactement comme avant** :
+
+1. **Si LM Studio est éteint** : `LMStudioClient.is_available()` retourne `False` → extraction skipée → recherche utilise fallback requête brute → comportement actuel
+2. **Si LM Studio est allumé** : extraction async en arrière-plan → ne bloque jamais la création de mémoire → recherche améliorée avec HL/LL keywords
+3. **Si LM Studio crash en cours de route** : timeout 30s → retry 1× → skip → fallback → zero impact sur les requêtes en cours
+4. **Si la migration n'est pas appliquée** : colonnes absentes → `AttributeError` sur les colonnes → **Fix** : le code de l'EntityExtractionService vérifiera l'existence des colonnes avant de les utiliser
+
+### Test de non-régression recommandé
+
+Après implémentation, vérifier :
+```bash
+# 1. MCP fonctionne sans LM Studio
+docker compose up -d api mcp
+curl http://localhost:8001/health  # → 200
+# Appeler search_memory → doit retourner des résultats (fallback)
+
+# 2. MCP fonctionnent avec LM Studio
+# Lancer LM Studio + charger Qwen2.5-7B
+# Créer une mémoire decision → vérifier extraction async après 5s
+# Rechercher avec query → vérifier résultats améliorés
+
+# 3. Anciennes mémoires intactes
+# search_memory sur des mémoires créées avant la migration → doivent fonctionner
+# read_memory sur anciennes mémoires → entities/concepts = []
+```
