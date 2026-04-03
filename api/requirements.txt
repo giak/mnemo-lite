@@ -12,7 +12,6 @@ alembic>=1.13.0  # Database migrations with async support
 # prometheus-fastapi-instrumentator>=7.0.0 # Uncomment if needed
 
 # Utilities
-# httpx>=0.27.0 # Uncomment if external API calls needed
 # requests>=2.31.0 # Uncomment if external API calls needed
 
 # Logging
@@ -90,4 +89,8 @@ opentelemetry-exporter-otlp-proto-http>=1.24.0
 opentelemetry-instrumentation-fastapi>=0.45b0
 opentelemetry-instrumentation-sqlalchemy>=0.45b0
 opentelemetry-instrumentation-redis>=0.45b0
-opentelemetry-semantic-conventions>=0.45b0 
+opentelemetry-semantic-conventions>=0.45b0
+
+# EPIC-28: Entity Extraction & Query Understanding (LM Studio)
+httpx>=0.27.0
+json-repair>=0.30.0
