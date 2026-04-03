@@ -5,7 +5,6 @@
 
 # Variables
 COMPOSE_FILE := docker-compose.yml
-PROD_COMPOSE_FILE := docker-compose.prod.yml
 # Variables par défaut pour les commandes exec (simplifié)
 POSTGRES_USER ?= mnemo
 POSTGRES_DB ?= mnemolite
@@ -128,27 +127,6 @@ worker-run:
 	@echo "Usage: make worker-run task=<task_module>"
 	@test -n "$(task)" || (echo "Error: 'task' parameter is required"; exit 1)
 	docker compose -f $(COMPOSE_FILE) exec -w /app/workers -e PYTHONUNBUFFERED=1 worker python -m $(task)
-
-# Commandes pour le frontend (Vue 3)
-frontend-dev:
-	cd frontend && npm run dev
-
-frontend-build:
-	cd frontend && npm run build
-
-frontend-typecheck:
-	cd frontend && npx vue-tsc --noEmit
-
-frontend-test:
-	cd frontend && npx vitest run --reporter=verbose
-
-# Commandes MCP
-mcp-test:
-	@echo "Running MCP tests (358 tests)..."
-	docker compose -f $(COMPOSE_FILE) exec api python -m pytest tests/mnemo_mcp/ -v --tb=short
-
-mcp-shell:
-	docker compose -f $(COMPOSE_FILE) exec api /bin/bash -c "cd /app && python -m mnemo_mcp.server"
 
 # Commandes pour le frontend (Vue 3)
 frontend-dev:
