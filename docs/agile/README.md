@@ -140,7 +140,7 @@ Les documents **d'archive historique** (EPIC-01 à EPIC-05) peuvent contenir des
   - Story 22.6: Alerting Backend (**2 pts**) ✅ - Alert rules, evaluation engine, persistence
   - Story 22.7: Alerting UI (**1 pt**) 🟡 - IN PROGRESS
 - **Vision**: "En 30 secondes, diagnostiquer n'importe quel problème production depuis l'UI"
-- **Stack**: Zero nouvelle dépendance (FastAPI + PostgreSQL + HTMX + ECharts + SSE)
+- **Stack**: Zero nouvelle dépendance (FastAPI + PostgreSQL + Vue 3 + Chart.js + SSE)
 - **Production Status**: 🟡 Phase 1 & 2 DEPLOYED - Phase 3 (Advanced Features) pending
 - **Gains**: Monitoring unifié, métriques persistées, logs streaming temps réel, alerting proactif
 - **Livrables**: Dashboard avancé, metrics table, SSE logs, endpoint performance tracking, alert system
@@ -166,7 +166,7 @@ Les documents **d'archive historique** (EPIC-01 à EPIC-05) peuvent contenir des
 - `EPIC-02_Recherche_Evenements.md` - Système de recherche événements
 - `EPIC-03_Recherche_Semantique_Hybride.md` - Recherche hybride (lexical + vector)
 - `EPIC-04_Refactoring_Bonnes_Pratiques.md` - Refactoring DIP/Repository pattern
-- `EPIC-05_UI_Exploration_MnemoLite.md` - Interface utilisateur HTMX (première version)
+- `EPIC-05_UI_Exploration_MnemoLite.md` - Interface utilisateur Vue 3 (première version)
 
 #### User Stories Historiques
 - `STORIES_EPIC-01.md` - Stories d'alignement API/Schema
@@ -206,7 +206,7 @@ Ces documents restent utiles pour :
 | **Octobre 2025** | Serena Evolution | EPIC-10 (Caching) + EPIC-11 (Symbols) + EPIC-12 (Robustness) + EPIC-13 (LSP Backend) + EPIC-14 (LSP UI) + EPIC-18 (LSP Stability) + EPIC-19 (Embeddings) |
 | **Octobre 2025** | Production Readiness | EPIC-22 (Observability) 🟡 53% + EPIC-23 (MCP Integration) ✅ Phase 1 Complete (35%) |
 
-**Version actuelle du projet** : v3.0.0 → v3.1.0-dev (en cours - Octobre 2025)
+**Version actuelle du projet** : v5.0.0-dev (en cours - Octobre 2025)
 
 **Progrès Total** :
 - ✅ EPIC-01 à EPIC-05 : Complétés (Q1-Q2 2025)

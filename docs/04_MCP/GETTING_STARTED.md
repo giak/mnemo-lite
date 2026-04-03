@@ -69,7 +69,7 @@ Edit `claude_desktop_config.json`:
     "mnemolite": {
       "command": "python",
       "args": ["-m", "api.mcp.server"],
-      "cwd": "/home/giak/Work/MnemoLite",
+      "cwd": "<project-root>",
       "env": {
         "MCP_DATABASE_URL": "postgresql://mnemo:mnemopass@localhost:5432/mnemolite",
         "MCP_REDIS_URL": "redis://localhost:6379/0",
@@ -80,7 +80,7 @@ Edit `claude_desktop_config.json`:
 }
 ```
 
-**Important**: Replace `/home/giak/Work/MnemoLite` with your actual project path.
+**Important**: Replace `<project-root>` with your actual project path.
 
 ### 3. Restart Claude Desktop
 

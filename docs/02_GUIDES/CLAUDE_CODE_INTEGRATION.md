@@ -1,7 +1,7 @@
 # MnemoLite + Claude Code — Guide d'Intégration
 
 **Version**: 1.0 (Vérifié 2025-11-08)
-**MnemoLite**: v3.1.0-dev
+**MnemoLite**: v5.0.0-dev
 **Claude Code**: v2.0+
 **MCP Spec**: 2025-06-18
 

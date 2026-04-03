@@ -62,7 +62,7 @@ contributors: [Human, Claude]
 ### 00_CONTROL (Dashboards)
 - `CONTROL_MISSION_CONTROL.md` - **This file** (Project dashboard)
 - `CONTROL_DOCUMENT_INDEX.md` - Complete document catalog
-- `CONTROL_test_inventory.md` - Test inventory (359 tests passing)
+- `CONTROL_test_inventory.md` - Test inventory (1570 tests passing)
 
 ### 01_DECISIONS (Architecture Decision Records)
 **8 Active Decisions**
@@ -121,7 +121,7 @@ contributors: [Human, Claude]
 - **Cache**: Redis 7-alpine (L2 cache, Redis Streams for queue)
 - **Worker**: Async Python worker for conversation processing
 - **Observability**: OpenObserve (logs, metrics, traces)
-- **UI**: HTMX 2.0 + SCADA industrial design
+- **UI**: Vue 3 SPA + SCADA industrial design
 
 ### Key Architectural Decisions
 
@@ -157,7 +157,7 @@ contributors: [Human, Claude]
 - **API Response Time**: <10ms (cached), <100ms (uncached)
 - **Indexing Speed**: <100ms per file (7-step pipeline)
 - **Graph Traversal**: 0.155ms for 3-hop recursive CTE (129× faster than target)
-- **Test Coverage**: 100% (359/359 tests passing)
+- **Test Coverage**: 100% (359/1570 tests passing)
 - **Cache Hit Rate**: 80%+ (L1 + L2)
 
 ### Database
