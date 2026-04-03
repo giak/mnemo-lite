@@ -105,7 +105,7 @@ def configure_otel(
 
     try:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-        FastAPIInstrumentor.instrument()
+        FastAPIInstrumentor().instrument()
         logger.info("otel_fastapi_instrumented")
     except Exception as e:
         logger.warning("otel_fastapi_instrument_failed", error=str(e))

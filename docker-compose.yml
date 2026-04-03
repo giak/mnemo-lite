@@ -85,12 +85,12 @@ services:
       CLAUDE_PROJECTS_DIR: /host/.claude/projects
       POLL_INTERVAL: ${POLL_INTERVAL:-30}
       IMPORT_HISTORICAL: ${IMPORT_HISTORICAL:-false}
-       ENABLE_AUTO_IMPORT: ${ENABLE_AUTO_IMPORT:-false}
-      - OTLP_ENDPOINT=http://openobserve:5080/api/default/v1/traces
-      - OTLP_METRICS_ENDPOINT=http://openobserve:5080/api/default/v1/metrics
-      - OTLP_LOGS_ENDPOINT=http://openobserve:5080/api/default/logs/_json
-      - O2_USER=${O2_USER:-admin@mnemolite.local}
-      - O2_PASSWORD=${O2_PASSWORD:-Complexpass#123}
+      ENABLE_AUTO_IMPORT: ${ENABLE_AUTO_IMPORT:-false}
+      OTLP_ENDPOINT: http://openobserve:5080/api/default/v1/traces
+      OTLP_METRICS_ENDPOINT: http://openobserve:5080/api/default/v1/metrics
+      OTLP_LOGS_ENDPOINT: http://openobserve:5080/api/default/logs/_json
+      O2_USER: ${O2_USER:-admin@mnemolite.local}
+      O2_PASSWORD: ${O2_PASSWORD:-Complexpass#123}
     depends_on:
       db:
         condition: service_healthy
@@ -181,11 +181,11 @@ services:
       MCP_HTTP_HOST: 0.0.0.0
       MCP_HTTP_PORT: "8002"
       MCP_AUTH_MODE: none
-      - OTLP_ENDPOINT=http://openobserve:5080/api/default/v1/traces
-      - OTLP_METRICS_ENDPOINT=http://openobserve:5080/api/default/v1/metrics
-      - OTLP_LOGS_ENDPOINT=http://openobserve:5080/api/default/logs/_json
-      - O2_USER=${O2_USER:-admin@mnemolite.local}
-      - O2_PASSWORD=${O2_PASSWORD:-Complexpass#123}
+      OTLP_ENDPOINT: http://openobserve:5080/api/default/v1/traces
+      OTLP_METRICS_ENDPOINT: http://openobserve:5080/api/default/v1/metrics
+      OTLP_LOGS_ENDPOINT: http://openobserve:5080/api/default/logs/_json
+      O2_USER: ${O2_USER:-admin@mnemolite.local}
+      O2_PASSWORD: ${O2_PASSWORD:-Complexpass#123}
     ports:
       - "127.0.0.1:8002:8002"
     networks:
