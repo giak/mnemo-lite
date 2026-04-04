@@ -14,28 +14,28 @@ graph TB
     end
 
     subgraph "Frontend"
-        FE[Frontend Vue 3 Vite dev :3000 Nginx prod :80]
+        FE[Vue 3 Vite :3000]
     end
 
     subgraph "Backend"
-        API[API REST FastAPI :8001]
-        MCP[Serveur MCP FastMCP :8002]
+        API[FastAPI :8001]
+        MCP[FastMCP :8002]
     end
 
     subgraph "Données"
-        PG[(PostgreSQL 18 pgvector 0.8 pg_trgm)]
-        Redis[(Redis 7 Cache L2)]
+        PG[(PostgreSQL 18)]
+        Redis[(Redis 7)]
     end
 
     subgraph "Arrière-plan"
-        Worker[Worker conversation]
+        Worker[Worker]
     end
 
     subgraph "Observabilité"
         OObserve[OpenObserve :5080]
     end
 
-    subgraph "Hôte (non-Docker)"
+    subgraph "Hôte"
         LMStudio[LM Studio :1234]
     end
 
@@ -50,12 +50,14 @@ graph TB
     Worker --> API
     API -.-> OObserve
     MCP -.-> OObserve
-    API -.->|http host.docker.internal:1234| LMStudio
-    MCP -.->|http host.docker.internal:1234| LMStudio
+    Worker -.-> OObserve
+    API -.-> LMStudio
+    MCP -.-> LMStudio
 
     style PG fill:#336791,color:#fff
     style Redis fill:#DC382D,color:#fff
     style LMStudio fill:#FF6B35,color:#fff
+    style OObserve fill:#E91E63,color:#fff
 ```
 
 **Pourquoi deux processus séparés ?** L'API REST parle HTTP aux navigateurs (CORS, sessions). Le serveur MCP parle JSON-RPC en stdio ou Streamable HTTP — un protocole fondamentalement différent. Les exécuter séparément signifie que le serveur MCP peut être utilisé par Claude Desktop sans avoir besoin de l'API REST, et inversement. Ils ne partagent **aucun code à l'exécution** — chacun initialise ses propres pools de connexion, services et caches.
@@ -159,25 +161,33 @@ Même architecture RRF, mais avec des sources de données différentes :
 
 ```mermaid
 flowchart LR
-    subgraph "Lexical mémoires"
-        I[ILIKE titre + source]
-        T[pg_trgm similarité GIN]
+    subgraph "Sources"
+        direction TB
+        I[ILIKE titre+source]
+        T[pg_trgm GIN]
+        H[HNSW halfvec]
+        E[JSONB entities]
+        G[Tag overlap]
     end
-    subgraph "Vectoriel mémoires"
-        H[HNSW halfvec index]
-    end
-    subgraph "Entités et tags (EPIC-28)"
-        E[JSONB containment @>]
-        G[Tag overlap ANY]
-    end
-    I --> MF[Fusion RRF 4 sources]
+
+    I --> MF
     T --> MF
     H --> MF
     E --> MF
     G --> MF
-    MF --> MD[Decay temporel]
-    MD --> MR[Rerank BM25 optionnel]
-    MR --> ResM[Résultat mémoire]
+
+    MF[Fusion RRF 4 sources] --> MD[Decay temporel]
+    MD --> MR[BM25 rerank]
+    MR --> Res[Résultat]
+
+    style I fill:#4CAF50,color:#fff
+    style T fill:#4CAF50,color:#fff
+    style H fill:#2196F3,color:#fff
+    style E fill:#FF9800,color:#fff
+    style G fill:#FF9800,color:#fff
+    style MF fill:#9C27B0,color:#fff
+    style MD fill:#607D8B,color:#fff
+    style MR fill:#9C27B0,color:#fff
 ```
 
 **Différence clé :** La recherche mémoire applique un **decay temporel** après le reranking. Le `MemoryDecayService` applique un decay exponentiel basé sur `created_at` — les anciennes mémoires obtiennent progressivement des scores plus bas. Configurable par tag via `configure_decay()`, permettant aux mémoires `sys:core` d'être permanentes (decay=0.0) tandis que `sys:history` decay avec une demi-vie de ~14 jours.
@@ -418,57 +428,48 @@ Le serveur MCP n'est **pas** un wrapper autour de l'API REST. C'est un processus
 
 ```mermaid
 flowchart TD
-    subgraph "Processus Serveur MCP"
-        FMCP[FastMCP Server]
-        LSP[server_lifespan]
-        TO[Outils 30]
-        RE[Ressources 12]
+    subgraph "MCP Server"
+        FMCP[FastMCP]
+        LSP[lifespan]
+        TO[30 outils]
+        RE[12 ressources]
         PR[Prompts]
 
-        subgraph "Dictionnaire de services"
-            SDB[db: pool asyncpg]
-            SR[redis: client aioredis]
-            SE[embedding_service]
-            SCI[code_indexing_service]
-            SCC[chunk_cache: CascadeCache]
-            SMR[memory_repository]
-            SMS[hybrid_memory_search]
-            SG[graph_traversal_service]
-            SM[metrics_collector]
-            SLM[lm_studio_client]
-            SEE[entity_extraction_service]
-            SQU[query_understanding_service]
+        subgraph "Services"
+            direction TB
+            SDB[db asyncpg]
+            SR[redis]
+            SE[embeddings]
+            SCI[indexing]
+            SCC[cache]
+            SMR[memory_repo]
+            SMS[memory_search]
+            SG[graph]
+            SM[metrics]
+            SLM[lm_studio]
+            SEE[entity_extract]
+            SQU[query_understand]
         end
 
-        LSP --> SDB
-        LSP --> SR
-        LSP --> SE
-        LSP --> SCI
-        LSP --> SCC
-        LSP --> SMR
-        LSP --> SMS
-        LSP --> SG
-        LSP --> SM
-        LSP --> SLM
-        LSP --> SEE
-        LSP --> SQU
+        LSP --> SDB & SR & SE & SCI & SCC
+        LSP --> SMR & SMS & SG & SM
+        LSP --> SLM & SEE & SQU
 
-        SDB --> TO
-        SR --> TO
-        SE --> TO
-        SCI --> TO
-        SCC --> TO
-        SMR --> TO
-        SMS --> TO
-        SG --> TO
-        SM --> TO
+        SDB & SR & SE & SCI & SCC --> TO
+        SMR & SMS & SG & SM --> TO
 
         TO --> FMCP
         RE --> FMCP
         PR --> FMCP
     end
 
-    Claude[Client IA / MCP] -->|stdio ou HTTP| FMCP
+    Claude[Client MCP] -->|stdio/HTTP| FMCP
+
+    style FMCP fill:#9C27B0,color:#fff
+    style TO fill:#4CAF50,color:#fff
+    style SLM fill:#FF6B35,color:#fff
+    style SEE fill:#FF6B35,color:#fff
+    style SQU fill:#FF6B35,color:#fff
 ```
 
 **Pourquoi asyncpg directement plutôt que SQLAlchemy ?** Le serveur MCP utilise asyncpg brut car il n'a pas besoin des fonctionnalités ORM de SQLAlchemy — il a juste besoin d'un pool de connexions et d'exécution SQL brute. Cela réduit l'empreinte mémoire (important pour la limite de 8 GB du container) et évite le surcoût d'initialisation de SQLAlchemy.
@@ -477,12 +478,12 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    Br[Navigateur :3000] -->|GET /api/v1/*| Vi[Vite Dev Server]
+    Br[Navigateur] -->|GET /api/v1/*| Vi[Vite :3000]
     Br -->|GET /mcp| Vi
-    Vi -->|proxy /api → :8001| AP[FastAPI :8001]
-    Vi -->|proxy /v1 → :8001| AP
-    Vi -->|proxy /health → :8001| AP
-    Vi -->|proxy /mcp → :8002| MC[FastMCP :8002]
+    Vi -->|proxy /api| AP[FastAPI :8001]
+    Vi -->|proxy /v1| AP
+    Vi -->|proxy /health| AP
+    Vi -->|proxy /mcp| MC[FastMCP :8002]
 
     style Vi fill:#646BFF,color:#fff
     style AP fill:#009688,color:#fff
@@ -499,24 +500,24 @@ Le système est conçu pour **se dégrader gracieusement** à chaque couche :
 
 ```mermaid
 flowchart TD
-    subgraph "Scénarios de panne"
+    subgraph "Panne"
         F1[PostgreSQL HS]
         F2[Redis HS]
-        F3[Modèle embedding OOM]
+        F3[Embedding OOM]
         F4[LSP crash]
         F5[BM25 erreur]
         F6[Timeout vectoriel]
         F7[LM Studio indisponible]
     end
 
-    subgraph "Chemins de dégradation"
-        D1[Toutes requêtes → 503]
-        D2[Cache miss → DB directe]
-        D3[Circuit breaker ouvert → mode mock]
-        D4[Extraction type ignorée]
-        D5[Ordre RRF utilisé]
+    subgraph "Degradation"
+        D1[Toutes requetes 503]
+        D2[Cache miss vers DB]
+        D3[Circuit breaker vers mock]
+        D4[Extraction ignoree]
+        D5[Ordre RRF utilise]
         D6[Repli lexical seul]
-        D7[Recherche brute sans HL/LL]
+        D7[Recherche brute]
     end
 
     F1 --> D1
@@ -526,6 +527,21 @@ flowchart TD
     F5 --> D5
     F6 --> D6
     F7 --> D7
+
+    style F1 fill:#F44336,color:#fff
+    style F2 fill:#FF9800,color:#fff
+    style F3 fill:#FF9800,color:#fff
+    style F4 fill:#FFC107,color:#000
+    style F5 fill:#FFC107,color:#000
+    style F6 fill:#FFC107,color:#000
+    style F7 fill:#4CAF50,color:#fff
+    style D1 fill:#F44336,color:#fff
+    style D2 fill:#4CAF50,color:#fff
+    style D3 fill:#4CAF50,color:#fff
+    style D4 fill:#4CAF50,color:#fff
+    style D5 fill:#4CAF50,color:#fff
+    style D6 fill:#FF9800,color:#fff
+    style D7 fill:#4CAF50,color:#fff
 ```
 
 **Le chemin de dégradation le plus important :** Si la recherche vectorielle est activée mais aucun embedding n'est disponible (modèle non chargé, circuit breaker ouvert, mode mock), le système **se rabat silencieusement sur la recherche lexicale seule** avec un warning dans les logs. L'utilisateur obtient des résultats — juste pas les sémantiques. C'est mieux que de retourner une erreur.
@@ -557,22 +573,23 @@ Le système construit automatiquement un **graphe sémantique** entre les mémoi
 
 ```mermaid
 flowchart TD
-    subgraph "Écriture (async)"
-        WM[write_memory] --> CR[Création en DB]
-        CR --> EE[Entity extraction via LM Studio]
-        EE --> RS[Push Redis Stream memory:relationships]
-        RS --> WK[Worker calcule relations TF-IDF]
-        WK --> INS[INSERT memory_relationships]
+    subgraph "Ecriture"
+        WM[write_memory] --> CR[Creation DB]
+        CR --> EE[Entity extraction LM Studio]
+        EE --> RS[Push Stream relationships]
+        RS --> WK[Worker TF-IDF]
+        WK --> INS[INSERT relationships]
     end
 
     subgraph "Lecture"
-        SM[search_memory] --> REL[Inclut mémoires liées si résultats < limit]
-        GET[GET /memories/{id}/related] --> BFS[BFS traversal max_depth=2]
-        GRAPH[GET /memories/graph] --> D3[Nodes + edges pour D3.js]
+        SM[search_memory] --> REL[Inclut liees]
+        G1[GET related] --> BFS[BFS depth 2]
+        G2[GET graph] --> D3[D3.js viz]
     end
 
     style WK fill:#FF6B35,color:#fff
     style BFS fill:#4CAF50,color:#fff
+    style D3 fill:#2196F3,color:#fff
 ```
 
 **Scoring TF-IDF :** Les entités rares (ADR-001) contribuent plus au score que les communes (Redis). Score composite : 50% entités + 30% concepts + 20% tags. Seuil minimum configurable (défaut 0.1).
