@@ -759,11 +759,11 @@ class SearchMemoryTool(BaseMCPComponent):
                     lifecycle_state=lifecycle_state,
                 )
 
-                # EPIC-28: Extract HL/LL keywords for improved search
+                # EPIC-32: Extract HL/LL keywords (deterministic, no LLM)
                 keywords = None
                 query_understanding = self._services.get("query_understanding_service")
                 if query_understanding:
-                    keywords = await query_understanding.extract_keywords(query)
+                    keywords = query_understanding.extract_keywords(query)
 
                 response = await self.hybrid_memory_search_service.search(
                     query=query,
