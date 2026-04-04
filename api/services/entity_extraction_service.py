@@ -1,11 +1,11 @@
 """
-Entity Extraction Service — Async extraction of entities, concepts, and tags.
+Entity Extraction Service — Deterministic extraction of entities, concepts, and tags.
 
-Uses Ollama (Qwen3.5) to extract structured metadata from memories.
-Runs asynchronously — does not block memory creation.
+Uses GLiNER (Generalist and Lightweight Model for NER) to extract structured 
+metadata from memories with zero hallucinations.
 
 Usage:
-    service = EntityExtractionService(ollama_client)
+    service = EntityExtractionService(gliner_service)
     await service.extract_entities(memory_id, title, content, memory_type, tags)
 """
 
@@ -17,7 +17,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.sql import text
 
-from services.ollama_client import OllamaClient
+from services.gliner_service import GLiNERService
 
 logger = structlog.get_logger(__name__)
 
@@ -26,57 +26,18 @@ EXTRACTABLE_TYPES = {"decision", "reference", "note", "investigation"}
 # System tags that trigger extraction regardless of type
 EXTRACTABLE_SYSTEM_TAGS = {"sys:core", "sys:anchor", "sys:pattern"}
 
-ENTITY_EXTRACTION_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "entities": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "type": {"type": "string", "enum": ["technology", "product", "file", "person", "organization", "concept", "other"]}
-                },
-                "required": ["name", "type"]
-            }
-        },
-        "concepts": {
-            "type": "array",
-            "items": {"type": "string"}
-        },
-        "tags": {
-            "type": "array",
-            "items": {"type": "string"}
-        }
-    },
-    "required": ["entities", "concepts", "tags"]
-}
-
-ENTITY_EXTRACTION_SYSTEM_PROMPT = """You are an entity and concept extraction specialist.
-
-Extract named entities, abstract concepts, and suggested tags from the text.
-
-Rules:
-- Only extract what is EXPLICITLY mentioned or clearly implied
-- Do not invent or infer entities not present
-- Normalize names (lowercase for tags, proper case for entities)
-- Entities are concrete: technologies, products, files, people, organizations
-- Concepts are abstract: patterns, decisions, architectural choices
-- Tags should be short, lowercase, hyphenated (e.g., "cache-layer", "redis")
-- Return ONLY valid JSON, no explanation"""
-
 
 class EntityExtractionService:
     """
-    Extracts entities, concepts, and tags from memories via Ollama.
+    Extracts entities, concepts, and tags from memories via GLiNER.
 
-    Extraction is async and non-blocking. If Ollama is unavailable,
+    Extraction is async and non-blocking. If GLiNER is unavailable,
     extraction is silently skipped.
     """
 
-    def __init__(self, engine: AsyncEngine, ollama_client: OllamaClient):
+    def __init__(self, engine: AsyncEngine, gliner_service: GLiNERService):
         self.engine = engine
-        self.ollama_client = ollama_client
+        self.gliner_service = gliner_service
         self.enabled = os.getenv("ENTITY_EXTRACTION_ENABLED", "true").lower() == "true"
         logger.info("EntityExtractionService initialized", enabled=self.enabled)
 
@@ -118,28 +79,18 @@ class EntityExtractionService:
             logger.debug("entity_extraction_skipped", memory_id=memory_id, memory_type=memory_type)
             return False
 
-        if not await self.ollama_client.is_available():
-            logger.debug("entity_extraction_skipped_ollama_unavailable", memory_id=memory_id)
+        text = f"{title}\n\n{content}"
+        entities = self.gliner_service.extract_entities(text)
+
+        if not entities:
+            logger.debug("entity_extraction_no_results", memory_id=memory_id)
             return False
 
-        user_content = f"Title: {title}\n\nContent: {content}"
+        mapped_entities = [{"name": e["name"], "type": e["type"]} for e in entities]
+        concepts = [e["name"] for e in entities if e["type"] == "concept"]
+        auto_tags = list(set(e["name"].lower().replace(" ", "-") for e in entities))
 
-        result = await self.ollama_client.extract_json(
-            system_prompt=ENTITY_EXTRACTION_SYSTEM_PROMPT,
-            user_content=user_content,
-            json_schema=ENTITY_EXTRACTION_SCHEMA,
-            temperature=0.1,
-        )
-
-        if result is None:
-            logger.warning("entity_extraction_failed", memory_id=memory_id)
-            return False
-
-        entities = result.get("entities", [])
-        concepts = result.get("concepts", [])
-        auto_tags = result.get("tags", [])
-
-        saved = await self._save_to_db(memory_id, entities, concepts, auto_tags)
+        saved = await self._save_to_db(memory_id, mapped_entities, concepts, auto_tags)
         if not saved:
             logger.warning("entity_extraction_save_failed", memory_id=memory_id)
             return False
@@ -147,7 +98,7 @@ class EntityExtractionService:
         logger.info(
             "entities_extracted",
             memory_id=memory_id,
-            entity_count=len(entities),
+            entity_count=len(mapped_entities),
             concept_count=len(concepts),
             tag_count=len(auto_tags),
         )
@@ -160,11 +111,7 @@ class EntityExtractionService:
         concepts: List[str],
         auto_tags: List[str],
     ) -> bool:
-        """Save extracted entities to the database.
-
-        Returns:
-            True if save succeeded, False otherwise.
-        """
+        """Save extracted entities to the database."""
         query = text("""
             UPDATE memories
             SET entities = :entities,

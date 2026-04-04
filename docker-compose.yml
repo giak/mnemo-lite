@@ -73,7 +73,6 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
-      - "ollama:${OLLAMA_HOST_IP:-172.18.0.1}"
     ports:
       - "127.0.0.1:${API_PORT:-8001}:8000"
     environment:
@@ -94,10 +93,7 @@ services:
       OTLP_LOGS_ENDPOINT: http://openobserve:5080/api/default/logs/_json
       O2_USER: ${O2_USER:-admin@mnemolite.local}
       O2_PASSWORD: ${O2_PASSWORD:-Complexpass#123}
-      OLLAMA_URL: http://ollama:11434/v1
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
-      OLLAMA_FALLBACK_MODEL: ${OLLAMA_FALLBACK_MODEL:-qwen3.5:2b}
-      OLLAMA_TIMEOUT: "30"
+      GLINER_MODEL_PATH: /app/models/gliner_multi-v2.1
       ENTITY_EXTRACTION_ENABLED: ${ENTITY_EXTRACTION_ENABLED:-true}
       ENTITY_EXTRACTION_MEMORY_TYPES: ${ENTITY_EXTRACTION_MEMORY_TYPES:-decision,reference,note,investigation}
       ENTITY_EXTRACTION_SYSTEM_TAGS: ${ENTITY_EXTRACTION_SYSTEM_TAGS:-sys:core,sys:anchor,sys:pattern}
@@ -110,6 +106,7 @@ services:
         condition: service_healthy
     volumes:
       - ./api:/app
+      - ./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro
       - ./workers:/app/workers
       - ./scripts:/app/scripts
       - ./db/migrations:/app/db/migrations:ro
@@ -198,15 +195,16 @@ services:
       OTLP_LOGS_ENDPOINT: http://openobserve:5080/api/default/logs/_json
       O2_USER: ${O2_USER:-admin@mnemolite.local}
       O2_PASSWORD: ${O2_PASSWORD:-Complexpass#123}
+      GLINER_MODEL_PATH: /app/models/gliner_multi-v2.1
     ports:
       - "127.0.0.1:8002:8002"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-      - "ollama:${OLLAMA_HOST_IP:-172.18.0.1}"
     networks:
       - backend
     volumes:
       - ./api:/app
+      - ./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro
       - hf_cache:/root/.cache/huggingface
     deploy:
       resources:

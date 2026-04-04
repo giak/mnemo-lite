@@ -1,51 +1,34 @@
 """
-Query Understanding Service — Extracts HL/LL keywords from search queries.
+Query Understanding Service — Deterministic keyword extraction.
 
-Uses Ollama to decompose queries into high-level concepts and low-level
-entities for improved hybrid search.
-
-Usage:
-    service = QueryUnderstandingService(ollama_client)
-    keywords = await service.extract_keywords("how do we handle memory consolidation?")
+Extracts HL/LL keywords from search queries using simple heuristics
+instead of LLMs. Zero latency, zero hallucinations.
 """
-
-import os
+import re
 from dataclasses import dataclass
 from typing import List
 
 import structlog
 
-from services.ollama_client import OllamaClient
-
 logger = structlog.get_logger(__name__)
 
-QUERY_UNDERSTANDING_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "hl_keywords": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "High-level concepts and themes (abstract)"
-        },
-        "ll_keywords": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Low-level entities and specifics (concrete)"
-        }
-    },
-    "required": ["hl_keywords", "ll_keywords"]
+STOPWORDS = {
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "can", "need", "dare", "ought",
+    "used", "to", "of", "in", "for", "on", "with", "at", "by", "from",
+    "as", "into", "through", "during", "before", "after", "above", "below",
+    "between", "out", "off", "over", "under", "again", "further", "then",
+    "once", "here", "there", "when", "where", "why", "how", "all", "both",
+    "each", "few", "more", "most", "other", "some", "such", "no", "nor",
+    "not", "only", "own", "same", "so", "than", "too", "very", "just",
+    "because", "but", "and", "or", "if", "while", "about", "what", "which",
+    "who", "whom", "this", "that", "these", "those", "i", "me", "my",
+    "myself", "we", "our", "ours", "ourselves", "you", "your", "yours",
+    "yourself", "yourselves", "he", "him", "his", "himself", "she", "her",
+    "hers", "herself", "it", "its", "itself", "they", "them", "their",
+    "theirs", "themselves",
 }
-
-QUERY_UNDERSTANDING_SYSTEM_PROMPT = """You are a query understanding assistant.
-
-Analyze the user's search query and extract:
-- hl_keywords: High-level concepts and themes (abstract, 2-4 items)
-- ll_keywords: Low-level entities and specifics (concrete, 2-5 items)
-
-HL keywords should capture the intent and themes.
-LL keywords should capture specific names, technologies, files, or tags.
-
-Return ONLY valid JSON."""
 
 
 @dataclass
@@ -57,17 +40,13 @@ class QueryKeywords:
 
 class QueryUnderstandingService:
     """
-    Extracts HL/LL keywords from search queries via Ollama.
+    Extracts HL/LL keywords from search queries using deterministic heuristics.
 
-    Falls back to empty keywords (query brute) if Ollama is unavailable.
+    HL keywords: Most frequent content words (concepts/themes)
+    LL keywords: Named entities (acronyms, versions, proper nouns)
     """
 
-    def __init__(self, ollama_client: OllamaClient):
-        self.ollama_client = ollama_client
-        self.enabled = os.getenv("QUERY_UNDERSTANDING_ENABLED", "true").lower() == "true"
-        logger.info("QueryUnderstandingService initialized", enabled=self.enabled)
-
-    async def extract_keywords(self, query: str) -> QueryKeywords:
+    def extract_keywords(self, query: str) -> QueryKeywords:
         """
         Extract high-level and low-level keywords from a query.
 
@@ -76,39 +55,28 @@ class QueryUnderstandingService:
 
         Returns:
             QueryKeywords with hl_keywords and ll_keywords.
-            Returns empty lists if extraction fails (fallback).
         """
-        if not self.enabled:
-            logger.debug("query_understanding_disabled")
-            return QueryKeywords(hl_keywords=[], ll_keywords=[])
+        words = re.findall(r'\b[a-zA-Z]{3,}\b', query.lower())
+        hl_keywords = list(dict.fromkeys(w for w in words if w not in STOPWORDS))[:4]
 
-        if not await self.ollama_client.is_available():
-            logger.debug("query_understanding_skipped_ollama_unavailable")
-            return QueryKeywords(hl_keywords=[], ll_keywords=[])
+        ll_keywords = []
+        
+        acronyms = re.findall(r'\b[A-Z]{2,}\b', query)
+        ll_keywords.extend(acronyms)
+        
+        versions = re.findall(r'\b(?:v?\d+\.\d+(?:\.\d+)?)\b', query)
+        ll_keywords.extend(versions)
+        
+        proper = re.findall(r'\b[A-Z][a-z]{2,}\b', query)
+        ll_keywords.extend(proper)
 
-        result = await self.ollama_client.extract_json(
-            system_prompt=QUERY_UNDERSTANDING_SYSTEM_PROMPT,
-            user_content=f"Query: {query}",
-            json_schema=QUERY_UNDERSTANDING_SCHEMA,
-            temperature=0.1,
-        )
-
-        if result is None:
-            logger.warning("query_understanding_failed", query=query[:50])
-            return QueryKeywords(hl_keywords=[], ll_keywords=[])
-
-        hl = result.get("hl_keywords", [])
-        ll = result.get("ll_keywords", [])
-
-        # Ensure lists contain only strings
-        hl = [str(k) for k in hl if isinstance(k, str) and k.strip()]
-        ll = [str(k) for k in ll if isinstance(k, str) and k.strip()]
+        ll_keywords = list(dict.fromkeys(ll_keywords))[:5]
 
         logger.debug(
             "query_keywords_extracted",
             query=query[:50],
-            hl_count=len(hl),
-            ll_count=len(ll),
+            hl_count=len(hl_keywords),
+            ll_count=len(ll_keywords),
         )
 
-        return QueryKeywords(hl_keywords=hl, ll_keywords=ll)
+        return QueryKeywords(hl_keywords=hl_keywords, ll_keywords=ll_keywords)

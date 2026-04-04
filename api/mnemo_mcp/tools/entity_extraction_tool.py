@@ -11,7 +11,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.sql import text
 
-from services.ollama_client import OllamaClient
+from services.gliner_service import GLiNERService
 from services.entity_extraction_service import EntityExtractionService
 
 logger = structlog.get_logger()
@@ -20,9 +20,9 @@ logger = structlog.get_logger()
 class ExtractEntitiesTool:
     """MCP tool to manually trigger entity extraction on an existing memory."""
 
-    def __init__(self, engine: AsyncEngine, ollama_client: OllamaClient):
+    def __init__(self, engine: AsyncEngine, gliner_service: GLiNERService):
         self.engine = engine
-        self.extraction_service = EntityExtractionService(engine=engine, ollama_client=ollama_client)
+        self.extraction_service = EntityExtractionService(engine=engine, gliner_service=gliner_service)
 
     async def execute(
         self,

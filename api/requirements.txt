@@ -91,6 +91,7 @@ opentelemetry-instrumentation-sqlalchemy>=0.45b0
 opentelemetry-instrumentation-redis>=0.45b0
 opentelemetry-semantic-conventions>=0.45b0
 
-# EPIC-28: Entity Extraction & Query Understanding (LM Studio)
+# EPIC-28: Entity Extraction & Query Understanding (GLiNER)
 httpx>=0.27.0
 json-repair>=0.30.0
+gliner
