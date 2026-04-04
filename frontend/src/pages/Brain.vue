@@ -13,6 +13,8 @@ import AlertsDashboard from '@/components/brain/AlertsDashboard.vue'
 import MetricsDashboard from '@/components/brain/MetricsDashboard.vue'
 import GraphExplorer from '@/components/brain/GraphExplorer.vue'
 import ComputedMetrics from '@/components/brain/ComputedMetrics.vue'
+import MemoryGraph from '@/components/brain/MemoryGraph.vue'
+import ConsolidationSuggestions from '@/components/brain/ConsolidationSuggestions.vue'
 import CacheStats from '@/components/brain/CacheStats.vue'
 import BatchStatus from '@/components/brain/BatchStatus.vue'
 import BrainSidebar from '@/components/brain/BrainSidebar.vue'
@@ -73,7 +75,7 @@ const groups = computed(() => [
     label: 'INTELLIGENCE',
     modules: ['Ω'],
     count: data.value.nodesCount + data.value.edgesCount + data.value.computedMetricsCount,
-    tabs: ['graph', 'computed', 'weights', 'search']
+    tabs: ['graph', 'computed', 'memory-graph', 'consolidation', 'weights', 'search']
   }
 ])
 
@@ -158,6 +160,8 @@ const currentGroup = computed(() => groups.value.find(g => g.id === activeGroup.
         <!-- Ω: INTELLIGENCE -->
         <GraphExplorer v-if="activeGroup === 'intelligence' && activeTab === 'graph'" :data="data" @select="(item) => selectItem(item, 'node')" />
         <ComputedMetrics v-if="activeGroup === 'intelligence' && activeTab === 'computed'" :data="data" />
+        <MemoryGraph v-if="activeGroup === 'intelligence' && activeTab === 'memory-graph'" />
+        <ConsolidationSuggestions v-if="activeGroup === 'intelligence' && activeTab === 'consolidation'" />
       </div>
 
       <!-- Col 3: Sidebar -->

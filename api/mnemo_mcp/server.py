@@ -419,18 +419,18 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         logger.warning("mcp.hybrid_memory_search_service.initialization_failed", error=str(e))
         services["hybrid_memory_search_service"] = None
 
-    # EPIC-28: Initialize LMStudioClient and EntityExtractionService
+    # EPIC-32: Initialize OllamaClient, EntityExtractionService, QueryUnderstandingService
     try:
-        from services.lm_studio_client import LMStudioClient
+        from services.ollama_client import OllamaClient
         from services.entity_extraction_service import EntityExtractionService
 
-        lm_client = LMStudioClient()
-        services["lm_studio_client"] = lm_client
+        ollama_client = OllamaClient()
+        services["ollama_client"] = ollama_client
 
         if sqlalchemy_engine:
             entity_extraction_service = EntityExtractionService(
                 engine=sqlalchemy_engine,
-                lm_client=lm_client,
+                ollama_client=ollama_client,
             )
             services["entity_extraction_service"] = entity_extraction_service
             logger.info("mcp.entity_extraction_service.initialized")
@@ -438,13 +438,13 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
             logger.warning("mcp.entity_extraction_service.skipped", reason="no_engine")
             services["entity_extraction_service"] = None
 
-        # EPIC-28: Initialize QueryUnderstandingService
+        # EPIC-32: Initialize QueryUnderstandingService
         try:
             from services.query_understanding_service import QueryUnderstandingService
 
-            if services.get("lm_studio_client"):
+            if services.get("ollama_client"):
                 query_understanding_service = QueryUnderstandingService(
-                    lm_client=services["lm_studio_client"],
+                    ollama_client=services["ollama_client"],
                 )
                 services["query_understanding_service"] = query_understanding_service
                 logger.info("mcp.query_understanding_service.initialized")
@@ -459,10 +459,10 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         try:
             from mnemo_mcp.tools.entity_extraction_tool import ExtractEntitiesTool, SearchByEntityTool
 
-            if sqlalchemy_engine and services.get("lm_studio_client"):
+            if sqlalchemy_engine and services.get("ollama_client"):
                 extract_tool = ExtractEntitiesTool(
                     engine=sqlalchemy_engine,
-                    lm_client=services["lm_studio_client"],
+                    ollama_client=services["ollama_client"],
                 )
                 search_entity_tool = SearchByEntityTool(engine=sqlalchemy_engine)
                 services["extract_entities_tool"] = extract_tool
@@ -479,7 +479,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
 
     except Exception as e:
         logger.warning("mcp.entity_extraction_service.initialization_failed", error=str(e))
-        services["lm_studio_client"] = None
+        services["ollama_client"] = None
         services["entity_extraction_service"] = None
         services["query_understanding_service"] = None
         services["extract_entities_tool"] = None

@@ -1,11 +1,11 @@
 """
 Entity Extraction Service — Async extraction of entities, concepts, and tags.
 
-Uses LM Studio (Qwen2.5-7B) to extract structured metadata from memories.
+Uses Ollama (Qwen3.5) to extract structured metadata from memories.
 Runs asynchronously — does not block memory creation.
 
 Usage:
-    service = EntityExtractionService(lm_client)
+    service = EntityExtractionService(ollama_client)
     await service.extract_entities(memory_id, title, content, memory_type, tags)
 """
 
@@ -17,7 +17,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.sql import text
 
-from services.lm_studio_client import LMStudioClient
+from services.ollama_client import OllamaClient
 
 logger = structlog.get_logger(__name__)
 
@@ -68,15 +68,15 @@ Rules:
 
 class EntityExtractionService:
     """
-    Extracts entities, concepts, and tags from memories via LM Studio.
+    Extracts entities, concepts, and tags from memories via Ollama.
 
-    Extraction is async and non-blocking. If LM Studio is unavailable,
+    Extraction is async and non-blocking. If Ollama is unavailable,
     extraction is silently skipped.
     """
 
-    def __init__(self, engine: AsyncEngine, lm_client: LMStudioClient):
+    def __init__(self, engine: AsyncEngine, ollama_client: OllamaClient):
         self.engine = engine
-        self.lm_client = lm_client
+        self.ollama_client = ollama_client
         self.enabled = os.getenv("ENTITY_EXTRACTION_ENABLED", "true").lower() == "true"
         logger.info("EntityExtractionService initialized", enabled=self.enabled)
 
@@ -118,13 +118,13 @@ class EntityExtractionService:
             logger.debug("entity_extraction_skipped", memory_id=memory_id, memory_type=memory_type)
             return False
 
-        if not await self.lm_client.is_available():
-            logger.debug("entity_extraction_skipped_lm_unavailable", memory_id=memory_id)
+        if not await self.ollama_client.is_available():
+            logger.debug("entity_extraction_skipped_ollama_unavailable", memory_id=memory_id)
             return False
 
         user_content = f"Title: {title}\n\nContent: {content}"
 
-        result = await self.lm_client.extract_json(
+        result = await self.ollama_client.extract_json(
             system_prompt=ENTITY_EXTRACTION_SYSTEM_PROMPT,
             user_content=user_content,
             json_schema=ENTITY_EXTRACTION_SCHEMA,

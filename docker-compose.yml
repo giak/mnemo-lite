@@ -93,9 +93,10 @@ services:
       OTLP_LOGS_ENDPOINT: http://openobserve:5080/api/default/logs/_json
       O2_USER: ${O2_USER:-admin@mnemolite.local}
       O2_PASSWORD: ${O2_PASSWORD:-Complexpass#123}
-      LM_STUDIO_URL: http://host.docker.internal:1234/v1
-      LM_STUDIO_MODEL: qwen2.5-7b-instruct
-      LM_STUDIO_TIMEOUT: "30"
+      OLLAMA_URL: http://ollama:11434/v1
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
+      OLLAMA_FALLBACK_MODEL: ${OLLAMA_FALLBACK_MODEL:-qwen3.5:2b}
+      OLLAMA_TIMEOUT: "30"
       ENTITY_EXTRACTION_ENABLED: ${ENTITY_EXTRACTION_ENABLED:-true}
       ENTITY_EXTRACTION_MEMORY_TYPES: ${ENTITY_EXTRACTION_MEMORY_TYPES:-decision,reference,note,investigation}
       ENTITY_EXTRACTION_SYSTEM_TAGS: ${ENTITY_EXTRACTION_SYSTEM_TAGS:-sys:core,sys:anchor,sys:pattern}
@@ -279,10 +280,26 @@ services:
       - backend
     logging: *default-logging
 
+  # Ollama — Headless LLM server for entity extraction and query understanding
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mnemo-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    networks:
+      - backend
+    logging: *default-logging
+
 volumes:
   postgres_data:
   redis_data:
   openobserve_data:
+  ollama_data:
   hf_cache:
 
 networks:

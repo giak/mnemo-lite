@@ -1,14 +1,12 @@
 """
 Query Understanding Service — Extracts HL/LL keywords from search queries.
 
-Uses LM Studio to decompose queries into high-level concepts and low-level
+Uses Ollama to decompose queries into high-level concepts and low-level
 entities for improved hybrid search.
 
 Usage:
-    service = QueryUnderstandingService(lm_client)
+    service = QueryUnderstandingService(ollama_client)
     keywords = await service.extract_keywords("how do we handle memory consolidation?")
-    # keywords.hl_keywords = ["memory consolidation", "lifecycle management"]
-    # keywords.ll_keywords = ["sys:history", "consolidate_memory", "configure_decay"]
 """
 
 import os
@@ -17,7 +15,7 @@ from typing import List
 
 import structlog
 
-from services.lm_studio_client import LMStudioClient
+from services.ollama_client import OllamaClient
 
 logger = structlog.get_logger(__name__)
 
@@ -59,13 +57,13 @@ class QueryKeywords:
 
 class QueryUnderstandingService:
     """
-    Extracts HL/LL keywords from search queries via LM Studio.
+    Extracts HL/LL keywords from search queries via Ollama.
 
-    Falls back to empty keywords (query brute) if LM Studio is unavailable.
+    Falls back to empty keywords (query brute) if Ollama is unavailable.
     """
 
-    def __init__(self, lm_client: LMStudioClient):
-        self.lm_client = lm_client
+    def __init__(self, ollama_client: OllamaClient):
+        self.ollama_client = ollama_client
         self.enabled = os.getenv("QUERY_UNDERSTANDING_ENABLED", "true").lower() == "true"
         logger.info("QueryUnderstandingService initialized", enabled=self.enabled)
 
@@ -84,11 +82,11 @@ class QueryUnderstandingService:
             logger.debug("query_understanding_disabled")
             return QueryKeywords(hl_keywords=[], ll_keywords=[])
 
-        if not await self.lm_client.is_available():
-            logger.debug("query_understanding_skipped_lm_unavailable")
+        if not await self.ollama_client.is_available():
+            logger.debug("query_understanding_skipped_ollama_unavailable")
             return QueryKeywords(hl_keywords=[], ll_keywords=[])
 
-        result = await self.lm_client.extract_json(
+        result = await self.ollama_client.extract_json(
             system_prompt=QUERY_UNDERSTANDING_SYSTEM_PROMPT,
             user_content=f"Query: {query}",
             json_schema=QUERY_UNDERSTANDING_SCHEMA,
