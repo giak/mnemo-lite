@@ -86,172 +86,93 @@ class ConversationWorker:
 
         try:
             while self._running:
-                await self._poll_and_process()
-                await self._poll_entity_extraction(entity_stream)
+                # Poll both streams simultaneously (non-blocking)
+                try:
+                    conv_messages = self.redis.xreadgroup(
+                        groupname=self.group_name,
+                        consumername=self.consumer_name,
+                        streams={self.stream_name: ">"},
+                        count=10,
+                        block=100  # 100ms timeout
+                    )
+                    entity_messages = self.redis.xreadgroup(
+                        groupname=self.group_name,
+                        consumername=self.consumer_name,
+                        streams={entity_stream: ">"},
+                        count=1,
+                        block=100  # 100ms timeout
+                    )
+                except Exception:
+                    conv_messages = None
+                    entity_messages = None
+
+                # Process conversation messages
+                if conv_messages:
+                    for _stream, stream_messages in conv_messages:
+                        for msg_id, data in stream_messages:
+                            await self._handle_conversation_message(msg_id, data)
+
+                # Process entity extraction messages
+                if entity_messages:
+                    for _stream, stream_messages in entity_messages:
+                        for msg_id, data in stream_messages:
+                            await self._handle_entity_extraction_message(msg_id, data, entity_stream)
+
                 await asyncio.sleep(0.1)
         finally:
             if self._http_client:
                 await self._http_client.aclose()
 
+    async def _handle_conversation_message(self, msg_id, data):
+        """Handle a single conversation message."""
+        msg_id_str = msg_id.decode() if isinstance(msg_id, bytes) else msg_id
+        try:
+            message = ConversationMessage(
+                id=msg_id_str,
+                user_message=data[b'user_message'].decode(),
+                user_message_clean=data.get(b'user_message_clean', b'').decode(),
+                assistant_message=data[b'assistant_message'].decode(),
+                project_name=data[b'project_name'].decode(),
+                session_id=data[b'session_id'].decode(),
+                timestamp=data[b'timestamp'].decode()
+            )
+
+            success = await self.process_message(message)
+            if success:
+                self.redis.xack(self.stream_name, self.group_name, msg_id_str)
+        except Exception as e:
+            logger.error("handle_conversation_error", msg_id=msg_id_str, error=str(e))
+
+    async def _handle_entity_extraction_message(self, msg_id, data, stream_name):
+        """Handle a single entity extraction message."""
+        msg_id_str = msg_id.decode() if isinstance(msg_id, bytes) else msg_id
+        payload = data.get(b"payload", b"{}").decode()
+
+        try:
+            entity_data = json.loads(payload)
+            success = await self._process_entity_extraction(entity_data)
+
+            if success:
+                self.redis.xack(stream_name, self.group_name, msg_id_str)
+                logger.info(
+                    "entity_extraction_completed",
+                    memory_id=entity_data.get("memory_id"),
+                )
+            else:
+                logger.warning(
+                    "entity_extraction_failed",
+                    memory_id=entity_data.get("memory_id"),
+                )
+        except json.JSONDecodeError as e:
+            logger.error("entity_extraction_invalid_payload", error=str(e))
+            self.redis.xack(stream_name, self.group_name, msg_id_str)
+        except Exception as e:
+            logger.error("entity_extraction_error", error=str(e))
+
     async def stop(self):
         """Stop the worker gracefully."""
         logger.info("worker_stopping")
         self._running = False
-
-    async def _poll_and_process(self):
-        """Poll Redis and process one batch of messages."""
-        try:
-            # Read from stream (block for 1 second)
-            messages = self.redis.xreadgroup(
-                groupname=self.group_name,
-                consumername=self.consumer_name,
-                streams={self.stream_name: ">"},
-                count=10,
-                block=1000
-            )
-
-            if not messages:
-                return
-
-            # Process each message
-            for stream, msg_list in messages:
-                for msg_id, data in msg_list:
-                    await self._handle_message(msg_id.decode(), data)
-
-        except Exception as e:
-            logger.error("poll_error", error=str(e))
-            await asyncio.sleep(1)  # Backoff on error
-
-    async def _handle_message(self, msg_id: str, data: dict):
-        """Handle a single message with OpenTelemetry tracing."""
-        # Start measuring time
-        start_time = time.time()
-
-        # Create a span for this message processing
-        if tracer:
-            with tracer.start_as_current_span("process_conversation") as span:
-                try:
-                    # Parse message
-                    message = ConversationMessage(
-                        id=msg_id,
-                        user_message=data[b'user_message'].decode(),
-                        user_message_clean=data.get(b'user_message_clean', b'').decode(),
-                        assistant_message=data[b'assistant_message'].decode(),
-                        project_name=data[b'project_name'].decode(),
-                        session_id=data[b'session_id'].decode(),
-                        timestamp=data[b'timestamp'].decode()
-                    )
-
-                    # Add span attributes
-                    span.set_attribute("message.id", msg_id)
-                    span.set_attribute("message.project", message.project_name)
-                    span.set_attribute("message.session_id", message.session_id)
-
-                    # Process with retry
-                    success = await self.process_message(message)
-
-                    if success:
-                        # Acknowledge message (remove from pending)
-                        self.redis.xack(self.stream_name, self.group_name, msg_id)
-
-                        # Record metrics
-                        duration_ms = (time.time() - start_time) * 1000
-                        if messages_processed_counter:
-                            messages_processed_counter.add(1, {"project": message.project_name})
-                        if processing_duration_histogram:
-                            processing_duration_histogram.record(duration_ms, {"project": message.project_name})
-
-                        span.set_attribute("success", True)
-                        span.set_attribute("duration_ms", duration_ms)
-
-                        logger.info(
-                            "message_processed",
-                            msg_id=msg_id,
-                            project=message.project_name,
-                            duration_ms=duration_ms
-                        )
-                    else:
-                        # Record failure
-                        if messages_failed_counter:
-                            messages_failed_counter.add(1, {"project": message.project_name})
-
-                        span.set_attribute("success", False)
-                        logger.error("message_failed_permanently", msg_id=msg_id)
-
-                except Exception as e:
-                    # Record exception in span and metrics
-                    if messages_failed_counter:
-                        messages_failed_counter.add(1, {"error": type(e).__name__})
-
-                    span.set_attribute("error", True)
-                    span.record_exception(e)
-                    logger.error("handle_message_error", msg_id=msg_id, error=str(e))
-        else:
-            # Fallback if OpenTelemetry not configured
-            try:
-                message = ConversationMessage(
-                    id=msg_id,
-                    user_message=data[b'user_message'].decode(),
-                    user_message_clean=data.get(b'user_message_clean', b'').decode(),
-                    assistant_message=data[b'assistant_message'].decode(),
-                    project_name=data[b'project_name'].decode(),
-                    session_id=data[b'session_id'].decode(),
-                    timestamp=data[b'timestamp'].decode()
-                )
-
-                success = await self.process_message(message)
-
-                if success:
-                    self.redis.xack(self.stream_name, self.group_name, msg_id)
-                    logger.info("message_processed", msg_id=msg_id, project=message.project_name)
-                else:
-                    logger.error("message_failed_permanently", msg_id=msg_id)
-
-            except Exception as e:
-                logger.error("handle_message_error", msg_id=msg_id, error=str(e))
-
-    async def _poll_entity_extraction(self, stream_name: str):
-        """Poll entity extraction stream and process requests."""
-        try:
-            messages = self.redis.xreadgroup(
-                groupname=self.group_name,
-                consumername=self.consumer_name,
-                streams={stream_name: ">"},
-                count=1,
-                block=0  # Non-blocking
-            )
-
-            if not messages:
-                return
-
-            for _stream, stream_messages in messages:
-                for msg_id, data in stream_messages:
-                    msg_id_str = msg_id.decode() if isinstance(msg_id, bytes) else msg_id
-                    payload = data.get(b"payload", b"{}").decode()
-
-                    try:
-                        entity_data = json.loads(payload)
-                        success = await self._process_entity_extraction(entity_data)
-
-                        if success:
-                            self.redis.xack(stream_name, self.group_name, msg_id_str)
-                            logger.info(
-                                "entity_extraction_completed",
-                                memory_id=entity_data.get("memory_id"),
-                            )
-                        else:
-                            logger.warning(
-                                "entity_extraction_failed",
-                                memory_id=entity_data.get("memory_id"),
-                            )
-                    except json.JSONDecodeError as e:
-                        logger.error("entity_extraction_invalid_payload", error=str(e))
-                        self.redis.xack(stream_name, self.group_name, msg_id_str)
-                    except Exception as e:
-                        logger.error("entity_extraction_error", error=str(e))
-
-        except Exception as e:
-            logger.debug("entity_extraction_poll_error", error=str(e))
 
     async def _process_entity_extraction(self, data: dict) -> bool:
         """Process entity extraction by calling the API endpoint."""
@@ -362,7 +283,7 @@ async def main():
     # Configuration from environment
     redis_host = os.getenv("REDIS_HOST", "localhost")
     redis_port = int(os.getenv("REDIS_PORT", "6379"))
-    api_url = os.getenv("API_URL", "http://api:8001")
+    api_url = os.getenv("API_URL", "http://api:8000")
 
     # Configure structured logging
     structlog.configure(
