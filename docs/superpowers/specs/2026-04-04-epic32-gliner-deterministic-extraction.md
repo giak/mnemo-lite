@@ -2,6 +2,7 @@
 
 > **Statut:** DRAFT | **Date:** 2026-04-04 | **Auteur:** giak
 > **Remplace:** EPIC-32 (Migration LM Studio → Ollama) — annulée car les LLM hallucinent toujours.
+> **Correction v2:** Modèle gliner_multi-v2.1 confirmé, API validée par POC, Volume Docker au lieu de COPY.
 
 ---
 
@@ -25,13 +26,17 @@ Remplacer l'extraction LLM par **GLiNER** (Generalist and Lightweight Model for 
 - **Déterministe** : Zéro hallucination. Il identifie des spans dans le texte, ne génère rien.
 - **Flexible** : Extrait n'importe quel type d'entité spécifié (technology, person, organization...).
 - **Léger** : ~1.2 GB RAM, inférence CPU <200ms.
-- **Local** : Modèle embarqué dans le container, zéro dépendance externe.
+- **Local** : Modèle monté en volume Docker, zéro dépendance externe.
 - **Validé** : POC réussi sur les vraies données MnemoLite (85-90% de précision, 0% d'hallucination).
 
 **Architecture :**
 ```
 Texte → GLiNER (extraction) → Post-processing (dédup, types, validation) → DB
 ```
+
+**Modèle utilisé** : `gliner_multi-v2.1` (~1.2 GB)
+- API confirmée : `GLiNER.from_pretrained(path)` + `model.predict_entities(text, types)`
+- Montage : Volume Docker `./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro` (image reste légère)
 
 ---
 
@@ -51,11 +56,9 @@ Uses GLiNER (Generalist and Lightweight Model for NER) to extract
 entities from text with zero hallucinations.
 """
 import os
-import json
 from typing import List, Dict, Any, Optional
 
 import structlog
-from gliner import GLiNER
 
 logger = structlog.get_logger(__name__)
 
@@ -75,19 +78,23 @@ class GLiNERService:
         model_path: Optional[str] = None,
         entity_types: Optional[List[str]] = None,
     ):
-        self.model_path = model_path or os.getenv("GLINER_MODEL_PATH", "/tmp/gliner_multi-v2.1")
+        self.model_path = model_path or os.getenv("GLINER_MODEL_PATH", "/app/models/gliner_multi-v2.1")
         self.entity_types = entity_types or DEFAULT_ENTITY_TYPES
-        self.model: Optional[GLiNER] = None
+        self.model = None
         self._load_model()
 
     def _load_model(self) -> None:
         """Load GLiNER model from local path."""
         try:
+            from gliner import GLiNER
             logger.info("loading_gliner_model", path=self.model_path)
             self.model = GLiNER.from_pretrained(self.model_path)
             logger.info("gliner_model_loaded")
+        except ImportError:
+            logger.error("gliner_not_installed")
+            self.model = None
         except Exception as e:
-            logger.error("gliner_model_load_failed", error=str(e))
+            logger.warning("gliner_model_load_failed", error=str(e))
             self.model = None
 
     def extract_entities(self, text: str) -> List[Dict[str, Any]]:
@@ -98,10 +105,10 @@ class GLiNERService:
             text: Input text
             
         Returns:
-            List of entities with name, type, start, end positions
+            List of entities with name, type, start, end positions.
+            Returns empty list if model not loaded.
         """
         if not self.model:
-            logger.warning("gliner_model_not_loaded")
             return []
         
         try:
@@ -118,10 +125,6 @@ class GLiNERService:
     ) -> List[Dict[str, Any]]:
         """
         Post-process raw entities: deduplicate, clean types, validate.
-        
-        1. Deduplicate by lowercase name
-        2. Map inconsistent types to canonical types
-        3. Validate entity exists in text
         """
         seen = {}
         type_map = {
@@ -144,7 +147,6 @@ class GLiNERService:
             
             key = name.lower()
             if key not in seen:
-                # Clean type
                 raw_type = e.get("label", "concept").lower()
                 clean_type = type_map.get(raw_type, raw_type)
                 
@@ -179,35 +181,44 @@ class GLiNERService:
 
 ---
 
-### Story 32.3: Remove LLM Dependencies
+### Story 32.3: Remove LLM Dependencies & Docker Setup
 
-**Objectif** : Nettoyer le codebase des clients LLM inutiles.
+**Objectif** : Nettoyer le codebase et configurer Docker pour GLiNER.
 
 **Modifications** :
 - Supprimer `OllamaClient` et `LMStudioClient`.
 - Retirer les variables d'environnement `OLLAMA_*` et `LM_STUDIO_*`.
-- Mettre à jour `docker-compose.yml` (retirer Ollama, ajouter GLiNER model path).
-- Mettre à jour `Dockerfile` (copier le modèle GLiNER, installer `gliner`).
+- **docker-compose.yml** :
+  - Retirer le service Ollama.
+  - Ajouter le volume pour le modèle GLiNER : `./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro`.
+  - Ajouter la variable d'env `GLINER_MODEL_PATH=/app/models/gliner_multi-v2.1`.
+- **Dockerfile** :
+  - Ajouter `RUN pip install gliner`.
+  - Ne PAS copier le modèle (trop lourd), utiliser le volume.
+- **requirements.txt** :
+  - Ajouter `gliner`.
+  - Retirer `json-repair` (si non utilisé ailleurs).
 
 **Fichiers** :
 - Supprimer : `api/services/ollama_client.py`
 - Supprimer : `api/services/lm_studio_client.py`
 - Modifier : `docker-compose.yml`
 - Modifier : `api/Dockerfile`
-- Modifier : `api/requirements.txt` (ajouter `gliner`, retirer `json-repair` si non utilisé ailleurs)
+- Modifier : `api/requirements.txt`
 
 ---
 
-### Story 32.4: Query Understanding Fallback
+### Story 32.4: Query Understanding — Méthode déterministe
 
 **Objectif** : Remplacer `QueryUnderstandingService` (LLM) par une méthode déterministe.
 
 **Approche** :
-- Utiliser une extraction de mots-clés simple (TF-IDF ou regex) pour les HL/LL keywords.
-- Ou désactiver temporairement la feature si la qualité n'est pas suffisante.
+- **HL Keywords** (concepts) : Mots les plus fréquents du texte (stopwords exclus).
+- **LL Keywords** (entités) : Regex pour acronymes (2+ majuscules), versions (v1.0, 0.8), noms propres.
+- **Avantage** : 100% déterministe, 0ms de latence LLM, zéro dépendance externe.
 
 **Fichiers** :
-- Modifier : `api/services/query_understanding_service.py` (fallback déterministe)
+- Modifier : `api/services/query_understanding_service.py` (réécrire sans LLM)
 
 ---
 
@@ -216,7 +227,7 @@ class GLiNERService:
 **Objectif** : Tester le nouveau service GLiNER.
 
 **Tests** :
-- `test_gliner_service.py` — Extraction, post-processing, déduplication.
+- `test_gliner_service.py` — Extraction, post-processing, déduplication, gestion modèle manquant.
 - `test_entity_extraction_gliner.py` — Intégration avec `EntityExtractionService`.
 
 **Fichiers** :
@@ -229,7 +240,7 @@ class GLiNERService:
 
 1. **Story 32.1** — GLiNER Service
 2. **Story 32.2** — Update EntityExtractionService
-3. **Story 32.3** — Remove LLM Dependencies
+3. **Story 32.3** — Remove LLM Dependencies & Docker Setup
 4. **Story 32.4** — Query Understanding Fallback
 5. **Story 32.5** — Tests TDD
 
@@ -248,6 +259,6 @@ class GLiNERService:
 
 ## 6. Dépendances
 
-- **Modèle GLiNER** : `gliner_multi-v2.1` (déjà téléchargé, ~1.2 GB)
+- **Modèle GLiNER** : `gliner_multi-v2.1` (déjà téléchargé dans `./gliner_multi-v2.1/`, ~1.2 GB)
 - **Bibliothèque** : `pip install gliner`
 - **Aucune dépendance externe** (Ollama/LM Studio supprimés)
