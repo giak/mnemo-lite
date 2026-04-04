@@ -31,17 +31,22 @@ Ajouter un outil MCP `suggest_consolidation` qui retourne des **groupes de mémo
 ┌─────────────────────────────────────────────────────────────┐
 │  suggest_consolidation()                                     │
 │                                                              │
-│  1. Fetch mémoires (filtrées par type, âge)                  │
-│  2. Index inversé: entity_name → [memory_ids]               │
-│  3. Pour chaque paire partageant >= min_shared_entities:     │
+│  1. Fetch mémoires (filtrées par type/tag, âge)              │
+│  2. Entity frequency cache (Redis, TTL 5 min)                │
+│  3. Index inversé: entity_name → [memory_ids]               │
+│  4. Pour chaque paire partageant >= min_shared_entities:     │
 │     - TF-IDF entity similarity (60%)                         │
 │     - TF-IDF concept similarity (40%)                        │
 │     - Score composite = 0.6*E + 0.4*C                       │
-│  4. Clustering greedy (paires triées par score)              │
-│  5. Retourner top-N groupes avec:                           │
-│     - memory_ids, titles, content_previews                   │
+│  5. Clustering greedy (paires triées par score)              │
+│     - Intersection stricte: si empty → ne pas fusionner      │
+│  6. Déduplication: groupes qui se chevauchent >50% → skip    │
+│  7. Retourner top-N groupes avec:                           │
+│     - source_ids (directement utilisable)                    │
+│     - titles, content_previews (LEFT 200 chars)              │
 │     - shared_entities, shared_concepts                       │
-│     - suggested_title, suggested_summary_hint                │
+│     - suggested_title, suggested_tags                        │
+│     - suggested_summary_hint, avg_similarity                 │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -67,7 +72,6 @@ Ajouter un outil MCP `suggest_consolidation` qui retourne des **groupes de mémo
 ```python
 def compute_tfidf_similarity(mem_a, mem_b, entity_freq, total_memories):
     """Similarité pondérée TF-IDF entre deux mémoires."""
-    # Entities (60%)
     a_entities = {e["name"].lower() for e in mem_a.entities if isinstance(e, dict)}
     b_entities = {e["name"].lower() for e in mem_b.entities if isinstance(e, dict)}
     shared_e = a_entities & b_entities
@@ -75,7 +79,6 @@ def compute_tfidf_similarity(mem_a, mem_b, entity_freq, total_memories):
     if not shared_e:
         return 0.0, set(), set()
     
-    # TF-IDF score pour les entités partagées
     tfidf_shared = sum(
         math.log(max(1, total_memories) / max(1, entity_freq.get(e, 1)))
         for e in shared_e
@@ -86,22 +89,19 @@ def compute_tfidf_similarity(mem_a, mem_b, entity_freq, total_memories):
     )
     entity_sim = tfidf_shared / max(1, tfidf_union)
     
-    # Concepts (40%)
     a_concepts = set(c.lower() for c in mem_a.concepts)
     b_concepts = set(c.lower() for c in mem_b.concepts)
     shared_c = a_concepts & b_concepts
     concept_sim = len(shared_c) / max(1, len(a_concepts | b_concepts))
     
-    # Composite
     score = 0.6 * entity_sim + 0.4 * concept_sim
     return score, shared_e, shared_c
 ```
 
-**Clustering greedy** :
+**Clustering avec intersection stricte** :
 ```python
 def find_groups(pairs, min_group_size=3):
-    """Construire des groupes à partir de paires triées par score."""
-    assigned = {}  # memory_id -> group_index
+    assigned = {}
     groups = []
     
     for mem_a, mem_b, score, shared_e, shared_c in sorted(pairs, key=lambda x: -x[2]):
@@ -110,10 +110,13 @@ def find_groups(pairs, min_group_size=3):
         
         if ga is not None and gb is not None:
             if ga != gb:
-                # Fusionner groupes
+                new_shared_e = groups[ga]["shared_entities"] & groups[gb]["shared_entities"]
+                new_shared_c = groups[ga]["shared_concepts"] & groups[gb]["shared_concepts"]
+                if not new_shared_e and not new_shared_c:
+                    continue  # Ne pas fusionner — pas d'entité commune
                 groups[ga]["memory_ids"].extend(groups[gb]["memory_ids"])
-                groups[ga]["shared_entities"] &= groups[gb]["shared_entities"]
-                groups[ga]["shared_concepts"] &= groups[gb]["shared_concepts"]
+                groups[ga]["shared_entities"] = new_shared_e
+                groups[ga]["shared_concepts"] = new_shared_c
                 for mid in groups[gb]["memory_ids"]:
                     assigned[mid] = ga
                 groups[gb] = None
@@ -138,25 +141,61 @@ def find_groups(pairs, min_group_size=3):
             assigned[mem_a] = idx
             assigned[mem_b] = idx
     
-    # Nettoyer et filtrer
     return [g for g in groups if g and len(g["memory_ids"]) >= min_group_size]
+```
+
+**Déduplication** :
+```python
+def deduplicate_groups(groups, overlap_threshold=0.5):
+    groups.sort(key=lambda g: -g["avg_score"])
+    result = []
+    for g in groups:
+        if not result:
+            result.append(g)
+            continue
+        overlap = max(
+            len(set(g["memory_ids"]) & set(r["memory_ids"])) / len(g["memory_ids"])
+            for r in result
+        )
+        if overlap < overlap_threshold:
+            result.append(g)
+    return result
 ```
 
 **Titre suggéré intelligent** :
 ```python
-def suggest_title(group, memories):
-    """Générer un titre basé sur les entités/concepts partagés."""
-    # Prend l'entité la plus fréquente + concept le plus fréquent
-    entity = max(group["shared_entities"], key=lambda e: len(e)) if group["shared_entities"] else ""
-    concept = max(group["shared_concepts"], key=lambda c: len(c)) if group["shared_concepts"] else ""
-    
+def suggest_title(group):
+    entity = max(group["shared_entities"], key=len) if group["shared_entities"] else ""
+    concept = max(group["shared_concepts"], key=len) if group["shared_concepts"] else ""
     if entity and concept:
         return f"{entity.title()} {concept}"
     elif entity:
         return f"{entity.title()} configuration"
-    else:
-        # Fallback: premier titre + " (consolidated)"
-        return f"{memories[0].title} (consolidated)"
+    return "Consolidated memories"
+```
+
+**Summary hint contextuel** :
+```python
+def suggest_hint(group):
+    entities = ", ".join(list(group["shared_entities"])[:3])
+    concepts = ", ".join(list(group["shared_concepts"])[:3])
+    n = len(group["memory_ids"])
+    return f"{n} memories about {entities}: {concepts}"
+```
+
+**Entity frequency cache (Redis)** :
+```python
+async def get_entity_frequencies(self) -> Dict[str, int]:
+    if self.redis:
+        cached = await self.redis.get("entity_freq")
+        if cached:
+            return json.loads(cached)
+    
+    freq = await self._compute_entity_frequencies()
+    
+    if self.redis:
+        await self.redis.setex("entity_freq", 300, json.dumps(freq))
+    return freq
 ```
 
 **Fichiers** :
@@ -174,7 +213,8 @@ def suggest_title(group, memories):
 async def suggest_consolidation(
     min_shared_entities: int = 2,
     min_shared_concepts: int = 1,
-    memory_types: List[str] = ["note", "sys:history"],
+    memory_types: List[str] = ["note"],
+    tags: List[str] = ["sys:history"],
     max_age_days: int = 30,
     min_group_size: int = 3,
     max_groups: int = 5,
@@ -187,14 +227,15 @@ async def suggest_consolidation(
 {
     "groups": [
         {
-            "memory_ids": ["uuid1", "uuid2", "uuid3"],
+            "source_ids": ["uuid1", "uuid2", "uuid3"],
             "titles": ["Redis cache setup", "Redis TTL config", "Redis persistence"],
             "content_previews": ["first 200 chars...", ...],
             "shared_entities": ["Redis", "cache"],
             "shared_concepts": ["cache layer", "ttl"],
             "avg_similarity": 0.72,
             "suggested_title": "Redis cache configuration",
-            "suggested_summary_hint": "3 memories about Redis cache: TTL, persistence, maxmemory"
+            "suggested_tags": ["sys:history"],
+            "suggested_summary_hint": "3 memories about Redis, cache: cache layer, ttl"
         }
     ],
     "total_groups_found": 3
@@ -210,13 +251,13 @@ async def suggest_consolidation(
 ### Story 30.3: Tests TDD
 
 **Tests unitaires** :
-- `test_consolidation_suggestion_service.py` — TF-IDF similarity, clustering, titre suggéré
+- `test_consolidation_suggestion_service.py` — TF-IDF similarity, clustering, déduplication, titre suggéré
 - `test_consolidation_tools.py` — outil MCP, paramètres, retour
 
 **Tests d'intégration** :
 - Créer 6 mémoires avec entités partagées → vérifier 2 groupes trouvés
-- Vérifier que les mémoires de types différents ne se mélangent pas
-- Vérifier le filtrage par âge
+- Vérifier que les groupes qui se chevauchent >50% sont dédupliqués
+- Vérifier le filtrage par type/tag/âge
 
 **Fichiers** :
 - Créer : `tests/services/test_consolidation_suggestion_service.py`
@@ -226,7 +267,7 @@ async def suggest_consolidation(
 
 ## 5. Ordre d'implémentation
 
-1. **Story 30.1** — ConsolidationSuggestionService (TF-IDF + clustering)
+1. **Story 30.1** — ConsolidationSuggestionService (TF-IDF + cache Redis + clustering + déduplication)
 2. **Story 30.2** — Outil MCP `suggest_consolidation`
 3. **Story 30.3** — Tests TDD
 
@@ -239,6 +280,7 @@ async def suggest_consolidation(
 | Pas d'entités extraites | Retourne groupes vides, log warning |
 | < 3 mémoires candidates | Retourne `groups: []` |
 | DB HS | Retourne `error: "Database unavailable"` |
+| Redis cache HS | Calcul direct sans cache (plus lent mais correct) |
 | Clustering lent (>5s) | Timeout, retourne les groupes trouvés jusqu'au timeout |
 
 ---
@@ -250,6 +292,7 @@ async def suggest_consolidation(
 | Groupes trouvés par appel | 1-5 | Moyenne sur 50 appels |
 | Similarité moyenne des groupes | > 0.4 | avg(group.avg_similarity) |
 | Latence de l'outil | < 2s | P95 response time |
+| Chevauchement entre groupes | < 10% | % de mémoires dans >1 groupe |
 | Taux d'acceptation | > 60% | % de suggestions suivies de consolidate_memory |
 
 ---
@@ -262,6 +305,7 @@ async def suggest_consolidation(
 | Groupes non pertinents | Moyenne | Moyen | Seuil similarity_threshold configurable |
 | Titre suggéré bizarre | Faible | Faible | L'agent peut toujours le réécrire |
 | Pas d'entités extraites | Moyenne | Moyen | Fallback sur tags partagés |
+| Cache entity_freq stale | Faible | Faible | TTL 5 min + invalidation à l'extraction |
 
 ---
 
