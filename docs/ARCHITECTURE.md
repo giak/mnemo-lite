@@ -1,6 +1,6 @@
 # Architecture MnemoLite
 
-> **Statut :** DECISION | **Mis à jour :** 2026-04-03
+> **Statut :** DECISION | **Mis à jour :** 2026-04-04
 
 ## 1. Topologie du système
 
@@ -380,6 +380,20 @@ erDiagram
     code_chunks ||--o{ graph_nodes : "lié à"
     graph_nodes ||--o{ graph_edges : "source"
     graph_nodes ||--o{ graph_edges : "cible"
+    memories ||--o{ memory_relationships : "source"
+    memories ||--o{ memory_relationships : "cible"
+
+    memory_relationships {
+        UUID id PK
+        UUID source_id FK
+        UUID target_id FK
+        FLOAT score
+        JSONB shared_entities
+        JSONB shared_concepts
+        JSONB shared_tags
+        TEXT[] relationship_types
+        TIMESTAMPTZ created_at
+    }
 ```
 
 **Décisions clés du schéma :**
@@ -391,6 +405,8 @@ erDiagram
 - **Table `code_chunks`** a **quatre** colonnes d'embedding : `embedding_text`, `embedding_code` (float32, pour l'écriture) et `embedding_text_half`, `embedding_code_half` (float16, pour la lecture/recherche). Les colonnes `repository` et `return_type` sont **générées automatiquement** depuis les métadonnées JSONB — cela transforme une extraction JSONB O(n) en recherche B-tree O(log n).
 
 - **Tables `graph_nodes` et `graph_edges`** forment le graphe de dépendance de code. Les nœuds sont extraits par tree-sitter (parsing) et les serveurs LSP (informations de type). Les arêtes représentent les relations `calls`, `imports`, `inherits`. Le graphe est parcouru via BFS pour la recherche de chemin et DFS pour la découverte d'appelants/appelés.
+
+- **Table `memory_relationships`** forme le graphe sémantique entre mémoires. Les relations sont calculées automatiquement après l'extraction d'entités (EPIC-28) via scoring TF-IDF — les entités rares (ADR-001) contribuent plus que les communes (Redis). Le worker consomme le Redis Stream `memory:relationships` et calcule les relations par batch. Une seule row par paire de mémoires avec score composite (0.0-1.0), les entités/concepts/tags partagés, et les types de relation. Utilisé pour la navigation multi-hop, la recherche contextuelle et la visualisation UI.
 
 ## 8. Le serveur MCP — Un second point d'entrée
 
@@ -535,7 +551,40 @@ flowchart TD
 
 **Scaling de l'index HNSW :** L'index HNSW sur les colonnes halfvec avec `m=16, ef_construction=128` gère ~100k chunks efficacement. Au-delà, `ef_search` doit être augmenté (actuellement 100) pour un meilleur rappel, ce qui augmente la latence linéairement.
 
-## 12. Résumé des compromis
+## 12. Graphe de relations entre mémoires (EPIC-29)
+
+Le système construit automatiquement un **graphe sémantique** entre les mémoires basé sur les entités, concepts et tags partagés.
+
+```mermaid
+flowchart TD
+    subgraph "Écriture (async)"
+        WM[write_memory] --> CR[Création en DB]
+        CR --> EE[Entity extraction via LM Studio]
+        EE --> RS[Push Redis Stream memory:relationships]
+        RS --> WK[Worker calcule relations TF-IDF]
+        WK --> INS[INSERT memory_relationships]
+    end
+
+    subgraph "Lecture"
+        SM[search_memory] --> REL[Inclut mémoires liées si résultats < limit]
+        GET[GET /memories/{id}/related] --> BFS[BFS traversal max_depth=2]
+        GRAPH[GET /memories/graph] --> D3[Nodes + edges pour D3.js]
+    end
+
+    style WK fill:#FF6B35,color:#fff
+    style BFS fill:#4CAF50,color:#fff
+```
+
+**Scoring TF-IDF :** Les entités rares (ADR-001) contribuent plus au score que les communes (Redis). Score composite : 50% entités + 30% concepts + 20% tags. Seuil minimum configurable (défaut 0.1).
+
+**Trois usages :**
+1. **Navigation multi-hop** — `GET /memories/{id}/related?max_depth=2` — BFS sur le graphe, cache Redis 5 min
+2. **Recherche contextuelle** — Après recherche normale, si résultats < limit, le système inclut les mémoires liées
+3. **Visualisation UI** — `GET /memories/graph?min_score=0.3` — nodes + edges JSON pour D3.js, cache Redis 10 min
+
+**Outils MCP ajoutés :** `get_related_memories(memory_id, max_depth)` pour la navigation contextuelle, `get_memory_graph(min_score, limit)` pour la visualisation.
+
+## 13. Résumé des compromis
 
 | Décision | Sacrifié | Gagné |
 |----------|----------|-------|
@@ -554,3 +603,5 @@ flowchart TD
 | LLM local (LM Studio) pour l'extraction | Dépendance externe, latence 1-2s | Entités/concepts structurés, recherche intentionnelle |
 | Extraction async non-bloquante | Délai entre création et extraction | Zéro impact sur la latence de création de mémoire |
 | RRF 4 sources au lieu de 2 | Complexité accrue du pipeline | Meilleur rappel via entités et tags auto-générés |
+| Graphe de relations entre mémoires | Stockage supplémentaire, calcul TF-IDF | Navigation multi-hop, recherche contextuelle, visualisation |
+| Détection Python au lieu de SQL GIN | O(n) au lieu de O(log n) | Évite les problèmes de type casting asyncpg |
