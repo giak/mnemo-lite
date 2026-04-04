@@ -242,28 +242,26 @@ class WriteMemoryTool(BaseMCPComponent):
 
     def _trigger_entity_extraction(self, memory: Any) -> None:
         """
-        Trigger async entity extraction for a newly created memory.
+        Push entity extraction request to Redis Stream for worker processing.
 
-        Uses asyncio.create_task to run extraction in the background.
+        Uses Redis Stream 'entity:extraction' — consumed by the background worker.
         Does not block the memory creation response.
         """
         try:
-            import asyncio
-            from services.entity_extraction_service import EntityExtractionService
-
-            extraction_service = self._services.get("entity_extraction_service")
-            if extraction_service is None:
+            import json as _json
+            redis = self._services.get("redis")
+            if redis is None:
                 return
 
-            asyncio.create_task(
-                extraction_service.extract_entities(
-                    memory_id=str(memory.id),
-                    title=memory.title,
-                    content=memory.content,
-                    memory_type=memory.memory_type.value if hasattr(memory.memory_type, "value") else str(memory.memory_type),
-                    tags=memory.tags or [],
-                )
-            )
+            payload = _json.dumps({
+                "memory_id": str(memory.id),
+                "title": memory.title,
+                "content": memory.content,
+                "memory_type": memory.memory_type.value if hasattr(memory.memory_type, "value") else str(memory.memory_type),
+                "tags": memory.tags or [],
+            })
+
+            redis.xadd("entity:extraction", {"payload": payload})
         except Exception as e:
             # Never fail memory creation due to extraction issues
             logger.debug("entity_extraction_trigger_failed", error=str(e))
