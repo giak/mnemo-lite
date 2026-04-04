@@ -735,6 +735,9 @@ def create_mcp_server() -> FastMCP:
     # EPIC-28: Entity extraction tools
     register_entity_tools(mcp)
 
+    # EPIC-29: Memory relationship tools
+    register_relationship_tools(mcp)
+
     # Story 23.10: Prompts library
     register_prompts(mcp)
 
@@ -2281,6 +2284,66 @@ def register_entity_tools(mcp: FastMCP) -> None:
             "mcp.components.entity_tools.registered",
             tools=["extract_entities", "search_by_entity"]
         )
+
+
+def register_relationship_tools(mcp: FastMCP) -> None:
+    """
+    Register memory relationship tools (EPIC-29).
+
+    Tools:
+        - get_related_memories: Get memories related to a specific memory
+        - get_memory_graph: Get the memory relationship graph for visualization
+
+    Args:
+        mcp: FastMCP server instance
+    """
+    from mcp.server.fastmcp import Context
+    from typing import Dict, Any
+
+    mcp_services = getattr(mcp, "_services", {})
+    sqlalchemy_engine = mcp_services.get("engine")
+
+    try:
+        from mnemo_mcp.tools.relationship_tools import GetRelatedMemoriesTool, GetMemoryGraphTool
+
+        if sqlalchemy_engine:
+            related_tool = GetRelatedMemoriesTool(engine=sqlalchemy_engine)
+            graph_tool = GetMemoryGraphTool(engine=sqlalchemy_engine)
+            mcp_services["get_related_memories_tool"] = related_tool
+            mcp_services["get_memory_graph_tool"] = graph_tool
+
+            @mcp.tool()
+            async def get_related_memories(
+                memory_id: str,
+                max_depth: int = 1,
+                min_score: float = 0.1,
+            ) -> Dict[str, Any]:
+                """Get memories related to a specific memory via semantic relationships."""
+                tool = mcp_services.get("get_related_memories_tool")
+                if tool:
+                    return await tool.execute(memory_id=memory_id, max_depth=max_depth, min_score=min_score)
+                return {"error": "Service not available", "total": 0, "related": []}
+
+            @mcp.tool()
+            async def get_memory_graph(
+                min_score: float = 0.3,
+                limit: int = 100,
+            ) -> Dict[str, Any]:
+                """Get the memory relationship graph for visualization."""
+                tool = mcp_services.get("get_memory_graph_tool")
+                if tool:
+                    return await tool.execute(min_score=min_score, limit=limit)
+                return {"error": "Service not available", "nodes": [], "edges": []}
+
+            logger.info("mcp.relationship_tools.registered")
+        else:
+            mcp_services["get_related_memories_tool"] = None
+            mcp_services["get_memory_graph_tool"] = None
+
+    except Exception as e:
+        logger.warning("mcp.relationship_tools.registration_failed", error=str(e))
+        mcp_services["get_related_memories_tool"] = None
+        mcp_services["get_memory_graph_tool"] = None
 
 
 # ============================================================================
