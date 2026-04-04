@@ -738,6 +738,9 @@ def create_mcp_server() -> FastMCP:
     # EPIC-29: Memory relationship tools
     register_relationship_tools(mcp)
 
+    # EPIC-30: Consolidation suggestion tools
+    register_consolidation_tools(mcp)
+
     # Story 23.10: Prompts library
     register_prompts(mcp)
 
@@ -2344,6 +2347,67 @@ def register_relationship_tools(mcp: FastMCP) -> None:
         logger.warning("mcp.relationship_tools.registration_failed", error=str(e))
         mcp_services["get_related_memories_tool"] = None
         mcp_services["get_memory_graph_tool"] = None
+
+
+def register_consolidation_tools(mcp: FastMCP) -> None:
+    """
+    Register consolidation suggestion tools (EPIC-30).
+
+    Tools:
+        - suggest_consolidation: Suggest groups of similar memories for consolidation
+
+    Args:
+        mcp: FastMCP server instance
+    """
+    from mcp.server.fastmcp import Context
+    from typing import Dict, Any, List, Optional
+
+    mcp_services = getattr(mcp, "_services", {})
+    sqlalchemy_engine = mcp_services.get("engine")
+
+    try:
+        from mnemo_mcp.tools.consolidation_tools import SuggestConsolidationTool
+
+        if sqlalchemy_engine:
+            suggest_tool = SuggestConsolidationTool(
+                engine=sqlalchemy_engine,
+                redis_client=mcp_services.get("redis"),
+            )
+            mcp_services["suggest_consolidation_tool"] = suggest_tool
+
+            @mcp.tool()
+            async def suggest_consolidation(
+                min_shared_entities: int = 2,
+                min_shared_concepts: int = 1,
+                memory_types: Optional[List[str]] = None,
+                tags: Optional[List[str]] = None,
+                max_age_days: int = 30,
+                min_group_size: int = 3,
+                max_groups: int = 5,
+                similarity_threshold: float = 0.3,
+            ) -> Dict[str, Any]:
+                """Suggest groups of similar memories for consolidation based on entity overlap."""
+                tool = mcp_services.get("suggest_consolidation_tool")
+                if tool:
+                    return await tool.execute(
+                        min_shared_entities=min_shared_entities,
+                        min_shared_concepts=min_shared_concepts,
+                        memory_types=memory_types,
+                        tags=tags,
+                        max_age_days=max_age_days,
+                        min_group_size=min_group_size,
+                        max_groups=max_groups,
+                        similarity_threshold=similarity_threshold,
+                    )
+                return {"error": "Service not available", "groups": [], "total_groups_found": 0}
+
+            logger.info("mcp.consolidation_tools.registered")
+        else:
+            mcp_services["suggest_consolidation_tool"] = None
+
+    except Exception as e:
+        logger.warning("mcp.consolidation_tools.registration_failed", error=str(e))
+        mcp_services["suggest_consolidation_tool"] = None
 
 
 # ============================================================================
