@@ -1,8 +1,11 @@
 """
-Ollama Client — OpenAI-compatible client for Ollama.
+Ollama Client — Native Ollama API client.
 
-Uses json_schema (preferred) with fallback to json_object + json_repair.
-Supports automatic model fallback (4b → 2b) on OOM.
+Uses Ollama's native /api/chat endpoint WITHOUT format parameter.
+Relies on strong system prompts + json_repair for reliable JSON extraction.
+
+This approach avoids the known bug where Ollama/LM Studio return JSON schemas
+instead of actual data when format/response_format is specified.
 """
 
 import os
@@ -18,10 +21,10 @@ logger = structlog.get_logger(__name__)
 
 class OllamaClient:
     """
-    HTTP client for Ollama's OpenAI-compatible API.
+    HTTP client for Ollama's native API.
 
-    Supports native json_schema for structured output with fallback
-    to json_object + json_repair for maximum reliability.
+    Uses /api/chat without format parameter for reliable JSON extraction.
+    Supports automatic model fallback (4b → 2b) on failure.
     """
 
     def __init__(
@@ -29,9 +32,9 @@ class OllamaClient:
         base_url: Optional[str] = None,
         model: Optional[str] = None,
         fallback_model: Optional[str] = None,
-        timeout: float = 30.0,
+        timeout: float = 120.0,
     ):
-        self.base_url = (base_url or os.getenv("OLLAMA_URL", "http://ollama:11434/v1")).rstrip("/")
+        self.base_url = (base_url or os.getenv("OLLAMA_URL", "http://ollama:11434")).rstrip("/")
         self.model = model or os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
         self.fallback_model = fallback_model or os.getenv("OLLAMA_FALLBACK_MODEL", "qwen3.5:2b")
         self.timeout = timeout
@@ -42,28 +45,29 @@ class OllamaClient:
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(self.timeout, connect=5.0),
+                timeout=httpx.Timeout(self.timeout, connect=10.0),
                 headers={"Content-Type": "application/json"},
             )
         return self._client
 
     async def is_available(self) -> bool:
-        """Check if Ollama is running and model is loaded."""
+        """Check if Ollama is running and model is available."""
         if self._available is not None:
             return self._available
         try:
             client = self._get_client()
-            resp = await client.get(f"{self.base_url}/models")
+            # Use native Ollama API to check models
+            resp = await client.get(f"{self.base_url}/api/tags")
             if resp.status_code == 200:
-                models = resp.json().get("data", [])
-                model_ids = [m.get("id", "") for m in models]
+                models = resp.json().get("models") or []
+                model_names = [m.get("name", "") for m in models]
                 # Check primary model first
-                if any(self.model in mid for mid in model_ids):
+                if any(self.model in name for name in model_names):
                     self._current_model = self.model
                     self._available = True
                     return True
                 # Check fallback model
-                if any(self.fallback_model in mid for mid in model_ids):
+                if any(self.fallback_model in name for name in model_names):
                     self._current_model = self.fallback_model
                     logger.warning("ollama_primary_model_missing", model=self.model)
                     self._available = True
@@ -83,41 +87,32 @@ class OllamaClient:
         temperature: float = 0.1,
     ) -> Optional[Dict[str, Any]]:
         """
-        Extract structured JSON using Ollama.
+        Extract structured JSON using Ollama's native API.
 
         Strategy:
-        1. Try json_schema with primary model
-        2. Fallback: json_object + json_repair with primary model
-        3. Retry json_schema with fallback model (2b if 4b OOM)
-        4. Return None if all attempts fail
+        1. Try with strong system prompt + json_repair on primary model
+        2. Retry with fallback model (2b if 4b fails)
+        3. Return None if all attempts fail
+
+        Note: We deliberately DO NOT use the 'format' parameter because
+        Ollama/LM Studio have a known bug where they return JSON schemas
+        instead of actual data when format is specified.
         """
-        # Attempt 1: json_schema with primary model
+        # Attempt 1: Primary model
         result = await self._attempt_extract(
             system_prompt, user_content, temperature,
             model=self._current_model,
-            response_format={"type": "json_schema", "json_schema": json_schema},
         )
         if result is not None:
             return result
 
-        # Attempt 2: json_object + json_repair with primary model
-        logger.debug("ollama_json_schema_failed", fallback="json_object")
-        result = await self._attempt_extract(
-            system_prompt, user_content, temperature,
-            model=self._current_model,
-            response_format={"type": "json_object"},
-        )
-        if result is not None:
-            return result
-
-        # Attempt 3: json_schema with fallback model
+        # Attempt 2: Fallback model
         if self._current_model != self.fallback_model:
             logger.warning("ollama_switching_to_fallback", model=self.fallback_model)
             self._current_model = self.fallback_model
             result = await self._attempt_extract(
                 system_prompt, user_content, temperature,
                 model=self.fallback_model,
-                response_format={"type": "json_schema", "json_schema": json_schema},
             )
             if result is not None:
                 return result
@@ -131,45 +126,51 @@ class OllamaClient:
         user_content: str,
         temperature: float,
         model: str,
-        response_format: Optional[Dict[str, Any]],
     ) -> Optional[Dict[str, Any]]:
-        """Single attempt to extract JSON from Ollama."""
+        """Single attempt to extract JSON from Ollama using native API."""
         try:
             client = self._get_client()
+            
+            # Enhance system prompt to enforce JSON output
+            enhanced_system_prompt = f"{system_prompt}\n\nIMPORTANT: Return ONLY valid JSON. No explanation, no markdown, no code blocks. Just the raw JSON object."
+            
             body: Dict[str, Any] = {
                 "model": model,
                 "messages": [
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": enhanced_system_prompt},
                     {"role": "user", "content": user_content},
                 ],
-                "temperature": temperature,
-                "max_tokens": 2048,
                 "stream": False,
+                "options": {
+                    "temperature": temperature,
+                    "num_predict": 2048,
+                },
             }
-            if response_format:
-                body["response_format"] = response_format
 
-            resp = await client.post(f"{self.base_url}/chat/completions", json=body)
+            resp = await client.post(f"{self.base_url}/api/chat", json=body)
 
             if resp.status_code != 200:
                 logger.debug("ollama_request_failed", status=resp.status_code, body=resp.text[:200])
                 return None
 
             data = resp.json()
-            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            content = data.get("message", {}).get("content", "")
             if not content:
                 return None
 
-            # If json_object was used, parse with json_repair
-            if response_format and response_format.get("type") == "json_object":
-                repaired = repair_json(content, return_objects=True)
-                if isinstance(repaired, dict):
-                    return repaired
-                logger.debug("ollama_json_repair_failed", content_preview=content[:100])
-                return None
+            # Parse JSON with json_repair for robustness
+            # Strip markdown code blocks if present
+            if content.startswith("```"):
+                content = content.split("```", 2)[1]
+                if content.startswith("json"):
+                    content = content[4:]
+            
+            repaired = repair_json(content, return_objects=True)
+            if isinstance(repaired, dict):
+                return repaired
 
-            # json_schema should return valid JSON directly
-            return json.loads(content)
+            logger.debug("ollama_json_repair_failed", content_preview=content[:100])
+            return None
 
         except json.JSONDecodeError as e:
             logger.debug("ollama_json_decode_error", error=str(e))

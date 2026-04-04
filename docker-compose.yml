@@ -73,6 +73,7 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "ollama:${OLLAMA_HOST_IP:-172.18.0.1}"
     ports:
       - "127.0.0.1:${API_PORT:-8001}:8000"
     environment:
@@ -199,6 +200,9 @@ services:
       O2_PASSWORD: ${O2_PASSWORD:-Complexpass#123}
     ports:
       - "127.0.0.1:8002:8002"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "ollama:${OLLAMA_HOST_IP:-172.18.0.1}"
     networks:
       - backend
     volumes:
@@ -280,20 +284,8 @@ services:
       - backend
     logging: *default-logging
 
-  # Ollama — Headless LLM server for entity extraction and query understanding
-  ollama:
-    image: ollama/ollama:latest
-    container_name: mnemo-ollama
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0:11434
-    networks:
-      - backend
-    logging: *default-logging
+  # Ollama — runs on host (port 11434), accessed via host.docker.internal
+  # Pull model: ollama pull qwen3.5:4b (or qwen3.5:2b for CPU-only)
 
 volumes:
   postgres_data:
