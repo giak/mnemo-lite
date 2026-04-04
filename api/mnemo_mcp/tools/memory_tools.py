@@ -242,28 +242,51 @@ class WriteMemoryTool(BaseMCPComponent):
 
     def _trigger_entity_extraction(self, memory: Any) -> None:
         """
-        Push entity extraction request to Redis Stream for worker processing.
-
-        Uses Redis Stream 'entity:extraction' — consumed by the background worker.
-        Does not block the memory creation response.
+        Extract entities using GLiNER singleton (lazy-loaded, shared across requests).
         """
         try:
             import json as _json
-            redis = self._services.get("redis")
-            if redis is None:
+            import asyncio
+            from services.gliner_service import get_gliner_service
+            from sqlalchemy.sql import text
+
+            gliner_service = get_gliner_service()
+            text_content = f"{memory.title}\n\n{memory.content}"
+            entities = gliner_service.extract_entities(text_content)
+
+            if not entities:
                 return
 
-            payload = _json.dumps({
-                "memory_id": str(memory.id),
-                "title": memory.title,
-                "content": memory.content,
-                "memory_type": memory.memory_type.value if hasattr(memory.memory_type, "value") else str(memory.memory_type),
-                "tags": memory.tags or [],
-            })
+            engine = self._services.get("engine")
+            if engine is None:
+                return
 
-            redis.xadd("entity:extraction", {"payload": payload})
+            async def save():
+                mapped_entities = [{"name": e["name"], "type": e["type"]} for e in entities]
+                concepts = [e["name"] for e in entities if e["type"] == "concept"]
+                auto_tags = list(set(e["name"].lower().replace(" ", "-") for e in entities))
+
+                async with engine.begin() as conn:
+                    await conn.execute(text("""
+                        UPDATE memories
+                        SET entities = :entities,
+                            concepts = :concepts,
+                            auto_tags = :auto_tags
+                        WHERE id = :memory_id
+                    """), {
+                        "memory_id": str(memory.id),
+                        "entities": _json.dumps(mapped_entities),
+                        "concepts": _json.dumps(concepts),
+                        "auto_tags": _json.dumps(auto_tags),
+                    })
+
+            asyncio.create_task(save())
+            logger.info(
+                "entity_extraction_triggered",
+                memory_id=str(memory.id),
+                entity_count=len(entities),
+            )
         except Exception as e:
-            # Never fail memory creation due to extraction issues
             logger.debug("entity_extraction_trigger_failed", error=str(e))
 
 

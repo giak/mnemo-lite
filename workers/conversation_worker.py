@@ -238,37 +238,71 @@ class ConversationWorker:
         self._running = False
 
     async def _process_entity_extraction(self, data: dict) -> bool:
-        """Process entity extraction by calling the API endpoint."""
-        if not self._http_client:
-            raise RuntimeError("HTTP client not initialized")
-
+        """Process entity extraction using GLiNER directly."""
         try:
-            response = await self._http_client.post(
-                f"{self.api_url}/api/v1/memories/{data['memory_id']}/extract-entities",
-                json={
-                    "title": data["title"],
-                    "content": data["content"],
-                    "memory_type": data["memory_type"],
-                    "tags": data["tags"],
-                },
+            from gliner import GLiNER
+            import json as _json
+            from sqlalchemy import create_engine
+            from sqlalchemy.sql import text
+
+            # Load GLiNER model
+            model_path = os.getenv("GLINER_MODEL_PATH", "/app/models/gliner_multi-v2.1")
+            model = GLiNER.from_pretrained(model_path)
+
+            # Extract entities
+            text = f"{data['title']}\n\n{data['content']}"
+            entity_types = ["technology", "product", "file", "person", "organization", "concept", "location"]
+            raw_entities = model.predict_entities(text, entity_types)
+
+            # Post-process: deduplicate, validate, clean types
+            type_map = {
+                "tech": "technology", "product": "technology",
+                "org": "organization", "company": "organization",
+                "per": "person", "loc": "location",
+            }
+            seen = {}
+            for e in raw_entities:
+                name = e.get("text", "").strip()
+                if not name or len(name) < 2:
+                    continue
+                if name.lower() not in text.lower():
+                    continue
+                key = name.lower()
+                if key not in seen:
+                    raw_type = e.get("label", "concept").lower()
+                    seen[key] = {"name": name, "type": type_map.get(raw_type, raw_type)}
+
+            entities = list(seen.values())
+            concepts = [e["name"] for e in entities if e["type"] == "concept"]
+            auto_tags = list(set(e["name"].lower().replace(" ", "-") for e in entities))
+
+            # Save to DB
+            db_url = os.getenv("DATABASE_URL", "postgresql+psycopg2://mnemo:mnemopass@db:5432/mnemolite")
+            engine = create_engine(db_url)
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    UPDATE memories
+                    SET entities = :entities,
+                        concepts = :concepts,
+                        auto_tags = :auto_tags
+                    WHERE id = :memory_id
+                """), {
+                    "memory_id": data["memory_id"],
+                    "entities": _json.dumps(entities),
+                    "concepts": _json.dumps(concepts),
+                    "auto_tags": _json.dumps(auto_tags),
+                })
+
+            logger.info(
+                "entity_extraction_completed",
+                memory_id=data.get("memory_id"),
+                entity_count=len(entities),
             )
+            return True
 
-            if response.status_code == 200:
-                return True
-            else:
-                logger.warning(
-                    "entity_extraction_api_error",
-                    status=response.status_code,
-                    memory_id=data["memory_id"],
-                )
-                return False
-
-        except httpx.RequestError as e:
-            logger.warning("entity_extraction_api_unreachable", error=str(e))
-            raise  # Retry
         except Exception as e:
-            logger.error("entity_extraction_unexpected_error", error=str(e))
-            return False  # Don't retry unexpected errors
+            logger.error("entity_extraction_error", memory_id=data.get("memory_id"), error=str(e))
+            return False
 
     @retry(
         stop=stop_after_attempt(5),

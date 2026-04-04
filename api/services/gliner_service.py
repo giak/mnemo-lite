@@ -17,6 +17,9 @@ DEFAULT_ENTITY_TYPES = [
     "organization", "concept", "location"
 ]
 
+# Module-level singleton (shared across all requests)
+_gliner_service: Optional["GLiNERService"] = None
+
 
 class GLiNERService:
     """
@@ -33,6 +36,14 @@ class GLiNERService:
         )
         self.entity_types = entity_types or DEFAULT_ENTITY_TYPES
         self.model = None
+        self._load_attempted = False
+        # Don't load model at init — load lazily on first use
+
+    def _ensure_model_loaded(self) -> None:
+        """Load model on first use (lazy loading)."""
+        if self._load_attempted:
+            return
+        self._load_attempted = True
         self._load_model()
 
     def _load_model(self) -> None:
@@ -60,6 +71,7 @@ class GLiNERService:
             List of entities with name, type, start, end positions.
             Returns empty list if model not loaded.
         """
+        self._ensure_model_loaded()
         if not self.model:
             return []
 
@@ -110,3 +122,11 @@ class GLiNERService:
                 }
 
         return list(seen.values())
+
+
+def get_gliner_service() -> GLiNERService:
+    """Get or create the module-level singleton GLiNER service."""
+    global _gliner_service
+    if _gliner_service is None:
+        _gliner_service = GLiNERService()
+    return _gliner_service

@@ -161,10 +161,12 @@ services:
       - OTLP_LOGS_ENDPOINT=http://openobserve:5080/api/default/logs/_json
       - O2_USER=${O2_USER:-admin@mnemolite.local}
       - O2_PASSWORD=${O2_PASSWORD:-Complexpass#123}
+      - GLINER_MODEL_PATH=/app/models/gliner_multi-v2.1
     networks:
       - backend
     volumes:
       - ./workers:/app/workers:ro
+      - ./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro
     command: python -m workers.conversation_worker
     logging: *default-logging
 
