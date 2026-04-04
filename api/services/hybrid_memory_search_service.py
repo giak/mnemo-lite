@@ -29,6 +29,7 @@ Architecture:
 """
 
 import asyncio
+import json
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -348,10 +349,7 @@ class HybridMemorySearchService:
             fusion_weights = [w / total_w for w in fusion_weights]
 
         if fusion_results:
-            fused_results = self.fusion.fuse(
-                results=fusion_results,
-                weights=fusion_weights,
-            )
+            fused_results = self.fusion.fuse(*fusion_results)
         else:
             fused_results = []
         fusion_time = (time.time() - fusion_start) * 1000
@@ -764,7 +762,7 @@ class HybridMemorySearchService:
         entity_conditions = []
         for i, kw in enumerate(keywords[:5]):  # Limit to 5 keywords for performance
             params[f"kw{i}"] = json.dumps([{"name": kw}])
-            entity_conditions.append(f"entities @> :kw{i}::jsonb")
+            entity_conditions.append(f"entities @> CAST(:kw{i} AS jsonb)")
 
         if not entity_conditions:
             return [], (time.time() - start_time) * 1000
@@ -849,7 +847,10 @@ class HybridMemorySearchService:
         tag_conditions = []
         for i, kw in enumerate(keywords[:5]):
             params[f"kw{i}"] = kw.lower()
-            tag_conditions.append(f":kw{i} = ANY(tags) OR :kw{i} = ANY(auto_tags)")
+            # tags is TEXT[], auto_tags is TEXT (JSON array string)
+            tag_conditions.append(
+                f"(:kw{i} = ANY(tags) OR auto_tags LIKE '%' || :kw{i} || '%')"
+            )
 
         if not tag_conditions:
             return [], (time.time() - start_time) * 1000

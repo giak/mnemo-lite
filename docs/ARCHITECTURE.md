@@ -500,7 +500,7 @@ flowchart TD
         D4[Extraction type ignorée]
         D5[Ordre RRF utilisé]
         D6[Repli lexical seul]
-        D7[Recherche brute (sans HL/LL)]
+        D7[Recherche brute sans HL/LL]
     end
 
     F1 --> D1
