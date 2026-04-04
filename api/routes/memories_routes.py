@@ -713,3 +713,81 @@ async def get_decay_config(engine: AsyncEngine = Depends(get_db_engine)) -> Dict
             status_code=500,
             detail="Failed to fetch decay configuration."
         )
+
+
+# EPIC-28: Entity extraction endpoint (called by worker)
+
+class EntityExtractionRequest(BaseModel):
+    """Request body for entity extraction endpoint."""
+    title: str
+    content: str
+    memory_type: str
+    tags: List[str] = Field(default_factory=list)
+
+
+@router.post("/{memory_id}/extract-entities")
+async def extract_entities_endpoint(
+    memory_id: str,
+    request: EntityExtractionRequest,
+    engine: AsyncEngine = Depends(get_db_engine),
+) -> Dict[str, Any]:
+    """
+    EPIC-28: Extract entities, concepts, and auto-tags for a memory.
+
+    Called by the background worker after receiving a request from
+    the entity:extraction Redis Stream.
+
+    Args:
+        memory_id: Memory UUID
+        request: Entity extraction request with title, content, type, tags
+
+    Returns:
+        Extraction result with entities, concepts, and auto_tags
+    """
+    try:
+        from services.lm_studio_client import LMStudioClient
+        from services.entity_extraction_service import EntityExtractionService
+
+        lm_client = LMStudioClient()
+        extraction_service = EntityExtractionService(engine=engine, lm_client=lm_client)
+
+        success = await extraction_service.extract_entities(
+            memory_id=memory_id,
+            title=request.title,
+            content=request.content,
+            memory_type=request.memory_type,
+            tags=request.tags,
+        )
+
+        if success:
+            # Fetch the extracted data
+            async with engine.begin() as conn:
+                result = await conn.execute(
+                    text("""
+                        SELECT entities, concepts, auto_tags
+                        FROM memories WHERE id = :memory_id
+                    """),
+                    {"memory_id": memory_id},
+                )
+                row = result.fetchone()
+
+            return {
+                "success": True,
+                "memory_id": memory_id,
+                "entities": row[0] if row else [],
+                "concepts": row[1] if row else [],
+                "auto_tags": row[2] if row else [],
+            }
+        else:
+            return {
+                "success": False,
+                "memory_id": memory_id,
+                "message": "Extraction skipped or failed (LM Studio unavailable)",
+            }
+
+    except Exception as e:
+        logger.error(f"Entity extraction failed for {memory_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Entity extraction failed: {e}"
+        )

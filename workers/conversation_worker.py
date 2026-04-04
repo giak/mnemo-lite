@@ -1,8 +1,11 @@
 """
 Conversation Worker - Consumes from Redis Streams and saves to API.
+Also consumes entity extraction requests and processes them via LM Studio.
 """
 import asyncio
 import time
+import os
+import json
 import structlog
 from dataclasses import dataclass
 from typing import Optional
@@ -66,9 +69,17 @@ class ConversationWorker:
         self._running = True
         self._http_client = httpx.AsyncClient(timeout=30.0)
 
+        # Setup entity extraction stream
+        entity_stream = "entity:extraction"
+        try:
+            self.redis.xgroup_create(entity_stream, self.group_name, mkstream=True)
+        except Exception:
+            pass  # Group may already exist
+
         logger.info(
             "worker_started",
             stream=self.stream_name,
+            entity_stream=entity_stream,
             group=self.group_name,
             consumer=self.consumer_name
         )
@@ -76,7 +87,8 @@ class ConversationWorker:
         try:
             while self._running:
                 await self._poll_and_process()
-                await asyncio.sleep(0.1)  # 100ms poll interval
+                await self._poll_entity_extraction(entity_stream)
+                await asyncio.sleep(0.1)
         finally:
             if self._http_client:
                 await self._http_client.aclose()
@@ -197,6 +209,82 @@ class ConversationWorker:
 
             except Exception as e:
                 logger.error("handle_message_error", msg_id=msg_id, error=str(e))
+
+    async def _poll_entity_extraction(self, stream_name: str):
+        """Poll entity extraction stream and process requests."""
+        try:
+            messages = self.redis.xreadgroup(
+                groupname=self.group_name,
+                consumername=self.consumer_name,
+                streams={stream_name: ">"},
+                count=1,
+                block=0  # Non-blocking
+            )
+
+            if not messages:
+                return
+
+            for _stream, stream_messages in messages:
+                for msg_id, data in stream_messages:
+                    msg_id_str = msg_id.decode() if isinstance(msg_id, bytes) else msg_id
+                    payload = data.get(b"payload", b"{}").decode()
+
+                    try:
+                        entity_data = json.loads(payload)
+                        success = await self._process_entity_extraction(entity_data)
+
+                        if success:
+                            self.redis.xack(stream_name, self.group_name, msg_id_str)
+                            logger.info(
+                                "entity_extraction_completed",
+                                memory_id=entity_data.get("memory_id"),
+                            )
+                        else:
+                            logger.warning(
+                                "entity_extraction_failed",
+                                memory_id=entity_data.get("memory_id"),
+                            )
+                    except json.JSONDecodeError as e:
+                        logger.error("entity_extraction_invalid_payload", error=str(e))
+                        self.redis.xack(stream_name, self.group_name, msg_id_str)
+                    except Exception as e:
+                        logger.error("entity_extraction_error", error=str(e))
+
+        except Exception as e:
+            logger.debug("entity_extraction_poll_error", error=str(e))
+
+    async def _process_entity_extraction(self, data: dict) -> bool:
+        """Process entity extraction by calling the API endpoint."""
+        if not self._http_client:
+            raise RuntimeError("HTTP client not initialized")
+
+        try:
+            response = await self._http_client.post(
+                f"{self.api_url}/api/v1/memories/{data['memory_id']}/extract-entities",
+                json={
+                    "title": data["title"],
+                    "content": data["content"],
+                    "memory_type": data["memory_type"],
+                    "tags": data["tags"],
+                },
+            )
+
+            if response.status_code == 200:
+                return True
+            else:
+                logger.warning(
+                    "entity_extraction_api_error",
+                    status=response.status_code,
+                    memory_id=data["memory_id"],
+                )
+                return False
+
+        except httpx.RequestError as e:
+            logger.warning("entity_extraction_api_unreachable", error=str(e))
+            raise  # Retry
+        except Exception as e:
+            logger.error("entity_extraction_unexpected_error", error=str(e))
+            return False  # Don't retry unexpected errors
 
     @retry(
         stop=stop_after_attempt(5),
