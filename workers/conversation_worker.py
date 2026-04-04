@@ -76,10 +76,18 @@ class ConversationWorker:
         except Exception:
             pass  # Group may already exist
 
+        # Setup memory relationships stream
+        rel_stream = "memory:relationships"
+        try:
+            self.redis.xgroup_create(rel_stream, self.group_name, mkstream=True)
+        except Exception:
+            pass  # Group may already exist
+
         logger.info(
             "worker_started",
             stream=self.stream_name,
             entity_stream=entity_stream,
+            rel_stream=rel_stream,
             group=self.group_name,
             consumer=self.consumer_name
         )
@@ -102,9 +110,17 @@ class ConversationWorker:
                         count=1,
                         block=100  # 100ms timeout
                     )
+                    rel_messages = self.redis.xreadgroup(
+                        groupname=self.group_name,
+                        consumername=self.consumer_name,
+                        streams={rel_stream: ">"},
+                        count=1,
+                        block=100  # 100ms timeout
+                    )
                 except Exception:
                     conv_messages = None
                     entity_messages = None
+                    rel_messages = None
 
                 # Process conversation messages
                 if conv_messages:
@@ -117,6 +133,12 @@ class ConversationWorker:
                     for _stream, stream_messages in entity_messages:
                         for msg_id, data in stream_messages:
                             await self._handle_entity_extraction_message(msg_id, data, entity_stream)
+
+                # Process memory relationship messages
+                if rel_messages:
+                    for _stream, stream_messages in rel_messages:
+                        for msg_id, data in stream_messages:
+                            await self._handle_relationship_message(msg_id, data, rel_stream)
 
                 await asyncio.sleep(0.1)
         finally:
@@ -168,6 +190,47 @@ class ConversationWorker:
             self.redis.xack(stream_name, self.group_name, msg_id_str)
         except Exception as e:
             logger.error("entity_extraction_error", error=str(e))
+
+    async def _handle_relationship_message(self, msg_id, data, stream_name):
+        """Handle a memory relationship computation message."""
+        msg_id_str = msg_id.decode() if isinstance(msg_id, bytes) else msg_id
+        payload = data.get(b"payload", b"{}").decode()
+
+        try:
+            rel_data = json.loads(payload)
+            memory_id = rel_data.get("memory_id")
+            entities = rel_data.get("entities", [])
+            concepts = rel_data.get("concepts", [])
+            tags = rel_data.get("tags", [])
+            auto_tags = rel_data.get("auto_tags", [])
+
+            if not memory_id:
+                self.redis.xack(stream_name, self.group_name, msg_id_str)
+                return
+
+            # Call API to compute relationships
+            if self._http_client:
+                response = await self._http_client.post(
+                    f"{self.api_url}/api/v1/memories/{memory_id}/compute-relationships",
+                    json={
+                        "entities": entities,
+                        "concepts": concepts,
+                        "tags": tags,
+                        "auto_tags": auto_tags,
+                    },
+                )
+                if response.status_code == 200:
+                    self.redis.xack(stream_name, self.group_name, msg_id_str)
+                    logger.info("relationships_computed", memory_id=memory_id)
+                else:
+                    logger.warning("relationship_compute_failed", memory_id=memory_id, status=response.status_code)
+            else:
+                self.redis.xack(stream_name, self.group_name, msg_id_str)
+        except json.JSONDecodeError as e:
+            logger.error("relationship_invalid_payload", error=str(e))
+            self.redis.xack(stream_name, self.group_name, msg_id_str)
+        except Exception as e:
+            logger.error("relationship_error", error=str(e))
 
     async def stop(self):
         """Stop the worker gracefully."""
