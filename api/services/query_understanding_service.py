@@ -68,7 +68,8 @@ class QueryUnderstandingService:
         ll_keywords.extend(versions)
         
         proper = re.findall(r'\b[A-Z][a-z]{2,}\b', query)
-        ll_keywords.extend(proper)
+        common_words = {"the", "a", "an", "is", "are", "was", "what", "how", "when", "where", "why", "who", "which", "this", "that", "these", "those", "some", "any", "all", "each", "every", "both", "few", "more", "most", "other", "such", "only", "own", "same", "very", "just", "also", "then", "than", "too", "can", "will", "would", "should", "could", "may", "might", "must", "shall", "need", "do", "does", "did", "has", "have", "had", "but", "and", "or", "if", "so", "yet", "for", "nor", "not"}
+        ll_keywords.extend(p for p in proper if p.lower() not in common_words)
 
         ll_keywords = list(dict.fromkeys(ll_keywords))[:5]
 
