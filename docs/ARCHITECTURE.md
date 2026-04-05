@@ -1,6 +1,6 @@
 # Architecture MnemoLite
 
-> **Statut :** DECISION | **Mis à jour :** 2026-04-04
+> **Statut :** DECISION | **Mis à jour :** 2026-04-05
 
 ## 1. Topologie du système
 
@@ -36,7 +36,7 @@ graph TB
     end
 
     subgraph "Hôte"
-        LMStudio[LM Studio :1234]
+        GLiNER[GLiNER modèle local]
     end
 
     Browser --> FE
@@ -51,18 +51,18 @@ graph TB
     API -.-> OObserve
     MCP -.-> OObserve
     Worker -.-> OObserve
-    API -.-> LMStudio
-    MCP -.-> LMStudio
+    API -.-> GLiNER
+    MCP -.-> GLiNER
 
     style PG fill:#336791,color:#fff
     style Redis fill:#DC382D,color:#fff
-    style LMStudio fill:#FF6B35,color:#fff
+    style GLiNER fill:#FF6B35,color:#fff
     style OObserve fill:#E91E63,color:#fff
 ```
 
 **Pourquoi deux processus séparés ?** L'API REST parle HTTP aux navigateurs (CORS, sessions). Le serveur MCP parle JSON-RPC en stdio ou Streamable HTTP — un protocole fondamentalement différent. Les exécuter séparément signifie que le serveur MCP peut être utilisé par Claude Desktop sans avoir besoin de l'API REST, et inversement. Ils ne partagent **aucun code à l'exécution** — chacun initialise ses propres pools de connexion, services et caches.
 
-**Isolation réseau :** Deux réseaux Docker isolent le trafic. `backend` connecte API, MCP, Worker, PostgreSQL et Redis. `frontend` connecte Frontend, API, MCP et OpenObserve. PostgreSQL et Redis ne sont **jamais** exposés au réseau frontend.
+**Isolation réseau :** Deux réseaux Docker isolent le trafic. `backend` connecte API, MCP, Worker, PostgreSQL, Redis et OpenObserve. `frontend` connecte Frontend, API, MCP et OpenObserve. PostgreSQL et Redis ne sont **jamais** exposés au réseau frontend. OpenObserve est sur les **deux** réseaux pour recevoir les logs de tous les services.
 
 ## 2. Le pattern Lifespan — Comment les services s'initialisent
 
@@ -97,6 +97,8 @@ sequenceDiagram
     L-->>U: nettoyage terminé
 ```
 
+**Note :** Ce diagramme décrit le lifespan de l'**API REST** (`main.py`). Le serveur MCP (`server.py`) a un lifespan différent : il crée un pool asyncpg + un moteur SQLAlchemy async, mais **ne précharge pas** les modèles d'embedding (chargement paresseux à la première utilisation) et **ne crée pas** de tâche de monitoring d'alertes.
+
 **Décision critique :** `app.state` est le localisateur de services. Chaque service initialisé pendant le lifespan est stocké sur `app.state` et récupéré par les fonctions `Depends()` de FastAPI. Le serveur MCP fait la même chose avec un dictionnaire `services` injecté via `inject_services()`.
 
 **Modes de défaillance au démarrage :**
@@ -108,7 +110,7 @@ sequenceDiagram
 | Modèles d'embedding | Prod : `RuntimeError`. Dev : warning | Correction prod vs vélocité dev |
 | Serveurs LSP | Warning loggé, `None` | Optionnel — l'indexation fonctionne sans |
 | Service d'alertes | Warning, tâche non démarrée | L'observabilité n'est pas critique |
-| LM Studio | Skip silencieux, fallback recherche brute | L'extraction est optionnelle, la recherche fonctionne sans |
+| GLiNER | Skip silencieux, fallback sans entités | L'extraction est optionnelle, la recherche fonctionne sans |
 
 ## 3. Le pipeline de recherche hybride
 
@@ -192,7 +194,9 @@ flowchart LR
 
 **Différence clé :** La recherche mémoire applique un **decay temporel** après le reranking. Le `MemoryDecayService` applique un decay exponentiel basé sur `created_at` — les anciennes mémoires obtiennent progressivement des scores plus bas. Configurable par tag via `configure_decay()`, permettant aux mémoires `sys:core` d'être permanentes (decay=0.0) tandis que `sys:history` decay avec une demi-vie de ~14 jours.
 
-**Recherche intentionnelle (EPIC-28) :** Avant la recherche, un LLM local (LM Studio) décompose la requête en **HL keywords** (concepts abstraits) et **LL keywords** (entités concrètes). Les HL keywords orientent la recherche vectorielle, les LL keywords alimentent deux recherches supplémentaires — containment JSONB sur les entités et overlap sur les tags (manuels + auto-générés). La fusion RRF passe de 2 à 4 sources avec des poids normalisés dynamiquement. Si le LLM n'est pas disponible, le système se rabat silencieusement sur la recherche brute (comportement antérieur).
+**Recherche intentionnelle (EPIC-28) :** Avant la recherche, le `QueryUnderstandingService` (déterministe, basé sur des heuristiques regex — pas de LLM) décompose la requête en **HL keywords** (concepts abstraits) et **LL keywords** (entités concrètes). Les HL keywords orientent la recherche vectorielle, les LL keywords alimentent deux recherches supplémentaires — containment JSONB sur les entités et overlap sur les tags (manuels + auto-générés). La fusion RRF passe de 2 à 4 sources avec des poids normalisés dynamiquement. Si le service n'est pas disponible, le système se rabat silencieusement sur la recherche brute (comportement antérieur).
+
+**Filtres avancés (EPIC-32) :** Le pipeline hybrid search applique les filtres `consumed` (colonnes `consumed_at IS NULL/NOT NULL`) et `lifecycle_state` (conditions SQL sur les tags) dans les 4 sous-requêtes parallèles avant la fusion RRF. Le paramètre `query` est optionnel si `tags` est fourni, permettant le mode listing pur utilisé par Expanse.
 
 ## 4. Architecture du cache à trois couches
 
@@ -314,6 +318,7 @@ erDiagram
         TIMESTAMPTZ updated_at
         TIMESTAMPTZ deleted_at
         TIMESTAMPTZ consumed_at
+        VARCHAR(100) consumed_by
         UUID[] related_chunks
         JSONB resource_links
         JSONB entities
@@ -404,15 +409,37 @@ erDiagram
         TEXT[] relationship_types
         TIMESTAMPTZ created_at
     }
+
+    projects {
+        UUID id PK
+        TEXT name
+        TEXT description
+        TIMESTAMPTZ created_at
+    }
+
+    memory_decay_config {
+        TEXT tag_pattern PK
+        FLOAT decay_rate
+        INT auto_consolidate_threshold
+        FLOAT priority_boost
+    }
+
+    indexing_errors {
+        UUID id PK
+        TEXT file_path
+        TEXT error_message
+        TEXT repository
+        TIMESTAMPTZ created_at
+    }
 ```
 
 **Décisions clés du schéma :**
 
 - **Table `events`** est le store original — c'était la première table. Les mémoires ont été dérivées plus tard via l'`EventProcessor`. Le `MemoryRepository` utilise SQLAlchemy Core (pas d'ORM) pour le contrôle SQL brut, surtout pour les opérations pgvector.
 
-- **Table `memories`** a à la fois `embedding` (float32 vector) et `embedding_half` (float16 halfvec). Le trigger les garde synchronisés. Le champ `embedding_source` est un résumé textuel focalisé utilisé pour calculer les embeddings — séparé du `content` complet — permettant une meilleure qualité d'embedding. Trois colonnes supplémentaires enrichissent les mémoires avec des métadonnées structurées : `entities` (JSONB, entités nommées), `concepts` (JSONB, concepts abstraits), et `auto_tags` (TEXT[], tags auto-générés). Les colonnes JSONB ont des index GIN `jsonb_path_ops` pour des requêtes de containment efficaces (`@>`).
+- **Table `memories`** a à la fois `embedding` (float32 vector) et `embedding_half` (float16 halfvec). Le trigger les garde synchronisés. Le champ `embedding_source` est un résumé textuel focalisé utilisé pour calculer les embeddings — séparé du `content` complet — permettant une meilleure qualité d'embedding. Trois colonnes supplémentaires enrichissent les mémoires avec des métadonnées structurées : `entities` (JSONB, entités nommées), `concepts` (JSONB, concepts abstraits), et `auto_tags` (TEXT[], tags auto-générés). La colonne `consumed_by` (VARCHAR) trace quel agent a consommé la mémoire. Les types de mémoire valides sont : `note`, `decision`, `task`, `reference`, `conversation`, `investigation`. Les colonnes JSONB ont des index GIN `jsonb_path_ops` pour des requêtes de containment efficaces (`@>`).
 
-- **Table `code_chunks`** a **quatre** colonnes d'embedding : `embedding_text`, `embedding_code` (float32, pour l'écriture) et `embedding_text_half`, `embedding_code_half` (float16, pour la lecture/recherche). Les colonnes `repository` et `return_type` sont **générées automatiquement** depuis les métadonnées JSONB — cela transforme une extraction JSONB O(n) en recherche B-tree O(log n).
+- **Table `code_chunks`** a **quatre** colonnes d'embedding : `embedding_text`, `embedding_code` (float32, pour l'écriture) et `embedding_text_half`, `embedding_code_half` (float16, pour la lecture/recherche). Les colonnes `repository` et `return_type` sont peuplées par le service d'indexage — `repository` depuis le contexte d'indexation, `return_type` depuis les serveurs LSP.
 
 - **Tables `graph_nodes` et `graph_edges`** forment le graphe de dépendance de code. Les nœuds sont extraits par tree-sitter (parsing) et les serveurs LSP (informations de type). Les arêtes représentent les relations `calls`, `imports`, `inherits`. Le graphe est parcouru via BFS pour la recherche de chemin et DFS pour la découverte d'appelants/appelés.
 
@@ -421,7 +448,7 @@ erDiagram
 ## 8. Le serveur MCP — Un second point d'entrée
 
 Le serveur MCP n'est **pas** un wrapper autour de l'API REST. C'est un processus complètement séparé avec son propre :
-- Pool de connexions DB (asyncpg, pas SQLAlchemy)
+- Pool de connexions DB (asyncpg pool_size=10 + SQLAlchemy async engine)
 - Client Redis
 - Instances de services
 - Gestion du cycle de vie
@@ -431,13 +458,14 @@ flowchart TD
     subgraph "MCP Server"
         FMCP[FastMCP]
         LSP[lifespan]
-        TO[30 outils]
+        TO[34 outils]
         RE[12 ressources]
         PR[Prompts]
 
         subgraph "Services"
             direction TB
-            SDB[db asyncpg]
+            SDB[db asyncpg pool]
+            SSE[SQLAlchemy engine]
             SR[redis]
             SE[embeddings]
             SCI[indexing]
@@ -446,14 +474,12 @@ flowchart TD
             SMS[memory_search]
             SG[graph]
             SM[metrics]
-            SLM[lm_studio]
-            SEE[entity_extract]
+            SGL[gliner]
             SQU[query_understand]
         end
 
-        LSP --> SDB & SR & SE & SCI & SCC
-        LSP --> SMR & SMS & SG & SM
-        LSP --> SLM & SEE & SQU
+        LSP --> SDB & SSE & SR & SE & SCI & SCC
+        LSP --> SMR & SMS & SG & SM & SGL & SQU
 
         SDB & SR & SE & SCI & SCC --> TO
         SMR & SMS & SG & SM --> TO
@@ -467,12 +493,11 @@ flowchart TD
 
     style FMCP fill:#9C27B0,color:#fff
     style TO fill:#4CAF50,color:#fff
-    style SLM fill:#FF6B35,color:#fff
-    style SEE fill:#FF6B35,color:#fff
+    style SGL fill:#FF6B35,color:#fff
     style SQU fill:#FF6B35,color:#fff
 ```
 
-**Pourquoi asyncpg directement plutôt que SQLAlchemy ?** Le serveur MCP utilise asyncpg brut car il n'a pas besoin des fonctionnalités ORM de SQLAlchemy — il a juste besoin d'un pool de connexions et d'exécution SQL brute. Cela réduit l'empreinte mémoire (important pour la limite de 8 GB du container) et évite le surcoût d'initialisation de SQLAlchemy.
+**Pourquoi asyncpg + SQLAlchemy ?** Le serveur MCP crée les deux : un pool asyncpg brut (`services["db"]`, pool_size=10) pour les requêtes directes, et un moteur SQLAlchemy async (`services["engine"]`) pour tous les services (MemoryRepository, HybridMemorySearchService, GraphConstructionService, etc.). SQLAlchemy Core est utilisé pour le contrôle SQL brut (pgvector, requêtes complexes) tout en bénéficiant du pool de connexions et de la gestion transactionnelle.
 
 ## 9. Communication Frontend vers API
 
@@ -507,7 +532,7 @@ flowchart TD
         F4[LSP crash]
         F5[BM25 erreur]
         F6[Timeout vectoriel]
-        F7[LM Studio indisponible]
+        F7[GLiNER indisponible]
     end
 
     subgraph "Degradation"
@@ -575,7 +600,7 @@ Le système construit automatiquement un **graphe sémantique** entre les mémoi
 flowchart TD
     subgraph "Ecriture"
         WM[write_memory] --> CR[Creation DB]
-        CR --> EE[Entity extraction LM Studio]
+        CR --> EE[Entity extraction GLiNER]
         EE --> RS[Push Stream relationships]
         RS --> WK[Worker TF-IDF]
         WK --> INS[INSERT relationships]
@@ -584,12 +609,12 @@ flowchart TD
     subgraph "Lecture"
         SM[search_memory] --> REL[Inclut liees]
         G1[GET related] --> BFS[BFS depth 2]
-        G2[GET graph] --> D3[D3.js viz]
+        G2[GET graph] --> G6["@"antv/g6 viz]
     end
 
     style WK fill:#FF6B35,color:#fff
     style BFS fill:#4CAF50,color:#fff
-    style D3 fill:#2196F3,color:#fff
+    style G6 fill:#2196F3,color:#fff
 ```
 
 **Scoring TF-IDF :** Les entités rares (ADR-001) contribuent plus au score que les communes (Redis). Score composite : 50% entités + 30% concepts + 20% tags. Seuil minimum configurable (défaut 0.1).
@@ -597,11 +622,105 @@ flowchart TD
 **Trois usages :**
 1. **Navigation multi-hop** — `GET /memories/{id}/related?max_depth=2` — BFS sur le graphe, cache Redis 5 min
 2. **Recherche contextuelle** — Après recherche normale, si résultats < limit, le système inclut les mémoires liées
-3. **Visualisation UI** — `GET /memories/graph?min_score=0.3` — nodes + edges JSON pour D3.js, cache Redis 10 min
+3. **Visualisation UI** — `GET /memories/graph?min_score=0.3` — nodes + edges JSON pour @antv/g6, cache Redis 10 min
 
 **Outils MCP ajoutés :** `get_related_memories(memory_id, max_depth)` pour la navigation contextuelle, `get_memory_graph(min_score, limit)` pour la visualisation.
 
-## 13. Résumé des compromis
+## 13. Extraction d'entités déterministe avec GLiNER (EPIC-32)
+
+Le système utilise **GLiNER** pour l'extraction d'entités nommées déterministe — sans LLM, sans appel réseau externe.
+
+```mermaid
+flowchart TD
+    WM[write_memory] --> RS[Push Stream entity:extraction]
+    RS --> WK[Worker GLiNER]
+    WK --> GL[GLiNER predict_entities]
+    GL --> PP[Post-processing]
+    PP --> DED[Déduplication case-insensitive]
+    DED --> VAL[Validation texte source]
+    VAL --> DB[UPDATE memories SET entities]
+    DB --> RS2[Push Stream relationships]
+
+    style GL fill:#FF6B35,color:#fff
+    style DED fill:#4CAF50,color:#fff
+    style VAL fill:#4CAF50,color:#fff
+```
+
+**Pourquoi GLiNER ?** L'ancienne extraction (EPIC-28) utilisait un LLM local via l'API REST legacy — remplacée par GLiNER pour les raisons suivantes :
+- Latence 1-2s par requête LLM → ~50ms avec GLiNER
+- Dépendance à un service externe (hôte) → modèle local embarqué
+- Résultats non déterministes → 100% déterministes
+- Prompt engineering complexe → configuration simple des types d'entités
+
+GLiNER résout tout cela : modèle local, ~50ms par extraction, résultats 100% déterministes, zéro dépendance réseau.
+
+**Types d'entités extraits :** `technology`, `product`, `file`, `person`, `organization`, `concept`, `location`. Le post-processing mappe les labels courts de GLiNER (`org` → `organization`, `per` → `person`) et déduplique par nom (case-insensitive).
+
+**Validation croisée :** Chaque entité extraite est validée contre le texte source — si le texte n'apparaît pas dans le contenu, elle est rejetée. Cela élimine les hallucinations du modèle.
+
+**Fallback gracieux :** Si le modèle GLiNER n'est pas disponible (fichier manquant, OOM), le worker logge un warning et retourne un résultat vide — la mémoire est créée normalement sans entités.
+
+**Modèle par défaut :** `gliner_multi-v2.1` dans `/app/models/`. Configurable via `GLINER_MODEL_PATH`.
+
+## 14. Filtres avancés de recherche mémoire
+
+La recherche mémoire supporte des filtres critiques pour l'intégration avec **Expanse** :
+
+```mermaid
+flowchart TD
+    Q[Requête search_memory] --> PC{query fourni?}
+    PC -->|Oui| HS[Hybrid search 4 sources]
+    PC -->|Non + tags| TO[Tag-only listing]
+    PC -->|Ni l'un ni l'autre| ERR[Erreur: Query or tags required]
+
+    HS --> CF{Filtres appliqués?}
+    TO --> CF
+
+    subgraph "Filtres SQL (4 sous-requêtes)"
+        C[consumed_at IS NULL/NOT NULL]
+        LS[lifecycle_state → tags]
+        MT[memory_type = :type]
+        TG[tags = ANY tags]
+    end
+
+    CF --> C & LS & MT & TG
+    C & LS & MT & TG --> RRF[Fusion RRF]
+    RRF --> Res[Résultats filtrés]
+
+    subgraph "Mapping lifecycle_state"
+        S["sealed" → pas :candidate, pas :doubt]
+        CA["candidate" → tag :candidate]
+        D["doubt" → tag :doubt]
+        SM["summary" → tag :summary]
+    end
+
+    LS -.-> S & CA & D & SM
+
+    style ERR fill:#F44336,color:#fff
+    style RRF fill:#9C27B0,color:#fff
+    style TO fill:#4CAF50,color:#fff
+```
+
+| Filtre | Type | Usage |
+|--------|------|-------|
+| `consumed` | `bool \| None` | `False` = traces fraîches (non consommées), `True` = déjà traitées |
+| `lifecycle_state` | `str \| None` | `sealed`, `candidate`, `doubt`, `summary` — mappé sur les tags |
+| `tag_mode` | `str` | `"and"` (défaut, tous les tags requis) ou `"or"` (au moins un) |
+
+**Mapping lifecycle_state → tags SQL :**
+
+| État | Condition SQL |
+|------|--------------|
+| `sealed` | Pas de tag `:candidate` ET pas de tag `:doubt` |
+| `candidate` | Tag `:candidate` présent |
+| `doubt` | Tag `:doubt` présent |
+| `summary` | Tag `:summary` présent |
+
+**Query optionnel :** Depuis EPIC-32, `query` est optionnel si `tags` est fourni. Cela permet le mode **listing pur par tags** — utilisé par Expanse pour la Triangulation L3 (`search_memory(tags=["sys:anchor"], lifecycle_state="sealed")`).
+
+**Application dans le pipeline hybrid search :** Les filtres `consumed` et `lifecycle_state` sont appliqués dans les 4 sous-requêtes parallèles (`_lexical_search`, `_vector_search`, `_entity_search`, `_tag_search`) avant la fusion RRF — garantissant que seuls les résultats filtrés participent au scoring.
+
+## 15. Résumé des compromis
 
 | Décision | Sacrifié | Gagné |
 |----------|----------|-------|
@@ -615,10 +734,12 @@ flowchart TD
 | Chargement paresseux des modèles | Cold start à la première requête | Démarrage plus rapide, modèles chargés si nécessaire |
 | Mode mock d'embedding | Réalisme des tests | Pas de téléchargement de modèles pour CI/CD |
 | Triggers PostgreSQL pour sync halfvec | Calcul côté DB | Zéro changement de code app pour halfvec |
-| Colonnes générées depuis JSONB | Surcoût de stockage (données redondantes) | Recherches O(log n) au lieu de O(n) |
+| Colonnes `repository`/`return_type` dédiées | Surcoût de stockage (données redondantes) | Recherches O(log n) au lieu de O(n) |
 | Circuit breakers indépendants par modèle | Gestion d'état légèrement plus complexe | Les échecs ne se propagent pas entre domaines |
-| LLM local (LM Studio) pour l'extraction | Dépendance externe, latence 1-2s | Entités/concepts structurés, recherche intentionnelle |
+| GLiNER au lieu de LLM pour l'extraction | Modèle ~200 MB supplémentaire | Déterministe, ~50ms, zéro dépendance réseau |
 | Extraction async non-bloquante | Délai entre création et extraction | Zéro impact sur la latence de création de mémoire |
 | RRF 4 sources au lieu de 2 | Complexité accrue du pipeline | Meilleur rappel via entités et tags auto-générés |
 | Graphe de relations entre mémoires | Stockage supplémentaire, calcul TF-IDF | Navigation multi-hop, recherche contextuelle, visualisation |
 | Détection Python au lieu de SQL GIN | O(n) au lieu de O(log n) | Évite les problèmes de type casting asyncpg |
+| Query optionnel si tags fournis | Validation plus complexe | Mode listing pur pour Expanse Triangulation L3 |
+| lifecycle_state mappé sur tags SQL | Pas de colonne dédiée | Zéro migration, compatible avec le système de tags existant |

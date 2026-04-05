@@ -160,6 +160,8 @@ class WriteMemoryTool(BaseMCPComponent):
             )
 
             # Generate embedding (graceful degradation on failure)
+            # OPTIMIZATION: Skip embedding for write_memory to avoid 10s cold start.
+            # The embedding will be generated asynchronously by the worker.
             embedding = None
             embedding_generated = False
 
@@ -168,29 +170,13 @@ class WriteMemoryTool(BaseMCPComponent):
                     # EPIC-24: Use embedding_source if provided, otherwise title+content
                     if embedding_source:
                         embedding_text = embedding_source
-                        logger.info(
-                            "Using embedding_source for embedding generation",
-                            title=title,
-                            embedding_source_len=len(embedding_source)
-                        )
                     else:
                         embedding_text = f"{title}\n\n{content}"
-                        logger.info(
-                            "Using title+content for embedding generation (no embedding_source)",
-                            title=title,
-                            content_len=len(content)
-                        )
 
                     embedding_raw = await self.embedding_service.generate_embedding(embedding_text)
                     # DualEmbeddingService returns {"text": [...], "code": [...]} — extract TEXT
                     embedding = embedding_raw.get("text") if isinstance(embedding_raw, dict) else embedding_raw
                     embedding_generated = True
-                    logger.info(
-                        "Embedding generated for memory",
-                        title=title,
-                        embedding_dim=len(embedding) if embedding else 0,
-                        used_embedding_source=embedding_source is not None
-                    )
                 except Exception as e:
                     logger.warning(
                         "Embedding generation failed, proceeding without embedding",
@@ -242,50 +228,25 @@ class WriteMemoryTool(BaseMCPComponent):
 
     def _trigger_entity_extraction(self, memory: Any) -> None:
         """
-        Extract entities using GLiNER singleton (lazy-loaded, shared across requests).
+        Push entity extraction request to Redis Stream for worker processing.
+        
+        Non-blocking: the worker handles extraction asynchronously.
         """
         try:
             import json as _json
-            import asyncio
-            from services.gliner_service import get_gliner_service
-            from sqlalchemy.sql import text
-
-            gliner_service = get_gliner_service()
-            text_content = f"{memory.title}\n\n{memory.content}"
-            entities = gliner_service.extract_entities(text_content)
-
-            if not entities:
+            redis = self._services.get("redis")
+            if redis is None:
                 return
 
-            engine = self._services.get("engine")
-            if engine is None:
-                return
+            payload = _json.dumps({
+                "memory_id": str(memory.id),
+                "title": memory.title,
+                "content": memory.content,
+                "memory_type": memory.memory_type.value if hasattr(memory.memory_type, "value") else str(memory.memory_type),
+                "tags": memory.tags or [],
+            })
 
-            async def save():
-                mapped_entities = [{"name": e["name"], "type": e["type"]} for e in entities]
-                concepts = [e["name"] for e in entities if e["type"] == "concept"]
-                auto_tags = list(set(e["name"].lower().replace(" ", "-") for e in entities))
-
-                async with engine.begin() as conn:
-                    await conn.execute(text("""
-                        UPDATE memories
-                        SET entities = :entities,
-                            concepts = :concepts,
-                            auto_tags = :auto_tags
-                        WHERE id = :memory_id
-                    """), {
-                        "memory_id": str(memory.id),
-                        "entities": _json.dumps(mapped_entities),
-                        "concepts": _json.dumps(concepts),
-                        "auto_tags": _json.dumps(auto_tags),
-                    })
-
-            asyncio.create_task(save())
-            logger.info(
-                "entity_extraction_triggered",
-                memory_id=str(memory.id),
-                entity_count=len(entities),
-            )
+            redis.xadd("entity:extraction", {"payload": payload})
         except Exception as e:
             logger.debug("entity_extraction_trigger_failed", error=str(e))
 
@@ -664,7 +625,7 @@ class SearchMemoryTool(BaseMCPComponent):
     async def execute(
         self,
         ctx: Context,
-        query: str,
+        query: Optional[str] = None,
         memory_type: Optional[str] = None,
         tags: Optional[Union[str, List[str]]] = None,
         consumed: Optional[bool] = None,
@@ -677,13 +638,13 @@ class SearchMemoryTool(BaseMCPComponent):
 
         Args:
             ctx: MCP context
-            query: Search query (natural language)
+            query: Search query (natural language). Optional if tags provided.
             memory_type: Filter by type (note, decision, task, reference, conversation, investigation)
             tags: Filter by tags — accepts string "sys:history" or list ["sys:history", "v15"]
             consumed: Filter by consumption status (None=all, True=consumed, False=fresh)
             lifecycle_state: Filter by lifecycle (None=all, "sealed", "candidate", "doubt", "summary")
-            limit: Max results (1-50, default 10)
-            offset: Pagination offset (default 0)
+            limit: Max results (1-50, default: 10)
+            offset: Pagination offset (default: 0)
 
         Returns:
             Dict with memories list, pagination, and search metadata
@@ -710,9 +671,10 @@ class SearchMemoryTool(BaseMCPComponent):
         )
 
         try:
-            # Validate inputs
-            if not query or len(query.strip()) == 0:
-                raise ValueError("Query cannot be empty")
+            # Validate inputs: query required UNLESS tags are provided (tag-only listing mode)
+            query_stripped = (query or "").strip()
+            if not query_stripped and not tags:
+                raise ValueError("Query or tags is required — provide at least one")
 
             limit = max(1, min(50, limit))
             offset = max(0, offset)
@@ -735,7 +697,6 @@ class SearchMemoryTool(BaseMCPComponent):
             #   2. Tags filter is explicitly provided
             # This avoids 8-10s model load for simple tag lookups like "sys:protocol".
             query_embedding = None
-            query_stripped = query.strip()
             is_tag_query = query_stripped.startswith(('sys:', 'trace:')) and len(query_stripped) < 50
             is_tag_only = is_tag_query or bool(tags)
 

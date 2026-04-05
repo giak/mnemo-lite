@@ -243,16 +243,16 @@ class ConversationWorker:
             from gliner import GLiNER
             import json as _json
             from sqlalchemy import create_engine
-            from sqlalchemy.sql import text
+            from sqlalchemy.sql import text as sql_text
 
             # Load GLiNER model
             model_path = os.getenv("GLINER_MODEL_PATH", "/app/models/gliner_multi-v2.1")
             model = GLiNER.from_pretrained(model_path)
 
             # Extract entities
-            text = f"{data['title']}\n\n{data['content']}"
+            text_content = f"{data['title']}\n\n{data['content']}"
             entity_types = ["technology", "product", "file", "person", "organization", "concept", "location"]
-            raw_entities = model.predict_entities(text, entity_types)
+            raw_entities = model.predict_entities(text_content, entity_types)
 
             # Post-process: deduplicate, validate, clean types
             type_map = {
@@ -265,7 +265,7 @@ class ConversationWorker:
                 name = e.get("text", "").strip()
                 if not name or len(name) < 2:
                     continue
-                if name.lower() not in text.lower():
+                if name.lower() not in text_content.lower():
                     continue
                 key = name.lower()
                 if key not in seen:
@@ -280,7 +280,7 @@ class ConversationWorker:
             db_url = os.getenv("DATABASE_URL", "postgresql+psycopg2://mnemo:mnemopass@db:5432/mnemolite")
             engine = create_engine(db_url)
             with engine.begin() as conn:
-                conn.execute(text("""
+                conn.execute(sql_text("""
                     UPDATE memories
                     SET entities = :entities,
                         concepts = :concepts,

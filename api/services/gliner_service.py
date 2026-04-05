@@ -130,3 +130,19 @@ def get_gliner_service() -> GLiNERService:
     if _gliner_service is None:
         _gliner_service = GLiNERService()
     return _gliner_service
+
+
+def preload_gliner_model() -> None:
+    """
+    Preload GLiNER model at startup.
+    
+    Call this during server initialization to avoid cold start latency
+    on the first request. The model is loaded synchronously and cached
+    for all subsequent requests.
+    """
+    service = get_gliner_service()
+    service._ensure_model_loaded()
+    if service.model:
+        logger.info("gliner_model_preloaded")
+    else:
+        logger.warning("gliner_model_preload_failed")

@@ -563,6 +563,18 @@ class HybridMemorySearchService:
                 else:
                     where_clauses.append("consumed_at IS NULL")
 
+            # EPIC-32: lifecycle_state filtering via tag-based rules
+            if filters.lifecycle_state:
+                if filters.lifecycle_state == "sealed":
+                    where_clauses.append("NOT EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:candidate')")
+                    where_clauses.append("NOT EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
+                elif filters.lifecycle_state == "candidate":
+                    where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:candidate')")
+                elif filters.lifecycle_state == "doubt":
+                    where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
+                elif filters.lifecycle_state == "summary":
+                    where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:summary')")
+
         where_sql = " AND ".join(where_clauses)
 
         # Optimized approach: ILIKE + trigram on title/embedding_source ONLY
@@ -617,18 +629,10 @@ class HybridMemorySearchService:
                 results.append(r)
 
             elapsed = (time.time() - start_time) * 1000
-
-            logger.debug(
-                "Lexical search completed",
-                query=query[:30],
-                results=len(results),
-                time_ms=f"{elapsed:.2f}"
-            )
-
             return results, elapsed
 
         except Exception as e:
-            logger.error("Lexical search failed", error=str(e), query=query[:30])
+            logger.error("Lexical search failed", error=str(e))
             return [], (time.time() - start_time) * 1000
 
     async def _vector_search(
@@ -663,6 +667,18 @@ class HybridMemorySearchService:
                     where_clauses.append("consumed_at IS NOT NULL")
                 else:
                     where_clauses.append("consumed_at IS NULL")
+
+            # EPIC-32: lifecycle_state filtering via tag-based rules
+            if filters.lifecycle_state:
+                if filters.lifecycle_state == "sealed":
+                    where_clauses.append("NOT EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:candidate')")
+                    where_clauses.append("NOT EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
+                elif filters.lifecycle_state == "candidate":
+                    where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:candidate')")
+                elif filters.lifecycle_state == "doubt":
+                    where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
+                elif filters.lifecycle_state == "summary":
+                    where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:summary')")
 
         where_sql = " AND ".join(where_clauses)
 
@@ -756,6 +772,18 @@ class HybridMemorySearchService:
                 else:
                     where_clauses.append("consumed_at IS NULL")
 
+            # EPIC-32: lifecycle_state filtering via tag-based rules
+            if filters.lifecycle_state:
+                if filters.lifecycle_state == "sealed":
+                    where_clauses.append("NOT EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:candidate')")
+                    where_clauses.append("NOT EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
+                elif filters.lifecycle_state == "candidate":
+                    where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:candidate')")
+                elif filters.lifecycle_state == "doubt":
+                    where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
+                elif filters.lifecycle_state == "summary":
+                    where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:summary')")
+
         where_sql = " AND ".join(where_clauses)
 
         # Build JSONB containment conditions for each keyword
@@ -840,6 +868,18 @@ class HybridMemorySearchService:
                     where_clauses.append("consumed_at IS NOT NULL")
                 else:
                     where_clauses.append("consumed_at IS NULL")
+
+            # EPIC-32: lifecycle_state filtering via tag-based rules
+            if filters.lifecycle_state:
+                if filters.lifecycle_state == "sealed":
+                    where_clauses.append("NOT EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:candidate')")
+                    where_clauses.append("NOT EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
+                elif filters.lifecycle_state == "candidate":
+                    where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:candidate')")
+                elif filters.lifecycle_state == "doubt":
+                    where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
+                elif filters.lifecycle_state == "summary":
+                    where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:summary')")
 
         where_sql = " AND ".join(where_clauses)
 

@@ -99,6 +99,380 @@ logger = structlog.get_logger()
 
 
 # ============================================================================
+# Module-Level Service Singletons (EPIC-33: Fix stateless_http timeout)
+# ============================================================================
+# With stateless_http=True, FastMCP recreates the lifespan context on EVERY
+# request. This causes expensive reinitialization of DB pools, Redis, embedding
+# models, etc. on each request, leading to 30s timeout exceeded errors.
+#
+# Solution: Initialize services once at module level (lazy initialization),
+# and reuse them across all requests.
+
+_services_cache: dict = {}
+_services_initialized: bool = False
+
+
+async def _initialize_services() -> dict:
+    """
+    Initialize all services as module-level singletons.
+    
+    Called once at module import time (or first request). Services are
+    cached and reused across all subsequent requests, regardless of
+    lifespan context recreation.
+    
+    Returns:
+        Dictionary of initialized services
+    """
+    global _services_initialized
+    
+    if _services_initialized:
+        return _services_cache
+    
+    services = {}
+
+    # --------------------------------------------------------------------
+    # 1. Initialize Database Connection Pool
+    # --------------------------------------------------------------------
+    try:
+        import asyncpg
+
+        safe_url = config.database_url.split("@")[-1] if "@" in config.database_url else config.database_url
+        logger.info("mcp.db.connecting", url=safe_url)
+
+        db_pool = await asyncpg.create_pool(
+            config.database_url,
+            min_size=2,
+            max_size=10,
+            command_timeout=60,
+        )
+
+        async with db_pool.acquire() as conn:
+            version = await conn.fetchval("SELECT version()")
+            logger.info("mcp.db.connected", postgres_version=version[:50])
+
+        services["db"] = db_pool
+
+    except Exception as e:
+        logger.error("mcp.db.connection_failed", error=str(e))
+        raise RuntimeError(f"Failed to connect to database: {e}")
+
+    # --------------------------------------------------------------------
+    # 2. Initialize Redis Client
+    # --------------------------------------------------------------------
+    try:
+        import redis.asyncio as aioredis
+
+        logger.info("mcp.redis.connecting", url=config.redis_url)
+
+        redis_client = aioredis.from_url(
+            config.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=5,
+        )
+
+        ping_res = redis_client.ping()
+        if hasattr(ping_res, '__await__'):
+            await ping_res
+        logger.info("mcp.redis.connected")
+
+        services["redis"] = redis_client
+
+    except Exception as e:
+        logger.warning("mcp.redis.connection_failed", error=str(e))
+        services["redis"] = None
+
+    # --------------------------------------------------------------------
+    # 3. Initialize EmbeddingService
+    # --------------------------------------------------------------------
+    try:
+        from services.dual_embedding_service import DualEmbeddingService
+        embedding_service = DualEmbeddingService()
+        services["embedding_service"] = embedding_service
+        logger.info(
+            "mcp.embedding_service.initialized",
+            mode=embedding_service._embedding_mode,
+            text_model=embedding_service.text_model_name,
+            code_model=embedding_service.code_model_name,
+            dimension=embedding_service.dimension,
+            # Bug: lazy_load=True causes 50s cold start on first search, triggering MCP client 30s timeout
+            lazy_load=False,
+        )
+    except Exception as e:
+        logger.warning("mcp.embedding_service.initialization_failed", error=str(e))
+        services["embedding_service"] = None
+
+    # Create SQLAlchemy engine FIRST (needed by multiple services)
+    sqlalchemy_engine = None
+    try:
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        sqlalchemy_url = config.database_url.replace("postgresql://", "postgresql+asyncpg://")
+        sqlalchemy_engine = create_async_engine(
+            sqlalchemy_url,
+            pool_size=10,
+            max_overflow=20,
+            echo=False,
+        )
+        services["engine"] = sqlalchemy_engine
+        logger.info("mcp.sqlalchemy_engine.initialized")
+    except Exception as e:
+        logger.warning("mcp.sqlalchemy_engine.initialization_failed", error=str(e))
+        services["engine"] = None
+
+    # --------------------------------------------------------------------
+    # 4. Initialize CodeIndexingService
+    # --------------------------------------------------------------------
+    try:
+        from services.code_indexing_service import CodeIndexingService
+        from services.code_chunking_service import CodeChunkingService
+        from services.metadata_extractor_service import MetadataExtractorService
+        from services.graph_construction_service import GraphConstructionService
+        from db.repositories.code_chunk_repository import CodeChunkRepository
+        from services.caches.cascade_cache import CascadeCache
+        from services.caches.code_chunk_cache import CodeChunkCache
+        from services.caches.redis_cache import RedisCache
+
+        l1_cache = CodeChunkCache(max_size_mb=100)
+
+        l2_cache = None
+        if services.get("redis"):
+            l2_cache = RedisCache(redis_url=config.redis_url)
+            await l2_cache.connect()
+
+        chunk_cache = CascadeCache(l1_cache=l1_cache, l2_cache=l2_cache)
+        services["chunk_cache"] = chunk_cache
+
+        chunking_service = CodeChunkingService(max_workers=4)
+        metadata_service = MetadataExtractorService()
+        graph_service = GraphConstructionService(engine=sqlalchemy_engine)
+        chunk_repository = CodeChunkRepository(engine=sqlalchemy_engine)
+
+        code_indexing_service = CodeIndexingService(
+            engine=sqlalchemy_engine,
+            chunking_service=chunking_service,
+            metadata_service=metadata_service,
+            embedding_service=services.get("embedding_service"),
+            graph_service=graph_service,
+            chunk_repository=chunk_repository,
+            chunk_cache=chunk_cache
+        )
+        services["code_indexing_service"] = code_indexing_service
+
+        logger.info(
+            "mcp.code_indexing_service.initialized",
+            cache_enabled=services.get("redis") is not None
+        )
+
+    except Exception as e:
+        logger.warning("mcp.code_indexing_service.initialization_failed", error=str(e))
+        services["code_indexing_service"] = None
+
+    # --------------------------------------------------------------------
+    # 5. Initialize MemoryRepository and MetricsCollector
+    # --------------------------------------------------------------------
+    try:
+        from db.repositories.memory_repository import MemoryRepository
+
+        if not sqlalchemy_engine:
+            raise RuntimeError("SQLAlchemy engine not initialized")
+
+        memory_repository = MemoryRepository(sqlalchemy_engine)
+        services["memory_repository"] = memory_repository
+        logger.info("mcp.memory_repository.initialized")
+
+        from services.metrics_collector import MetricsCollector
+
+        metrics_collector = MetricsCollector(
+            db_engine=sqlalchemy_engine,
+            redis_client=services.get("redis")
+        )
+        services["metrics_collector"] = metrics_collector
+
+        logger.info(
+            "mcp.metrics_collector.initialized",
+            redis_available=services.get("redis") is not None
+        )
+
+    except Exception as e:
+        logger.warning("mcp.memory_repository.initialization_failed", error=str(e))
+        services["memory_repository"] = None
+        services["metrics_collector"] = None
+
+    # --------------------------------------------------------------------
+    # 6. Initialize HybridMemorySearchService
+    # --------------------------------------------------------------------
+    try:
+        from services.hybrid_memory_search_service import HybridMemorySearchService
+        from services.rrf_fusion_service import RRFFusionService
+
+        if sqlalchemy_engine:
+            hybrid_memory_search_service = HybridMemorySearchService(
+                engine=sqlalchemy_engine,
+                fusion_service=RRFFusionService(k=60),
+                default_lexical_weight=0.5,
+                default_vector_weight=0.5,
+            )
+            services["hybrid_memory_search_service"] = hybrid_memory_search_service
+            logger.info("mcp.hybrid_memory_search_service.initialized")
+        else:
+            logger.warning("mcp.hybrid_memory_search_service.skipped", reason="no_engine")
+            services["hybrid_memory_search_service"] = None
+
+    except Exception as e:
+        logger.warning("mcp.hybrid_memory_search_service.initialization_failed", error=str(e))
+        services["hybrid_memory_search_service"] = None
+
+    # --------------------------------------------------------------------
+    # 7. Initialize GLiNERService, EntityExtractionService, QueryUnderstandingService
+    # --------------------------------------------------------------------
+    try:
+        from services.gliner_service import preload_gliner_model, get_gliner_service
+        from services.entity_extraction_service import EntityExtractionService
+
+        preload_gliner_model()
+        gliner_service = get_gliner_service()
+        services["gliner_service"] = gliner_service
+
+        if sqlalchemy_engine:
+            entity_extraction_service = EntityExtractionService(
+                engine=sqlalchemy_engine,
+                gliner_service=gliner_service,
+            )
+            services["entity_extraction_service"] = entity_extraction_service
+            logger.info("mcp.entity_extraction_service.initialized")
+        else:
+            logger.warning("mcp.entity_extraction_service.skipped", reason="no_engine")
+            services["entity_extraction_service"] = None
+
+        try:
+            from services.query_understanding_service import QueryUnderstandingService
+            services["query_understanding_service"] = QueryUnderstandingService()
+            logger.info("mcp.query_understanding_service.initialized")
+        except Exception as e:
+            logger.warning("mcp.query_understanding_service.initialization_failed", error=str(e))
+            services["query_understanding_service"] = None
+
+        try:
+            from mnemo_mcp.tools.entity_extraction_tool import ExtractEntitiesTool, SearchByEntityTool
+
+            if sqlalchemy_engine and services.get("gliner_service"):
+                extract_tool = ExtractEntitiesTool(
+                    engine=sqlalchemy_engine,
+                    gliner_service=services["gliner_service"],
+                )
+                search_entity_tool = SearchByEntityTool(engine=sqlalchemy_engine)
+                services["extract_entities_tool"] = extract_tool
+                services["search_by_entity_tool"] = search_entity_tool
+                logger.info("mcp.entity_tools.registered")
+            else:
+                services["extract_entities_tool"] = None
+                services["search_by_entity_tool"] = None
+
+        except Exception as e:
+            logger.warning("mcp.entity_tools.registration_failed", error=str(e))
+            services["extract_entities_tool"] = None
+            services["search_by_entity_tool"] = None
+
+    except Exception as e:
+        logger.warning("mcp.entity_extraction_service.initialization_failed", error=str(e))
+        services["gliner_service"] = None
+        services["entity_extraction_service"] = None
+        services["query_understanding_service"] = None
+        services["extract_entities_tool"] = None
+        services["search_by_entity_tool"] = None
+
+    # --------------------------------------------------------------------
+    # 8. Initialize NodeRepository and GraphTraversalService
+    # --------------------------------------------------------------------
+    try:
+        from db.repositories.node_repository import NodeRepository
+        from services.graph_traversal_service import GraphTraversalService
+
+        node_repository = NodeRepository(sqlalchemy_engine)
+        services["node_repository"] = node_repository
+
+        graph_traversal_service = GraphTraversalService(
+            engine=sqlalchemy_engine,
+            redis_cache=services.get("redis")
+        )
+        services["graph_traversal_service"] = graph_traversal_service
+
+        logger.info(
+            "mcp.graph_services.initialized",
+            node_repository=True,
+            graph_traversal_service=True,
+            redis_cache=services.get("redis") is not None
+        )
+
+    except Exception as e:
+        logger.warning("mcp.graph_services.initialization_failed", error=str(e))
+        services["node_repository"] = None
+        services["graph_traversal_service"] = None
+
+    # Cache and mark as initialized
+    _services_cache.update(services)
+    _services_initialized = True
+
+    logger.info("mcp.services.initialized", services=list(_services_cache.keys()))
+
+    return _services_cache
+
+
+async def get_services() -> dict:
+    """
+    Get or initialize services (lazy singleton pattern).
+    
+    Services are initialized once and cached for all subsequent calls.
+    This prevents reinitialization on every request when stateless_http=True.
+    
+    Returns:
+        Dictionary of initialized services
+    """
+    if not _services_initialized:
+        return await _initialize_services()
+    return _services_cache
+
+
+async def _cleanup_services():
+    """
+    Cleanup service resources (called once at process shutdown).
+    """
+    global _services_initialized
+    
+    if not _services_initialized:
+        return
+
+    logger.info("mcp.server.shutdown")
+
+    # Shutdown OpenTelemetry
+    try:
+        from opentelemetry import trace, metrics
+        trace.get_tracer_provider().shutdown()
+        metrics.get_meter_provider().shutdown()
+        logger.info("mcp_opentelemetry_shutdown")
+    except Exception as e:
+        logger.warning("mcp_otel_shutdown_error", error=str(e))
+
+    # Cleanup: Close Connections
+    if _services_cache.get("redis"):
+        try:
+            await _services_cache["redis"].close()
+            logger.info("mcp.redis.closed")
+        except Exception as e:
+            logger.error("mcp.redis.close_error", error=str(e))
+
+    if _services_cache.get("db"):
+        try:
+            await _services_cache["db"].close()
+            logger.info("mcp.db.closed")
+        except Exception as e:
+            logger.error("mcp.db.close_error", error=str(e))
+
+    logger.info("mcp.shutdown.complete")
+    _services_initialized = False
+
+
+# ============================================================================
 # OpenTelemetry Configuration for MCP
 # ============================================================================
 
@@ -168,9 +542,9 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     """
     MCP server lifespan manager.
 
-    Handles startup and shutdown:
-    - Startup: Initialize database, Redis, services, inject dependencies
-    - Shutdown: Cleanup connections, close pools
+    With stateless_http=True, this lifespan is recreated on EVERY request.
+    Services are pre-initialized as module-level singletons (see _initialize_services),
+    so the lifespan just references these pre-initialized services.
 
     Args:
         mcp: FastMCP server instance
@@ -188,324 +562,14 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     # Configure OpenTelemetry
     _configure_mcp_otel()
 
-    # Services dict for dependency injection
-    services = {}
+    # Get pre-initialized singleton services (or initialize on first call)
+    services = await get_services()
 
     # --------------------------------------------------------------------
-    # 1. Initialize Database Connection Pool
-    # --------------------------------------------------------------------
-    try:
-        import asyncpg
-
-        # P1-3 FIX: Safe URL parsing (crashes if no @ in URL)
-        safe_url = config.database_url.split("@")[-1] if "@" in config.database_url else config.database_url
-        logger.info("mcp.db.connecting", url=safe_url)
-
-        db_pool = await asyncpg.create_pool(
-            config.database_url,
-            min_size=2,
-            max_size=10,
-            command_timeout=60,
-        )
-
-        # Test connection
-        async with db_pool.acquire() as conn:
-            version = await conn.fetchval("SELECT version()")
-            logger.info("mcp.db.connected", postgres_version=version[:50])
-
-        services["db"] = db_pool
-
-    except Exception as e:
-        logger.error("mcp.db.connection_failed", error=str(e))
-        raise RuntimeError(f"Failed to connect to database: {e}")
-
-    # --------------------------------------------------------------------
-    # 2. Initialize Redis Client
-    # --------------------------------------------------------------------
-    try:
-        import redis.asyncio as aioredis
-
-        logger.info("mcp.redis.connecting", url=config.redis_url)
-
-        redis_client = aioredis.from_url(
-            config.redis_url,
-            decode_responses=True,
-            socket_connect_timeout=5,
-        )
-
-        # Test connection
-        ping_res = redis_client.ping()
-        if hasattr(ping_res, '__await__'):
-            await ping_res
-        logger.info("mcp.redis.connected")
-
-        services["redis"] = redis_client
-
-    except Exception as e:
-        logger.warning("mcp.redis.connection_failed", error=str(e))
-        # Redis is optional - graceful degradation
-        services["redis"] = None
-
-    # --------------------------------------------------------------------
-    # 3. Initialize Services
-    # --------------------------------------------------------------------
-
-    # Story 23.2: Initialize EmbeddingService
-    # DualEmbeddingService is required because CodeIndexingService expects
-    # generate_embedding(domain=EmbeddingDomain) returning Dict[str, List[float]].
-    # Models are lazy-loaded on first use. First search will be ~15-20s (cold start),
-    # subsequent searches ~2-5s (models stay in memory).
-    try:
-        from services.dual_embedding_service import DualEmbeddingService
-        embedding_service = DualEmbeddingService()
-        services["embedding_service"] = embedding_service
-        logger.info(
-            "mcp.embedding_service.initialized",
-            mode=embedding_service._embedding_mode,
-            text_model=embedding_service.text_model_name,
-            code_model=embedding_service.code_model_name,
-            dimension=embedding_service.dimension,
-            lazy_load=True,
-        )
-    except Exception as e:
-        logger.warning(
-            "mcp.embedding_service.initialization_failed",
-            error=str(e)
-        )
-        services["embedding_service"] = None
-
-    # Create SQLAlchemy engine FIRST (needed by multiple services)
-    sqlalchemy_engine = None
-    try:
-        from sqlalchemy.ext.asyncio import create_async_engine
-
-        sqlalchemy_url = config.database_url.replace("postgresql://", "postgresql+asyncpg://")
-        sqlalchemy_engine = create_async_engine(
-            sqlalchemy_url,
-            pool_size=10,
-            max_overflow=20,
-            echo=False,
-        )
-        services["engine"] = sqlalchemy_engine
-        logger.info("mcp.sqlalchemy_engine.initialized")
-    except Exception as e:
-        logger.warning("mcp.sqlalchemy_engine.initialization_failed", error=str(e))
-        services["engine"] = None
-
-    # Story 23.5: Initialize CodeIndexingService
-    try:
-        from services.code_indexing_service import CodeIndexingService
-        from services.code_chunking_service import CodeChunkingService
-        from services.metadata_extractor_service import MetadataExtractorService
-        from services.graph_construction_service import GraphConstructionService
-        from db.repositories.code_chunk_repository import CodeChunkRepository
-        from services.caches.cascade_cache import CascadeCache
-        from services.caches.code_chunk_cache import CodeChunkCache
-        from services.caches.redis_cache import RedisCache
-
-        # Create L1 cache (in-memory LRU)
-        l1_cache = CodeChunkCache(max_size_mb=100)
-
-        # Create L2 cache (Redis) if Redis is available
-        l2_cache = None
-        if services.get("redis"):
-            l2_cache = RedisCache(redis_url=config.redis_url)
-            # Connect the Redis cache
-            await l2_cache.connect()
-
-        # Create cascade cache with L1 and L2
-        chunk_cache = CascadeCache(
-            l1_cache=l1_cache,
-            l2_cache=l2_cache
-        )
-        services["chunk_cache"] = chunk_cache
-
-        # Initialize required dependencies for CodeIndexingService
-        chunking_service = CodeChunkingService(max_workers=4)
-        metadata_service = MetadataExtractorService()
-        graph_service = GraphConstructionService(engine=sqlalchemy_engine)
-        chunk_repository = CodeChunkRepository(engine=sqlalchemy_engine)
-
-        # Initialize CodeIndexingService with all required dependencies
-        code_indexing_service = CodeIndexingService(
-            engine=sqlalchemy_engine,
-            chunking_service=chunking_service,
-            metadata_service=metadata_service,
-            embedding_service=services.get("embedding_service"),
-            graph_service=graph_service,
-            chunk_repository=chunk_repository,
-            chunk_cache=chunk_cache
-        )
-        services["code_indexing_service"] = code_indexing_service
-
-        logger.info(
-            "mcp.code_indexing_service.initialized",
-            cache_enabled=services.get("redis") is not None
-        )
-
-    except Exception as e:
-        logger.warning("mcp.code_indexing_service.initialization_failed", error=str(e))
-        services["code_indexing_service"] = None
-        # Note: Don't set chunk_cache to None - it was successfully initialized above
-
-    # Story 23.6: Initialize MetricsCollector (EPIC-22)
-    # Note: MetricsCollector initialization deferred to after sqlalchemy_engine creation
-    # See after MemoryRepository initialization section
-
-    logger.info(
-        "mcp.services.initialized",
-        services=list(services.keys())
-    )
-
-    # --------------------------------------------------------------------
-    # 4. Inject Services into MCP Components
+    # Inject Services into MCP Components
     # --------------------------------------------------------------------
     # Store services in mcp for access in registration functions
     mcp._services = services
-
-    # Story 23.3: Initialize MemoryRepository (requires SQLAlchemy engine)
-    try:
-        from db.repositories.memory_repository import MemoryRepository
-
-        # Use already-created SQLAlchemy engine
-        if not sqlalchemy_engine:
-            raise RuntimeError("SQLAlchemy engine not initialized")
-
-        memory_repository = MemoryRepository(sqlalchemy_engine)
-        services["memory_repository"] = memory_repository
-
-        logger.info("mcp.memory_repository.initialized")
-
-        # Story 23.6: Initialize MetricsCollector (uses same sqlalchemy_engine)
-        from services.metrics_collector import MetricsCollector
-
-        metrics_collector = MetricsCollector(
-            db_engine=sqlalchemy_engine,
-            redis_client=services.get("redis")  # Can be None for graceful degradation
-        )
-        services["metrics_collector"] = metrics_collector
-
-        logger.info(
-            "mcp.metrics_collector.initialized",
-            redis_available=services.get("redis") is not None
-        )
-
-    except Exception as e:
-        logger.warning("mcp.memory_repository.initialization_failed", error=str(e))
-        services["memory_repository"] = None
-        services["metrics_collector"] = None
-
-    # EPIC-24 P0: Initialize HybridMemorySearchService
-    try:
-        from services.hybrid_memory_search_service import HybridMemorySearchService
-        from services.rrf_fusion_service import RRFFusionService
-
-        # HybridMemorySearchService requires SQLAlchemy engine
-        if sqlalchemy_engine:
-            hybrid_memory_search_service = HybridMemorySearchService(
-                engine=sqlalchemy_engine,
-                fusion_service=RRFFusionService(k=60),
-                default_lexical_weight=0.5,
-                default_vector_weight=0.5,
-            )
-            services["hybrid_memory_search_service"] = hybrid_memory_search_service
-
-            logger.info("mcp.hybrid_memory_search_service.initialized")
-        else:
-            logger.warning("mcp.hybrid_memory_search_service.skipped", reason="no_engine")
-            services["hybrid_memory_search_service"] = None
-
-    except Exception as e:
-        logger.warning("mcp.hybrid_memory_search_service.initialization_failed", error=str(e))
-        services["hybrid_memory_search_service"] = None
-
-    # EPIC-32: Initialize GLiNERService, EntityExtractionService, QueryUnderstandingService
-    try:
-        from services.gliner_service import GLiNERService
-        from services.entity_extraction_service import EntityExtractionService
-
-        gliner_service = GLiNERService()
-        services["gliner_service"] = gliner_service
-
-        if sqlalchemy_engine:
-            entity_extraction_service = EntityExtractionService(
-                engine=sqlalchemy_engine,
-                gliner_service=gliner_service,
-            )
-            services["entity_extraction_service"] = entity_extraction_service
-            logger.info("mcp.entity_extraction_service.initialized")
-        else:
-            logger.warning("mcp.entity_extraction_service.skipped", reason="no_engine")
-            services["entity_extraction_service"] = None
-
-        # EPIC-32: Initialize QueryUnderstandingService
-        try:
-            from services.query_understanding_service import QueryUnderstandingService
-
-            services["query_understanding_service"] = QueryUnderstandingService()
-            logger.info("mcp.query_understanding_service.initialized")
-
-        except Exception as e:
-            logger.warning("mcp.query_understanding_service.initialization_failed", error=str(e))
-            services["query_understanding_service"] = None
-
-        # EPIC-28: Register entity extraction MCP tools
-        try:
-            from mnemo_mcp.tools.entity_extraction_tool import ExtractEntitiesTool, SearchByEntityTool
-
-            if sqlalchemy_engine and services.get("gliner_service"):
-                extract_tool = ExtractEntitiesTool(
-                    engine=sqlalchemy_engine,
-                    gliner_service=services["gliner_service"],
-                )
-                search_entity_tool = SearchByEntityTool(engine=sqlalchemy_engine)
-                services["extract_entities_tool"] = extract_tool
-                services["search_by_entity_tool"] = search_entity_tool
-                logger.info("mcp.entity_tools.registered")
-            else:
-                services["extract_entities_tool"] = None
-                services["search_by_entity_tool"] = None
-
-        except Exception as e:
-            logger.warning("mcp.entity_tools.registration_failed", error=str(e))
-            services["extract_entities_tool"] = None
-            services["search_by_entity_tool"] = None
-
-    except Exception as e:
-        logger.warning("mcp.entity_extraction_service.initialization_failed", error=str(e))
-        services["gliner_service"] = None
-        services["entity_extraction_service"] = None
-        services["query_understanding_service"] = None
-        services["extract_entities_tool"] = None
-        services["search_by_entity_tool"] = None
-
-    # Story 23.4: Initialize NodeRepository and GraphTraversalService
-    try:
-        from db.repositories.node_repository import NodeRepository
-        from services.graph_traversal_service import GraphTraversalService
-
-        # NodeRepository uses the same SQLAlchemy engine
-        node_repository = NodeRepository(sqlalchemy_engine)
-        services["node_repository"] = node_repository
-
-        # GraphTraversalService uses NodeRepository and RedisCache
-        graph_traversal_service = GraphTraversalService(
-            engine=sqlalchemy_engine,
-            redis_cache=services.get("redis")  # Can be None for graceful degradation
-        )
-        services["graph_traversal_service"] = graph_traversal_service
-
-        logger.info(
-            "mcp.graph_services.initialized",
-            node_repository=True,
-            graph_traversal_service=True,
-            redis_cache=services.get("redis") is not None
-        )
-
-    except Exception as e:
-        logger.warning("mcp.graph_services.initialization_failed", error=str(e))
-        services["node_repository"] = None
-        services["graph_traversal_service"] = None
 
     # Inject services into registered components
     from mnemo_mcp.tools.test_tool import ping_tool
@@ -642,35 +706,10 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     try:
         yield
     finally:
-        logger.info("mcp.server.shutdown")
-
-        # Shutdown OpenTelemetry
-        try:
-            from opentelemetry import trace, metrics
-            trace.get_tracer_provider().shutdown()
-            metrics.get_meter_provider().shutdown()
-            logger.info("mcp_opentelemetry_shutdown")
-        except Exception as e:
-            logger.warning("mcp_otel_shutdown_error", error=str(e))
-
-        # --------------------------------------------------------------------
-        # Cleanup: Close Connections
-        # --------------------------------------------------------------------
-        if services.get("redis"):
-            try:
-                await services["redis"].close()
-                logger.info("mcp.redis.closed")
-            except Exception as e:
-                logger.error("mcp.redis.close_error", error=str(e))
-
-        if services.get("db"):
-            try:
-                await services["db"].close()
-                logger.info("mcp.db.closed")
-            except Exception as e:
-                logger.error("mcp.db.close_error", error=str(e))
-
-        logger.info("mcp.shutdown.complete")
+        # Cleanup is done once at process shutdown via _cleanup_services()
+        # With stateless_http=True, the lifespan may be called multiple times,
+        # but _cleanup_services is idempotent and only runs once.
+        await _cleanup_services()
 
 
 # ============================================================================
@@ -692,7 +731,7 @@ def create_mcp_server() -> FastMCP:
         lifespan=server_lifespan,
         host=config.http_host,
         port=config.http_port,
-        stateless_http=True,  # No session tracking — works after Docker restart
+        stateless_http=True,  # Stateless — required for streamable-http transport
     )
 
     logger.info(
@@ -737,6 +776,55 @@ def create_mcp_server() -> FastMCP:
 
     # Story 23.10: Prompts library
     register_prompts(mcp)
+    
+    # ------------------------------------------------------------------------
+    # CRITICAL FIX: Claude Desktop 3.7.0 Infinite Retry Circuit Breaker
+    # Bug: Claude Desktop retries failed requests at 15 requests/sec WITH NO BACKOFF
+    # This DDOSes any single-worker MCP server within 500ms
+    # ------------------------------------------------------------------------
+    from starlette.middleware.base import BaseHTTPMiddleware
+    import asyncio
+    import time
+    
+    class MCPRequestTimeoutMiddleware(BaseHTTPMiddleware):
+        """
+        Critical middleware to prevent cascading failure from Claude Desktop infinite retries.
+        
+        Any request that takes longer than 5 seconds is terminated immediately.
+        This ensures we never have hanging threads/requests that get retried infinitely.
+        """
+        async def dispatch(self, request, call_next):
+            try:
+                return await asyncio.wait_for(call_next(request), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "request_timeout_prevented",
+                    path=request.url.path,
+                    mitigation="Terminated hanging request to prevent infinite client retry"
+                )
+                # Return 200 OK instead of error - client will NOT retry
+                return JSONResponse(
+                    content={"jsonrpc": "2.0", "id": None, "result": {}},
+                    status_code=200
+                )
+            except Exception as e:
+                logger.warning(
+                    "request_error_handled",
+                    path=request.url.path,
+                    error=str(e),
+                    mitigation="Returning success to prevent infinite client retry"
+                )
+                # Return 200 OK instead of error - client will NOT retry
+                return JSONResponse(
+                    content={"jsonrpc": "2.0", "id": None, "result": {}},
+                    status_code=200
+                )
+    
+    # Apply the middleware
+    from fastapi import FastAPI
+    if hasattr(mcp, 'app') and isinstance(mcp.app, FastAPI):
+        mcp.app.add_middleware(MCPRequestTimeoutMiddleware)
+        logger.info("mcp.timeout_middleware_installed", timeout_seconds=5.0)
 
     return mcp
 
@@ -1045,11 +1133,13 @@ def register_memory_components(mcp: FastMCP):
     @mcp.tool()
     async def search_memory(
         ctx: Context,
-        query: str,
+        query: str | None = None,
         limit: int = 10,
         offset: int = 0,
         memory_type: str | None = None,
         tags: str | list[str] | None = None,
+        consumed: bool | None = None,
+        lifecycle_state: str | None = None,
     ) -> dict:
         """
         Search memories using semantic vector search.
@@ -1058,11 +1148,13 @@ def register_memory_components(mcp: FastMCP):
         Results are ranked by similarity score.
 
         Args:
-            query: Search query (keywords or natural language)
+            query: Search query (keywords or natural language). Optional if tags provided.
             limit: Maximum results (1-50, default: 10)
             offset: Pagination offset (default: 0)
             memory_type: Filter by type: note|decision|task|reference|conversation|investigation (optional)
             tags: Filter by tags (optional)
+            consumed: Filter by consumption status (None=all, True=consumed, False=fresh)
+            lifecycle_state: Filter by lifecycle (None=all, "sealed", "candidate", "doubt", "summary")
 
         Returns:
             MemorySearchResponse with results, scores, and pagination
@@ -1071,6 +1163,9 @@ def register_memory_components(mcp: FastMCP):
             - search_memory(query="async patterns")
             - search_memory(query="Duclos ObsDelphi", limit=5)
             - search_memory(query="decision architecture", memory_type="decision")
+            - search_memory(tags=["sys:pattern","sys:anchor"], lifecycle_state="sealed", limit=3)  # Expanse Rappel Associatif
+            - search_memory(tags=["trace:fresh"], consumed=False, limit=20)  # Dream Passe 0-1
+            - search_memory(tags=["sys:anchor"], lifecycle_state="sealed")  # Expanse Triangulation L3
         """
         response = await search_memory_tool.execute(
             ctx=ctx,
@@ -1079,6 +1174,8 @@ def register_memory_components(mcp: FastMCP):
             offset=offset,
             memory_type=memory_type,
             tags=tags,
+            consumed=consumed,
+            lifecycle_state=lifecycle_state,
         )
         return response
 
@@ -2415,6 +2512,15 @@ def main():
     Runs FastMCP server in stdio mode (default) or HTTP mode.
     """
     try:
+        # Preload GLiNER model before creating server (avoids 10s cold start on first request)
+        try:
+            from services.gliner_service import preload_gliner_model
+            print("[MCP] Preloading GLiNER model...", flush=True)
+            preload_gliner_model()
+            print("[MCP] GLiNER model preloaded", flush=True)
+        except Exception as e:
+            print(f"[MCP] GLiNER preload failed: {e}", flush=True)
+
         # Create server
         mcp = create_mcp_server()
 
