@@ -13,7 +13,8 @@ import pytest
 import time
 from typing import List
 
-MCP_URL = "http://localhost:8002/mcp"
+import os
+MCP_URL = os.getenv("MCP_URL", "http://localhost:8002/mcp")
 HEADERS = {
     "Content-Type": "application/json",
     "Accept": "application/json, text/event-stream"

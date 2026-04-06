@@ -111,10 +111,9 @@ class TestWriteMemoryTool:
         assert response["id"] is not None
         assert response["title"] == "Test Memory"
         assert response["memory_type"] == "note"
-        assert response["embedding_generated"] is True
+        # Embeddings are skipped in MCP tools to avoid cold start timeouts
+        assert response["embedding_generated"] is False
 
-        # Verify embedding service was called
-        mock_embedding_service.generate_embedding.assert_called_once()
         # Verify repository was called
         mock_memory_repository.create.assert_called_once()
 

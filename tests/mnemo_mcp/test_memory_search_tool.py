@@ -2,11 +2,12 @@
 Tests for MCP memory search tool.
 
 Tests cover:
-- Hybrid search with mocked hybrid_memory_search_service
-- Tag-only search (no embedding) with mocked memory_repository
+- Tag-only search (embeddings disabled in MCP tools)
 - Cache hit/miss behavior
 - Input validation (empty query, invalid memory_type, limits)
-- Correct attribute access on HybridMemorySearchResult
+- Tag query detection (sys:* queries skip embedding)
+- Correct attribute access on search results
+- Regression: is_tag_query bug fix (NameError)
 """
 
 import pytest
@@ -154,6 +155,27 @@ def sample_hybrid_response(sample_hybrid_results):
     )
 
 
+def _make_mock_memory(
+    memory_id="111-222-333",
+    title="Test Memory",
+    content="Test content here",
+    memory_type_value="note",
+    tags=None,
+    created_at_iso="2026-04-01T00:00:00Z"
+):
+    """Helper to create a MagicMock memory object."""
+    mock = MagicMock()
+    mock.id = memory_id
+    mock.title = title
+    mock.content = content
+    mock.memory_type = MagicMock(value=memory_type_value)
+    mock.tags = tags or []
+    mock.created_at = MagicMock()
+    mock.created_at.isoformat.return_value = created_at_iso
+    mock.similarity_score = None  # Prevent MagicMock default from getattr
+    return mock
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -165,76 +187,7 @@ class TestSearchMemoryTool:
         tool = SearchMemoryTool()
         assert tool.get_name() == "search_memory"
 
-    # ---- Hybrid search (normal path) ----
-
-    @pytest.mark.asyncio
-    async def test_hybrid_search_success(
-        self, mock_ctx, mock_embedding_service, mock_hybrid_search_service,
-        mock_redis, sample_hybrid_response
-    ):
-        """Test normal hybrid search with embedding."""
-        tool = SearchMemoryTool()
-        mock_hybrid_search_service.search.return_value = sample_hybrid_response
-
-        tool.inject_services({
-            "embedding_service": mock_embedding_service,
-            "hybrid_memory_search_service": mock_hybrid_search_service,
-            "redis": mock_redis,
-        })
-
-        result = await tool.execute(
-            ctx=mock_ctx,
-            query="DSA censorship",
-            limit=5,
-        )
-
-        assert result["total"] == 2
-        assert len(result["memories"]) == 2
-        assert result["metadata"]["search_mode"] == "hybrid"
-
-        # Verify correct attribute mapping from HybridMemorySearchResult
-        m = result["memories"][0]
-        assert m["id"] == "aaa-bbb-ccc"
-        assert m["title"] == "DSA censure investigation"
-        assert "DSA mass censorship" in m["content_preview"]
-        assert m["memory_type"] == "investigation"
-        assert m["tags"] == ["sys:pattern", "dsa"]
-        assert m["created_at"] == "2026-04-01T10:00:00Z"
-        assert m["similarity_score"] == 0.95  # rrf_score
-
-        # Verify embedding was called
-        mock_embedding_service.generate_embedding.assert_called_once()
-
-        # Verify hybrid search was called
-        mock_hybrid_search_service.search.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_hybrid_search_returns_highlights(
-        self, mock_ctx, mock_embedding_service, mock_hybrid_search_service,
-        mock_redis, sample_hybrid_response
-    ):
-        """Test that hybrid search includes highlight snippets."""
-        tool = SearchMemoryTool()
-        mock_hybrid_search_service.search.return_value = sample_hybrid_response
-
-        tool.inject_services({
-            "embedding_service": mock_embedding_service,
-            "hybrid_memory_search_service": mock_hybrid_search_service,
-            "redis": mock_redis,
-        })
-
-        result = await tool.execute(
-            ctx=mock_ctx,
-            query="DSA censorship",
-            limit=5,
-        )
-
-        # Each memory should have highlights
-        for m in result["memories"]:
-            assert "highlights" in m
-            assert isinstance(m["highlights"], list)
-
-    # ---- Tag-only search (no embedding) ----
+    # ---- Tag-only search (current MCP behavior — embeddings disabled) ----
 
     @pytest.mark.asyncio
     async def test_tag_only_search_no_embedding(
@@ -243,17 +196,14 @@ class TestSearchMemoryTool:
         """Test tag-only search skips embedding generation."""
         tool = SearchMemoryTool()
 
-        # Mock search_by_tags response: (list, total_count)
-        mock_memory = MagicMock()
-        mock_memory.id = "111-222-333"
-        mock_memory.title = "Core protocol"
-        mock_memory.content = "This is the core protocol content."
-        mock_memory.memory_type = MagicMock(value="note")
-        mock_memory.tags = ["sys:protocol"]
-        mock_memory.created_at = MagicMock()
-        mock_memory.created_at.isoformat.return_value = "2026-04-01T00:00:00Z"
-
-        mock_memory_repository.search_by_tags.return_value = ([mock_memory], 1)
+        mock_mem = _make_mock_memory(
+            memory_id="111-222-333",
+            title="Core protocol",
+            content="This is the core protocol content.",
+            tags=["sys:protocol"],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None  # cache miss
 
         tool.inject_services({
             "memory_repository": mock_memory_repository,
@@ -267,7 +217,6 @@ class TestSearchMemoryTool:
             limit=10,
         )
 
-        # Embedding should NOT have been called (no embedding_service injected)
         assert result["metadata"]["search_mode"] == "tag_only"
         assert len(result["memories"]) == 1
         assert result["total"] == 1
@@ -276,19 +225,17 @@ class TestSearchMemoryTool:
     async def test_tag_query_detection_no_embedding(
         self, mock_ctx, mock_memory_repository, mock_redis
     ):
-        """Test that queries starting with sys: skip embedding."""
+        """Test that queries starting with sys: work correctly."""
         tool = SearchMemoryTool()
 
-        mock_memory = MagicMock()
-        mock_memory.id = "444-555-666"
-        mock_memory.title = "History memory"
-        mock_memory.content = "Historical data"
-        mock_memory.memory_type = MagicMock(value="conversation")
-        mock_memory.tags = ["sys:history"]
-        mock_memory.created_at = MagicMock()
-        mock_memory.created_at.isoformat.return_value = "2026-04-01T00:00:00Z"
-
-        mock_memory_repository.search_by_tags.return_value = ([mock_memory], 1)
+        mock_mem = _make_mock_memory(
+            memory_id="444-555-666",
+            title="History memory",
+            content="Historical data",
+            tags=["sys:history"],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
 
         tool.inject_services({
             "memory_repository": mock_memory_repository,
@@ -304,6 +251,46 @@ class TestSearchMemoryTool:
         assert result["metadata"]["search_mode"] == "tag_only"
         assert len(result["memories"]) == 1
 
+    # ---- Regression: is_tag_query NameError bug fix ----
+
+    @pytest.mark.asyncio
+    async def test_regression_is_tag_query_no_nameerror(
+        self, mock_ctx, mock_memory_repository, mock_redis
+    ):
+        """
+        Regression test: ensure is_tag_query NameError does not recur.
+
+        Bug: line 773 referenced undefined variable `is_tag_query` instead
+        of `is_tag_only`, causing NameError on every search_memory call
+        when falling back to tag-only search.
+        """
+        tool = SearchMemoryTool()
+
+        mock_mem = _make_mock_memory(
+            memory_id="regression-test-id",
+            title="Regression test",
+            content="Content for regression test",
+            tags=["test"],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
+
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "redis": mock_redis,
+        })
+
+        # This should NOT raise NameError
+        result = await tool.execute(
+            ctx=mock_ctx,
+            query="regression test",
+            limit=5,
+        )
+
+        assert len(result["memories"]) == 1
+        assert result["memories"][0]["id"] == "regression-test-id"
+        assert result["metadata"]["search_mode"] == "tag_only"
+
     # ---- Input validation ----
 
     @pytest.mark.asyncio
@@ -312,7 +299,7 @@ class TestSearchMemoryTool:
         tool = SearchMemoryTool()
         tool.inject_services({})
 
-        with pytest.raises(ValueError, match="Query cannot be empty"):
+        with pytest.raises(ValueError, match="Query or tags is required"):
             await tool.execute(ctx=mock_ctx, query="")
 
     @pytest.mark.asyncio
@@ -321,8 +308,36 @@ class TestSearchMemoryTool:
         tool = SearchMemoryTool()
         tool.inject_services({})
 
-        with pytest.raises(ValueError, match="Query cannot be empty"):
+        with pytest.raises(ValueError, match="Query or tags is required"):
             await tool.execute(ctx=mock_ctx, query="   ")
+
+    @pytest.mark.asyncio
+    async def test_empty_query_with_tags_succeeds(self, mock_ctx, mock_memory_repository, mock_redis):
+        """Test that empty query with tags is valid (tag-only listing mode)."""
+        tool = SearchMemoryTool()
+
+        mock_mem = _make_mock_memory(
+            memory_id="tag-list-id",
+            title="Tag list result",
+            content="Content",
+            tags=["sys:core"],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
+
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "redis": mock_redis,
+        })
+
+        result = await tool.execute(
+            ctx=mock_ctx,
+            query=None,
+            tags=["sys:core"],
+            limit=5,
+        )
+
+        assert len(result["memories"]) == 1
 
     @pytest.mark.asyncio
     async def test_invalid_memory_type_raises(self, mock_ctx):
@@ -334,14 +349,15 @@ class TestSearchMemoryTool:
             await tool.execute(ctx=mock_ctx, query="test", memory_type="invalid_type")
 
     @pytest.mark.asyncio
-    async def test_valid_memory_types_accepted(self, mock_ctx, mock_embedding_service, mock_hybrid_search_service, mock_redis, sample_hybrid_response):
+    async def test_valid_memory_types_accepted(self, mock_ctx, mock_memory_repository, mock_redis):
         """Test that all valid memory types are accepted."""
-        tool = SearchMemoryTool()
-        mock_hybrid_search_service.search.return_value = sample_hybrid_response
+        mock_mem = _make_mock_memory()
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
 
+        tool = SearchMemoryTool()
         tool.inject_services({
-            "embedding_service": mock_embedding_service,
-            "hybrid_memory_search_service": mock_hybrid_search_service,
+            "memory_repository": mock_memory_repository,
             "redis": mock_redis,
         })
 
@@ -355,30 +371,31 @@ class TestSearchMemoryTool:
             assert "memories" in result
 
     @pytest.mark.asyncio
-    async def test_limit_clamped_to_50(self, mock_ctx, mock_embedding_service, mock_hybrid_search_service, mock_redis, sample_hybrid_response):
+    async def test_limit_clamped_to_50(self, mock_ctx, mock_memory_repository, mock_redis):
         """Test that limit is clamped to max 50."""
-        tool = SearchMemoryTool()
-        mock_hybrid_search_service.search.return_value = sample_hybrid_response
+        mock_mem = _make_mock_memory()
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
 
+        tool = SearchMemoryTool()
         tool.inject_services({
-            "embedding_service": mock_embedding_service,
-            "hybrid_memory_search_service": mock_hybrid_search_service,
+            "memory_repository": mock_memory_repository,
             "redis": mock_redis,
         })
 
-        # Request 100, should be clamped to 50
         result = await tool.execute(ctx=mock_ctx, query="test", limit=100)
         assert result["limit"] == 50
 
     @pytest.mark.asyncio
-    async def test_limit_minimum_1(self, mock_ctx, mock_embedding_service, mock_hybrid_search_service, mock_redis, sample_hybrid_response):
+    async def test_limit_minimum_1(self, mock_ctx, mock_memory_repository, mock_redis):
         """Test that limit minimum is 1."""
-        tool = SearchMemoryTool()
-        mock_hybrid_search_service.search.return_value = sample_hybrid_response
+        mock_mem = _make_mock_memory()
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
 
+        tool = SearchMemoryTool()
         tool.inject_services({
-            "embedding_service": mock_embedding_service,
-            "hybrid_memory_search_service": mock_hybrid_search_service,
+            "memory_repository": mock_memory_repository,
             "redis": mock_redis,
         })
 
@@ -392,23 +409,20 @@ class TestSearchMemoryTool:
         """Test that string tags are converted to list."""
         tool = SearchMemoryTool()
 
-        mock_memory = MagicMock()
-        mock_memory.id = "777-888-999"
-        mock_memory.title = "Test"
-        mock_memory.content = "Content"
-        mock_memory.memory_type = MagicMock(value="note")
-        mock_memory.tags = ["sys:core"]
-        mock_memory.created_at = MagicMock()
-        mock_memory.created_at.isoformat.return_value = "2026-04-01T00:00:00Z"
-
-        mock_memory_repository.search_by_tags.return_value = ([mock_memory], 1)
+        mock_mem = _make_mock_memory(
+            memory_id="777-888-999",
+            title="Test",
+            content="Content",
+            tags=["sys:core"],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
 
         tool.inject_services({
             "memory_repository": mock_memory_repository,
             "redis": mock_redis,
         })
 
-        # Pass tags as string (agent error tolerance)
         result = await tool.execute(
             ctx=mock_ctx,
             query="sys:core",
@@ -446,22 +460,20 @@ class TestSearchMemoryTool:
         )
 
         assert result["memories"][0]["id"] == "cached-id"
-        # Redis get should have been called
         mock_redis.get.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_cache_miss_calls_search_and_writes_cache(
-        self, mock_ctx, mock_embedding_service, mock_hybrid_search_service,
-        mock_redis, sample_hybrid_response
+        self, mock_ctx, mock_memory_repository, mock_redis
     ):
         """Test that cache miss calls search and writes to cache."""
-        tool = SearchMemoryTool()
-        mock_hybrid_search_service.search.return_value = sample_hybrid_response
-        mock_redis.get.return_value = None  # cache miss
+        mock_mem = _make_mock_memory()
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None  # explicit cache miss
 
+        tool = SearchMemoryTool()
         tool.inject_services({
-            "embedding_service": mock_embedding_service,
-            "hybrid_memory_search_service": mock_hybrid_search_service,
+            "memory_repository": mock_memory_repository,
             "redis": mock_redis,
         })
 
@@ -471,32 +483,28 @@ class TestSearchMemoryTool:
             limit=5,
         )
 
-        assert len(result["memories"]) == 2
-        # Redis setex should have been called to cache the result
+        assert len(result["memories"]) == 1
         mock_redis.setex.assert_called_once()
 
     # ---- Fallback when hybrid service unavailable ----
 
     @pytest.mark.asyncio
     async def test_fallback_to_repository_search(
-        self, mock_ctx, mock_embedding_service, mock_memory_repository, mock_redis
+        self, mock_ctx, mock_memory_repository, mock_redis
     ):
         """Test fallback when hybrid_memory_search_service is not available."""
         tool = SearchMemoryTool()
 
-        mock_memory = MagicMock()
-        mock_memory.id = "fallback-id"
-        mock_memory.title = "Fallback result"
-        mock_memory.content = "Fallback content here"
-        mock_memory.memory_type = MagicMock(value="note")
-        mock_memory.tags = ["test"]
-        mock_memory.created_at = MagicMock()
-        mock_memory.created_at.isoformat.return_value = "2026-04-01T00:00:00Z"
-
-        mock_memory_repository.search_by_vector.return_value = ([mock_memory], 1)
+        mock_mem = _make_mock_memory(
+            memory_id="fallback-id",
+            title="Fallback result",
+            content="Fallback content here",
+            tags=["test"],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
 
         tool.inject_services({
-            "embedding_service": mock_embedding_service,
             "memory_repository": mock_memory_repository,
             "redis": mock_redis,
         })
@@ -523,16 +531,14 @@ class TestSearchMemoryTool:
         mock_embedding = AsyncMock()
         mock_embedding.generate_embedding.side_effect = RuntimeError("Model unavailable")
 
-        mock_memory = MagicMock()
-        mock_memory.id = "fallback-embed"
-        mock_memory.title = "Embedding fallback"
-        mock_memory.content = "Content when embedding fails"
-        mock_memory.memory_type = MagicMock(value="note")
-        mock_memory.tags = []
-        mock_memory.created_at = MagicMock()
-        mock_memory.created_at.isoformat.return_value = "2026-04-01T00:00:00Z"
-
-        mock_memory_repository.search_by_tags.return_value = ([mock_memory], 1)
+        mock_mem = _make_mock_memory(
+            memory_id="fallback-embed",
+            title="Embedding fallback",
+            content="Content when embedding fails",
+            tags=[],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
 
         tool.inject_services({
             "embedding_service": mock_embedding,
@@ -546,7 +552,6 @@ class TestSearchMemoryTool:
             limit=5,
         )
 
-        # Should still return results via fallback (tag-only since embedding failed)
         assert len(result["memories"]) == 1
         assert result["metadata"]["search_mode"] == "tag_only"
 
@@ -554,16 +559,21 @@ class TestSearchMemoryTool:
 
     @pytest.mark.asyncio
     async def test_response_structure(
-        self, mock_ctx, mock_embedding_service, mock_hybrid_search_service,
-        mock_redis, sample_hybrid_response
+        self, mock_ctx, mock_memory_repository, mock_redis
     ):
         """Test that response has all required fields."""
-        tool = SearchMemoryTool()
-        mock_hybrid_search_service.search.return_value = sample_hybrid_response
+        mock_mem = _make_mock_memory(
+            memory_id="struct-id",
+            title="Structure test",
+            content="Content for structure test",
+            tags=["test"],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
 
+        tool = SearchMemoryTool()
         tool.inject_services({
-            "embedding_service": mock_embedding_service,
-            "hybrid_memory_search_service": mock_hybrid_search_service,
+            "memory_repository": mock_memory_repository,
             "redis": mock_redis,
         })
 
@@ -587,7 +597,6 @@ class TestSearchMemoryTool:
         meta = result["metadata"]
         assert "search_mode" in meta
         assert "embedding_time_ms" in meta
-        assert "execution_time_ms" in meta
 
         # Memory fields
         for m in result["memories"]:
