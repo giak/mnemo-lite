@@ -1,291 +1,605 @@
 # MnemoLite Architecture
 
-## Technology Stack
+**Version:** v5.0.0-dev  
+**Documentation:** [http://localhost:8001/docs](http://localhost:8001/docs) (Swagger/OpenAPI)
 
-| Component | Technology |
-|-----------|------------|
-| Database | PostgreSQL 18 + pgvector 0.8.1 |
-| API | FastAPI + AsyncPG |
-| Cache | Redis 7 (L2) + In-memory (L1) |
-| Frontend | Vue 3 SPA + Tailwind + SCADA design |
-| MCP | FastMCP 1.12.3 |
-| Indexing | tree-sitter (15+ languages) |
+---
 
-## Architecture Diagram
+## Table des Matières
+
+1. [Vue d'Ensemble](#vue-densemble)
+2. [Architecture Système](#architecture-système)
+3. [Stack Technique](#stack-technique)
+4. [Flux de Données](#flux-de-données)
+5. [Pipeline d'Indexation](#pipeline-dindexation)
+6. [Recherche Hybride](#recherche-hybride)
+7. [Mémoire Sémantique](#mémoire-sémantique)
+8. [Graphe de Code](#graphe-de-code)
+9. [Cache Triple-Layer](#cache-triple-layer)
+10. [Schéma Base de Données](#schéma-base-de-données)
+11. [Protocole MCP](#protocole-mcp)
+12. [Déploiement](#déploiement)
+
+---
+
+## Vue d'Ensemble
+
+MnemoLite est un système cognitif de mémoire et d'intelligence de code **100% local**Built on PostgreSQL 18. Il combine recherche vectorielle, analyse de graphe, et intégration MCP pour fournir une mémoire persistante aux agents IA.
+
+### Fonctionnalités Clés
+
+| Capacité | Description |
+|----------|-------------|
+| **Mémoire Sémantique** | Stockage avec embeddings, recherche hybride, decay temporel |
+| **Intelligence de Code** | Indexation AST, graphe de dépendances, 15+ langages |
+| **Recherche Hybride** | Lexical (pg_trgm) + Vectoriel (pgvector HNSW) + RRF |
+| **Intégration MCP** | 33 outils pour LLM (Claude, KiloCode, etc.) |
+| **Cache Triple-Layer** | L1 (mémoire) → L2 (Redis) → L3 (PostgreSQL) |
+
+---
+
+## Architecture Système
+
+```mermaid
+graph TB
+    subgraph Clients
+        Claude["Claude Desktop"]
+        Kilo["KiloCode / OpenCode"]
+        Web["Web UI (Vue 3)"]
+    end
+
+    subgraph MnemoLite
+        MCP["MCP Server<br/>:8002"]
+        API["FastAPI REST<br/>:8001"]
+        Front["Vue 3 SPA<br/>:3000"]
+    end
+
+    subgraph Data
+        PG["PostgreSQL 18<br/>pgvector 0.8.1"]
+        Redis["Redis 7<br/>L2 Cache"]
+    end
+
+    Clients --> MCP
+    Clients --> API
+    Web --> API
+    API --> PG
+    API --> Redis
+    MCP --> PG
+    MCP --> Redis
+
+    style PG fill:#336791,color:#fff
+    style Redis fill:#DC382D,color:#fff
+    style MCP fill:#4CAF50,color:#fff
+    style API fill:#4CAF50,color:#fff
+```
+
+### Services
+
+| Service | Port | Protocol | Rôle |
+|---------|------|----------|------|
+| Vue 3 SPA | 3000 | HTTP | Interface utilisateur |
+| FastAPI REST | 8001 | HTTP | API backend |
+| MCP Server | 8002 | Streamable HTTP | Outils LLM |
+| PostgreSQL | 5432 | TCP | Données + Vecteurs |
+| Redis | 6379 | TCP | Cache L2 |
+| OpenObserve | 5080 | HTTP | Observabilité |
+
+---
+
+## Stack Technique
+
+```mermaid
+graph LR
+    subgraph Frontend
+        V3["Vue 3 SPA"]
+        Tail["Tailwind CSS"]
+        SCADA["SCADA Design"]
+    end
+
+    subgraph Backend
+        FA["FastAPI"]
+        Async["AsyncPG"]
+        SA["SQLAlchemy"]
+    end
+
+    subgraph Data
+        PG["PostgreSQL 18"]
+        Vec["pgvector 0.8.1"]
+        Redis["Redis 7"]
+    end
+
+    subgraph AI/ML
+        TS["tree-sitter"]
+        LSP["LSP (Pyright)"]
+        Emb["Sentence-Transformers"]
+    end
+
+    subgraph MCP
+        FMCP["FastMCP 1.12.3"]
+        Tools["33 Tools"]
+    end
+
+    V3 --> FA
+    FA --> Async
+    FA --> SA
+    SA --> PG
+    PG --> Vec
+    FA --> Redis
+    TS --> FA
+    LSP --> FA
+    Emb --> FA
+    FMCP --> Tools
+```
+
+| Composant | Technology | Version |
+|-----------|------------|---------|
+| Database | PostgreSQL | 18+ |
+| Vector | pgvector | 0.8.1 |
+| API | FastAPI | latest |
+| ORM | SQLAlchemy | async |
+| Cache | Redis | 7 |
+| MCP | FastMCP | 1.12.3 |
+| Frontend | Vue 3 | 3.x |
+| Indexing | tree-sitter | 15+ langs |
+| Embeddings | nomic-embed-text | v1.5 |
+| Code Embeddings | jina-embeddings | v2-base-code |
+
+---
+
+## Flux de Données
+
+```mermaid
+sequenceDiagram
+    participant User as Utilisateur
+    participant MCP as MCP Server
+    participant API as FastAPI
+    participant Cache as Redis L2
+    participant PG as PostgreSQL
+
+    User->>MCP: search_memory(query)
+    MCP->>API: Search Request
+    API->>Cache: Check L1/L2
+
+    alt Cache Hit
+        Cache-->>API: Cached Result
+        API-->>MCP: Response
+        MCP-->>User: Results
+    else Cache Miss
+        API->>PG: SQL Query
+        PG-->>API: Raw Results
+        API->>API: RRF Fusion + Rerank
+        API->>Cache: Store L2
+        API-->>MCP: Response
+        MCP-->>User: Results
+    end
+```
+
+---
+
+## Pipeline d'Indexation
+
+Le pipeline d'indexation transforme le code source en chunks sémantiques avec embeddings.
+
+```mermaid
+flowchart LR
+    A[Code Source] --> B[Detection Langage]
+    B --> C[Parsing AST]
+    C --> D[Chunking]
+    D --> E[Extraction Métadonnées]
+    E --> F[Embedding Dual]
+    F --> G[Graphe Dépendances]
+    G --> H[Stockage PostgreSQL]
+
+    subgraph "7 Étapes"
+        B
+        C
+        D
+        E
+        F
+        G
+        H
+    end
+
+    style A fill:#ff6b6b,color:#fff
+    style H fill:#4CAF50,color:#fff
+```
+
+### Détail des Étapes
+
+| Étape | Description | Outil |
+|-------|-------------|-------|
+| 1. Detection | Identifier langage (Python, JS, TS, etc.) | Extension fichier |
+| 2. Parsing | Analyser AST | tree-sitter |
+| 3. Chunking | Découper en fonctions/classes | AST traversal |
+| 4. Métadonnées | Extraire types, signatures | LSP (Pyright) |
+| 5. Embedding TEXT | Vectoriser nom + documentation | nomic-embed-text |
+| 6. Embedding CODE | Vectoriser code source | jina-embeddings-v2 |
+| 7. Graphe | Construire relations | Recursive CTE |
+
+### Langages Supportés
 
 ```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   Vue 3 SPA │───▶│  FastAPI    │───▶│ PostgreSQL  │
-│  (port 3000)│    │  (port 8001)│    │   (port 5432)│
-└─────────────┘    └──────┬──────┘    └─────────────┘
-                         │
-                   ┌─────┴─────┐    ┌─────────────┐
-                   │    MCP    │    │   Redis 7   │
-                   │(port 8002)│    │  (port 6379) │
-                   └───────────┘    └─────────────┘
+Python, JavaScript, TypeScript, JSX, TSX, Go, Rust, Java,
+C, C++, C#, Ruby, PHP, Swift, Kotlin, Scala, HTML, CSS,
+SQL, Markdown, YAML, JSON, TOML
 ```
 
-## Triple-Layer Cache
+---
 
+## Recherche Hybride
+
+MnemoLite combine trois stratégies de recherche pour des résultats optimaux.
+
+```mermaid
+flowchart TB
+    Q[Query] --> E[Embedding Query]
+    Q --> T[Tokenisation]
+
+    subgraph Lexical
+        T --> Trgm[pg_trgm Matching]
+    end
+
+    subgraph Vector
+        E --> HNSW[HNSW Index]
+    end
+
+    subgraph Fusion
+        Trgm --> RRF[RRF Fusion]
+        HNSW --> RRF
+        RRF --> Rerank[Reranking BM25]
+    end
+
+    Rerank --> Results[Top-K Results]
+
+    style Q fill:#ff6b6b,color:#fff
+    style Results fill:#4CAF50,color:#fff
 ```
-┌─────────────────────────────────────────────┐
-│                    Cache                     │
-├─────────────┬─────────────┬────────────────┤
-│ L1 (Memory) │ L2 (Redis)  │ L3 (PostgreSQL)│
-│    ~1ms     │   ~10ms     │    ~50ms       │
-│  Per-process│  Distributed │     Disk       │
-└─────────────┴─────────────┴────────────────┘
-```
 
-## Indexing Pipeline (7 Steps)
+### Paramètres RRF
 
-1. **File Detection** — Scan project for supported files
-2. **Language Identification** — Detect language (Python, JS, TS, etc.)
-3. **AST Parsing** — Parse with tree-sitter
-4. **Chunking** — Split into semantic chunks (functions, classes)
-5. **Metadata Extraction** — LSP for types, signatures
-6. **Dual Embedding** — TEXT + CODE vectors (768D each)
-7. **Graph Construction** — Build dependency graph
+| Paramètre | Valeur | Effet |
+|-----------|--------|-------|
+| k adaptatif | 20/60/80 | Code→précision, NL→recall |
+| Lexical weight | 0.4 (défaut) | Importance search lexical |
+| Vector weight | 0.6 (défaut) | Importance search vectoriel |
 
-## Database Schema
-
-### memories
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| title | VARCHAR(200) | Memory title |
-| content | TEXT | Full content |
-| memory_type | VARCHAR(50) | Type: note, decision, task |
-| tags | TEXT[] | Array of tags |
-| embedding | halfvec(768) | Vector embedding |
-| author | VARCHAR(100) | Author |
-| project_id | UUID | Project scope (nullable) |
-| created_at | TIMESTAMPTZ | Creation time |
-| updated_at | TIMESTAMPTZ | Last update |
-| deleted_at | TIMESTAMPTZ | Soft delete |
-
-### code_chunks
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| repository | VARCHAR(100) | Repository name |
-| file_path | TEXT | File path |
-| chunk_type | VARCHAR(50) | function, class, method |
-| name | VARCHAR(200) | Chunk name |
-| source_code | TEXT | Code content |
-| embedding_text | halfvec(768) | TEXT embedding |
-| embedding_code | halfvec(768) | CODE embedding |
-| language | VARCHAR(20) | Programming language |
-| metadata | JSONB | LSP metadata |
-| created_at | TIMESTAMPTZ | Creation time |
-
-### graph_nodes
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| repository | VARCHAR(100) | Repository name |
-| node_type | VARCHAR(50) | function, class, module |
-| name | VARCHAR(200) | Node name |
-| file_path | TEXT | Location |
-| metadata | JSONB | Additional data |
-
-### graph_edges
-
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| source_id | UUID | Source node |
-| target_id | UUID | Target node |
-| edge_type | VARCHAR(50) | calls, imports, inherits |
-
-## Hybrid Search
-
-MnemoLite combines multiple search strategies:
-
-1. **Lexical** — pg_trgm trigram matching
-2. **Vector** — pgvector HNSW (ef_search=100)
-3. **RRF Fusion** — Reciprocal Rank Fusion
-4. **BM25 Reranking** — Optional reranking
+### Exemple SQL
 
 ```sql
--- Example: Hybrid search
 SELECT * FROM memories
 WHERE deleted_at IS NULL
 ORDER BY 
-  0.4 * similarity(title, query) +
-  0.6 * (1 - embedding <=> query::vector)
+  -- Lexical: pg_trgm similarity
+  0.4 * GREATEST(
+    similarity(title, $1),
+    similarity(content, $1)
+  ) +
+  -- Vector: pgvector cosine distance
+  0.6 * (1 - embedding <=> $1::halfvec)
 LIMIT 10;
 ```
 
-## Memory Management
+---
 
-MnemoLite uses semantic memory with decay-based relevance:
+## Mémoire Sémantique
 
-### Memory Types
+### Types de Mémoires
 
-| Type | Purpose | Auto-expire |
-|------|---------|-------------|
-| note | General notes | 30 days |
-| decision | Architectural decisions | Never |
-| task | Track TODOs | Until completed |
-| reference | Code references | 90 days |
-| conversation | Chat history | 14 days |
-| investigation | Debug findings | 45 days |
+```mermaid
+graph LR
+    N[note] --> P[Permanent]
+    D[decision] --> P
+    R[reference] --> T[Temporal]
+    T[reference] --> Exp[Expire]
+    C[conversation] --> Exp
+    I[investigation] --> Exp
+    Tk[task] --> P
 
-### Decay Configuration
+    style P fill:#4CAF50,color:#fff
+    style Exp fill:#ff6b6b,color:#fff
+```
 
-Each tag can have custom decay:
-- `decay_rate`: Exponential decay (0.0 = permanent, 0.1 ≈ 7 days half-life)
-- `auto_consolidate_threshold`: Consolidate when count exceeds limit
-- `priority_boost`: Score adjustment (+0.5 important, -0.1 deprioritize)
+| Type | Description | Duration |
+|------|-------------|----------|
+| `note` | Observations générales | 30 jours |
+| `decision` | Décisions d'architecture | Permanent |
+| `task` | TODO items | Jusqu'à complétion |
+| `reference` | Liens documentation | 90 jours |
+| `conversation` | Contexte dialogue | 14 jours |
+| `investigation` | Résultats debug | 45 jours |
 
-### Consolidation Workflow
+### Décay Configuration
 
-When `sys:history` count > 20, oldest 10 memories are consolidated into 1 summary:
-1. Search oldest 10 `sys:history` memories
-2. Generate LLM summary
-3. Create new `sys:history:summary` memory
-4. Soft-delete source memories
+Chaque tag peut avoir une configuration de decay:
 
-## MCP Tools
+| Config | Type | Description |
+|--------|------|-------------|
+| `decay_rate` | float | Décroissance exponentielle (0.0 = permanent) |
+| `priority_boost` | float | Boost de score (+important, -dépriorisé) |
+| `auto_consolidate_threshold` | int | Seuil pour consolidation auto |
 
-### Search Tools
+### Cycle de Vie
 
-| Tool | Description |
+```mermaid
+stateDiagram-v2
+    [*] --> New: write_memory
+    New --> Active: Embedding généré
+    Active --> Consumed: mark_consumed
+    Consumed --> Active: Refresh
+    Active --> Decayed: Temps + decay_rate
+    Decayed --> Consolidated: Threshold atteint
+    Consolidated --> Summary: LLM summary
+    Summary --> [*]
+```
+
+### Consolidation
+
+Quand `sys:history` > 20, les 10 plus anciennes mémoires sont consolidées:
+
+1. Rechercher les 10 plus anciennes `sys:history`
+2. Générer summary via LLM
+3. Créer nouvelle mémoire `sys:history:summary`
+4. Soft-delete des sources
+
+---
+
+## Graphe de Code
+
+Le graphe de code représente les dépendances entre fonctions, classes, et modules.
+
+```mermaid
+graph TD
+    A[Module: main.py] --> B[Function: authenticate]
+    A --> C[Function: process]
+    B --> D[Function: validate_token]
+    C --> E[Function: query_db]
+    C --> F[Class: ResponseHandler]
+    D --> G[Import: jwt.decode]
+    E --> H[Import: asyncpg.connect]
+
+    style A fill:#336791,color:#fff
+    style B fill:#4CAF50,color:#fff
+    style C fill:#4CAF50,color:#fff
+```
+
+### Types de Nœuds
+
+| Type | Description |
 |------|-------------|
-| search_code | Hybrid lexical + vector search |
-| search_memory | Semantic memory search |
+| `function` | Fonction ou méthode |
+| `class` | Classe ou interface |
+| `module` | Fichier/module Python |
+| `import` | Import externe |
 
-### Memory Tools
+### Types d'Arêtes
 
-| Tool | Description |
+| Type | Description |
 |------|-------------|
-| write_memory | Create new memory |
-| update_memory | Partial update |
-| delete_memory | Soft/hard delete |
-| consolidate_memory | Merge multiple memories |
-| mark_consumed | Mark as processed |
+| `calls` | Fonction appelle une autre |
+| `imports` | Module importe un autre |
+| `inherits` | Classe hérite d'une autre |
+| `contains` | Module contient une fonction |
 
-### Graph Tools
+### Traversal
 
-| Tool | Description |
-|------|-------------|
-| get_graph_stats | Repository statistics |
-| traverse_graph | Navigate dependencies |
-| find_path | Shortest path BFS |
-| get_module_data | Module details |
+```mermaid
+flowchart LR
+    N[Node] --> Out[outgoing: callees]
+    N --> In[incoming: callers]
+    N --> Both[both: full]
 
-### Indexing Tools
+    style N fill:#ff6b6b,color:#fff
+```
 
-| Tool | Description |
-|------|-------------|
-| index_project | Full project index |
-| index_incremental | Changed files only |
-| reindex_file | Single file update |
-| get_indexing_status | Progress/status |
+### Path Finding (BFS)
 
-## API Endpoints
+Trouve le chemin le plus court entre deux nœuds:
 
-### FastAPI (port 8001)
+```python
+find_path(source_id, target_id, max_depth=5)
+# → ["node1", "node2", "node3"]
+```
 
-| Endpoint | Method | Description |
+---
+
+## Cache Triple-Layer
+
+```mermaid
+flowchart LR
+    Q[Query] --> L1[L1: In-Memory]
+    L1 -->|miss| L2[L2: Redis]
+    L2 -->|miss| L3[L3: PostgreSQL]
+
+    L1 -->|hit| R1[Response]
+    L2 -->|hit| R2[Response]
+    L3 -->|hit| R3[Response]
+
+    style L1 fill:#2196F3,color:#fff
+    style L2 fill:#9C27B0,color:#fff
+    style L3 fill:#336791,color:#fff
+```
+
+| Layer | Technologie | Latence | Scope |
+|-------|-------------|---------|-------|
+| L1 | In-Memory (dict) | ~1ms | Per-process |
+| L2 | Redis | ~10ms | Distributed |
+| L3 | PostgreSQL | ~50ms | Persistent |
+
+### Cache Keys
+
+```
+memory:{id}           → Memory full content
+search:{hash}         → Search results
+graph:{repo}:{id}     → Graph data
+index:{repo}:{file}   → Indexing status
+```
+
+---
+
+## Schéma Base de Données
+
+### memories
+
+```mermaid
+erDiagram
+    MEMORY ||--o{ TAG : has
+    MEMORY {
+        uuid id PK
+        string title
+        text content
+        string memory_type
+        array tags
+        vector embedding
+        string author
+        uuid project_id FK
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+    }
+```
+
+### code_chunks
+
+```mermaid
+erDiagram
+    CHUNK }o--|| REPOSITORY : belongs
+    CHUNK ||--o{ GRAPH_NODE : relates
+
+    CHUNK {
+        uuid id PK
+        string repository
+        text file_path
+        string chunk_type
+        string name
+        text source_code
+        vector embedding_text
+        vector embedding_code
+        string language
+        jsonb metadata
+        timestamptz created_at
+    }
+```
+
+### graph_nodes
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| id | UUID | Primary key |
+| repository | VARCHAR | Repository name |
+| node_type | VARCHAR | function, class, module |
+| name | VARCHAR | Node name |
+| file_path | TEXT | File location |
+| metadata | JSONB | Extra data |
+
+### graph_edges
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| id | UUID | Primary key |
+| source_id | UUID | Source node FK |
+| target_id | UUID | Target node FK |
+| edge_type | VARCHAR | calls, imports, inherits |
+
+---
+
+## Protocole MCP
+
+```mermaid
+sequenceDiagram
+    participant C as MCP Client
+    participant S as MnemoLite MCP
+
+    C->>S: initialize (JSON-RPC)
+    S-->>C: serverInfo + capabilities
+    C->>S: notifications/initialized
+    loop Every Request
+        C->>S: tools/call (name, arguments)
+        S->>S: Execute Tool
+        S-->>C: Result (content)
+    end
+```
+
+### 33 Outils MCP
+
+| Catégorie | Nombre | Outils |
+|----------|--------|--------|
+| **Memory** | 9 | write, read, update, delete, search, snapshot, mark_consumed, consolidate, configure_decay |
+| **Indexing** | 7 | index_project, index_incremental, index_markdown, reindex_file, get_status, get_errors, retry |
+| **Code Search** | 1 | search_code |
+| **Analytics** | 4 | get_indexing_stats, get_memory_health, get_cache_stats, clear_cache |
+| **Graph** | 4 | get_graph_stats, traverse_graph, find_path, get_module_data |
+| **Project** | 2 | switch_project, ping |
+
+### Configuration Client
+
+**KiloCode / OpenCode:**
+```json
+{
+  "mcpServers": {
+    "mnemolite": {
+      "url": "http://localhost:8002/mcp"
+    }
+  }
+}
+```
+
+---
+
+## Déploiement
+
+### Docker Compose
+
+```yaml
+services:
+  api:
+    image: mnemolite/api
+    ports: ["8001:8001"]
+
+  mcp:
+    image: mnemolite/mcp
+    ports: ["8002:8002"]
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: mnemolite
+      POSTGRES_EXTENSIONS: vector pg_trgm pg_partman
+
+  redis:
+    image: redis:7-alpine
+
+  frontend:
+    image: mnemolite/frontend
+    ports: ["3000:3000"]
+```
+
+### Variables d'Environnement
+
+| Variable | Défaut | Description |
 |----------|--------|-------------|
-| /health | GET | Health check |
-| /search | POST | Code search |
-| /memories | GET/POST | Memory CRUD |
-| /memories/{id} | GET/PUT/DELETE | Single memory |
-| /graph/stats | GET | Graph statistics |
-| /graph/traverse | POST | Graph navigation |
-| /index | POST | Start indexing |
-| /index/status | GET | Indexing status |
-
-### MCP Protocol (port 8002)
-
-MCP expose 33 tools via Streamable HTTP:
-- Transport: Streamable HTTP (port 8002)
-- Protocol: MCP 1.12.3 (JSON-RPC 2.0)
-- Tools registered at server startup
-- Endpoints: `/mcp`
-
-## Graph Traversal
-
-The code graph represents:
-- **Nodes**: Functions, classes, modules
-- **Edges**: calls, imports, inherits relationships
-
-### Traversal Types
-
-| Direction | Description |
-|-----------|-------------|
-| outgoing | callees, imports |
-| incoming | callers, referencers |
-| both | Full neighborhood |
-
-### BFS Path Finding
-
-Finds shortest path between two nodes:
-- Max depth configurable (default: 5)
-- Returns nodes and edges along path
-- Used for "how does X reach Y?" queries
-
-## Deployment
-
-### Production Ports
-
-| Service | Port | Protocol |
-|---------|------|----------|
-| Frontend Vue 3 | 3000 | HTTP |
-| FastAPI | 8001 | HTTP/HTTPS |
-| MCP | 8002 | stdin/stdout |
-| PostgreSQL | 5432 | TCP |
-| Redis | 6379 | TCP |
-
-### Distributed Architecture
-
-```
-                    ┌──────────────────┐
-                    │   Load Balancer   │
-                    └────────┬─────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
- ┌──────┴──────┐     ┌──────┴──────┐     ┌──────┴──────┐
- │  Worker 1   │     │  Worker 2   │     │  Worker N   │
- │  (port 8001)│     │  (port 8001)│     │  (port 8001)│
- └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-        │                    │                    │
-        └────────────────────┼────────────────────┘
-                             │
-              ┌──────────────┴──────────────┐
-              │         PostgreSQL            │
-              │         (port 5432)            │
-              └──────────────┬──────────────┘
-                             │
-              ┌──────────────┴──────────────┐
-              │           Redis             │
-              │         (port 6379)          │
-              └─────────────────────────────┘
-```
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| DATABASE_URL | postgresql://localhost:5432/mnemo | Database connection |
+| DATABASE_URL | postgresql://... | PostgreSQL connection |
 | REDIS_URL | redis://localhost:6379 | Redis connection |
 | MCP_PORT | 8002 | MCP server port |
 | API_PORT | 8001 | API server port |
-| FRONTEND_PORT | 3000 | Frontend port |
+| EMBEDDING_MODEL | nomic-ai/nomic-embed-text-v1.5 | TEXT embedding model |
+| CODE_EMBEDDING_MODEL | jinaai/jina-embeddings-v2-base-code | CODE embedding model |
+| EMBEDDING_DIMENSION | 768 | Embedding dimension |
+
+---
 
 ## Performance
 
-| Metric | Value |
-|--------|-------|
-| Search latency (cached) | <10ms |
-| Search latency (uncached) | ~100ms |
-| Indexing speed | ~5s per file |
-| Graph traversal (3 hops) | ~0.15ms |
+| Métrique | Valeur |
+|----------|--------|
+| Latence search (cached) | <10ms |
+| Latence search (uncached) | ~100ms |
+| Vitesse indexation | ~5s/fichier |
+| Graphe traversal (3 hops) | ~0.15ms |
 | Cache hit rate | 80%+ |
+| Mémoire embedding | ~1.6GB |
+
+---
+
+## License
+
+MIT
