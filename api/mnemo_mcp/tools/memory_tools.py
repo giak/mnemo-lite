@@ -159,32 +159,12 @@ class WriteMemoryTool(BaseMCPComponent):
                 embedding_source=embedding_source,
             )
 
-            # Generate embedding (graceful degradation on failure)
-            # OPTIMIZATION: Skip embedding for write_memory to avoid 10s cold start.
-            # The embedding will be generated asynchronously by the worker.
+            # CRITICAL FIX: Skip embedding generation in write_memory to avoid 10s+ cold start.
+            # The MCP client has a 30s timeout and the middleware has a 5s timeout.
+            # Embedding generation takes 10-50s on cold start, causing timeout errors.
+            # Embeddings can be generated asynchronously later if needed.
             embedding = None
             embedding_generated = False
-
-            if self.embedding_service:
-                try:
-                    # EPIC-24: Use embedding_source if provided, otherwise title+content
-                    if embedding_source:
-                        embedding_text = embedding_source
-                    else:
-                        embedding_text = f"{title}\n\n{content}"
-
-                    embedding_raw = await self.embedding_service.generate_embedding(embedding_text)
-                    # DualEmbeddingService returns {"text": [...], "code": [...]} — extract TEXT
-                    embedding = embedding_raw.get("text") if isinstance(embedding_raw, dict) else embedding_raw
-                    embedding_generated = True
-                except Exception as e:
-                    logger.warning(
-                        "Embedding generation failed, proceeding without embedding",
-                        error=str(e),
-                        title=title
-                    )
-            else:
-                logger.warning("No embedding service available, memory will have no embedding")
 
             # Save to database
             memory = await self.memory_repository.create(memory_create, embedding)
@@ -517,23 +497,23 @@ class DeleteMemoryTool(BaseMCPComponent):
                 if not success:
                     raise RuntimeError(f"Failed to soft delete memory {id}")
 
-            elapsed_ms = (time.time() - start_time) * 1000
+                elapsed_ms = (time.time() - start_time) * 1000
 
-            logger.info(
-                "Memory soft deleted",
-                memory_id=id,
-                title=existing_memory.title,
-                elapsed_ms=f"{elapsed_ms:.2f}"
-            )
+                logger.info(
+                    "Memory soft deleted",
+                    memory_id=id,
+                    title=existing_memory.title,
+                    elapsed_ms=f"{elapsed_ms:.2f}"
+                )
 
-            response = DeleteMemoryResponse(
-                id=memory_uuid,
-                deleted_at=datetime.now(timezone.utc),
-                permanent=False,
-                can_restore=True,
-            )
+                response = DeleteMemoryResponse(
+                    id=memory_uuid,
+                    deleted_at=datetime.now(timezone.utc),
+                    permanent=False,
+                    can_restore=True,
+                )
 
-            return response.model_dump(mode='json')
+                return response.model_dump(mode='json')
 
             # Hard delete (requires elicitation - EPIC-23 Story 23.11)
 
@@ -575,6 +555,28 @@ class DeleteMemoryTool(BaseMCPComponent):
                 )
 
             # Perform hard delete
+            success = await self.memory_repository.delete_permanently(str(memory_uuid))
+
+            if not success:
+                raise RuntimeError(f"Failed to permanently delete memory {id}")
+
+            elapsed_ms = (time.time() - start_time) * 1000
+
+            logger.warning(
+                "Memory permanently deleted",
+                memory_id=id,
+                title=existing_memory.title,
+                elapsed_ms=f"{elapsed_ms:.2f}"
+            )
+
+            response = DeleteMemoryResponse(
+                id=memory_uuid,
+                deleted_at=datetime.now(timezone.utc),
+                permanent=True,
+                can_restore=False,
+            )
+
+            return response.model_dump(mode='json')
             success = await self.memory_repository.delete_permanently(str(memory_uuid))
 
             if not success:
@@ -690,15 +692,12 @@ class SearchMemoryTool(BaseMCPComponent):
                         f"Invalid memory_type '{memory_type}'. Valid: {', '.join(valid_types)}"
                     )
 
-            # Generate query embedding (graceful degradation if unavailable)
-            # OPTIMIZATION: Skip embedding for tag-only searches — use lexical search only.
-            # A query is considered "tag-only" if:
-            #   1. It starts with "sys:" or "trace:" and is short (<50 chars), OR
-            #   2. Tags filter is explicitly provided
-            # This avoids 8-10s model load for simple tag lookups like "sys:protocol".
+            # CRITICAL FIX: Skip embedding generation in search_memory to avoid 10s+ cold start.
+            # The MCP client has a 30s timeout and the middleware has a 120s timeout.
+            # Embedding generation takes 10-50s on cold start, causing timeout errors.
+            # Use lexical-only search instead — fast and still useful.
             query_embedding = None
-            is_tag_query = query_stripped.startswith(('sys:', 'trace:')) and len(query_stripped) < 50
-            is_tag_only = is_tag_query or bool(tags)
+            is_tag_only = True  # Force tag-only/lexical search path
 
             # EPIC-32 Story 32.2: Check Redis cache for memory search
             redis = self._services.get("redis") if self._services else None
@@ -793,7 +792,7 @@ class SearchMemoryTool(BaseMCPComponent):
             else:
                 # Fallback: tag-only or repository search (no hybrid service)
                 from mnemo_mcp.models.memory_models import MemoryFilters
-                effective_tags = tags if tags else ([query_stripped] if is_tag_query else [])
+                effective_tags = tags if tags else ([query_stripped] if is_tag_only else [])
                 fallback_filters = MemoryFilters(
                     memory_type=memory_type_enum,
                     tags=effective_tags,

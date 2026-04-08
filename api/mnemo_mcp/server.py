@@ -57,29 +57,6 @@ from mnemo_mcp.tools.analytics_tools import (
     get_cache_stats_tool,
 )
 
-# EPIC-31: Import tool singletons at module level for @mcp.tool() decorators
-from mnemo_mcp.tools.graph_tools import (
-    get_graph_stats_tool,
-    traverse_graph_tool,
-    find_path_tool,
-    get_module_data_tool,
-)
-from mnemo_mcp.tools.indexing_tools import (
-    index_project_tool,
-    reindex_file_tool,
-    index_incremental_tool,
-    index_markdown_workspace_tool,
-    get_indexing_status_tool,
-    get_indexing_errors_tool,
-    retry_indexing_tool,
-)
-from mnemo_mcp.tools.analytics_tools import (
-    clear_cache_tool,
-    get_indexing_stats_tool,
-    get_memory_health_tool,
-    get_cache_stats_tool,
-)
-
 # Setup structured logging - MUST use stderr for MCP stdio transport
 # stdout is reserved for JSONRPC protocol messages only
 structlog.configure(
@@ -182,24 +159,13 @@ async def _initialize_services() -> dict:
         services["redis"] = None
 
     # --------------------------------------------------------------------
-    # 3. Initialize EmbeddingService
+    # 3. Initialize EmbeddingService (SKIPPED - causes 50s cold start)
     # --------------------------------------------------------------------
-    try:
-        from services.dual_embedding_service import DualEmbeddingService
-        embedding_service = DualEmbeddingService()
-        services["embedding_service"] = embedding_service
-        logger.info(
-            "mcp.embedding_service.initialized",
-            mode=embedding_service._embedding_mode,
-            text_model=embedding_service.text_model_name,
-            code_model=embedding_service.code_model_name,
-            dimension=embedding_service.dimension,
-            # Bug: lazy_load=True causes 50s cold start on first search, triggering MCP client 30s timeout
-            lazy_load=False,
-        )
-    except Exception as e:
-        logger.warning("mcp.embedding_service.initialization_failed", error=str(e))
-        services["embedding_service"] = None
+    # CRITICAL FIX: Skip embedding service initialization entirely.
+    # write_memory and search_memory no longer use embeddings to avoid
+    # the 10-50s cold start that triggers MCP client timeouts.
+    # Embeddings can be generated via the API REST endpoint if needed.
+    services["embedding_service"] = None
 
     # Create SQLAlchemy engine FIRST (needed by multiple services)
     sqlalchemy_engine = None
@@ -325,11 +291,14 @@ async def _initialize_services() -> dict:
     # --------------------------------------------------------------------
     # 7. Initialize GLiNERService, EntityExtractionService, QueryUnderstandingService
     # --------------------------------------------------------------------
+    # CRITICAL FIX: Skip GLiNER preload during service initialization.
+    # GLiNER model loading takes ~10s and blocks the first request.
+    # Instead, load it lazily when actually needed (first entity extraction call).
     try:
-        from services.gliner_service import preload_gliner_model, get_gliner_service
+        from services.gliner_service import get_gliner_service
         from services.entity_extraction_service import EntityExtractionService
 
-        preload_gliner_model()
+        # Get singleton but DON'T load model yet (lazy loading)
         gliner_service = get_gliner_service()
         services["gliner_service"] = gliner_service
 
@@ -559,8 +528,10 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         transport=config.transport
     )
 
-    # Configure OpenTelemetry
-    _configure_mcp_otel()
+    # Configure OpenTelemetry ONCE (not on every lifespan recreation)
+    if not getattr(server_lifespan, '_otel_configured', False):
+        _configure_mcp_otel()
+        server_lifespan._otel_configured = True
 
     # Get pre-initialized singleton services (or initialize on first call)
     services = await get_services()
@@ -706,10 +677,12 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     try:
         yield
     finally:
-        # Cleanup is done once at process shutdown via _cleanup_services()
-        # With stateless_http=True, the lifespan may be called multiple times,
-        # but _cleanup_services is idempotent and only runs once.
-        await _cleanup_services()
+        # CRITICAL FIX: Do NOT call _cleanup_services() here.
+        # With stateless_http=True, the lifespan is recreated on EVERY request.
+        # Calling _cleanup_services() would close the DB pool and Redis after
+        # every request, breaking all subsequent requests.
+        # Cleanup is handled at process shutdown via atexit handler.
+        pass
 
 
 # ============================================================================
@@ -790,12 +763,12 @@ def create_mcp_server() -> FastMCP:
         """
         Critical middleware to prevent cascading failure from Claude Desktop infinite retries.
         
-        Any request that takes longer than 5 seconds is terminated immediately.
-        This ensures we never have hanging threads/requests that get retried infinitely.
+        First request may take 30-60s due to service initialization (GLiNER model loading,
+        embedding service initialization). Subsequent requests should be <5s.
         """
         async def dispatch(self, request, call_next):
             try:
-                return await asyncio.wait_for(call_next(request), timeout=5.0)
+                return await asyncio.wait_for(call_next(request), timeout=120.0)
             except asyncio.TimeoutError:
                 logger.warning(
                     "request_timeout_prevented",
