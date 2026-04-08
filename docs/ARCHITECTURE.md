@@ -204,10 +204,11 @@ When `sys:history` count > 20, oldest 10 memories are consolidated into 1 summar
 
 ### MCP Protocol (port 8002)
 
-MCP exposes tools via JSON-RPC 2.0:
+MCP expose 33 tools via Streamable HTTP:
+- Transport: Streamable HTTP (port 8002)
+- Protocol: MCP 1.12.3 (JSON-RPC 2.0)
 - Tools registered at server startup
-- Request/response via stdin/stdout
-- Notifications for progress updates
+- Endpoints: `/mcp`
 
 ## Graph Traversal
 
