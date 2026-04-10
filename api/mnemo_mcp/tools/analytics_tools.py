@@ -313,7 +313,23 @@ class GetMemoryHealthTool(BaseMCPComponent):
                 ))
                 decay_rules = decay_result.fetchone()[0]
 
+                outcome_stats = await conn.fetchrow("""
+                    SELECT 
+                        COUNT(*) FILTER (WHERE outcome_positive > 0 OR outcome_negative > 0) as rated_count,
+                        AVG(outcome_score) FILTER (WHERE outcome_score IS NOT NULL) as avg_score,
+                        COUNT(*) FILTER (WHERE outcome_positive > outcome_negative + 2) as positive_count,
+                        COUNT(*) FILTER (WHERE outcome_negative > outcome_positive + 2) as negative_count
+                    FROM memories 
+                    WHERE deleted_at IS NULL
+                """)
+
             embedding_pct = round(with_embedding / total * 100, 1) if total > 0 else 0
+
+            rated_count = outcome_stats["rated_count"] if outcome_stats else 0
+            avg_score = outcome_stats["avg_score"] if outcome_stats and outcome_stats["avg_score"] else None
+            positive_count = outcome_stats["positive_count"] if outcome_stats else 0
+            negative_count = outcome_stats["negative_count"] if outcome_stats else 0
+            positive_rate = f"{round(100 * positive_count / max(1, rated_count))}%" if rated_count > 0 else "N/A"
 
             return {
                 "success": True,
@@ -325,6 +341,13 @@ class GetMemoryHealthTool(BaseMCPComponent):
                 "needs_consolidation": history_count > 20,
                 "unconsumed_drifts": drift_count,
                 "decay_rules": decay_rules,
+                "outcome_metrics": {
+                    "rated_memories": rated_count,
+                    "avg_outcome_score": round(avg_score, 2) if avg_score else None,
+                    "positive_count": positive_count,
+                    "negative_count": negative_count,
+                    "positive_rate": positive_rate,
+                },
             }
 
         except Exception as e:
