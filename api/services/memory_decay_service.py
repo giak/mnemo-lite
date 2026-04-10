@@ -53,7 +53,6 @@ DECAY_PRESETS = {
 
 DEFAULT_DECAY_RATE = 0.01  # ~70 days half-life
 
-
 class MemoryDecayService:
     """
     Temporal decay scoring for memory search results.
@@ -112,6 +111,8 @@ class MemoryDecayService:
         created_at: datetime,
         decay_rate: Optional[float] = None,
         now: Optional[datetime] = None,
+        outcome_positive: int = 0,
+        outcome_negative: int = 0,
     ) -> float:
         """
         Apply temporal decay to a relevance score.
@@ -121,6 +122,8 @@ class MemoryDecayService:
             created_at: When the memory was created
             decay_rate: Decay rate override
             now: Current time (defaults to utcnow)
+            outcome_positive: Number of positive outcome signals
+            outcome_negative: Number of negative outcome signals
 
         Returns:
             Decay-adjusted score
@@ -136,7 +139,11 @@ class MemoryDecayService:
         age_days = max(0, age_seconds / 86400)
 
         decay = self.compute_decay(age_days, decay_rate)
-        return relevance_score * decay
+        
+        # Get outcome factor
+        outcome_factor = self.compute_outcome_factor(outcome_positive, outcome_negative)
+        
+        return relevance_score * decay * outcome_factor
 
     def apply_decay_to_results(
         self,
@@ -210,6 +217,30 @@ class MemoryDecayService:
                 return DECAY_PRESETS[tag]
 
         return self.default_decay_rate
+
+    @staticmethod
+    def compute_outcome_factor(
+        outcome_positive: int,
+        outcome_negative: int,
+    ) -> float:
+        """
+        Calculate reward factor based on outcome feedback.
+        
+        Formula: 1 + 0.5 * (pos - neg) / (pos + neg + 1)
+        Range: (0.5, 1.5)
+        
+        Examples:
+            (0, 0)  -> 1.0   (no feedback, neutral)
+            (5, 0)  -> 1.33  (positive)
+            (0, 5)  -> 0.67  (negative)
+            (10, 2) -> 1.17  (mostly positive)
+        """
+        if outcome_positive == 0 and outcome_negative == 0:
+            return 1.0
+        
+        total = outcome_positive + outcome_negative + 1
+        ratio = (outcome_positive - outcome_negative) / total
+        return 1 + 0.5 * ratio
 
     @staticmethod
     def half_life(decay_rate: float) -> float:
