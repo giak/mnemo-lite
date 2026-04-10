@@ -1183,6 +1183,78 @@ class MarkConsumedTool(BaseMCPComponent):
             raise RuntimeError(f"Failed to mark memories consumed: {e}") from e
 
 
+
+class RateMemoryTool(BaseMCPComponent):
+    """
+    Tool for rating a memory's helpfulness outcome.
+    
+    Modulates the memory's decay rate based on outcome feedback.
+    Memories with positive outcomes decay slower (stay relevant longer).
+    Memories with negative outcomes decay faster (disappear quicker).
+    
+    Usage:
+        rate_memory(id="...", helpful=True)
+        rate_memory(id="...", helpful=False)
+        rate_memory(id="...", helpful=True, score=0.8)
+    """
+
+    def get_name(self) -> str:
+        return "rate_memory"
+
+    async def execute(self, ctx: Context, **params) -> dict:
+        """
+        Rate a memory's helpfulness.
+
+        Args:
+            id: Memory UUID to rate
+            helpful: True = positive outcome, False = negative outcome
+            score: Optional explicit score (-1.0 to 1.0)
+
+        Returns:
+            Dict with id, outcome_positive, outcome_negative, outcome_score, last_outcome_at
+        """
+        memory_id = params.get("id")
+        helpful = params.get("helpful")
+        score = params.get("score")
+
+        if not memory_id:
+            raise ValueError("id is required")
+
+        if helpful is None:
+            raise ValueError("helpful is required")
+
+        # Validate score range if provided
+        if score is not None and (score < -1.0 or score > 1.0):
+            raise ValueError("score must be between -1.0 and 1.0")
+
+        try:
+            memory_repo = self._services.get("memory_repository")
+            if not memory_repo:
+                raise RuntimeError("Memory repository not available")
+
+            result = await memory_repo.rate_memory(
+                memory_id=memory_id,
+                helpful=helpful,
+                score=score,
+            )
+
+            logger.info(
+                "memories.rate_memory",
+                memory_id=memory_id,
+                helpful=helpful,
+                score=score,
+                outcome_positive=result.get("outcome_positive"),
+                outcome_negative=result.get("outcome_negative"),
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error("Failed to rate memory", error=str(e), memory_id=memory_id)
+            raise RuntimeError(f"Failed to rate memory: {e}") from e
+
+
+
 class SystemSnapshotTool(BaseMCPComponent):
     """
     Tool for getting a system snapshot in a single call.
@@ -1348,6 +1420,7 @@ search_memory_tool = SearchMemoryTool()
 read_memory_tool = ReadMemoryTool()
 consolidate_memory_tool = ConsolidateMemoryTool()
 mark_consumed_tool = MarkConsumedTool()
+rate_memory_tool = RateMemoryTool()
 # system_snapshot_tool defined after ConfigureDecayTool (line 1325)
 
 
