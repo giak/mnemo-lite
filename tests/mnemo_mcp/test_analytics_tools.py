@@ -99,6 +99,14 @@ class TestGetMemoryHealthTool:
         drift_row.__getitem__ = lambda self, i: [3][i]
         decay_row = MagicMock()
         decay_row.__getitem__ = lambda self, i: [11][i]
+        # outcome_row must support both integer index and string key (like real SQLAlchemy Row)
+        outcome_row = MagicMock()
+        outcome_row.__getitem__ = lambda self, key: {
+            0: 100, 'rated_count': 100,
+            1: 0.75, 'avg_score': 0.75,
+            2: 30, 'positive_count': 30,
+            3: 10, 'negative_count': 10,
+        }.get(key, 0)
 
         mock_conn.execute = AsyncMock(side_effect=[
             MagicMock(fetchone=MagicMock(return_value=total_row)),
@@ -107,6 +115,7 @@ class TestGetMemoryHealthTool:
             MagicMock(fetchone=MagicMock(return_value=history_row)),
             MagicMock(fetchone=MagicMock(return_value=drift_row)),
             MagicMock(fetchone=MagicMock(return_value=decay_row)),
+            MagicMock(fetchone=MagicMock(return_value=outcome_row)),
         ])
 
         tool.inject_services({"engine": mock_engine})

@@ -313,7 +313,7 @@ class GetMemoryHealthTool(BaseMCPComponent):
                 ))
                 decay_rules = decay_result.fetchone()[0]
 
-                outcome_stats = await conn.fetchrow("""
+                outcome_result = await conn.execute(text("""
                     SELECT 
                         COUNT(*) FILTER (WHERE outcome_positive > 0 OR outcome_negative > 0) as rated_count,
                         AVG(outcome_score) FILTER (WHERE outcome_score IS NOT NULL) as avg_score,
@@ -321,7 +321,8 @@ class GetMemoryHealthTool(BaseMCPComponent):
                         COUNT(*) FILTER (WHERE outcome_negative > outcome_positive + 2) as negative_count
                     FROM memories 
                     WHERE deleted_at IS NULL
-                """)
+                """))
+                outcome_stats = outcome_result.fetchone()
 
             embedding_pct = round(with_embedding / total * 100, 1) if total > 0 else 0
 
