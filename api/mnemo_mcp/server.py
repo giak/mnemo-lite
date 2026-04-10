@@ -554,6 +554,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         read_memory_tool,
         consolidate_memory_tool,
         mark_consumed_tool,
+        rate_memory_tool,
         system_snapshot_tool,
         configure_decay_tool,
     )
@@ -618,6 +619,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     read_memory_tool.inject_services(services)
     consolidate_memory_tool.inject_services(services)
     mark_consumed_tool.inject_services(services)
+    rate_memory_tool.inject_services(services)
     system_snapshot_tool.inject_services(services)
     configure_decay_tool.inject_services(services)
     get_memory_resource.inject_services(services)
@@ -944,6 +946,7 @@ def register_memory_components(mcp: FastMCP):
         read_memory_tool,
         consolidate_memory_tool,
         mark_consumed_tool,
+        rate_memory_tool,
         system_snapshot_tool,
         configure_decay_tool,
     )
@@ -1270,6 +1273,41 @@ def register_memory_components(mcp: FastMCP):
             ctx=ctx,
             memory_ids=memory_ids,
             consumed_by=consumed_by,
+        )
+        return response
+
+    # Register rate_memory tool
+    @mcp.tool()
+    async def rate_memory(
+        ctx: Context,
+        id: str,
+        helpful: bool,
+        score: float | None = None,
+    ) -> dict:
+        """
+        Rate a memory's helpfulness.
+
+        Modulates the memory's decay rate based on outcome feedback.
+        Memories with positive outcomes decay slower, negative outcomes decay faster.
+
+        Args:
+            id: Memory UUID to rate
+            helpful: True = positive outcome, False = negative outcome
+            score: Optional explicit score (-1.0 to 1.0)
+
+        Returns:
+            Dict with id, outcome_positive, outcome_negative, outcome_score, last_outcome_at
+
+        Examples:
+            - rate_memory(id="...", helpful=True)
+            - rate_memory(id="...", helpful=False)
+            - rate_memory(id="...", helpful=True, score=0.8)
+        """
+        response = await rate_memory_tool.execute(
+            ctx=ctx,
+            id=id,
+            helpful=helpful,
+            score=score,
         )
         return response
 
