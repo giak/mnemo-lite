@@ -10,7 +10,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 # Import from the service layer (same as other tests)
-from services.memory_decay_service import MemoryDecayService
+from api.services.memory_decay_service import MemoryDecayService
 
 # Import the tool
 from mnemo_mcp.tools.memory_tools import RateMemoryTool
