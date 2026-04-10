@@ -683,6 +683,81 @@ class MemoryRepository:
         except Exception as e:
             raise RepositoryError(f"Failed to search memories by tags: {e}") from e
 
+    async def rate_memory(
+        self,
+        memory_id: str,
+        helpful: bool,
+        score: float | None = None,
+    ) -> dict:
+        """
+        Rate a memory's helpfulness outcome.
+        
+        Args:
+            memory_id: UUID of the memory to rate
+            helpful: True = positive, False = negative
+            score: Optional explicit score (-1.0 to 1.0)
+        
+        Returns:
+            Dict with outcome fields after update
+        
+        Raises:
+            RepositoryError: If memory not found or update fails
+        """
+        try:
+            # Default score based on helpfulness
+            if score is None:
+                score = 1.0 if helpful else -1.0
+            
+            # Calculate increment values
+            positive_inc = 1 if helpful else 0
+            negative_inc = 1 if not helpful else 0
+            
+            query = text("""
+                UPDATE memories
+                SET outcome_positive = outcome_positive + :positive_inc,
+                    outcome_negative = outcome_negative + :negative_inc,
+                    outcome_score = :score,
+                    last_outcome_at = NOW()
+                WHERE id = :id
+                  AND deleted_at IS NULL
+                RETURNING id, outcome_positive, outcome_negative, outcome_score, last_outcome_at
+            """)
+            
+            params = {
+                "id": memory_id,
+                "positive_inc": positive_inc,
+                "negative_inc": negative_inc,
+                "score": score,
+            }
+            
+            async with self.engine.begin() as conn:
+                result = await conn.execute(query, params)
+                row = result.fetchone()
+            
+            if not row:
+                raise RepositoryError(f"Memory not found: {memory_id}")
+            
+            self.logger.info(
+                "Memory rated",
+                memory_id=memory_id,
+                helpful=helpful,
+                score=score
+            )
+            
+            # Return dict with outcome fields
+            return {
+                "id": str(row.id),
+                "outcome_positive": row.outcome_positive,
+                "outcome_negative": row.outcome_negative,
+                "outcome_score": row.outcome_score,
+                "last_outcome_at": row.last_outcome_at.isoformat() if row.last_outcome_at else None,
+            }
+        
+        except RepositoryError:
+            raise
+        except Exception as e:
+            raise RepositoryError(f"Failed to rate memory: {e}") from e
+
     def _row_to_memory(
         self,
         row,
