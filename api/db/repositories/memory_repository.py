@@ -648,7 +648,8 @@ class MemoryRepository:
                     id, title, content, created_at, updated_at,
                     memory_type, tags, author, project_id,
                     embedding, embedding_model, related_chunks, resource_links,
-                    deleted_at
+                    deleted_at,
+                    outcome_positive, outcome_negative, outcome_score, last_outcome_at
                 FROM memories
                 WHERE {where_sql}
                 ORDER BY created_at DESC

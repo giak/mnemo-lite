@@ -1116,6 +1116,7 @@ def register_memory_components(mcp: FastMCP):
         tags: str | list[str] | None = None,
         consumed: bool | None = None,
         lifecycle_state: str | None = None,
+        include_outcome: bool = False,
     ) -> dict:
         """
         Search memories using semantic vector search.
@@ -1142,6 +1143,7 @@ def register_memory_components(mcp: FastMCP):
             - search_memory(tags=["sys:pattern","sys:anchor"], lifecycle_state="sealed", limit=3)  # Expanse Rappel Associatif
             - search_memory(tags=["trace:fresh"], consumed=False, limit=20)  # Dream Passe 0-1
             - search_memory(tags=["sys:anchor"], lifecycle_state="sealed")  # Expanse Triangulation L3
+            - search_memory(query="async patterns", include_outcome=True)  # Include outcome feedback
         """
         response = await search_memory_tool.execute(
             ctx=ctx,
@@ -1152,6 +1154,7 @@ def register_memory_components(mcp: FastMCP):
             tags=tags,
             consumed=consumed,
             lifecycle_state=lifecycle_state,
+            include_outcome=include_outcome,
         )
         return response
 

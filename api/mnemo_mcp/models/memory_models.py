@@ -207,6 +207,24 @@ class Memory(MemoryBase):
         default_factory=list,
         description="Auto-generated tags from entity extraction (async)"
     )
+    
+    # EPIC-35 Story 35.3: Outcome feedback fields
+    outcome_positive: int = Field(
+        default=0,
+        description="Number of positive outcome signals"
+    )
+    outcome_negative: int = Field(
+        default=0,
+        description="Number of negative outcome signals"
+    )
+    outcome_score: Optional[float] = Field(
+        None,
+        description="Most recent outcome score (-1.0 to 1.0)"
+    )
+    last_outcome_at: Optional[datetime] = Field(
+        None,
+        description="Timestamp of last outcome feedback"
+    )
 
 
 class MemoryResponse(BaseModel):

@@ -634,6 +634,7 @@ class SearchMemoryTool(BaseMCPComponent):
         lifecycle_state: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
+        include_outcome: bool = False,
     ) -> Dict[str, Any]:
         """
         Semantic search on memories.
@@ -647,6 +648,7 @@ class SearchMemoryTool(BaseMCPComponent):
             lifecycle_state: Filter by lifecycle (None=all, "sealed", "candidate", "doubt", "summary")
             limit: Max results (1-50, default: 10)
             offset: Pagination offset (default: 0)
+            include_outcome: Include outcome fields in results (default: False)
 
         Returns:
             Dict with memories list, pagination, and search metadata
@@ -765,7 +767,8 @@ class SearchMemoryTool(BaseMCPComponent):
                     content_preview = content_text[:300] + "..." if len(content_text) > 300 else content_text
                     # EPIC-35 Story 35.1: Add highlighting snippets
                     highlights = highlight_matches(content_text, query, max_snippets=2) if query else []
-                    memories.append({
+                    # Build result dict
+                    memory_dict = {
                         "id": str(m.memory_id),
                         "title": m.title,
                         "content_preview": content_preview,
@@ -774,7 +777,18 @@ class SearchMemoryTool(BaseMCPComponent):
                         "tags": m.tags or [],
                         "similarity_score": m.rrf_score,
                         "created_at": m.created_at,
-                    })
+                    }
+                    # Add outcome fields if requested and available
+                    if include_outcome:
+                        for field in ["outcome_positive", "outcome_negative", "outcome_score", "last_outcome_at"]:
+                            if hasattr(m, field):
+                                val = getattr(m, field)
+                                if val is not None:
+                                    if field == "last_outcome_at" and hasattr(val, "isoformat"):
+                                        memory_dict[field] = val.isoformat()
+                                    else:
+                                        memory_dict[field] = val
+                    memories.append(memory_dict)
 
                 result = {
                     "query": query,
@@ -822,7 +836,8 @@ class SearchMemoryTool(BaseMCPComponent):
                 for m in memories_list:
                     content_text = m.content[:300] + "..." if len(m.content) > 300 else m.content
                     highlights = highlight_matches(content_text, query, max_snippets=2) if query else []
-                    memories.append({
+                    # Build result dict
+                    memory_dict = {
                         "id": str(m.id),
                         "title": m.title,
                         "content_preview": content_text,
@@ -831,7 +846,19 @@ class SearchMemoryTool(BaseMCPComponent):
                         "tags": m.tags or [],
                         "similarity_score": getattr(m, 'similarity_score', None),
                         "created_at": m.created_at.isoformat() if hasattr(m.created_at, 'isoformat') else str(m.created_at),
-                    })
+                    }
+                    # Add outcome fields if requested and available
+                    if include_outcome:
+                        outcome_fields = ["outcome_positive", "outcome_negative", "outcome_score", "last_outcome_at"]
+                        for field in outcome_fields:
+                            if hasattr(m, field):
+                                val = getattr(m, field)
+                                if val is not None:
+                                    if field == "last_outcome_at" and hasattr(val, "isoformat"):
+                                        memory_dict[field] = val.isoformat()
+                                    else:
+                                        memory_dict[field] = val
+                    memories.append(memory_dict)
 
                 result = {
                     "query": query,
