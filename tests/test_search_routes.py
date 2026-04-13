@@ -50,7 +50,7 @@ async def test_db_pool():
     """Fixture pour créer et gérer la DB de test et un pool de connexion."""
     test_url_with_driver = os.getenv(
         "TEST_DATABASE_URL"
-    )  # This should be postgresql+asyncpg://...
+    )  # Accepts postgresql:// or postgresql+asyncpg://
     if not test_url_with_driver:
         pytest.fail("TEST_DATABASE_URL environment variable not set.")
 
@@ -58,11 +58,11 @@ async def test_db_pool():
     try:
         # from urllib.parse import urlparse # Already imported
 
-        # Parse the full URL (expected: postgresql+asyncpg://...)
+        # Parse the full URL (accept both postgresql:// and postgresql+asyncpg://)
         parsed_test_url = urlparse(test_url_with_driver)
-        if not parsed_test_url.scheme.startswith("postgresql+"):
+        if not parsed_test_url.scheme.startswith("postgresql"):
             pytest.fail(
-                f"TEST_DATABASE_URL scheme should start with 'postgresql+', got '{parsed_test_url.scheme}'"
+                f"TEST_DATABASE_URL scheme should start with 'postgresql', got '{parsed_test_url.scheme}'"
             )
 
         test_db_name = parsed_test_url.path.lstrip("/")

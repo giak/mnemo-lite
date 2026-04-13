@@ -10,6 +10,8 @@ from sqlalchemy import text
 async def test_worker_logs_parsing_errors_to_database():
     """Test that worker subprocess logs errors to indexing_errors table."""
     db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     engine = create_async_engine(db_url)
     test_repo = "test_worker_errors"
 

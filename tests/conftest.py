@@ -15,6 +15,19 @@ logging.basicConfig(level=logging.DEBUG)
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 
 
+def _ensure_asyncpg_url(url: str) -> str:
+    """Convert postgresql:// to postgresql+asyncpg:// for async SQLAlchemy.
+
+    Safe to call with None — returns None unchanged.
+    Idempotent — won't double-convert postgresql+asyncpg:// URLs.
+    """
+    if not url:
+        return url
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
 @pytest.fixture(scope="session")
 def anyio_backend():
     return "asyncio"
@@ -25,29 +38,24 @@ def test_db_url():
     """
     Get TEST_DATABASE_URL for subprocess tests.
 
-    Returns the test database URL from environment variable.
+    Auto-converts postgresql:// to postgresql+asyncpg:// for async SQLAlchemy.
     """
     test_db_url = os.getenv("TEST_DATABASE_URL")
 
     if not test_db_url:
         raise ValueError("TEST_DATABASE_URL environment variable not set")
 
-    return test_db_url
+    return _ensure_asyncpg_url(test_db_url)
 
 
 @pytest_asyncio.fixture(scope="function")
-async def test_engine() -> AsyncEngine:
+async def test_engine(test_db_url) -> AsyncEngine:
     """
     Create a SQLAlchemy AsyncEngine connected to the test database.
 
-    Uses TEST_DATABASE_URL environment variable.
+    Uses the test_db_url fixture (already asyncpg-compatible).
     Scope: function (new engine per test for isolation)
     """
-    test_db_url = os.getenv("TEST_DATABASE_URL")
-
-    if not test_db_url:
-        raise ValueError("TEST_DATABASE_URL environment variable not set")
-
     # Create engine
     engine = create_async_engine(
         test_db_url,

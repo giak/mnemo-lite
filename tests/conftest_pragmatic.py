@@ -27,6 +27,15 @@ from sqlalchemy import text
 from httpx import AsyncClient
 
 
+def _ensure_asyncpg_url(url: str) -> str:
+    """Convert postgresql:// to postgresql+asyncpg:// for async SQLAlchemy."""
+    if not url:
+        return url
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
 # ============================================================================
 # DATABASE FIXTURES
 # ============================================================================
@@ -36,11 +45,14 @@ async def test_engine() -> AsyncEngine:
     """
     Create a test database engine with optimized settings for tests.
 
+    Auto-converts postgresql:// to postgresql+asyncpg:// for async SQLAlchemy.
     Scope: function (isolation between tests)
     """
     test_db_url = os.getenv("TEST_DATABASE_URL")
     if not test_db_url:
         raise ValueError("TEST_DATABASE_URL not set")
+
+    test_db_url = _ensure_asyncpg_url(test_db_url)
 
     engine = create_async_engine(
         test_db_url,

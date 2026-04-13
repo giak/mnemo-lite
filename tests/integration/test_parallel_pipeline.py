@@ -25,6 +25,8 @@ async def test_engine():
     """Create test database engine."""
     import os
     db_url = os.getenv("TEST_DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite_test")
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     engine = create_async_engine(db_url, echo=False)
     yield engine
     await engine.dispose()

@@ -15,6 +15,9 @@ async def test_consumer_triggers_graph_with_correct_languages():
     """Test that consumer triggers graph construction with typescript/javascript."""
     # Setup
     db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    # SQLAlchemy async engine requires +asyncpg driver scheme
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     redis_url = "redis://redis:6379/0"
     test_repo = "test_graph_trigger"
 

@@ -27,6 +27,15 @@ from services.batch_indexing_producer import BatchIndexingProducer
 from services.batch_indexing_consumer import BatchIndexingConsumer
 
 
+def _ensure_asyncpg_url(url: str) -> str:
+    """Convert postgresql:// to postgresql+asyncpg:// for async SQLAlchemy."""
+    if not url:
+        return url
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
 @pytest.mark.e2e
 @pytest.mark.asyncio
 async def test_full_batch_indexing_261_files():
@@ -50,6 +59,7 @@ async def test_full_batch_indexing_261_files():
     test_db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
     if not test_db_url:
         pytest.skip("No database URL available (TEST_DATABASE_URL or DATABASE_URL)")
+    test_db_url = _ensure_asyncpg_url(test_db_url)
 
     # Setup: Cleanup existing data
     print(f"\n🧹 Cleaning up existing data for repository '{repository}'...")
@@ -213,9 +223,10 @@ async def test_batch_indexing_empty_directory(tmp_path):
     directory = tmp_path / "empty"
     directory.mkdir()
 
-    test_db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
-    if not test_db_url:
+    raw_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if not raw_url:
         pytest.skip("No database URL available")
+    test_db_url = _ensure_asyncpg_url(raw_url)
 
     # Producer should handle empty directory
     producer = BatchIndexingProducer()
@@ -255,9 +266,10 @@ async def test_batch_indexing_small_batch(tmp_path):
         file_path = directory / f"file{i}.ts"
         file_path.write_text(f"const x{i} = {i};\nexport default x{i};\n")
 
-    test_db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
-    if not test_db_url:
+    raw_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if not raw_url:
         pytest.skip("No database URL available")
+    test_db_url = _ensure_asyncpg_url(raw_url)
 
     # Cleanup
     engine = create_async_engine(test_db_url, echo=False)

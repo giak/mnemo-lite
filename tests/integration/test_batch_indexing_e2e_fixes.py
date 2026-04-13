@@ -18,6 +18,15 @@ import asyncio
 import shutil
 
 
+def _ensure_asyncpg_url(url: str) -> str:
+    """Convert postgresql:// to postgresql+asyncpg:// for async SQLAlchemy."""
+    if not url:
+        return url
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
 @pytest.mark.asyncio
 async def test_e2e_batch_indexing_excludes_dist_and_builds_graph():
     """
@@ -48,7 +57,7 @@ export class Calculator {
     import uuid
     test_repo = f"test_e2e_dist_{uuid.uuid4().hex[:8]}"
     redis_url = "redis://redis:6379/0"
-    db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    db_url = _ensure_asyncpg_url(os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL"))
 
     # Thorough cleanup of existing data before test
     engine = create_async_engine(db_url)
