@@ -109,6 +109,27 @@ class WriteMemoryTool(BaseMCPComponent):
             if not content:
                 raise ValueError("Content cannot be empty")
 
+            # EPIC-42: Sanitize secrets before storage
+            privacy = self._services.get("privacy_service")
+            if privacy:
+                try:
+                    title, title_counts = privacy.sanitize(title)
+                    content, content_counts = privacy.sanitize(content)
+                    source_counts = {}
+                    if embedding_source:
+                        embedding_source, source_counts = privacy.sanitize(embedding_source)
+                    if title_counts or content_counts or source_counts:
+                        logger.warning(
+                            "security.data_sanitized",
+                            tool="write_memory",
+                            title_redactions=title_counts,
+                            content_redactions=content_counts,
+                            embedding_source_redactions=source_counts,
+                        )
+                except Exception as e:
+                    # Graceful degradation: continue without sanitization
+                    logger.error("privacy_service.failed", error=str(e))
+
             # Parse memory_type enum
             try:
                 memory_type_enum = MemoryType(memory_type)
@@ -320,6 +341,31 @@ class UpdateMemoryTool(BaseMCPComponent):
                     related_chunks_uuids = [uuid.UUID(c) for c in related_chunks]
                 except ValueError as e:
                     raise ValueError(f"Invalid related_chunks UUID: {e}")
+
+            # EPIC-42: Sanitize secrets before storage
+            privacy = self._services.get("privacy_service")
+            if privacy:
+                try:
+                    title_counts = {}
+                    content_counts = {}
+                    source_counts = {}
+                    if title is not None:
+                        title, title_counts = privacy.sanitize(title)
+                    if content is not None:
+                        content, content_counts = privacy.sanitize(content)
+                    if embedding_source is not None:
+                        embedding_source, source_counts = privacy.sanitize(embedding_source)
+                    if title_counts or content_counts or source_counts:
+                        logger.warning(
+                            "security.data_sanitized",
+                            tool="update_memory",
+                            title_redactions=title_counts,
+                            content_redactions=content_counts,
+                            embedding_source_redactions=source_counts,
+                        )
+                except Exception as e:
+                    # Graceful degradation: continue without sanitization
+                    logger.error("privacy_service.failed", error=str(e))
 
             # Create MemoryUpdate object
             memory_update = MemoryUpdate(

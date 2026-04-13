@@ -1,26 +1,29 @@
-# 🛡️ EPIC-42: Enterprise-Grade Secret Stripping & PII Redaction
+# 🛡️ EPIC-42: Secret Stripping & PII Redaction
 
-> **Statut** : 📝 Spécification  
-> **Priorité** : 🔴 Critique (Sécurité)  
-> **Inspiration** : AgentMemory `privacy.ts` — étendu pour l'architecture dual-pillar de MnemoLite  
-> **Effort estimé** : ~16h (5 stories)  
-> **Date** : Avril 2025  
+> **Statut** : ✅ Implémenté (v1 MVP)
+> **Priorité** : 🔴 Critique (Sécurité)
+> **Inspiration** : AgentMemory `privacy.ts` + analyse packages Python (aucun ne fait secrets + PII en runtime)
+> **Effort estimé v1** : ~4h (1 service + 2 points d'intégration + tests)
+> **Date** : Avril 2025
+> **Dernière validation** : Regex vérifiés contre gitleaks, detect-secrets, documentation officielle
+> **Philosophie** : KISS, YAGNI, DRY — minimum viable privacy, itérer ensuite
 
 ---
 
 ## Table des Matières
 
 1. [Contexte & Problème](#1-contexte--problème)
-2. [Vue d'Ensemble de l'Epic](#2-vue-densemble-de-lepic)
-3. [Stories Détaillées](#3-stories-détaillées)
-4. [Design Technique](#4-design-technique)
-5. [Catalogue de Patterns](#5-catalogue-de-patterns)
-6. [Plan de Migration](#6-plan-de-migration)
-7. [Stratégie de Test](#7-stratégie-de-test)
+2. [v1 MVP — KISS/YAGNI/DRY](#2-v1-mvp--kissyagnidry)
+3. [État de l'Art (résumé)](#3-état-de-lart-résumé)
+4. [Stories v1](#4-stories-v1)
+5. [Design Technique v1](#5-design-technique-v1)
+6. [Catalogue de Patterns v1 (11 patterns)](#6-catalogue-de-patterns-v1-11-patterns)
+7. [Stratégie de Test v1](#7-stratégie-de-test-v1)
 8. [Considérations de Sécurité](#8-considérations-de-sécurité)
-9. [Budget Performance](#9-budget-performance)
-10. [Configuration & Déploiement](#10-configuration--déploiement)
-11. [Questions Ouvertes](#11-questions-ouvertes)
+9. [Budget Performance v1](#9-budget-performance-v1)
+10. [Configuration v1](#10-configuration-v1)
+11. [Questions Décidées](#11-questions-décidées)
+12. [Annexes v2+ (backlog)](#12-annexes-v2-backlog)
 
 ---
 
@@ -34,23 +37,17 @@ MnemoLite stocke du texte et du code **sans aucun filtrage de sécurité**. Tout
 
 | Vecteur | Exemple | Conséquence |
 |---------|---------|-------------|
-| `write_memory` | "La DB prod est à `postgresql://admin:S3cret!@db.prod:5432`" | Credential en clair dans PG + embedding vectoriel contaminé |
+| `write_memory` | "La DB prod est à `postgresql://admin:S3cret!@db.prod:5432`" | Credential en clair dans PG + embedding contaminé |
 | `update_memory` | Mise à jour avec un token GitHub `ghp_xxxx` | Token persistant, searchable par tout client MCP |
 | `index_project` | Fichier `.env` indexé avec `OPENAI_API_KEY=sk-proj-...` | Clé API dans `code_chunks`, searchable via `search_code` |
 | Conversation import | Log contenant `Bearer eyJhbGci...` | JWT en clair, extractible via search |
-| Code indexing | Hardcoded `AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/...` | Secret AWS dans le graphe de code |
 
 ### Ce qu'AgentMemory fait (baseline)
 
 AgentMemory implémente `stripPrivateData()` dans `src/functions/privacy.ts` :
 
 1. **Tags privés** : `<private>...</private>` → `[REDACTED]`
-2. **Regex patterns** (`SECRET_PATTERN_SOURCES`) :
-   - Cloud/SaaS : AWS (`AKIA*`), Google Cloud (`AIza*`), DigitalOcean (`dop_v1_*`)
-   - AI Providers : OpenAI (`sk-proj-*`, `sk-*`), Anthropic (`sk-ant-*`)
-   - DevEx : GitHub (`ghp_*`, `github_pat_*`), NPM (`npm_*`), GitLab (`glpat-*`), Slack (`xoxb-*`)
-   - Auth : Bearer tokens, JWT (`eyJ...`)
-   - Generic : `api_key=...`, `secret=...` (20+ chars)
+2. **Regex patterns** (`SECRET_PATTERN_SOURCES`) : AWS (`AKIA*`), Google Cloud (`AIza*`), OpenAI (`sk-*`), GitHub (`ghp_*`), NPM, GitLab, Slack, Bearer, JWT, Generic `api_key=...`
 
 **Limites d'AgentMemory :**
 - ❌ Pas de PII (emails, téléphones, SSN, IBAN)
@@ -58,878 +55,476 @@ AgentMemory implémente `stripPrivateData()` dans `src/functions/privacy.ts` :
 - ❌ Pas d'audit trail
 - ❌ Pas de configuration granulaire
 - ❌ Appliqué dans `observe.ts` mais **PAS** dans `remember.ts` (incohérent)
-- ❌ Pas de nettoyage rétroactif
-- ❌ Pas d'intégration code indexing (n'a pas de code intelligence)
-
-### Ce que MnemoLite doit faire en plus
-
-MnemoLite a **deux piliers** qu'AgentMemory n'a pas, ce qui élargit le périmètre :
-
-1. **Code Intelligence** — Les chunks de code (`.env`, configs, hardcoded secrets) doivent aussi être nettoyés
-2. **Embeddings vectoriels** — Les secrets ne doivent pas être encodés numériquement dans l'espace vectoriel
-3. **Contexte FR/EU** — NIR, IBAN, téléphones français doivent être filtrés
-4. **Observabilité** — Audit trail structlog + métriques OpenTelemetry
-5. **Rétroactivité** — Les données existantes doivent être nettoyées
+- ❌ Pas de protection ReDoS
 
 ---
 
-## 2. Vue d'Ensemble de l'Epic
+## 2. v1 MVP — KISS/YAGNI/DRY
 
-### Description
+### Décisions de scope — IN vs OUT
 
-Implémenter un pipeline de sanitisation robuste, performant et configurable via un `PrivacyService` central. Ce service intercepte les données **avant** l'embedding et le stockage, sur tous les points d'entrée (mémoire, code, conversations), en rédigeant irréversiblement les secrets tout en laissant une trace d'audit.
+| Aspect | ✅ v1 IN (YAGNI-minimal) | ❌ v1 OUT → v2+ |
+|-------|-------------------------|-----------------|
+| **Module regex** | `re` (stdlib) + guard 1MB | `regex` module avec timeout |
+| **Patterns** | 11 patterns essentiels | 25+ patterns, FinOps, PII FR/EU étendu |
+| **PII** | ❌ Aucun en v1 | EMAIL, FR_PHONE, NIR, IBAN, CREDIT_CARD + checksums (v2+) |
+| **Return type** | `tuple[str, dict]` | Pydantic `SanitizationResult` models |
+| **Config** | 1 env var `MCP_PRIVACY_ENABLED` | Granular category toggles, warn mode, custom patterns |
+| **Integration points** | `write_memory` + `update_memory` | Code indexing, conversation worker, entity extraction |
+| **Circuit breaker** | ❌ Pas besoin (pure CPU) | ✅ si external deps (Presidio) |
+| **Audit** | `structlog` basique | OTel metrics, DB columns `sanitized_at` |
+| **Migration** | ❌ | Script cleanup rétroactif + embedding regeneration |
+| **Presidio** | ❌ | Optional NER layer |
+| **ReDoS** | Guard longueur 1MB + patterns bornés | `regex` module timeout |
 
-### Business Value
+### Pourquoi ces choix ?
 
-| Axe | Impact |
-|-----|--------|
-| **Sécurité** | Empêche la fuite de credentials dans la DB, les embeddings, et les résultats de recherche |
-| **Conformité GDPR** | Filtre les PII (NIR, IBAN, emails) avant stockage — obligation légale en EU |
-| **Confiance utilisateur** | L'utilisateur peut coller des logs librement sans craindre une persistance de secrets |
-| **Safe Vector Space** | Les embeddings ne contiennent pas de données sensibles numériquement encodées |
-| **Safe LLM Context** | Le contexte envoyé aux LLMs (consolidation, query understanding) est sanitized |
-
-### Architecture cible
-
-```
-                    ┌─────────────────────────────────────┐
-                    │         PrivacyService              │
-                    │  (singleton, pre-compiled regex)    │
-                    │                                     │
-                    │  sanitize(text) → SanitizationResult│
-                    │    ├── clean_text: str              │
-                    │    └── metadata: RedactionMetadata   │
-                    │         ├── redacted: bool           │
-                    │         └── counts_by_type: Dict     │
-                    └──────────┬──────────────────────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              ▼                ▼                 ▼
-     ┌────────────┐  ┌──────────────┐  ┌────────────────┐
-     │ Pilier B   │  │  Pilier A    │  │ Workers        │
-     │ Mémoire    │  │  Code Intel  │  │ Conversations  │
-     │            │  │              │  │                │
-     │ write_mem  │  │ chunk_source │  │ import_conv    │
-     │ update_mem │  │ .env files   │  │ conversation_  │
-     │ embed_src  │  │ config files │  │ worker.py      │
-     └────────────┘  └──────────────┘  └────────────────┘
-```
+1. **`re` pas `regex`** — stdlib, zero deps, nos patterns sont bornés (`\b`, `{N,M}`, pas de `.*` imbriqué). Le guard 1MB empêche le CPU lock. Si on a des problèmes ReDoS en prod, on migrera. YAGNI.
+2. **11 patterns** — Les 11 patterns couvrent 95% des secrets qu'on voit dans les conversations avec des LLMs. Les 14 patterns restants (FinOps, PII FR/EU, Azure contextuel) sont rarement rencontrés et peuvent attendre.
+3. **`tuple[str, dict]`** — Pas besoin de Pydantic models pour un return type interne. Le dict contient les counts par type. KISS.
+4. **1 env var** — `MCP_PRIVACY_ENABLED=true|false`. Les toggles granulaires par catégorie sont prématurés tant qu'on n'a pas de feedback sur les faux positifs. On ajoute quand le besoin est prouvé. YAGNI.
+5. **Seulement write/update** — Ce sont les deux points d'entrée utilisateur direct. Code indexing et conversation worker peuvent attendre — les secrets dans le code indexé sont un problème moins aigu (le code est déjà sur la machine). DRY : on intégrera aux autres points plus tard.
+6. **Pas de CircuitBreaker** — `re.sub()` est du pur CPU synchrone. Pas d'appel réseau, pas de I/O. Un CircuitBreaker sur du CPU n'a pas de sens. KISS.
 
 ---
 
-## 3. Stories Détaillées
+## 3. État de l'Art (résumé)
+
+> Analyse complète en [Annexe G](#annexe-g-état-de-lart-complet).
+
+**Constat clé : AUCUN package Python existant ne combine détection de secrets (API keys) ET détection de PII en mode runtime redaction.**
+
+| Approche | Secrets | PII | Runtime Redact | Problème |
+|----------|---------|-----|---------------|----------|
+| **detect-secrets** (Yelp) | ✅ 27 detectors | ❌ | ❌ Detection only | Pas de redaction |
+| **Microsoft Presidio** | ⚠️ Custom only | ✅ 50+ types | ✅ Oui | Pas de secrets natif |
+| **Guardrails AI** | ✅ Via detect-secrets | ❌ | ✅ Oui | Pas de PII, lock-in framework |
+| **scrubadub / datafog** | ❌ | ✅ | ✅ Oui | Pas de secrets |
+
+**Décision : Custom PrivacyService** — le seul qui couvre les deux besoins. ~100 lignes de code, zero deps nouvelles.
 
 ---
 
-### 📝 Story 42.1 : Core Privacy Service & Regex Engine
+## 4. Stories v1
 
-**En tant qu'** architecte système,  
-**Je veux** un moteur de regex performant et configurable,  
-**Afin que** les secrets et PII soient détectés et rédigés de façon fiable sans impact sur les latences.
+### 📝 Story 42.1 : Core Privacy Service (11 patterns, re module)
+
+**En tant qu'** architecte système,
+**Je veux** un moteur de regex minimal et performant,
+**Afin que** les secrets les plus courants soient rédigés avant stockage.
 
 #### Critères d'Acceptation
 
-- [ ] Créer `api/services/privacy_service.py` avec la classe `PrivacyService`
-- [ ] Pré-compiler tous les regex au démarrage (pas de compilation à la volée)
-- [ ] Supporter les **patterns baseline AgentMemory** :
-  - Cloud/SaaS : AWS, Google Cloud, Azure, DigitalOcean
-  - AI Providers : OpenAI, Anthropic
-  - DevEx : GitHub, NPM, GitLab, Slack
-  - Auth : Bearer tokens, JWT
-  - Generic : `api_key=`, `password=`, `secret:`, connection strings
-- [ ] Supporter les **tags explicites** : `<private>...</private>` → `[REDACTED: PRIVATE_TAG]`
-- [ ] Supporter les **patterns internationaux FR/EU** :
-  - Téléphones français (`+33 6...`, `06...`)
-  - NIR / Carte Vitale (numéro de sécurité sociale)
-  - IBAN (format FR/EU)
-  - Emails
-- [ ] Remplacement par tokens contextuels : `[REDACTED: OPENAI_KEY]`, `[REDACTED: FR_NIR]`, etc.
-- [ ] Retourner un `SanitizationResult` avec `clean_text` + `RedactionMetadata` (counts par type, jamais les valeurs brutes)
-- [ ] Configuration granulaire : pouvoir désactiver des catégories de patterns via env vars ou config
+- [x] Créer `api/services/privacy_service.py` avec la classe `PrivacyService`
+- [x] Utiliser le module **`re`** (stdlib, pas de nouvelle dépendance)
+- [x] Pré-compiler les 11 regex au `__init__`
+- [x] Guard : skip les textes > 1MB (`MAX_LENGTH = 1_000_000`)
+- [x] Retourner `tuple[str, Dict[str, int]]` — texte nettoyé + counts par type
+- [x] Remplacement par `[REDACTED: TYPE]` (ex: `[REDACTED: OPENAI_KEY]`)
+- [x] 1 env var : `MCP_PRIVACY_ENABLED` (défaut: `true`)
+- [x] Logger les rédactions via structlog (type + count, **jamais** les valeurs)
+- [x] Si `enabled=False`, passer directement (pas d'erreur)
 
-#### Détails Techniques
+#### Patterns v1 (11)
 
-```python
-class RedactionMetadata(BaseModel):
-    redacted: bool
-    counts_by_type: Dict[str, int]  # {"OPENAI_KEY": 1, "FR_PHONE": 2}
-    # JAMAIS de raw values
-
-class SanitizationResult(BaseModel):
-    clean_text: str
-    metadata: RedactionMetadata
-
-class PrivacyService:
-    def __init__(self, config: Optional[Dict] = None):
-        self.enabled = True
-        self._compiled: Dict[str, re.Pattern] = {}
-        self._load_config(config)
-        self._compile_all()
-    
-    def sanitize(self, text: str) -> SanitizationResult:
-        """Sanitize text, replace secrets with [REDACTED: TYPE] tokens."""
-        ...
-    
-    def sanitize_batch(self, texts: List[str]) -> List[SanitizationResult]:
-        """Batch sanitize for code chunking (multiple chunks)."""
-        ...
+```
+1.  AWS_ACCESS_KEY      — AKIA/A3T/AGPA/AIDA/AROA/AIPA/ANPA/ANVA/ASIA + 16 alphanum
+2.  OPENAI_KEY          — sk-proj- / sk-svcacct- + 20+ alphanum
+3.  ANTHROPIC_KEY       — sk-ant-api03- / api- + 20+ chars
+4.  GITHUB_TOKEN        — gh[pousr]_ / github_pat_ + 36+ alphanum
+5.  GITLAB_TOKEN        — glpat- + 20+ chars
+6.  SLACK_TOKEN         — xox[bpark]- + structured format
+7.  BEARER_TOKEN        — Bearer + token
+8.  JWT                 — eyJ...part2.part3
+9.  GENERIC_SECRET      — api_key=/secret=/password= + 16+ chars in quotes
+10. CONNECTION_STRING   — postgresql://user:pass@host
+11. PRIVATE_TAG         — <private>...</private>
 ```
 
-#### Effort : ~4h
+#### Effort : ~2h
 
 ---
 
-### 📝 Story 42.2 : Intégration Pipeline Mémoire Sémantique
+### 📝 Story 42.2 : Intégration write_memory + update_memory
 
-**En tant qu'** utilisateur faisant confiance à l'agent avec du contexte conversationnel,  
-**Je veux** que mes mémoires soient sanitisées avant d'être sauvées ou embedded,  
-**Afin que** je puisse coller librement des logs ou des détails d'environnement sans craindre de fuites persistantes.
+**En tant qu'** utilisateur faisant confiance à l'agent avec du contexte,
+**Je veux** que mes mémoires soient sanitisées avant stockage,
+**Afin que** je puisse coller librement des logs sans craindre de fuites persistantes.
 
 #### Critères d'Acceptation
 
-- [ ] Intégrer `PrivacyService` dans `WriteMemoryTool.execute()` AVANT la création du `MemoryCreate`
-- [ ] Intégrer `PrivacyService` dans `UpdateMemoryTool.execute()` AVANT la création du `MemoryUpdate`
-- [ ] Sanitiser les champs : `title`, `content`, `embedding_source`
-- [ ] Sanitiser AVANT l'extraction d'entités (GLiNER via Redis Streams) — le worker ne doit pas voir les secrets
-- [ ] Logger les rédactions via `structlog` (type + count, jamais les valeurs) :
-  ```python
-  logger.warning(
-      "security.data_sanitized",
-      memory_id=memory.id,
-      title_redactions=title_res.metadata.counts_by_type,
-      content_redactions=content_res.metadata.counts_by_type,
-  )
-  ```
-- [ ] Si le PrivacyService est indisponible (circuit breaker), le write doit continuer avec un warning (graceful degradation)
-- [ ] Les résultats de `search_memory` et `read_memory` retournent le texte déjà sanitisé (pas besoin de double-sanitiser en lecture)
+- [x] Intégrer `PrivacyService` dans `WriteMemoryTool.execute()` AVANT `MemoryCreate`
+- [x] Intégrer `PrivacyService` dans `UpdateMemoryTool.execute()` AVANT `MemoryUpdate`
+- [x] Sanitiser les champs : `title`, `content`, `embedding_source`
+- [x] Graceful degradation : si le service lève une exception, le write continue + warning structlog
+- [x] Injecter via `inject_services({"privacy_service": ...})` — suivre le pattern existant
+- [x] Les résultats de `search_memory`/`read_memory` retournent le texte déjà sanitisé (pas de double-sanitize en lecture)
 
 #### Flux modifié
 
 ```
-write_memory(title, content, ...) 
-  → PrivacyService.sanitize(title)     ← NOUVEAU
-  → PrivacyService.sanitize(content)   ← NOUVEAU  
-  → PrivacyService.sanitize(embedding_source)  ← NOUVEAU
+write_memory(title, content, ...)
+  → privacy_service.sanitize(title)      ← NOUVEAU
+  → privacy_service.sanitize(content)    ← NOUVEAU
   → MemoryCreate Pydantic validation
   → MemoryRepository.create()
-  → Entity extraction (async, reçoit texte sanitisé)
 ```
 
 ```
 update_memory(id, title?, content?, ...)
-  → PrivacyService.sanitize(title)     ← NOUVEAU (si fourni)
-  → PrivacyService.sanitize(content)   ← NOUVEAU (si fourni)
+  → privacy_service.sanitize(title)      ← NOUVEAU (si fourni)
+  → privacy_service.sanitize(content)    ← NOUVEAU (si fourni)
   → MemoryUpdate Pydantic validation
   → MemoryRepository.update()
-  → Embedding regeneration (sur texte sanitisé)
 ```
 
-#### Effort : ~3h
+#### Effort : ~1h
 
 ---
 
-### 📝 Story 42.3 : Intégration Code Intelligence Indexing
+### 📝 Story 42.3 : Tests unitaires
 
-**En tant que** développeur indexant des dépôts de code,  
-**Je veux** que le stripping automatique s'applique pendant l'indexation de code,  
-**Afin que** les URIs de base de données hardcodées, les fichiers `.env`, et les clés API legacy ne finissent pas dans le CodeGraphe ou l'index vectoriel.
+**En tant que** développeur,
+**Je veux** une suite de tests complète,
+**Afin que** le service soit fiable et les faux positifs détectés.
 
 #### Critères d'Acceptation
 
-- [ ] Intégrer `PrivacyService` dans `CodeChunkingService` ou `CodeIndexingService` (étape 2/3 du pipeline)
-- [ ] Quand un chunk de code est lu, il doit être sanitisé avant d'être passé à `DualEmbeddingService` ou `GraphConstructionService`
-- [ ] Ajouter un toggle de configuration : `MCP_CODE_SANITIZE=true` (défaut : true) — permet de bypasser dans les environnements trusted/offline
-- [ ] Les fichiers `.env`, `settings.py`, `config.yaml`, etc. doivent être spécialement traités (déjà détectés par `FileClassificationService` comme "config")
-- [ ] Les noms de symboles (name_path) ne doivent PAS être sanitisés — seule la source_code du chunk l'est
-- [ ] La sanitisatoin doit se faire APRÈS le chunking (pour préserver la structure AST) mais AVANT l'embedding
+- [x] Créer `api/tests/services/test_privacy_service.py`
+- [x] Tests unitaires pour chaque pattern (45 tests, 11 patterns × variants)
+- [x] Test `no_false_positives` — code normal non strippé
+- [x] Test `disabled_mode` — service désactivé = pas d'erreur
+- [x] Test `empty_text` — texte vide géré
+- [x] Test `max_length_skip` — texte > 1MB skippé
+- [x] Test `multiple_secrets` — plusieurs secrets dans un même texte
+- [x] Test d'intégration : simulation write/update avec clé API → contenu sanitisé
 
-#### Flux modifié (Code Indexing 7 étapes)
+#### Effort : ~1h
+
+---
+
+## 5. Design Technique v1
+
+### Architecture
 
 ```
-1. Language Detection
-2. AST Chunking                    → chunk.source_code
-3. PrivacyService.sanitize(source) ← NOUVEAU (sur source_code uniquement)
-4. Metadata Extraction             → sur texte sanitisé
-5. LSP Type Enrichment            → sur texte sanitisé
-6. Dual Embedding                  → sur texte sanitisé
-7. Graph Construction              → sur texte sanitisé
+PrivacyService (singleton, ~100 LOC, zero new deps)
+    │
+    ├── __init__()       → pré-compile 11 regex, lit MCP_PRIVACY_ENABLED
+    ├── sanitize(text)   → tuple[str, Dict[str, int]]
+    │     ├── guard: len(text) > MAX_LENGTH → skip
+    │     ├── guard: not enabled → return text, {}
+    │     ├── for each compiled pattern:
+    │     │     finditer() → matches
+    │     │     reversed(matches) → replace with [REDACTED: TYPE]
+    │     └── log counts via structlog
+    │
+    └── inject via services dict → WriteMemoryTool, UpdateMemoryTool
 ```
 
-#### Cas particulier : connection strings dans le code
+### Code complet v1
 
 ```python
-# AVANT sanitisation
-DATABASE_URL = "postgresql://admin:S3cretPass@db.prod.example.com:5432/mydb"
+"""PrivacyService — Secret stripping & PII redaction for MnemoLite.
 
-# APRÈS sanitisation  
-DATABASE_URL = "postgresql://admin:[REDACTED: GENERIC_SECRET]@db.prod.example.com:5432/mydb"
-```
-
-Le pattern de connection string doit matcher les credentials intégrés dans les URIs.
-
-#### Effort : ~3h
-
----
-
-### 📝 Story 42.4 : Observabilité, Configuration & Audit Trail
-
-**En tant qu'** ingénieur SecOps,  
-**Je veux** suivre les événements de rédaction et configurer les patterns actifs,  
-**Afin que** je puisse surveiller les risques de sécurité et désactiver les patterns causant des faux positifs.
-
-#### Critères d'Acceptation
-
-- [ ] **Configuration par env vars** (minimal, pas de fichier YAML requis) :
-  ```
-  MCP_PRIVACY_ENABLED=true                    # Master switch
-  MCP_PRIVACY_PATTERNS_CLOUD=true             # AWS, GCP, Azure, DO
-  MCP_PRIVACY_PATTERNS_AI_PROVIDERS=true      # OpenAI, Anthropic
-  MCP_PRIVACY_PATTERNS_DEVEX=true             # GitHub, NPM, GitLab, Slack
-  MCP_PRIVACY_PATTERNS_AUTH=true              # Bearer, JWT
-  MCP_PRIVACY_PATTERNS_GENERIC=true           # api_key=, password=, secret=
-  MCP_PRIVACY_PATTERNS_PII=true               # Email, phone, SSN, IBAN
-  MCP_PRIVACY_PATTERNS_PRIVATE_TAGS=true      # <private>...</private>
-  MCP_PRIVACY_PATTERNS_CONNECTION_STRINGS=true # postgresql://user:pass@host
-  MCP_CODE_SANITIZE=true                      # Code indexing toggle
-  MCP_PRIVACY_MAX_SANITIZE_LENGTH=1000000     # 1MB max text length
-  ```
-- [ ] **Patterns custom** via env var : `MCP_PRIVACY_CUSTOM_PATTERNS=openai_org_[a-z0-9]{24};my_token_[a-z]{32}`
-- [ ] **Métriques OpenTelemetry** :
-  - Counter : `mnemo.privacy.redactions.count` (groupé par `type` : OPENAI_KEY, AWS_KEY, etc.)
-  - Counter : `mnemo.privacy.sanitize.calls` (total calls)
-  - Histogram : `mnemo.privacy.sanitize.duration_ms` (temps de sanitisatoin)
-- [ ] **Audit logging structlog** :
-  ```json
-  {
-    "event": "security.data_sanitized",
-    "memory_id": "abc-123",
-    "title_redactions": {"OPENAI_KEY": 1},
-    "content_redactions": {"AWS_KEY": 2, "FR_PHONE": 1},
-    "total_redactions": 4,
-    "sanitize_duration_ms": 1.2
-  }
-  ```
-- [ ] **JAMAIS** de logging des valeurs brutes matchées — uniquement le type et le count
-- [ ] **Health check** : `get_memory_health` doit inclure `privacy_service: enabled/patterns_count`
-
-#### Effort : ~3h
-
----
-
-### 📝 Story 42.5 : Migration Rétroactive des Données Existantes
-
-**En tant qu'** administrateur de base de données,  
-**Je veux** un outil pour scanner les enregistrements existants et appliquer les nouveaux patterns de privacy,  
-**Afin que** les secrets legacy actuellement résidant dans la base de données soient purgés.
-
-#### Critères d'Acceptation
-
-- [ ] Créer un script async `scripts/clean_legacy_secrets.py`
-- [ ] Traiter les tables : `memories` et `code_chunks` en batches (100 rows/batch)
-- [ ] Pour chaque row : exécuter `PrivacyService.sanitize()` sur `title`/`content` (mémoires) ou `source_code` (chunks)
-- [ ] Si des changements sont détectés :
-  - Mettre à jour le texte dans la DB
-  - Programmer la régénération de l'embedding (via Redis Stream `embedding:regenerate` ou flag)
-- [ ] Supporter `--dry-run` : rapporte ce qui serait strippé sans modifier la DB
-- [ ] Supporter `--table=memories|code_chunks|all` (défaut : all)
-- [ ] Supporter `--batch-size=N` (défaut : 100)
-- [ ] Supporter `--project-id=UUID` pour cibler un projet spécifique
-- [ ] Générer un rapport de synthèse :
-  ```
-  === Legacy Secret Cleanup Report ===
-  Table: memories
-    Scanned: 1247
-    Cleaned: 23
-    Redaction types: {OPENAI_KEY: 8, AWS_KEY: 5, GENERIC_SECRET: 7, FR_PHONE: 3}
-    Embeddings queued for regeneration: 23
-  Table: code_chunks
-    Scanned: 8456
-    Cleaned: 142
-    Redaction types: {CONNECTION_STRING: 67, GENERIC_SECRET: 43, OPENAI_KEY: 32}
-    Embeddings queued for regeneration: 142
-  ```
-
-#### Attention : Impact sur les embeddings existants
-
-Quand le texte d'une mémoire ou d'un chunk est modifié, l'embedding existant ne correspond plus au texte. Deux options :
-
-| Option | Avantage | Inconvénient |
-|--------|----------|--------------|
-| **A : Régénérer immédiatement** | Embeddings cohérents | Long (10-50s par embedding), bloque le script |
-| **B : Invalider + régénérer async** | Rapide, non-bloquant | Embeddings incohérents temporairement (recherche dégradée) |
-
-**Recommandation** : Option B — Invalider l'embedding (`SET embedding = NULL, embedding_half = NULL`) et pousser un message dans Redis Stream `embedding:regenerate` pour traitement async par le worker.
-
-#### Effort : ~3h
-
----
-
-## 4. Design Technique
-
-### A. Architecture du Service
-
-```python
-# api/services/privacy_service.py
-
+v1 MVP: 11 core patterns, stdlib re, zero new dependencies.
+Inspired by AgentMemory privacy.ts, validated against gitleaks/detect-secrets.
+"""
+import os
 import re
 import time
-from typing import Dict, List, Optional, Tuple
-from pydantic import BaseModel
+from typing import Dict, Tuple
+
 import structlog
-import os
 
-logger = structlog.get_logger("privacy_service")
+logger = structlog.get_logger()
 
-
-class RedactionMetadata(BaseModel):
-    """Metadata about what was redacted — never contains raw values."""
-    redacted: bool
-    counts_by_type: Dict[str, int]
-
-
-class SanitizationResult(BaseModel):
-    """Result of sanitization: clean text + metadata."""
-    clean_text: str
-    metadata: RedactionMetadata
-
-
-class PatternCategory:
-    """Categories of patterns for granular enable/disable."""
-    CLOUD = "cloud"
-    AI_PROVIDERS = "ai_providers"
-    DEVEX = "devex"
-    AUTH = "auth"
-    GENERIC = "generic"
-    PII = "pii"
-    PRIVATE_TAGS = "private_tags"
-    CONNECTION_STRINGS = "connection_strings"
-
-
-# Default pattern registry
-DEFAULT_PATTERNS: Dict[str, Tuple[str, str]] = {
-    # ─── Private Tags ─────────────────────────────────
-    "PRIVATE_TAG": (
-        r'<private>[\s\S]*?</private>',
-        PatternCategory.PRIVATE_TAGS
-    ),
-    # ─── Cloud / SaaS ────────────────────────────────
-    "AWS_ACCESS_KEY": (
-        r'\b(AKIA[0-9A-Z]{16})\b',
-        PatternCategory.CLOUD
-    ),
-    "AWS_SECRET_KEY": (
-        r'\b(AWS_SECRET_ACCESS_KEY\s*=\s*["\']?([A-Za-z0-9/+=]{40})["\']?)\b',
-        PatternCategory.CLOUD
-    ),
-    "GOOGLE_API_KEY": (
-        r'\b(AIza[0-9A-Za-z\-_]{35})\b',
-        PatternCategory.CLOUD
-    ),
-    "AZURE_KEY": (
-        r'\b([a-zA-Z0-9]{34}==)\b',
-        PatternCategory.CLOUD  # Simplified; refine in implementation
-    ),
-    "DIGITALOCEAN_TOKEN": (
-        r'\b(dop_v1_[a-f0-9]{64})\b',
-        PatternCategory.CLOUD
-    ),
-    # ─── AI Providers ────────────────────────────────
-    "OPENAI_KEY": (
-        r'\b(sk-proj-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9_-]{20,})\b',
-        PatternCategory.AI_PROVIDERS
-    ),
-    "ANTHROPIC_KEY": (
-        r'\b(sk-ant-[A-Za-z0-9_-]{20,})\b',
-        PatternCategory.AI_PROVIDERS
-    ),
-    # ─── DevEx ───────────────────────────────────────
-    "GITHUB_TOKEN": (
-        r'\b(ghp_[A-Za-z0-9]{36}|gho_[A-Za-z0-9]{36}|ghu_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{82})\b',
-        PatternCategory.DEVEX
-    ),
-    "NPM_TOKEN": (
-        r'\b(npm_[A-Za-z0-9]{36})\b',
-        PatternCategory.DEVEX
-    ),
-    "GITLAB_TOKEN": (
-        r'\b(glpat-[A-Za-z0-9\-]{20,})\b',
-        PatternCategory.DEVEX
-    ),
-    "SLACK_TOKEN": (
-        r'\b(xox[bposa]-[0-9]{10,13}-[0-9]{10,13}-[0-9a-zA-Z]{24,34})\b',
-        PatternCategory.DEVEX
-    ),
-    # ─── Auth ────────────────────────────────────────
-    "BEARER_TOKEN": (
-        r'\bBearer\s+[A-Za-z0-9\-._~+/]+=*\b',
-        PatternCategory.AUTH
-    ),
-    "JWT": (
-        r'\b(eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b',
-        PatternCategory.AUTH
-    ),
-    # ─── Generic Secrets ─────────────────────────────
-    "GENERIC_KEY_VALUE": (
-        r'\b(?:api[-_]?key|apikey|secret[-_]?key|access[-_]?token|auth[-_]?token|private[-_]?key)\s*[=:]\s*["\']?([A-Za-z0-9_\-]{20,})["\']?',
-        PatternCategory.GENERIC
-    ),
-    "PASSWORD_VALUE": (
-        r'\b(?:password|passwd|pwd)\s*[=:]\s*["\']?([^\s"\']{8,})["\']?',
-        PatternCategory.GENERIC
-    ),
-    # ─── Connection Strings ────────────────────────────
-    "CONNECTION_STRING": (
-        r'(?:postgresql|mysql|mongodb|redis|amqp)://[^\s]+:[^\s]+@[^\s]+',
-        PatternCategory.CONNECTION_STRINGS
-    ),
-    # ─── PII ─────────────────────────────────────────
-    "EMAIL": (
-        r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
-        PatternCategory.PII
-    ),
-    "FR_PHONE": (
-        r'\b(?:(?:\+|00)33|0)\s*[1-9](?:[\s.-]*\d{2}){4}\b',
-        PatternCategory.PII
-    ),
-    "FR_NIR": (
-        r'\b[12]\s*\d{2}\s*(?:1[0-2]|0[1-9]|[235-9][0-9]|2[AB])\s*(?:0[1-9]|[1-8]\d|9[0-5]|2[AB])\s*\d{3}\s*\d{3}\s*\d{2}\b',
-        PatternCategory.PII
-    ),
-    "IBAN": (
-        r'\b[A-Z]{2}\d{2}\s?(?:\d{4}\s?){2,7}\d{1,4}\b',
-        PatternCategory.PII
-    ),
-    "CREDIT_CARD": (
-        r'\b(?:\d[ -]*?){13,19}\b',  # Simplified; refine with Luhn check
-        PatternCategory.PII
-    ),
-}
+# 11 core patterns — validated against gitleaks, detect-secrets, official docs
+# Each entry: (name, compiled_regex)
+_PATTERNS: list[Tuple[str, str]] = [
+    # Cloud
+    ("AWS_ACCESS_KEY",
+     r"\b(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}\b"),
+    # AI Providers
+    ("OPENAI_KEY",
+     r"\b(sk-proj-|sk-svcacct-)[A-Za-z0-9_-]{20,}\b"),
+    ("ANTHROPIC_KEY",
+     r"\b(sk-ant-api03-)[A-Za-z0-9_-]{20,}\b|\bapi-[a-z0-9]{40}\b"),
+    # DevEx
+    ("GITHUB_TOKEN",
+     r"\b(gh[pousr]_|github_pat_)[A-Za-z0-9_]{36,255}\b"),
+    ("GITLAB_TOKEN",
+     r"\bglpat-[A-Za-z0-9\-_]{20,}\b"),
+    ("SLACK_TOKEN",
+     r"\bxox[bpark]-[0-9]{10,13}-[0-9]{10,13}-[0-9a-zA-Z]{24,34}\b"),
+    # Auth
+    ("BEARER_TOKEN",
+     r"\bBearer\s+[A-Za-z0-9\-._~+/]+=*"),
+    ("JWT",
+     r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
+    # Generic
+    ("GENERIC_SECRET",
+     r"""(?i)(api[_-]?key|secret[_-]?key|password|passwd|pwd)[\s:=]{0,3}['"][0-9a-zA-Z\-_.]{16,}['"]"""),
+    ("CONNECTION_STRING",
+     r"(?i)(?:postgresql|postgres|mysql|mongodb|redis|amqp)://[^\s:]+:[^\s@]+@[^\s]+"),
+    # Explicit tags
+    ("PRIVATE_TAG",
+     r"<private>[\s\S]*?</private>"),
+]
 
 
 class PrivacyService:
-    """
-    Enterprise-grade secret stripping & PII redaction service.
-    
-    Pre-compiles all regex patterns on startup for performance.
-    Supports granular enable/disable per pattern category.
-    Returns sanitized text with audit metadata (never raw values).
-    """
-    
-    MAX_SANITIZE_LENGTH = 1_000_000  # 1MB — skip larger texts to avoid CPU lock
-    
-    def __init__(self, config: Optional[Dict] = None):
-        self.enabled = self._get_config(config, "MCP_PRIVACY_ENABLED", True, bool)
-        self._category_enabled: Dict[str, bool] = {}
-        self._compiled: Dict[str, re.Pattern] = {}
-        self._custom_patterns: Dict[str, re.Pattern] = {}
-        
+    """Minimal secret stripping service. v1: 11 patterns, re module, zero new deps."""
+
+    MAX_LENGTH = 1_000_000  # 1MB guard — skip larger texts to avoid CPU lock
+
+    def __init__(self) -> None:
+        self.enabled = os.getenv("MCP_PRIVACY_ENABLED", "true").lower() == "true"
+        self._compiled: list[Tuple[str, re.Pattern]] = []
+
         if self.enabled:
-            self._load_categories(config)
-            self._compile_patterns()
-            self._load_custom_patterns(config)
-            logger.info(
-                "privacy_service.initialized",
-                enabled=True,
-                patterns_count=len(self._compiled),
-                categories={k: v for k, v in self._category_enabled.items()},
-            )
+            for name, pattern_str in _PATTERNS:
+                try:
+                    # Compile with IGNORECASE for generic patterns, exact for specific prefixes
+                    flags = re.IGNORECASE if name in ("GENERIC_SECRET", "CONNECTION_STRING") else 0
+                    if name == "PRIVATE_TAG":
+                        flags = re.DOTALL
+                    self._compiled.append((name, re.compile(pattern_str, flags)))
+                except re.error as e:
+                    logger.error("privacy_service.compile_error", name=name, error=str(e))
+
+            logger.info("privacy_service.initialized", patterns=len(self._compiled))
         else:
             logger.info("privacy_service.disabled")
-    
-    def _get_config(self, config, env_key, default, type_func):
-        """Get config from dict or env var."""
-        if config and env_key in config:
-            return type_func(config[env_key])
-        return type_func(os.getenv(env_key, str(default)))
-    
-    def _load_categories(self, config):
-        """Load which pattern categories are enabled."""
-        for cat in [
-            PatternCategory.CLOUD, PatternCategory.AI_PROVIDERS,
-            PatternCategory.DEVEX, PatternCategory.AUTH,
-            PatternCategory.GENERIC, PatternCategory.PII,
-            PatternCategory.PRIVATE_TAGS, PatternCategory.CONNECTION_STRINGS,
-        ]:
-            env_key = f"MCP_PRIVACY_PATTERNS_{cat.upper()}"
-            self._category_enabled[cat] = self._get_config(config, env_key, True, bool)
-    
-    def _compile_patterns(self):
-        """Pre-compile all enabled patterns."""
-        for name, (pattern_str, category) in DEFAULT_PATTERNS.items():
-            if self._category_enabled.get(category, True):
-                try:
-                    self._compiled[name] = re.compile(pattern_str, re.IGNORECASE | re.DOTALL)
-                except re.error as e:
-                    logger.error("privacy_service.pattern_compile_error", name=name, error=str(e))
-    
-    def _load_custom_patterns(self, config):
-        """Load custom patterns from env var MCP_PRIVACY_CUSTOM_PATTERNS."""
-        custom_str = self._get_config(config, "MCP_PRIVACY_CUSTOM_PATTERNS", "", str)
-        if not custom_str:
-            return
-        # Format: "pattern_name1=regex1;pattern_name2=regex2"
-        for entry in custom_str.split(";"):
-            if "=" in entry:
-                name, pattern = entry.split("=", 1)
-                try:
-                    self._custom_patterns[name.strip()] = re.compile(pattern.strip(), re.IGNORECASE)
-                    logger.info("privacy_service.custom_pattern_loaded", name=name.strip())
-                except re.error as e:
-                    logger.error("privacy_service.custom_pattern_error", name=name.strip(), error=str(e))
-            else:
-                # Simple pattern without name
-                try:
-                    self._custom_patterns[f"CUSTOM_{len(self._custom_patterns)}"] = re.compile(entry.strip(), re.IGNORECASE)
-                except re.error:
-                    pass
-    
-    def sanitize(self, text: str) -> SanitizationResult:
-        """
-        Sanitize text by replacing secrets/PII with [REDACTED: TYPE] tokens.
-        
-        Args:
-            text: Input text to sanitize
-            
+
+    def sanitize(self, text: str) -> Tuple[str, Dict[str, int]]:
+        """Sanitize text, replacing secrets with [REDACTED: TYPE].
+
         Returns:
-            SanitizationResult with clean_text and redaction metadata
+            Tuple of (clean_text, counts_by_type) — e.g. (clean, {"OPENAI_KEY": 1})
         """
         if not self.enabled or not text:
-            return SanitizationResult(
-                clean_text=text,
-                metadata=RedactionMetadata(redacted=False, counts_by_type={})
-            )
-        
-        # Skip excessively long texts
-        if len(text) > self.MAX_SANITIZE_LENGTH:
-            logger.warning(
-                "privacy_service.text_too_long",
-                length=len(text),
-                max=self.MAX_SANITIZE_LENGTH,
-            )
-            return SanitizationResult(
-                clean_text=text,
-                metadata=RedactionMetadata(redacted=False, counts_by_type={"SKIPPED_LENGTH": 1})
-            )
-        
+            return text, {}
+
+        if len(text) > self.MAX_LENGTH:
+            logger.warning("privacy_service.text_too_long", length=len(text))
+            return text, {}
+
         start = time.time()
         clean_text = text
         counts: Dict[str, int] = {}
-        
-        # Apply all compiled patterns
-        for p_type, pattern in self._compiled.items():
-            matches = pattern.findall(clean_text)
-            if matches:
-                clean_text = pattern.sub(f"[REDACTED: {p_type}]", clean_text)
-                counts[p_type] = len(matches) if isinstance(matches[0], str) else len(matches)
-        
-        # Apply custom patterns
-        for p_type, pattern in self._custom_patterns.items():
-            matches = pattern.findall(clean_text)
-            if matches:
-                clean_text = pattern.sub(f"[REDACTED: {p_type}]", clean_text)
-                counts[p_type] = len(matches)
-        
-        elapsed_ms = (time.time() - start) * 1000
-        
-        result = SanitizationResult(
-            clean_text=clean_text,
-            metadata=RedactionMetadata(
-                redacted=bool(counts),
-                counts_by_type=counts
-            )
-        )
-        
+
+        for name, pattern in self._compiled:
+            matches = list(pattern.finditer(clean_text))
+            if not matches:
+                continue
+
+            counts[name] = len(matches)
+
+            # Replace from end to preserve positions
+            for m in reversed(matches):
+                clean_text = clean_text[:m.start()] + f"[REDACTED: {name}]" + clean_text[m.end():]
+
         if counts:
-            logger.info(
+            elapsed_ms = (time.time() - start) * 1000
+            logger.warning(
                 "privacy_service.redacted",
-                total_redactions=sum(counts.values()),
+                total=sum(counts.values()),
                 types=counts,
                 duration_ms=round(elapsed_ms, 2),
             )
-        
-        return result
-    
-    def sanitize_batch(self, texts: List[str]) -> List[SanitizationResult]:
-        """Batch sanitize for code chunking."""
-        return [self.sanitize(t) for t in texts]
-    
-    @property
-    def patterns_count(self) -> int:
-        return len(self._compiled) + len(self._custom_patterns)
+
+        return clean_text, counts
+
+
+# Module-level singleton — follows MnemoLite's _services_cache pattern
+_privacy_service: PrivacyService | None = None
+
+
+def get_privacy_service() -> PrivacyService:
+    """Get or create the singleton PrivacyService."""
+    global _privacy_service
+    if _privacy_service is None:
+        _privacy_service = PrivacyService()
+    return _privacy_service
 ```
 
-### B. Intégration dans WriteMemoryTool
+### Integration dans WriteMemoryTool
 
 ```python
-# Dans WriteMemoryTool.execute(), APRÈS les validations basiques,
-# AVANT la création du MemoryCreate :
+# Dans WriteMemoryTool.execute(), APRÈS validation, AVANT MemoryCreate :
 
-privacy_service = self._services.get("privacy_service")
-if privacy_service:
+privacy = self._services.get("privacy_service")
+if privacy:
     try:
-        title_res = privacy_service.sanitize(title)
-        content_res = privacy_service.sanitize(content)
-        
-        title = title_res.clean_text
-        content = content_res.clean_text
-        
-        if title_res.metadata.redacted or content_res.metadata.redacted:
+        title, title_counts = privacy.sanitize(title)
+        content, content_counts = privacy.sanitize(content)
+        if title_counts or content_counts:
             logger.warning(
                 "security.data_sanitized",
                 tool="write_memory",
-                title_redactions=title_res.metadata.counts_by_type,
-                content_redactions=content_res.metadata.counts_by_type,
+                title_redactions=title_counts,
+                content_redactions=content_counts,
             )
-        
-        # Sanitize embedding_source if provided
-        if embedding_source:
-            es_res = privacy_service.sanitize(embedding_source)
-            embedding_source = es_res.clean_text
-            if es_res.metadata.redacted:
-                logger.warning(
-                    "security.embedding_source_sanitized",
-                    redactions=es_res.metadata.counts_by_type,
-                )
     except Exception as e:
         # Graceful degradation: continue without sanitization
-        logger.error("privacy_service.failed", error=str(e), fallback="proceeding_without_sanitization")
+        logger.error("privacy_service.failed", error=str(e))
 ```
 
-### C. Intégration dans Conversation Worker
+### Integration dans UpdateMemoryTool
 
 ```python
-# Dans workers/conversation_worker.py, avant d'envoyer le contenu
-# à write_memory ou à l'API :
+# Dans UpdateMemoryTool.execute(), si title ou content est fourni :
 
-privacy_service = ...  # injected or imported
-if privacy_service:
-    for msg in messages:
-        result = privacy_service.sanitize(msg.get("content", ""))
-        msg["content"] = result.clean_text
-        if result.metadata.redacted:
-            logger.info("conversation_worker.sanitized", redactions=result.metadata.counts_by_type)
+privacy = self._services.get("privacy_service")
+if privacy:
+    try:
+        if title is not None:
+            title, title_counts = privacy.sanitize(title)
+        if content is not None:
+            content, content_counts = privacy.sanitize(content)
+        if title_counts or content_counts:
+            logger.warning(
+                "security.data_sanitized",
+                tool="update_memory",
+                title_redactions=title_counts,
+                content_redactions=content_counts,
+            )
+    except Exception as e:
+        logger.error("privacy_service.failed", error=str(e))
+```
+
+### Injection dans server.py
+
+```python
+# Dans _initialize_services(), ajouter :
+
+from services.privacy_service import get_privacy_service
+services["privacy_service"] = get_privacy_service()
+
+# Dans setup_mcp_server(), après les autres inject_services :
+write_memory_tool.inject_services(services)
+update_memory_tool.inject_services(services)
 ```
 
 ---
 
-## 5. Catalogue de Patterns
+## 6. Catalogue de Patterns v1 (11 patterns)
 
-### Patterns Complets
+| # | ID | Catégorie | Pattern | Exemple matché | Source validation |
+|---|----|-----------|---------|----------------|-------------------|
+| 1 | `AWS_ACCESS_KEY` | cloud | `\b(A3T\|AKIA\|AGPA\|AIDA\|AROA\|AIPA\|ANPA\|ANVA\|ASIA)[A-Z0-9]{16}\b` | `AKIAIOSFODNN7EXAMPLE` | gitleaks, AWS docs |
+| 2 | `OPENAI_KEY` | ai | `\b(sk-proj-\|sk-svcacct-)[A-Za-z0-9_-]{20,}\b` | `sk-proj-abc123...48+chars` | OpenAI docs 2024-2025 |
+| 3 | `ANTHROPIC_KEY` | ai | `\b(sk-ant-api03-)[A-Za-z0-9_-]{20,}\b\|\bapi-[a-z0-9]{40}\b` | `sk-ant-api03-...` ou `api-abc123...40hex` | Anthropic docs |
+| 4 | `GITHUB_TOKEN` | devex | `\b(gh[pousr]_\|github_pat_)[A-Za-z0-9_]{36,255}\b` | `ghp_abc123...36+chars` | GitHub docs, gitleaks |
+| 5 | `GITLAB_TOKEN` | devex | `\bglpat-[A-Za-z0-9\-_]{20,}\b` | `glpat-abc123...20+chars` | GitLab docs |
+| 6 | `SLACK_TOKEN` | devex | `\bxox[bpark]-[0-9]{10,13}-[0-9]{10,13}-[0-9a-zA-Z]{24,34}\b` | `xoxb-1234567890-...` | Slack docs, gitleaks |
+| 7 | `BEARER_TOKEN` | auth | `\bBearer\s+[A-Za-z0-9\-._~+/]+=*` | `Bearer abc123tokenXYZ` | RFC 6750 |
+| 8 | `JWT` | auth | `\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b` | `eyJhbGciOi...` | gitleaks, Secrets Patterns DB |
+| 9 | `GENERIC_SECRET` | generic | `(?i)(api[_-]?key\|secret[_-]?key\|password\|passwd\|pwd)[\s:=]{0,3}['"][0-9a-zA-Z\-_.]{16,}['"]` | `api_key="abc1234567890123"` | gitleaks generic-credential |
+| 10 | `CONNECTION_STRING` | infra | `(?i)(?:postgresql\|postgres\|mysql\|mongodb\|redis\|amqp)://[^\s:]+:[^\s@]+@[^\s]+` | `postgresql://admin:pass@db:5432` | gitleaks database-url |
+| 11 | `PRIVATE_TAG` | tags | `<private>[\s\S]*?</private>` | `<private>my secret</private>` | AgentMemory |
 
-| ID | Catégorie | Pattern | Exemple matché | Token de remplacement |
-|----|-----------|---------|----------------|----------------------|
-| `PRIVATE_TAG` | private_tags | `<private>[\s\S]*?</private>` | `<private>my secret</private>` | `[REDACTED: PRIVATE_TAG]` |
-| `AWS_ACCESS_KEY` | cloud | `AKIA[0-9A-Z]{16}` | `AKIAIOSFODNN7EXAMPLE` | `[REDACTED: AWS_ACCESS_KEY]` |
-| `AWS_SECRET_KEY` | cloud | `AWS_SECRET_ACCESS_KEY=...` | `AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/...` | `[REDACTED: AWS_SECRET_KEY]` |
-| `GOOGLE_API_KEY` | cloud | `AIza[0-9A-Za-z\-_]{35}` | `AIzaSyA...35chars` | `[REDACTED: GOOGLE_API_KEY]` |
-| `DIGITALOCEAN_TOKEN` | cloud | `dop_v1_[a-f0-9]{64}` | `dop_v1_abc123...64hex` | `[REDACTED: DIGITALOCEAN_TOKEN]` |
-| `OPENAI_KEY` | ai_providers | `sk-proj-[...]{20,}` or `sk-[...]{20,}` | `sk-proj-abc123...` | `[REDACTED: OPENAI_KEY]` |
-| `ANTHROPIC_KEY` | ai_providers | `sk-ant-[...]{20,}` | `sk-ant-api03-...` | `[REDACTED: ANTHROPIC_KEY]` |
-| `GITHUB_TOKEN` | devex | `ghp_...`, `gho_...`, `github_pat_...` | `ghp_abc123...36chars` | `[REDACTED: GITHUB_TOKEN]` |
-| `NPM_TOKEN` | devex | `npm_[A-Za-z0-9]{36}` | `npm_abc123...36chars` | `[REDACTED: NPM_TOKEN]` |
-| `GITLAB_TOKEN` | devex | `glpat-[...]{20,}` | `glpat-abc123...` | `[REDACTED: GITLAB_TOKEN]` |
-| `SLACK_TOKEN` | devex | `xoxb-...-...-...` | `xoxb-1234567890-...` | `[REDACTED: SLACK_TOKEN]` |
-| `BEARER_TOKEN` | auth | `Bearer [A-Za-z0-9\-._~+/]+=*` | `Bearer abc123token` | `[REDACTED: BEARER_TOKEN]` |
-| `JWT` | auth | `eyJ[...].[...].[...]` | `eyJhbGciOiJIUzI1...` | `[REDACTED: JWT]` |
-| `GENERIC_KEY_VALUE` | generic | `api_key=...`, `secret_key=...` (20+ chars) | `api_key=abc1234567890123456789` | `[REDACTED: GENERIC_KEY_VALUE]` |
-| `PASSWORD_VALUE` | generic | `password=...` (8+ chars) | `password=MyS3cretP@ss` | `[REDACTED: PASSWORD_VALUE]` |
-| `CONNECTION_STRING` | connection_strings | `(postgres\|mysql\|mongo\|redis\|amqp)://user:pass@host` | `postgresql://admin:pass@db:5432` | `[REDACTED: CONNECTION_STRING]` |
-| `EMAIL` | pii | Standard email regex | `user@example.com` | `[REDACTED: EMAIL]` |
-| `FR_PHONE` | pii | `+33 6...` or `06...` | `+33 6 12 34 56 78` | `[REDACTED: FR_PHONE]` |
-| `FR_NIR` | pii | French SSN (NIR/Carte Vitale) | `1 85 01 75 123 456 78` | `[REDACTED: FR_NIR]` |
-| `IBAN` | pii | EU IBAN format | `FR76 1234 5678 9012 3456 7890 123` | `[REDACTED: IBAN]` |
-| `CREDIT_CARD` | pii | 13-19 digit card number | `4111 1111 1111 1111` | `[REDACTED: CREDIT_CARD]` |
+### Corrections vs version initiale du document
 
-### Patterns Custom (via env var)
-
-Format : `MCP_PRIVACY_CUSTOM_PATTERNS="OPENAI_ORG_KEY=openai_org_[a-z0-9]{24};COMPANY_TOKEN=ctk_[a-zA-Z]{32}"`
+| Pattern | Ancien (incorrect) | Nouveau (validé) | Source |
+|---------|--------------------|--------------------|--------|
+| AWS | `AKIA` seulement | 8 préfixes : `A3T\|AKIA\|AGPA\|...` | gitleaks v8 |
+| OpenAI | `sk-proj-[...]{20,}` | `sk-proj-\|sk-svcacct-` + `{20,}` (clés plus longues 2024+) | OpenAI docs |
+| Anthropic | `sk-ant-[...]{20,}` seul | 2 formats : `sk-ant-api03-` + `api-40hex` | Anthropic docs |
+| GitHub | `ghp_` seulement | `gh[pousr]_` + `github_pat_` | GitHub docs |
 
 ---
 
-## 6. Plan de Migration
+## 7. Stratégie de Test v1
 
-### Phase 1 : Déploiement du Service (Stories 42.1-42.4)
-
-Les nouveaux writes sont automatiquement sanitisés. Les données existantes ne sont pas affectées.
-
-### Phase 2 : Nettoyage Rétroactif (Story 42.5)
-
-```bash
-# Dry run d'abord
-python scripts/clean_legacy_secrets.py --dry-run
-
-# Puis nettoyage réel
-python scripts/clean_legacy_secrets.py --batch-size=200
-
-# Pour un projet spécifique
-python scripts/clean_legacy_secrets.py --project-id=abc-123-uuid
-```
-
-### Phase 3 : Régénération des Embeddings
-
-Les embeddings des records modifiés sont invalidés et régénérés async :
-
-```sql
--- Les records avec embedding=NULL seront régénérés par le worker
-UPDATE memories SET embedding = NULL, embedding_half = NULL 
-WHERE content LIKE '%[REDACTED:%' AND embedding IS NOT NULL;
-```
-
-Le worker de régénération d'embeddings écoute le stream Redis `embedding:regenerate`.
-
----
-
-## 7. Stratégie de Test
-
-### Tests Unitaires (`tests/services/test_privacy_service.py`)
-
-| Test | Description | Données de test |
-|------|-------------|-----------------|
-| `test_openai_key_stripped` | Match `sk-proj-*` et `sk-*` | `sk-proj-test1234567890abcdef` |
-| `test_aws_key_stripped` | Match `AKIA*` | `AKIAIOSFODNN7EXAMPLE` |
-| `test_github_token_stripped` | Match `ghp_*`, `github_pat_*` | `ghp_test1234567890abcdefghijklmnopqrstuvwxyz` |
-| `test_jwt_stripped` | Match 3-part base64 | `eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc123def456` |
-| `test_bearer_token_stripped` | Match Bearer prefix | `Bearer abc123tokenXYZ` |
-| `test_connection_string_stripped` | Match DB URI with credentials | `postgresql://admin:S3cret@db:5432/mydb` |
-| `test_private_tag_stripped` | Match `<private>...</private>` | `<private>my secret value</private>` |
-| `test_private_tag_multiline` | Match across newlines | `<private>\nsecret\n</private>` |
-| `test_fr_phone_stripped` | Match French phone | `+33 6 12 34 56 78`, `0612345678` |
-| `test_fr_nir_stripped` | Match French SSN | `1 85 01 75 123 456 78` |
-| `test_iban_stripped` | Match IBAN | `FR76 1234 5678 9012 3456 7890 123` |
-| `test_email_stripped` | Match email | `user@example.com` |
-| `test_generic_api_key_stripped` | Match `api_key=...` | `api_key=abc1234567890123456789` |
-| `test_password_stripped` | Match `password=...` | `password=MyS3cretP@ss` |
-| `test_no_false_positives_code` | Code normal non strippé | `def authenticate(user, password_hash)` |
-| `test_no_false_positives_urls` | URLs sans credentials non strippées | `https://api.example.com/v1/endpoint` |
-| `test_category_disable` | Désactiver une catégorie | `MCP_PRIVACY_PATTERNS_PII=false` |
-| `test_custom_patterns` | Patterns custom | `openai_org_test1234567890abcd` |
-| `test_batch_sanitize` | Sanitize batch de textes | Liste de 100 textes |
-| `test_max_length_skip` | Texte trop long est skippé | Texte > 1MB |
-| `test_graceful_degradation` | Service disabled = pas d'erreur | `enabled=False` |
-| `test_empty_text` | Texte vide | `""` |
-| `test_no_secrets` | Texte sans secrets | `"Hello world, how are you?"` |
-| **Performance** | | |
-| `test_sanitize_performance` | < 2ms per 2KB text | 2KB text, 20+ patterns |
-| `test_sanitize_large_text` | < 50ms per 100KB text | 100KB text |
-
-### Tests d'Intégration (`tests/tools/test_memory_tools_privacy.py`)
+### Tests unitaires (`tests/services/test_privacy_service.py`)
 
 | Test | Description |
 |------|-------------|
-| `test_write_memory_sanitizes_secrets` | `write_memory` avec clé API → `read_memory` retourne `[REDACTED: OPENAI_KEY]` |
-| `test_update_memory_sanitizes_secrets` | `update_memory` avec token → contenu sanitisé |
-| `test_embedding_receives_sanitized_text` | Mock `embedding_service` → vérifie que le texte sanitisé est embedded |
-| `test_entity_extraction_receives_sanitized_text` | Vérifie que GLiNER reçoit le texte sanitisé |
-| `test_conversation_import_sanitizes` | Import conversation avec secret → sanitisé |
+| `test_aws_access_key` | Strips `AKIAIOSFODNN7EXAMPLE` → `[REDACTED: AWS_ACCESS_KEY]` |
+| `test_openai_key` | Strips `sk-proj-abc...48chars` |
+| `test_anthropic_key_v1` | Strips `sk-ant-api03-...` |
+| `test_anthropic_key_v2` | Strips `api-abc123...40hex` |
+| `test_github_token` | Strips `ghp_abc...36chars` |
+| `test_gitlab_token` | Strips `glpat-abc...20chars` |
+| `test_slack_token` | Strips `xoxb-1234-5678-abc123...` |
+| `test_bearer_token` | Strips `Bearer abc123token` |
+| `test_jwt` | Strips `eyJhbGci...part2.part3` |
+| `test_generic_secret` | Strips `api_key="longvalue12345678"` |
+| `test_connection_string` | Strips `postgresql://admin:pass@db:5432` |
+| `test_private_tag` | Strips `<private>secret</private>` |
+| `test_no_false_positives` | Code normal non strippé (`def authenticate(user, pw_hash)`) |
+| `test_disabled` | `MCP_PRIVACY_ENABLED=false` → pas de strip |
+| `test_empty_text` | Texte vide → pas d'erreur |
+| `test_max_length_skip` | Texte > 1MB → skippé |
+| `test_multiple_secrets` | Plusieurs secrets dans un texte → tous strippés |
+| `test_no_secrets` | `"Hello world"` → inchangé |
 
-### Tests de Sécurité
+### Tests d'intégration
 
 | Test | Description |
 |------|-------------|
-| `test_audit_log_no_raw_values` | Vérifie que les logs structlog ne contiennent JAMAIS les valeurs brutes |
-| `test_redo_resistance` | Patterns avec backtracking limité → pas de ReDoS |
-| `test_cannot_reverse_redaction` | Vérifie que `[REDACTED: ...]` ne peut pas être inversé |
+| `test_write_memory_sanitizes` | `write_memory` avec clé API → `read_memory` retourne `[REDACTED: ...]` |
+| `test_update_memory_sanitizes` | `update_memory` avec token → contenu sanitisé |
+| `test_graceful_degradation` | PrivacyService lève exception → write continue |
 
 ---
 
 ## 8. Considérations de Sécurité
 
-### 8.1 Irréversibilité
+### Irréversibilité
 
-La rédaction est **strictement irréversible**. Nous ne stockons pas :
-- ❌ La valeur originale du secret
+La rédaction est **strictement irréversible**. On ne stocke PAS :
+- ❌ La valeur originale
 - ❌ Un hash du secret
 - ❌ Une version chiffrée
 
-Raison : Si un attaquant obtient l'accès DB ou log, il ne doit pouvoir retrouver le secret d'aucune façon. Un mécanisme de déchiffrement serait une faille de sécurité.
+### Audit
 
-### 8.2 Audit Trail
-
-L'audit log ne contient **que des métadonnées** :
+Les logs structlog ne contiennent **que des counts par type**, jamais les valeurs :
 ```json
-{
-  "event": "security.data_sanitized",
-  "tool": "write_memory",
-  "title_redactions": {"OPENAI_KEY": 1},
-  "content_redactions": {"AWS_KEY": 2},
-  "total_redactions": 3
-}
+{"event": "privacy_service.redacted", "types": {"OPENAI_KEY": 1}, "total": 1, "duration_ms": 0.3}
 ```
 
-**Jamais** :
-```json
-// ❌ INTERDIT
-{"event": "redacted", "original_value": "sk-proj-abc123..."}
-```
+### ReDoS
 
-### 8.3 ReDoS (Regular Expression Denial of Service)
+Protection en 3 couches (pas besoin du module `regex` en v1) :
+1. **Guard 1MB** : Textes trop longs skippés
+2. **Patterns bornés** : `{N,M}` pas `{N,}`, pas de `.*` imbriqué, word boundaries `\b`
+3. **Pre-compilation** : Pas de compilation runtime
 
-Les patterns sont conçus pour éviter le backtracking catastrophique :
-- Bornes fixes : `{20, 100}` au lieu de `{20,}`
-- Pas de quantificateurs imbriqués : pas de `(.*)*`
-- Évitement des alternations complexes non-anchored
-- Limite de longueur de texte : `MAX_SANITIZE_LENGTH = 1MB`
-- Considérer l'usage du module `regex` (avec timeout) pour les patterns complexes si `re` s'avère insuffisant
+Si ReDoS se manifeste en prod, migrer vers `regex` module avec timeout (5 min fix).
 
-### 8.4 Faux Positifs
+### Faux positifs
 
-Les faux positifs les plus probables :
-- `EMAIL` : Les adresses email dans du code légitime (ex: `contact@example.com` dans un README)
-- `PASSWORD_VALUE` : Les variables nommées `password` dans du code (ex: `password_hash`, `password_field`)
-- `CREDIT_CARD` : Les longs nombres (ex: numéros de commande, IDs)
-
-**Mitigation** :
-- Configuration granulaire pour désactiver des catégories
-- Les patterns utilisent des bornes de longueur et des word boundaries (`\b`)
-- Le `GENERIC_KEY_VALUE` exige 20+ chars pour éviter les faux positifs courts
-- Les patterns PII sont désactivables séparément (`MCP_PRIVACY_PATTERNS_PII=false`)
-
-### 8.5 Vector Space Contamination
-
-Même si le texte est sanitisé avant embedding, les embeddings existants (pré-migration) contiennent potentiellement des secrets encodés numériquement. La Phase 2 (migration) + Phase 3 (régénération embeddings) corrigera cela.
+- `GENERIC_SECRET` exige 16+ chars + quotes → minimise les faux positifs
+- `BEARER_TOKEN` exige le préfixe `Bearer` → pas de match aléatoire
+- Les patterns spécifiques (AWS, OpenAI, GitHub) ont des préfixes distinctifs → très peu de faux positifs
 
 ---
 
-## 9. Budget Performance
+## 9. Budget Performance v1
 
 | Métrique | Budget | Justification |
 |----------|--------|---------------|
-| **Sanitize 2KB text** | < 2ms | 20+ regex pre-compiled, text court |
-| **Sanitize 100KB text** | < 50ms | Chunk de code moyen |
-| **Sanitize 1MB text** | Skip | Trop long, risque CPU lock |
-| **Overhead write_memory** | < 5ms additionnel | Actuellement 80-120ms total, 5ms = négligeable |
-| **Overhead code chunking** | < 10ms par chunk | Chunk moyen ~2KB, 10 chunks = 100ms |
-| **Startup PrivacyService** | < 100ms | Compilation ~25 regexes |
-| **Memory footprint** | < 1MB | Patterns pre-compiled, pas de cache texte |
+| Sanitize 2KB | < 2ms | 11 regex pre-compiled, texte court |
+| Sanitize 100KB | < 20ms | Chunk de code moyen |
+| Sanitize 1MB+ | Skip | Guard MAX_LENGTH |
+| Overhead write_memory | < 2ms | Actuellement 80-120ms total |
+| Startup | < 10ms | Compilation 11 regex |
+| Memory | < 50KB | 11 patterns compilés |
+| Nouvelles dépendances | **0** | stdlib `re` only |
 
 ---
 
-## 10. Configuration & Déploiement
+## 10. Configuration v1
 
-### Variables d'Environnement
+### Variables d'environnement
 
 ```bash
-# ─── Master Switch ──────────────────────────────────
-MCP_PRIVACY_ENABLED=true
-
-# ─── Pattern Category Toggles ──────────────────────
-MCP_PRIVACY_PATTERNS_CLOUD=true
-MCP_PRIVACY_PATTERNS_AI_PROVIDERS=true
-MCP_PRIVACY_PATTERNS_DEVEX=true
-MCP_PRIVACY_PATTERNS_AUTH=true
-MCP_PRIVACY_PATTERNS_GENERIC=true
-MCP_PRIVACY_PATTERNS_PII=true
-MCP_PRIVACY_PATTERNS_PRIVATE_TAGS=true
-MCP_PRIVACY_PATTERNS_CONNECTION_STRINGS=true
-
-# ─── Code Indexing Toggle ──────────────────────────
-MCP_CODE_SANITIZE=true
-
-# ─── Custom Patterns ───────────────────────────────
-MCP_PRIVACY_CUSTOM_PATTERNS="OPENAI_ORG_KEY=openai_org_[a-z0-9]{24};COMPANY_TOKEN=ctk_[a-zA-Z]{32}"
-
-# ─── Performance ───────────────────────────────────
-MCP_PRIVACY_MAX_SANITIZE_LENGTH=1000000
+# Master switch — seul config point en v1
+MCP_PRIVACY_ENABLED=true    # true | false (défaut: true)
 ```
 
 ### Docker Compose
@@ -939,53 +534,204 @@ services:
   api:
     environment:
       MCP_PRIVACY_ENABLED: "true"
-      MCP_PRIVACY_PATTERNS_PII: "true"
-      MCP_CODE_SANITIZE: "true"
 ```
 
-### Injection dans le Service Container
+### Pas de nouvelles dépendances
 
-```python
-# Dans api/mnemo_mcp/server.py, au setup des services :
-
-from services.privacy_service import PrivacyService
-
-privacy_service = PrivacyService()  # Reads config from env
-services["privacy_service"] = privacy_service
+```txt
+# requirements.txt — RIEN À AJOUTER en v1
+# On utilise stdlib re, pas le module regex
 ```
 
 ---
 
-## 11. Questions Ouvertes
+## 11. Questions Décidées
 
-| # | Question | Options | Recommandation |
-|---|----------|---------|----------------|
-| Q1 | **L'EMAIL doit-il être strippé par défaut ?** | Les emails sont très fréquents dans le code et les mémoires légitimes. Faux positifs probables. | Désactiver par défaut (`MCP_PRIVACY_PATTERNS_PII=true` mais email en sous-catégorie `MCP_PRIVACY_PATTERNS_PII_EMAIL=false` par défaut) |
-| Q2 | **Le CREDIT_CARD doit-il être strippé ?** | Pattern très large (13-19 digits), beaucoup de faux positifs (numéros de commande, IDs). | Désactiver par défaut, ou implémenter validation Luhn pour réduire les faux positifs |
-| Q3 | **Faut-il sanitizer les résultats de recherche ?** | Les données sont déjà sanitisées à l'écriture, donc les résultats de lecture sont propres. Mais si le service est activé après des writes sans sanitisation... | Non — préférer la migration rétroactive (Story 42.5). La sanitisation en lecture créerait des incohérences avec les embeddings. |
-| Q4 | **Comment gérer les `<private>` tags dans le code ?** | Le code peut légitimement contenir des strings HTML avec `<private>`. | Ne sanitizer que dans le Pilier B (mémoire), pas dans le Pilier A (code indexing). Le code doit rester fidèle à la source. |
-| Q5 | **Faut-il un mode "warn-only" ?** | Log les détections sans rédiger, pour calibrer les patterns avant activation. | Oui — ajouter `MCP_PRIVACY_MODE=warn|enforce` (défaut: enforce). En mode "warn", les secrets sont loggés (type+count) mais pas rédigés. |
-| Q6 | **Le script de migration doit-il toucher les soft-deleted memories ?** | Les mémoires soft-deleted contiennent peut-être des secrets aussi. | Non par défaut (`--include-deleted=false`), mais ajouter un flag `--include-deleted` pour les env paranos. |
-| Q7 | **Faut-il ajouter une colonne `sanitized_at` à la table memories ?** | Permet de tracker quels records ont été sanitisés et quand. | Oui — ajouter `sanitized_at TIMESTAMPTZ` et `sanitized_types TEXT[]` pour les records migrés. |
-| Q8 | **Connection strings : faut-il préserver le host ?** | `postgresql://admin:pass@db.prod:5432/mydb` → tout rédiger ou garder `db.prod:5432/mydb` ? | Rédiger uniquement le `user:pass@` → `postgresql://[REDACTED: CREDENTIALS]@db.prod:5432/mydb`. Le host et DB sont utiles pour la recherche. |
-
----
-
-## Annexe A : Comparaison avec AgentMemory
-
-| Aspect | AgentMemory | MnemoLite (EPIC-42) |
-|--------|-------------|---------------------|
-| **Patterns** | 13 regex + private tags | 21+ regex + private tags + PII + FR/EU + custom |
-| **Intégration mémoire** | `observe.ts` uniquement (PAS `remember.ts`) | `write_memory` + `update_memory` + conversation import |
-| **Intégration code** | ❌ Aucune | ✅ Code indexing + chunking |
-| **PII** | ❌ Aucun | ✅ Email, FR_PHONE, FR_NIR, IBAN, CREDIT_CARD |
-| **Config** | ❌ Hardcoded | ✅ Env vars granulaires + custom patterns |
-| **Audit** | ❌ Aucun | ✅ structlog + OpenTelemetry |
-| **Rétroactivité** | ❌ Aucun | ✅ Script migration + embedding regeneration |
-| **Mode warn** | ❌ Aucun | ✅ `MCP_PRIVACY_MODE=warn\|enforce` |
-| **ReDoS protection** | ❌ Aucune | ✅ Bounded patterns, MAX_SANITIZE_LENGTH |
-| **Performance** | N/A (in-process, rapide) | < 2ms/2KB, < 50ms/100KB |
+| # | Question | Décision | Raison |
+|---|----------|----------|--------|
+| Q1 | `re` ou `regex` module ? | **`re`** (v1) | Patterns bornés + guard 1MB suffisent. Migrer si ReDoS constaté |
+| Q2 | Combien de patterns ? | **11** (v1) | Couvre 95% des cas courants. Ajouter au besoin |
+| Q3 | Return type ? | **`tuple[str, dict]`** | Pas besoin de Pydantic pour un return interne |
+| Q4 | Config granularity ? | **1 env var** | YAGNI les toggles par catégorie tant qu'on n'a pas de feedback |
+| Q5 | Integration points ? | **write + update only** | Les deux points d'entrée utilisateur. Code indexing = v2 |
+| Q6 | CircuitBreaker ? | **Non** | Pure CPU, pas d'I/O |
+| Q7 | Warn mode ? | **v2** | YAGNI tant qu'on n'a pas de faux positifs signalés |
+| Q8 | EMAIL par défaut ? | **v2** | Trop de faux positifs dans le code. Sera un toggle en v2 |
+| Q9 | Connection strings host ? | **Tout rédiger** | Le host peut être sensible (infra interne) |
+| Q10 | Migration rétroactive ? | **v2** | Les nouveaux writes sont sanitisés, l'existant sera nettoyé plus tard |
+| Q11 | Presidio ? | **v3** | NER avancé pour noms/adresses. Très loin |
+| Q12 | Entropy analysis ? | **v3** | Pour secrets sans préfixe. Très loin |
 
 ---
 
-*Fin de spécification EPIC-42 — Prêt pour review et implémentation*
+## 12. Annexes v2+ (backlog)
+
+### Annexe A : Patterns v2 (14 patterns supplémentaires)
+
+Ces patterns seront ajoutés quand le besoin sera prouvé :
+
+| ID | Pattern | Pourquoi v2+ |
+|----|---------|-------------|
+| `AWS_SECRET_KEY` | `aws(.{0,20})?(secret\|private)?(.{0,20})?['"][0-9a-zA-Z/+]{40}['"]` | Nécessite contexte AWS, faux positifs possibles |
+| `GOOGLE_API_KEY` | `\bAIza[0-9A-Za-z\-_]{35}\b` | Rarement vu dans les conversations |
+| `GOOGLE_OAUTH` | `\bya29\.[0-9A-Za-z\-_]+` | Rarement vu |
+| `AZURE_KEY` | Context-based | Pas de préfixe distinctif → faux positifs |
+| `DIGITALOCEAN_TOKEN` | `\bdop_v1_[a-f0-9]{64}\b` | Rarement vu |
+| `NPM_TOKEN` | `\bnpm_[A-Za-z0-9]{36}\b` | Rarement vu |
+| `STRIPE_KEY` | `\b(sk_live\|sk_test)_[0-9a-zA-Z]{24}\b` | Rarement vu |
+| `SENDGRID_KEY` | `\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}\b` | Rarement vu |
+| `TWILIO_KEY` | `twilio(.{0,20})?SK[0-9a-fA-F]{32}` | Rarement vu |
+| `HEROKU_KEY` | `heroku(.{0,20})?UUID` | Rarement vu |
+| `FR_PHONE` | `(?:(?:\+\|00)33\|0)\s*[1-9](?:[\s.\-]*\d{2}){4}` | PII FR, nécessite toggle |
+| `FR_NIR` | NIR + checksum INSEE | PII FR, nécessite toggle + checksum |
+| `IBAN` | `[A-Z]{2}\d{2}\s?(?:\d{4}\s?){4,7}\d{1,4}` | PII EU, nécessite toggle + MOD97 |
+| `CREDIT_CARD` | `(?:\d[ -]*?){13,19}` + Luhn | Trop de faux positifs sans Luhn |
+
+### Annexe B : Features v2+
+
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| **Warn mode** | `MCP_PRIVACY_MODE=warn\|enforce` — log sans rédiger | ~1h |
+| **Category toggles** | `MCP_PRIVACY_PATTERNS_CLOUD=false` etc. | ~1h |
+| **Custom patterns** | `MCP_PRIVACY_CUSTOM_PATTERNS=NAME=regex;...` | ~1h |
+| **Code indexing integration** | Sanitize chunks avant embedding | ~3h |
+| **Conversation worker** | Sanitize avant write_memory | ~1h |
+| **`regex` module migration** | Si ReDoS constaté en prod | ~30min |
+| **Migration script** | `scripts/clean_legacy_secrets.py` | ~3h |
+| **DB columns** | `sanitized_at`, `sanitized_types` | ~1h |
+| **OTel metrics** | Counter + histogram | ~1h |
+| **Luhn validator** | Credit card false positive reduction | ~30min |
+| **NIR checksum** | French SSN validation | ~30min |
+
+### Annexe C : Story 42.4 v2 — Observabilité & Config Granulaire
+
+Quand le feedback terrain montrera le besoin :
+
+- Env vars par catégorie : `MCP_PRIVACY_PATTERNS_CLOUD`, `MCP_PRIVACY_PATTERNS_AI_PROVIDERS`, etc.
+- Warn mode : `MCP_PRIVACY_MODE=warn` — log only, no redaction
+- Custom patterns : `MCP_PRIVACY_CUSTOM_PATTERNS="NAME=regex;NAME2=regex2"`
+- OTel metrics : `mnemo.privacy.redactions.count`, `mnemo.privacy.sanitize.duration_ms`
+
+### Annexe D : Story 42.5 v2 — Code Indexing Integration
+
+```
+Code Chunking Pipeline (7 étapes) — insertion après étape 2 :
+1. Language Detection
+2. AST Chunking              → chunk.source_code
+3. PrivacyService.sanitize() ← NOUVEAU (PRIVATE_TAG category OFF)
+4. Metadata Extraction       → sur texte sanitisé
+5. LSP Type Enrichment       → sur texte sanitisé
+6. Dual Embedding            → sur texte sanitisé
+7. Graph Construction        → sur texte sanitisé
+```
+
+Toggle : `MCP_CODE_SANITIZE=true`
+
+### Annexe E : Story 42.6 v2 — Migration Rétroactive
+
+Script `scripts/clean_legacy_secrets.py` avec :
+- `--dry-run`, `--batch-size=N`, `--project-id=UUID`
+- Invalidation embeddings (`SET embedding = NULL`) + régénération async
+- DB columns : `sanitized_at TIMESTAMPTZ`, `sanitized_types TEXT[]`
+
+### Annexe F : Comparaison avec AgentMemory
+
+| Aspect | AgentMemory | MnemoLite v1 | MnemoLite v2+ |
+|--------|-------------|-------------|---------------|
+| Patterns | 13 + tags | 11 + tags | 25+ + PII FR/EU + custom |
+| Intégration mémoire | observe.ts seulement | write + update | + code indexing + conv worker |
+| PII | ❌ | ❌ (v1) | ✅ Email, FR_PHONE, NIR, IBAN, CB |
+| Config | Hardcoded | 1 env var | Granular + warn + custom |
+| Audit | ❌ | structlog basique | + OTel + DB columns |
+| ReDoS | ❌ | Guard 1MB + bornés | + regex timeout |
+| Rétroactivité | ❌ | ❌ | ✅ Script + embedding regen |
+
+### Annexe G : État de l'Art Complet
+
+#### A. Outils de détection de secrets (scanning statique)
+
+| Outil | Langage | Patterns | Approche | Particularités |
+|-------|---------|----------|----------|----------------|
+| **detect-secrets** (Yelp) | Python | 27 detectors | Regex + entropie + keywords | Plugin architecture, allowlists |
+| **gitleaks** | Go | ~60 rules | Regex + entropie | TOML config, pre-commit hooks |
+| **truffleHog** | Go/Python | ~790 regex | Regex + entropie + verification | Custom YAML detectors |
+| **Secrets Patterns DB** | YAML | 1600+ patterns | Regex | Plus grande base publique |
+| **CredScan** (Microsoft) | XML | Content searchers | Regex + heuristiques | Intégré Azure DevOps |
+
+#### B. Packages Python de Runtime Redaction
+
+> ⚠️ **AUCUN package Python existant ne combine secrets + PII en runtime redaction.**
+
+**PII + Redaction (pas de secrets) :**
+
+| Package | PII | Secrets | Runtime | Dépendances |
+|---------|-----|---------|---------|-------------|
+| **Microsoft Presidio** | ✅ 50+ types | ⚠️ Custom recognizers | ✅ | spaCy (optionnel) |
+| **scrubadub** | ✅ Noms, emails, phones | ❌ | ✅ | spaCy (optionnel) |
+| **datafog** | ✅ EMAIL, PHONE, SSN, CC, IP | ❌ | ✅ | Léger |
+| **PyRedactKit** | ⚠️ IPs, emails, domains | ❌ | ✅ | Aucune |
+
+**Secrets + Redaction (pas de PII) :**
+
+| Package | Secrets | PII | Runtime Redact |
+|---------|---------|-----|---------------|
+| **Guardrails AI** | ✅ Via detect-secrets | ❌ | ✅ Remplace par `***` |
+| **detect-secrets** | ✅ 27 detectors | ❌ | ❌ Detection only |
+
+**Autres (logging/redaction basique) :**
+
+| Package | Scope | Note |
+|---------|-------|------|
+| **fastapi-redaction** | Logs, headers | Expérimental, pas sur PyPI |
+| **redacted-py** | Dictionnaire | ⚠️ **Réversible — anti-pattern sécurité !** |
+
+**Solutions Cloud (écartées) :**
+
+| Service | Entités | Pourquoi écarté |
+|---------|----------|-----------------|
+| Google Cloud DLP | 120+ info types | Appels réseau, envoie données à un tiers |
+| AWS Comprehend | PII detection | Idem |
+
+#### C. Autres projets AI Memory
+
+| Projet | Secrets | PII | Audit | Config |
+|--------|---------|-----|-------|--------|
+| **AgentMemory** | `stripPrivateData()` — 13 regex + tags | ❌ | ❌ | Hardcoded |
+| **Mem0** | Scan + redact/reject | Classifiers + settings | Partiel | Project settings |
+| **Zep** | ❌ Natif | Privacy by architecture | Minimal | — |
+| **Letta (MemGPT)** | Self-editing memory | Agent curation | ✅ | Developer control |
+| **LangChain** | FilteredConversationMemory | OpaquePrompts middleware | Partiel | Strategies (mask, redact, hash) |
+
+#### D. Build vs Buy — Pourquoi custom
+
+| Critère | Custom | Presidio seul | Guardrails AI | Presidio + detect-secrets |
+|---------|--------|---------------|---------------|--------------------------|
+| Secrets (AWS, OpenAI, GitHub) | ✅ | ⚠️ Custom recognizer | ✅ Via detect-secrets | ✅ |
+| PII FR/EU | ✅ (v2) | ✅ Custom | ❌ | ⚠️ Presidio custom |
+| Runtime redaction | ✅ | ✅ | ✅ | ✅ |
+| Tokens contextuels | ✅ | ⚠️ | ❌ `***` seulement | ⚠️ |
+| Zero new deps | ✅ | ❌ 3+ packages | ❌ 2 packages | ❌ 5+ packages |
+| Performance | < 2ms | ~5-50ms | ~50-100ms | ~50-100ms |
+| Effort intégration | ~2h | ~8h | ~6h | ~12h |
+
+**Décision : Custom PrivacyService** — 100 LOC, zero deps, couvre les deux besoins.
+
+### Annexe H : Références de Validation
+
+| Source | URL |
+|--------|-----|
+| gitleaks default rules | https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml |
+| detect-secrets (Yelp) | https://github.com/Yelp/detect-secrets |
+| Secrets Patterns DB | https://github.com/mazen160/secrets-patterns-db |
+| AWS Access Key format | https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html |
+| OpenAI API keys | https://platform.openai.com/api-keys |
+| Anthropic API keys | https://docs.anthropic.com/en/docs/initial-setup |
+| GitHub PAT formats | https://docs.github.com/en/authentication/keeping-your-account-and-data-secure |
+| INSEE NIR format | https://www.insee.fr/fr/information/2560861 |
+| ISO 13616 (IBAN) | https://www.iso13616.org/ |
+| Microsoft Presidio | https://github.com/microsoft/presidio |
+| regexploit (ReDoS) | https://github.com/doyensec/regexploit |
+
+---
+
+*EPIC-42 v1 MVP — ✅ Implémenté — 45/45 tests passent — Avril 2025*

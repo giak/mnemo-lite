@@ -351,7 +351,24 @@ async def _initialize_services() -> dict:
         services["search_by_entity_tool"] = None
 
     # --------------------------------------------------------------------
-    # 8. Initialize NodeRepository and GraphTraversalService
+    # 8. Initialize PrivacyService (EPIC-42)
+    # --------------------------------------------------------------------
+    try:
+        from services.privacy_service import get_privacy_service
+
+        privacy_service = get_privacy_service()
+        services["privacy_service"] = privacy_service
+        logger.info(
+            "mcp.privacy_service.initialized",
+            enabled=privacy_service.enabled,
+            patterns=privacy_service.pattern_count if privacy_service.enabled else 0,
+        )
+    except Exception as e:
+        logger.warning("mcp.privacy_service.initialization_failed", error=str(e))
+        services["privacy_service"] = None
+
+    # --------------------------------------------------------------------
+    # 9. Initialize NodeRepository and GraphTraversalService
     # --------------------------------------------------------------------
     try:
         from db.repositories.node_repository import NodeRepository

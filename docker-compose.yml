@@ -99,6 +99,7 @@ services:
       ENTITY_EXTRACTION_SYSTEM_TAGS: ${ENTITY_EXTRACTION_SYSTEM_TAGS:-sys:core,sys:anchor,sys:pattern}
       QUERY_UNDERSTANDING_ENABLED: ${QUERY_UNDERSTANDING_ENABLED:-true}
       QUERY_UNDERSTANDING_FALLBACK: ${QUERY_UNDERSTANDING_FALLBACK:-true}
+      MCP_PRIVACY_ENABLED: ${MCP_PRIVACY_ENABLED:-true}
     depends_on:
       db:
         condition: service_healthy
@@ -192,6 +193,7 @@ services:
       MCP_HTTP_HOST: 0.0.0.0
       MCP_HTTP_PORT: "8002"
       MCP_AUTH_MODE: none
+      MCP_PRIVACY_ENABLED: ${MCP_PRIVACY_ENABLED:-true}
       OTLP_ENDPOINT: http://openobserve:5080/api/default/v1/traces
       OTLP_METRICS_ENDPOINT: http://openobserve:5080/api/default/v1/metrics
       OTLP_LOGS_ENDPOINT: http://openobserve:5080/api/default/logs/_json
