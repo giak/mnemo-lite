@@ -12,6 +12,7 @@
 
 - **Cognitive Memory** — Semantic search, time-aware storage, hybrid RRF fusion
 - **Code Intelligence** — AST-based indexing, dependency graphs, 15+ languages
+- **Secret Stripping** — 11 regex patterns + `<private>` tags, auto-redaction on write (EPIC-42)
 - **MCP Integration** — 33 tools for LLM integration
 - **Triple-Layer Cache** — L1 (memory) → L2 (Redis) → L3 (PostgreSQL)
 

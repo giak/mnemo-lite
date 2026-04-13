@@ -17,7 +17,8 @@
 8. [Cache Triple-Layer](#8-cache-triple-layer)
 9. [Schéma Base de Données](#9-schéma-base-de-données)
 10. [MCP - 33 Outils](#10-mcp---33-outils)
-11. [Déploiement](#11-déploiement)
+11. [Secret Stripping (EPIC-42)](#11-secret-stripping-epic-42)
+12. [Déploiement](#12-déploiement)
 
 ---
 
@@ -33,6 +34,7 @@ MnemoLite est un système cognitif de mémoire et d'intelligence de code **100% 
 | **Intelligence de Code** | Indexation AST, graphe de dépendances | Compréhension codebase |
 | **Recherche Hybride** | Lexical + Vectoriel + RRF + Reranking | Résultats précis |
 | **Intégration MCP** | 33 outils pour LLM (Claude, KiloCode) | Interface LLM native |
+| **Secret Stripping** | 11 regex patterns + `<private>` tags | Sécurité (EPIC-42) |
 | **Cache Triple-Layer** | L1 → L2 → L3 avec fallback | Performance |
 
 ### Stack Technique
@@ -643,7 +645,67 @@ sequenceDiagram
 
 ---
 
-## 11. Déploiement
+## 11. Secret Stripping (EPIC-42)
+
+Le **PrivacyService** réduit automatiquement les secrets avant stockage dans les mémoires.
+
+### Fonctionnement
+
+```mermaid
+flowchart LR
+    subgraph INPUT["📥 write_memory / update_memory"]
+        A["title, content,\nembedding_source"]
+    end
+
+    subgraph PRIVACY["🛡️ PrivacyService"]
+        B["11 Regex Patterns\n(AWS, OpenAI, Anthropic,\nGitHub, GitLab, Slack,\nJWT, Bearer, Generic,\nConnStr, <private>)"]
+    end
+
+    subgraph OUTPUT["📤 Storage"]
+        C["[REDACTED: TYPE]\nSecrets remplacés"]
+        D["structlog\ntype + count"]
+    end
+
+    A --> B --> C
+    B --> D
+
+    style INPUT fill:#FF7043,stroke:#E64A19,color:#fff
+    style PRIVACY fill:#9C27B0,stroke:#7B1FA2,color:#fff
+    style OUTPUT fill:#66BB6A,stroke:#388E3C,color:#fff
+```
+
+### Patterns (11)
+
+| Pattern | Exemple détecté |
+|---------|----------------|
+| `AWS_ACCESS_KEY` | `AKIAIOSFODNN7EXAMPLE` |
+| `OPENAI_KEY` | `sk-proj-abc...` |
+| `ANTHROPIC_KEY` | `sk-ant-api03-...` |
+| `GITHUB_TOKEN` | `ghp_xxx...`, `github_pat_...` |
+| `GITLAB_TOKEN` | `glpat-...` |
+| `SLACK_TOKEN` | `xoxb-...`, `xoxp-...` |
+| `BEARER_TOKEN` | `Bearer abc123...` |
+| `JWT` | `eyJhbG...` |
+| `GENERIC_SECRET` | `api_key="..."`, `password="..."` |
+| `CONNECTION_STRING` | `postgresql://user:pass@host/db` |
+| `PRIVATE_TAG` | `<private>secret</private>` |
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_PRIVACY_ENABLED` | `true` | Activer/désactiver la rédaction |
+
+### Principes
+
+- **Irréversible** : Les secrets sont remplacés, jamais loggés
+- **Graceful degradation** : Si le PrivacyService échoue, le write continue sans rédaction
+- **Guard anti-ReDoS** : Textes > 1MB ignorés
+- **Zero nouvelles dépendances** : stdlib `re` uniquement
+
+---
+
+## 12. Déploiement
 
 ### Docker Compose
 
@@ -739,6 +801,7 @@ volumes:
 | `EMBEDDING_MODEL` | nomic-ai/nomic-embed-text-v1.5 | TEXT embedding |
 | `CODE_EMBEDDING_MODEL` | jinaai/jina-embeddings-v2-base-code | CODE embedding |
 | `EMBEDDING_DIMENSION` | 768 | Vector dimension |
+| `MCP_PRIVACY_ENABLED` | true | Enable secret stripping |
 | `MCP_PORT` | 8002 | MCP server port |
 
 ---

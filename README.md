@@ -30,9 +30,16 @@ Zero external vector databases. Zero API dependencies. Zero cost. Complete priva
 * **Dependency Graph:** Function/class call graphs with recursive CTE traversal
 * **7-Step Indexing Pipeline:** Language detection → AST parsing → chunking → metadata → dual embedding → graph → storage
 
+### 🛡️ Privacy & Security
+* **Secret Stripping:** 11 regex patterns (AWS, OpenAI, Anthropic, GitHub, GitLab, Slack, JWT, Bearer, etc.)
+* **Automatic Redaction:** Secrets replaced with `[REDACTED: TYPE]` before storage
+* **`<private>` Tags:** Wrap sensitive text in `<private>...</private>` for explicit redaction
+* **Zero Dependencies:** stdlib `re` module, no external packages
+* **Toggle:** `MCP_PRIVACY_ENABLED` env var (default: `true`)
+
 ### 🔌 MCP Integration (28 tools)
 * **Code Search:** `search_code` — hybrid search with 6 filter types
-* **Memory CRUD:** `write_memory`, `read_memory`, `update_memory`, `delete_memory`
+* **Memory CRUD:** `write_memory` *(sanitized)*, `read_memory`, `update_memory` *(sanitized)*, `delete_memory`
 * **Memory Search:** `search_memory` — vector + lexical + tag-only optimization
 * **Indexing:** `index_project`, `reindex_file`, `index_incremental`, `index_markdown_workspace`
 * **Analytics:** `get_indexing_stats`, `get_memory_health`, `get_cache_stats`, `clear_cache`
@@ -128,7 +135,7 @@ docker compose --profile prod up -d  # Prod (Nginx)
 
 **Version:** 5.0.0-dev | **Tests:** 1570 functions (356/358 MCP passing) | **MCP Tools:** 28
 
-**Completed EPICs:** 28–36 (Frontend Hardening, Test Infrastructure, Observability, MCP Integration, Search Performance, Design Polish, Backend API, Search UX, Production Readiness)
+**Completed EPICs:** 28–36, 42 (Frontend Hardening, Test Infrastructure, Observability, MCP Integration, Search Performance, Design Polish, Backend API, Search UX, Production Readiness, **Secret Stripping**)
 
 ## 📜 License
 

@@ -72,7 +72,25 @@ Sauvegarde: le projet utilise FastAPI + PostgreSQL
 Tags: tech-stack, architecture
 ```
 
-## 5. Services Disponibles
+## 5. Configuration Sécurité
+
+Les secrets (API keys, tokens, mots de passe) sont automatiquement rédactés lors de `write_memory` et `update_memory`.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_PRIVACY_ENABLED` | `true` | Activer/désactiver la rédaction automatique |
+
+Pour désactiver :
+```bash
+# Dans docker-compose.yml ou .env
+MCP_PRIVACY_ENABLED=false
+```
+
+Secrets détectés : AWS, OpenAI, Anthropic, GitHub, GitLab, Slack, JWT, Bearer, Connection Strings, `<private>` tags.
+
+Remplacement : `[REDACTED: TYPE]` (ex: `[REDACTED: OPENAI_KEY]`)
+
+## 6. Services Disponibles
 
 | Service | URL |
 |---------|-----|

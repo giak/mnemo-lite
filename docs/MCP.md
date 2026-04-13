@@ -22,9 +22,9 @@ Semantic memory management with embeddings for persistent knowledge.
 
 | Tool | Description | Latency |
 |------|-------------|---------|
-| `write_memory` | Create memory with semantic embedding | ~100ms |
+| `write_memory` | Create memory with semantic embedding *(auto-sanitized)* | ~100ms |
 | `read_memory` | Read memory content by UUID | ~10ms |
-| `update_memory` | Partial update (regenerates embedding) | ~50ms |
+| `update_memory` | Partial update (regenerates embedding) *(auto-sanitized)* | ~50ms |
 | `delete_memory` | Soft delete (reversible) or hard delete | ~10ms |
 | `search_memory` | Hybrid semantic search with filters | ~100ms |
 | `get_system_snapshot` | Full boot context in one call (4x faster) | ~50ms |
@@ -204,6 +204,7 @@ docker compose restart mcp
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MCP_PORT` | 8002 | HTTP port |
+| `MCP_PRIVACY_ENABLED` | true | Enable secret stripping (EPIC-42) |
 | `DATABASE_URL` | postgresql://... | PostgreSQL connection |
 | `REDIS_URL` | redis://... | Redis connection |
 | `EMBEDDING_MODEL` | sentence-transformers/... | Embedding model |
@@ -216,6 +217,24 @@ docker compose restart mcp
 curl http://localhost:8002/mcp -X POST \
   -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"ping","arguments":{}},"id":1}'
 ```
+
+## Secret Stripping (EPIC-42)
+
+All write operations (`write_memory`, `update_memory`) automatically sanitize secrets before storage. Secrets are replaced with `[REDACTED: TYPE]` markers (e.g., `[REDACTED: OPENAI_KEY]`).
+
+**11 patterns detected:** AWS Access Key, OpenAI Key, Anthropic Key, GitHub Token, GitLab Token, Slack Token, Bearer Token, JWT, Generic Secret, Connection String, `<private>` tags.
+
+**Configuration:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_PRIVACY_ENABLED` | `true` | Enable/disable secret stripping |
+
+**Explicit redaction:** Wrap any text in `<private>...</private>` to force redaction regardless of pattern matching.
+
+**Graceful degradation:** If the PrivacyService fails, write operations continue without sanitization. Secrets are **never logged** — only redaction counts per type.
+
+---
 
 ## Architecture
 

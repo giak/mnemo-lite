@@ -17,9 +17,9 @@ http://localhost:8001
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | /stats | Memory statistics |
-| POST | / | Create memory |
+| POST | / | Create memory *(auto-sanitized)* |
 | GET | /{id} | Get memory |
-| PUT | /{id} | Update memory |
+| PUT | /{id} | Update memory *(auto-sanitized)* |
 | DELETE | /{id} | Delete memory |
 | POST | /search | Search memories |
 | GET | /recent | Recent memories |
