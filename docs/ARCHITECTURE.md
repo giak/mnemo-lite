@@ -59,7 +59,7 @@ MnemoLite est un système cognitif de mémoire et d'intelligence de code **100% 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4CAF50', 'primaryTextColor': '#fff', 'primaryBorderColor': '#388E3C', 'lineColor': '#666', 'secondaryColor': '#2196F3', 'tertiaryColor': '#9C27B0'}}}%%
 graph TB
-    subgraph "🐳 Docker Compose" padding=20
+    subgraph "🐳 Docker Compose" 
         subgraph "🌐 Interface"
             Web["<b>Vue 3 SPA</b><br/>:3000"]
         end
