@@ -1,17 +1,17 @@
+# IDE & Editors
 .cursor/
 .vscode/
-
-
 .idea/
+
+# OS
 .DS_Store
+
+# Environment
 .env
 .env.production
-# SpecStory explanation file
-.specstory/
-.specstory/.what-is-this.md
 
-# Migration archives
-archives/
+# SpecStory
+.specstory/
 
 # Python
 __pycache__/
@@ -56,6 +56,8 @@ test_reports/
 *.swp
 *~
 backups/
+*.backup
+*.final.bak
 
 # Temporary test/debug scripts
 api/*_test_*.py
@@ -85,7 +87,6 @@ static/
 api/static/
 
 # Coverage
-.coverage
 coverage.json
 api/.coverage
 api/coverage.json
@@ -96,72 +97,14 @@ src/
 # Demonstration artifacts
 demonstration/
 
-# Frontend env
+# Frontend
 frontend/.env
-
-# Backup files
-*.bak
-*.backup
-*.final.bak
+frontend/.vite/
+frontend/node_modules/
 
 # Disabled tests
 _DISABLED_*.py
 
-# Python cache (comprehensive)
-__pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-
-# Node
-node_modules/
-
-# Runtime directories
-logs/
-api/logs/
-*.log
-
-# Generated certs
-certs/
-api/certs/
-*.pem
-*.key
-*.crt
-
-# Empty static dirs
-static/
-api/static/
-
-# Coverage
-.coverage
-coverage.json
-api/.coverage
-api/coverage.json
-
-# Orphaned directories
-src/
-
-# Demonstration artifacts
-demonstration/
-
-# Frontend env
-frontend/.env
-
-# Backup files
-*.bak
-*.backup
-*.final.bak
-
-# Disabled tests
-_DISABLED_*.py
-
-# Python cache (comprehensive)
-__pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-
-# Node
-node_modules/
+# Large files & submodules
 gliner_multi-v2.1/
 _study/
