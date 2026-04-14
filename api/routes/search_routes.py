@@ -195,6 +195,8 @@ async def search(
                         status_code=422,
                         detail="Format JSON invalide pour le vecteur de recherche",
                     )
+        except HTTPException:
+            raise  # Re-raise HTTPExceptions (e.g. validation errors) as-is
         except Exception as e:
             logger.error(
                 f"Erreur lors du traitement de la requête vectorielle: {str(e)}"
