@@ -10,6 +10,7 @@ Story 26.5: Testing & Validation - Verify graph edges are created
 """
 
 import pytest
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 from services.code_chunking_service import CodeChunkingService
@@ -50,11 +51,12 @@ def mock_edge_repo():
 
 @pytest.fixture
 def graph_service(mock_node_repo, mock_edge_repo):
-    """Create graph construction service with mocked repos."""
-    service = GraphConstructionService(
-        node_repo=mock_node_repo,
-        edge_repo=mock_edge_repo
-    )
+    """Create graph construction service with mocked engine and repos."""
+    mock_engine = MagicMock()
+    service = GraphConstructionService(engine=mock_engine)
+    # Replace internally-created repos with mocks
+    service.node_repo = mock_node_repo
+    service.edge_repo = mock_edge_repo
     return service
 
 
@@ -119,16 +121,14 @@ export class UserService {
         chunk_model = CodeChunkModel(
             id=chunk_id,
             name=chunk.name,
-            code=chunk.code,
+            source_code=chunk.source_code,
             file_path=chunk.file_path,
             start_line=chunk.start_line,
             end_line=chunk.end_line,
             language="typescript",
+            chunk_type=chunk.chunk_type,
             metadata=chunk.metadata or {},
-            embedding=None,
-            indexed_at=None,
-            embedding_model=None,
-            parent_chunk_id=None
+            indexed_at=datetime.now(timezone.utc),
         )
         chunk_models.append(chunk_model)
 
@@ -138,6 +138,7 @@ export class UserService {
             label=chunk.name,
             node_type="function",
             properties={"file_path": chunk.file_path},
+            created_at=datetime.now(timezone.utc),
         )
         chunk_to_node[chunk_id] = node
 
@@ -224,16 +225,14 @@ function mapItem(item) {
         chunk_model = CodeChunkModel(
             id=chunk_id,
             name=chunk.name,
-            code=chunk.code,
+            source_code=chunk.source_code,
             file_path=chunk.file_path,
             start_line=chunk.start_line,
             end_line=chunk.end_line,
             language="javascript",
+            chunk_type=chunk.chunk_type,
             metadata=chunk.metadata or {},
-            embedding=None,
-            indexed_at=None,
-            embedding_model=None,
-            parent_chunk_id=None
+            indexed_at=datetime.now(timezone.utc),
         )
         chunk_models.append(chunk_model)
 
@@ -243,6 +242,7 @@ function mapItem(item) {
             label=chunk.name,
             node_type="function",
             properties={"file_path": chunk.file_path},
+            created_at=datetime.now(timezone.utc),
         )
         chunk_to_node[chunk_id] = node
 
