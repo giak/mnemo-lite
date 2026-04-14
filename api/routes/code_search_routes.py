@@ -291,11 +291,13 @@ async def hybrid_search(
             ),
         )
 
+    except HTTPException:
+        raise
     except ValueError as e:
         logger.error(f"Validation error in hybrid search: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Request failed",
+            detail=str(e),
         )
     except Exception as e:
         logger.error(f"Hybrid search failed: {e}", exc_info=True)
@@ -328,21 +330,21 @@ async def lexical_search(
     try:
         # Convert filters
         filters_dict = None
-        if search_request.filters:
+        if request.filters:
             filters_dict = {
                 k: v
                 for k, v in {
-                    "language": search_request.filters.language,
-                    "chunk_type": search_request.filters.chunk_type,
-                    "repository": search_request.filters.repository,
-                    "file_path": search_request.filters.file_path,
+                    "language": request.filters.language,
+                    "chunk_type": request.filters.chunk_type,
+                    "repository": request.filters.repository,
+                    "file_path": request.filters.file_path,
                 }.items()
                 if v is not None
             }
 
         # Execute lexical search
         results = await service.lexical.search(
-            query=search_request.query,
+            query=request.query,
             filters=filters_dict,
             limit=request.limit,
         )
@@ -365,11 +367,13 @@ async def lexical_search(
             "total_results": len(results),
         }
 
+    except HTTPException:
+        raise
     except ValueError as e:
         logger.error(f"Validation error in lexical search: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Request failed",
+            detail=str(e),
         )
     except Exception as e:
         logger.error(f"Lexical search failed: {e}", exc_info=True)
@@ -406,14 +410,14 @@ async def vector_search(
 
         # Convert filters
         filters_dict = None
-        if search_request.filters:
+        if request.filters:
             filters_dict = {
                 k: v
                 for k, v in {
-                    "language": search_request.filters.language,
-                    "chunk_type": search_request.filters.chunk_type,
-                    "repository": search_request.filters.repository,
-                    "file_path": search_request.filters.file_path,
+                    "language": request.filters.language,
+                    "chunk_type": request.filters.chunk_type,
+                    "repository": request.filters.repository,
+                    "file_path": request.filters.file_path,
                 }.items()
                 if v is not None
             }
@@ -447,11 +451,13 @@ async def vector_search(
             "embedding_domain": request.embedding_domain,
         }
 
+    except HTTPException:
+        raise
     except ValueError as e:
         logger.error(f"Validation error in vector search: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Request failed",
+            detail=str(e),
         )
     except Exception as e:
         logger.error(f"Vector search failed: {e}", exc_info=True)
