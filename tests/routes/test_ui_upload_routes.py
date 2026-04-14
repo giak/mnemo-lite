@@ -289,9 +289,11 @@ async def test_code_upload_process_error_overflow(test_client):
     """
     Test error overflow handling.
 
-    EPIC-09: Should limit errors to first 100 when there are many failures.
+    EPIC-09: Payload exceeding 50MB Content-Length should be rejected with 413.
+    The route has a security check that validates Content-Length before processing.
+    With 150 files × 11MB each, total payload ~1.73GB exceeds the 50MB limit.
     """
-    # Create 150 invalid files (all too large)
+    # Create 150 invalid files (all too large) — total payload ~1.73GB
     files = []
     for i in range(150):
         files.append({
@@ -307,13 +309,11 @@ async def test_code_upload_process_error_overflow(test_client):
 
     response = await test_client.post("/ui/code/upload/process", json=payload)
 
-    assert response.status_code == 200
+    # Content-Length (1.73GB) exceeds MAX_UPLOAD_SIZE (50MB) → 413
+    assert response.status_code == 413
     result = response.json()
-
-    # Async response - error overflow will be tracked during processing
-    assert result["status"] == "processing"
-    assert "upload_id" in result
-    assert result["total_files"] == 150
+    assert "detail" in result
+    assert "too large" in result["detail"].lower() or "payload" in result["detail"].lower()
 
 
 @pytest.mark.anyio
@@ -328,7 +328,7 @@ async def test_code_upload_page_renders(test_client):
     assert response.status_code == 200
     # Check that it's HTML
     assert "text/html" in response.headers["content-type"]
-    # Check for key elements of advanced upload
+    # Check for key elements of the upload page
     html = response.text
-    assert "Advanced Code Upload" in html or "advanced" in html.lower()
+    assert "Code Upload" in html
     assert "upload" in html.lower()

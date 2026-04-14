@@ -112,7 +112,7 @@ services:
       - ./scripts:/app/scripts
       - ./db/migrations:/app/db/migrations:ro
       - ./tests:/app/tests
-      - ./ap./api/templates:/app/templates
+      - ./api/templates:/app/templates
       - ./.claude:/app/.claude:ro
       - ${CLAUDE_PROJECTS_DIR:-/home/giak/.claude/projects}:/host/.claude/projects:ro
       - /home/giak/projects:/external/projects:ro

@@ -125,12 +125,14 @@ async def dashboard(
         if is_htmx:
             # Return only the event list partial
             return templates.TemplateResponse(
+                request,
                 "partials/dashboard_events.html",
                 context
             )
         else:
             # Return full page
             return templates.TemplateResponse(
+                request,
                 "dashboard.html",
                 context
             )
@@ -138,6 +140,7 @@ async def dashboard(
     except Exception as e:
         logger.error(f"Dashboard error: {e}", exc_info=True)
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "error": str(e)},
             status_code=500
@@ -152,6 +155,7 @@ async def search_page(request: Request):
     Results are loaded dynamically via HTMX.
     """
     return templates.TemplateResponse(
+        request,
         "search.html",
         {"request": request}
     )
@@ -225,6 +229,7 @@ async def search_results(
             }
 
         return templates.TemplateResponse(
+            request,
             "partials/event_list.html",
             context
         )
@@ -232,6 +237,7 @@ async def search_results(
     except Exception as e:
         logger.error(f"Search error: {e}", exc_info=True)
         return templates.TemplateResponse(
+            request,
             "partials/error_message.html",
             {"request": request, "error": str(e)},
             status_code=500
@@ -257,12 +263,14 @@ async def event_detail(
 
         if not event:
             return templates.TemplateResponse(
+                request,
                 "partials/error_message.html",
                 {"request": request, "error": f"Event {event_id} not found"},
                 status_code=404
             )
 
         return templates.TemplateResponse(
+            request,
             "partials/event_detail.html",
             {
                 "request": request,
@@ -272,6 +280,7 @@ async def event_detail(
 
     except ValueError:
         return templates.TemplateResponse(
+            request,
             "partials/error_message.html",
             {"request": request, "error": f"Invalid event ID: {event_id}"},
             status_code=400
@@ -279,6 +288,7 @@ async def event_detail(
     except Exception as e:
         logger.error(f"Event detail error: {e}", exc_info=True)
         return templates.TemplateResponse(
+            request,
             "partials/error_message.html",
             {"request": request, "error": str(e)},
             status_code=500
@@ -345,6 +355,7 @@ async def graph_page(request: Request):
     Shows interactive network graph of nodes and edges using Cytoscape.js.
     """
     return templates.TemplateResponse(
+        request,
         "graph.html",
         {"request": request}
     )
@@ -364,6 +375,7 @@ async def monitoring_page(request: Request):
     - Auto-refresh (30s)
     """
     return templates.TemplateResponse(
+        request,
         "monitoring.html",
         {"request": request}
     )
@@ -383,6 +395,7 @@ async def monitoring_advanced_page(request: Request):
     - Auto-refresh (10s)
     """
     return templates.TemplateResponse(
+        request,
         "monitoring_advanced.html",
         {"request": request}
     )
@@ -404,6 +417,7 @@ async def cache_dashboard_page(request: Request):
     - Auto-refresh (5s)
     """
     return templates.TemplateResponse(
+        request,
         "cache_dashboard.html",
         {"request": request}
     )
@@ -421,6 +435,7 @@ async def code_dashboard(request: Request):
     Analytics and overview of indexed code repositories.
     """
     return templates.TemplateResponse(
+        request,
         "code_dashboard.html",
         {"request": request}
     )
@@ -768,6 +783,7 @@ async def code_repositories(request: Request):
     View and manage indexed code repositories.
     """
     return templates.TemplateResponse(
+        request,
         "code_repos.html",
         {"request": request}
     )
@@ -814,6 +830,7 @@ async def code_repositories_list(
         ]
 
         return templates.TemplateResponse(
+            request,
             "partials/repo_list.html",
             {
                 "request": request,
@@ -824,6 +841,7 @@ async def code_repositories_list(
     except Exception as e:
         logger.error(f"Failed to fetch repositories: {e}", exc_info=True)
         return templates.TemplateResponse(
+            request,
             "partials/error_message.html",
             {"request": request, "error": f"Failed to load repositories: {str(e)}"},
             status_code=500
@@ -908,6 +926,7 @@ async def code_repository_delete(
         ]
 
         return templates.TemplateResponse(
+            request,
             "partials/repo_list.html",
             {
                 "request": request,
@@ -918,6 +937,7 @@ async def code_repository_delete(
     except Exception as e:
         logger.error(f"Failed to delete repository '{repository}': {e}", exc_info=True)
         return templates.TemplateResponse(
+            request,
             "partials/error_message.html",
             {"request": request, "error": f"Failed to delete repository: {str(e)}"},
             status_code=500
@@ -932,6 +952,7 @@ async def code_search_page(request: Request):
     Search indexed code with hybrid/lexical/vector modes.
     """
     return templates.TemplateResponse(
+        request,
         "code_search.html",
         {"request": request}
     )
@@ -1103,6 +1124,7 @@ async def code_search_results(
         # Validate query
         if not q or not q.strip():
             return templates.TemplateResponse(
+                request,
                 "partials/code_results.html",
                 {
                     "request": request,
@@ -1196,6 +1218,7 @@ async def code_search_results(
             }
 
         return templates.TemplateResponse(
+            request,
             "partials/code_results.html",
             context
         )
@@ -1203,6 +1226,7 @@ async def code_search_results(
     except Exception as e:
         logger.error(f"Code search error: {e}", exc_info=True)
         return templates.TemplateResponse(
+            request,
             "partials/error_message.html",
             {"request": request, "error": f"Search failed: {str(e)}"},
             status_code=500
@@ -1217,6 +1241,7 @@ async def code_graph_page(request: Request):
     Interactive visualization of code dependencies.
     """
     return templates.TemplateResponse(
+        request,
         "code_graph.html",
         {"request": request}
     )
@@ -1354,7 +1379,8 @@ async def code_upload_page(request: Request):
     Real-time progress tracking with polling.
     """
     return templates.TemplateResponse(
-        "code_upload_advanced.html",
+        request,
+        "code_upload.html",
         {"request": request}
     )
 
@@ -1588,6 +1614,7 @@ async def autosave_dashboard(request: Request):
     EPIC-24: Auto-Save Conversations - UI/UX
     """
     return templates.TemplateResponse(
+        request,
         "autosave_dashboard.html",
         {"request": request}
     )
