@@ -195,7 +195,7 @@ class TestGraphTraversalIntegration:
 
         # Build graph
         graph_service = GraphConstructionService(test_engine)
-        stats = await graph_service.build_graph_for_repository("test_traversal", "python")
+        stats = await graph_service.build_graph_for_repository("test_traversal", languages=["python"])
 
         print(f"Graph created: {stats.total_nodes} nodes, {stats.total_edges} edges")
 

@@ -101,10 +101,20 @@ async def test_fallback_on_strict_threshold_returns_results(
     mock_query_fallback = text("SELECT ... ORDER BY dist")
     mock_params_fallback = {"vec_query": str(query_vector), "lim": 10, "off": 0}
 
+    # Mock count query result
+    mock_count_result = AsyncMock(spec=Result)
+    mock_count_mappings = MagicMock()
+    mock_count_mappings.first.return_value = {"total": 1}
+    mock_count_result.mappings.return_value = mock_count_mappings
+
     mock_builder.build_search_vector_query.side_effect = [
         (mock_query_strict, mock_params_strict),
         (mock_query_fallback, mock_params_fallback),
     ]
+    mock_builder.build_count_query.return_value = (text("SELECT COUNT(*)"), {})
+
+    # Third execute call is for the count query
+    mock_connection.execute.side_effect = [mock_result_empty, mock_result_fallback, mock_count_result]
 
     # Créer repository et injecter le builder mocké
     repository = EventRepository(engine=mock_engine)
@@ -154,6 +164,14 @@ async def test_no_fallback_with_metadata_filter(
     mock_query = text("SELECT ... WHERE metadata @> ...")
     mock_params = {"vec_query": str(query_vector), "md_filter": json.dumps(metadata), "dist_threshold": 0.3}
     mock_builder.build_search_vector_query.return_value = (mock_query, mock_params)
+    mock_builder.build_count_query.return_value = (text("SELECT COUNT(*)"), {})
+
+    # Mock count result
+    mock_count_result = AsyncMock(spec=Result)
+    mock_count_mappings = MagicMock()
+    mock_count_mappings.first.return_value = {"total": 0}
+    mock_count_result.mappings.return_value = mock_count_mappings
+    mock_connection.execute.side_effect = [mock_result_empty, mock_count_result]
 
     repository = EventRepository(engine=mock_engine)
     repository.query_builder = mock_builder
@@ -169,7 +187,6 @@ async def test_no_fallback_with_metadata_filter(
     # Vérifications
     assert len(events) == 0, "Devrait retourner 0 résultats (pas de fallback)"
     assert mock_builder.build_search_vector_query.call_count == 1, "Builder appelé 1 seule fois"
-    assert mock_connection.execute.call_count == 1, "Execute appelé 1 seule fois"
 
 
 # === Test 3: Pas de fallback si time filter ===
@@ -196,6 +213,14 @@ async def test_no_fallback_with_time_filter(
     mock_query = text("SELECT ... WHERE timestamp >= ...")
     mock_params = {"vec_query": str(query_vector), "ts_start": ts_start, "dist_threshold": 0.3}
     mock_builder.build_search_vector_query.return_value = (mock_query, mock_params)
+    mock_builder.build_count_query.return_value = (text("SELECT COUNT(*)"), {})
+
+    # Mock count result
+    mock_count_result = AsyncMock(spec=Result)
+    mock_count_mappings = MagicMock()
+    mock_count_mappings.first.return_value = {"total": 0}
+    mock_count_result.mappings.return_value = mock_count_mappings
+    mock_connection.execute.side_effect = [mock_result_empty, mock_count_result]
 
     repository = EventRepository(engine=mock_engine)
     repository.query_builder = mock_builder
@@ -211,7 +236,6 @@ async def test_no_fallback_with_time_filter(
     # Vérifications
     assert len(events) == 0, "Devrait retourner 0 résultats (pas de fallback)"
     assert mock_builder.build_search_vector_query.call_count == 1
-    assert mock_connection.execute.call_count == 1
 
 
 # === Test 4: Désactivation du fallback ===
@@ -237,6 +261,14 @@ async def test_fallback_disabled_with_enable_fallback_false(
     mock_query = text("SELECT ... WHERE dist <= 0.3")
     mock_params = {"vec_query": str(query_vector), "dist_threshold": 0.3}
     mock_builder.build_search_vector_query.return_value = (mock_query, mock_params)
+    mock_builder.build_count_query.return_value = (text("SELECT COUNT(*)"), {})
+
+    # Mock count result
+    mock_count_result = AsyncMock(spec=Result)
+    mock_count_mappings = MagicMock()
+    mock_count_mappings.first.return_value = {"total": 0}
+    mock_count_result.mappings.return_value = mock_count_mappings
+    mock_connection.execute.side_effect = [mock_result_empty, mock_count_result]
 
     repository = EventRepository(engine=mock_engine)
     repository.query_builder = mock_builder
@@ -276,6 +308,14 @@ async def test_warning_on_strict_threshold(
     mock_query = text("SELECT ...")
     mock_params = {"vec_query": str(query_vector), "dist_threshold": 0.4}
     mock_builder.build_search_vector_query.return_value = (mock_query, mock_params)
+    mock_builder.build_count_query.return_value = (text("SELECT COUNT(*)"), {})
+
+    # Mock count result
+    mock_count_result = AsyncMock(spec=Result)
+    mock_count_mappings = MagicMock()
+    mock_count_mappings.first.return_value = {"total": 1}
+    mock_count_result.mappings.return_value = mock_count_mappings
+    mock_connection.execute.side_effect = [mock_result, mock_count_result]
 
     repository = EventRepository(engine=mock_engine)
     repository.query_builder = mock_builder
@@ -316,6 +356,14 @@ async def test_warning_on_high_threshold(
     mock_query = text("SELECT ...")
     mock_params = {"vec_query": str(query_vector), "dist_threshold": 3.5}
     mock_builder.build_search_vector_query.return_value = (mock_query, mock_params)
+    mock_builder.build_count_query.return_value = (text("SELECT COUNT(*)"), {})
+
+    # Mock count result
+    mock_count_result = AsyncMock(spec=Result)
+    mock_count_mappings = MagicMock()
+    mock_count_mappings.first.return_value = {"total": 1}
+    mock_count_result.mappings.return_value = mock_count_mappings
+    mock_connection.execute.side_effect = [mock_result, mock_count_result]
 
     repository = EventRepository(engine=mock_engine)
     repository.query_builder = mock_builder
@@ -388,6 +436,14 @@ async def test_no_fallback_if_threshold_none(
     mock_query = text("SELECT ... ORDER BY dist")
     mock_params = {"vec_query": str(query_vector), "lim": 10, "off": 0}
     mock_builder.build_search_vector_query.return_value = (mock_query, mock_params)
+    mock_builder.build_count_query.return_value = (text("SELECT COUNT(*)"), {})
+
+    # Mock count result
+    mock_count_result = AsyncMock(spec=Result)
+    mock_count_mappings = MagicMock()
+    mock_count_mappings.first.return_value = {"total": 1}
+    mock_count_result.mappings.return_value = mock_count_mappings
+    mock_connection.execute.side_effect = [mock_result, mock_count_result]
 
     repository = EventRepository(engine=mock_engine)
     repository.query_builder = mock_builder
@@ -402,7 +458,6 @@ async def test_no_fallback_if_threshold_none(
     # Vérifications
     assert len(events) == 1
     assert mock_builder.build_search_vector_query.call_count == 1, "Builder appelé 1 seule fois"
-    assert mock_connection.execute.call_count == 1, "Pas de fallback nécessaire"
 
 
 # === Test 9: Logging du fallback ===
@@ -440,6 +495,14 @@ async def test_fallback_logs_warning(
         (mock_query_1, mock_params_1),
         (mock_query_2, mock_params_2),
     ]
+    mock_builder.build_count_query.return_value = (text("SELECT COUNT(*)"), {})
+
+    # Mock count result
+    mock_count_result = AsyncMock(spec=Result)
+    mock_count_mappings = MagicMock()
+    mock_count_mappings.first.return_value = {"total": 1}
+    mock_count_result.mappings.return_value = mock_count_mappings
+    mock_connection.execute.side_effect = [mock_result_empty, mock_result_fallback, mock_count_result]
 
     repository = EventRepository(engine=mock_engine)
     repository.query_builder = mock_builder

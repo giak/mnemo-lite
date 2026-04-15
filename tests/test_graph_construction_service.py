@@ -190,7 +190,7 @@ class TestGraphConstructionService:
         """Test building graph for empty repository returns empty stats."""
         service = GraphConstructionService(test_engine)
 
-        stats = await service.build_graph_for_repository("nonexistent_repo", "python")
+        stats = await service.build_graph_for_repository("nonexistent_repo", languages=["python"])
 
         assert isinstance(stats, GraphStats)
         assert stats.repository == "nonexistent_repo"
@@ -252,13 +252,13 @@ class TestGraphConstructionIntegration:
         """Test full graph construction with real chunks in database."""
         service = GraphConstructionService(test_engine)
 
-        stats = await service.build_graph_for_repository("test_repo", "python")
+        stats = await service.build_graph_for_repository("test_repo", languages=["python"])
 
         # Verify statistics
         # Note: May have nodes from previous tests (db not cleaned between tests)
         assert stats.total_nodes >= 2, f"Should create at least 2 nodes, got {stats.total_nodes}"
         assert stats.total_edges >= 0, "Should have at least 0 edges"
-        assert stats.nodes_by_type.get("function", 0) >= 2, "Should have at least 2 function nodes"
+        assert stats.nodes_by_type.get("Function", 0) >= 2, "Should have at least 2 Function nodes"
         assert stats.construction_time_seconds > 0
         assert stats.resolution_accuracy is not None
         assert stats.resolution_accuracy == 100.0, f"Should have 100% resolution accuracy, got {stats.resolution_accuracy}"

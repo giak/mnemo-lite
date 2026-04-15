@@ -215,18 +215,19 @@ class TestCascadeCache:
 
     @pytest.mark.anyio
     async def test_invalidate_repository(self, cascade_cache, l1_cache, l2_cache):
-        """Test invalidate_repository clears entire cache."""
+        """Test invalidate_repository clears repo-specific cache entries."""
         repository = "my-repo"
 
-        # Mock L2 flush_pattern
+        # Mock L1 invalidate_by_prefix and L2 flush_pattern
+        l1_cache.invalidate_by_prefix = MagicMock(return_value=5)
         l2_cache.flush_pattern = AsyncMock()
 
         # Invalidate repository
         await cascade_cache.invalidate_repository(repository)
 
-        # Assertions
-        l1_cache.clear.assert_called_once()
-        l2_cache.flush_pattern.assert_called_once_with("chunks:*")
+        # Assertions — invalidate_repository now uses per-repo prefix invalidation
+        l1_cache.invalidate_by_prefix.assert_called_once_with(repository)
+        l2_cache.flush_pattern.assert_called_once_with(f"chunks:{repository}:*")
 
     @pytest.mark.anyio
     async def test_combined_hit_rate_calculation(self, cascade_cache, l1_cache, l2_cache):

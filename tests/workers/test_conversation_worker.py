@@ -14,6 +14,7 @@ async def test_process_message_success():
     message = ConversationMessage(
         id="1234-0",
         user_message="Test user",
+        user_message_clean="Test user",
         assistant_message="Test assistant",
         project_name="test-project",
         session_id="test-session",
@@ -45,6 +46,7 @@ async def test_process_message_retry_on_failure():
     message = ConversationMessage(
         id="1234-0",
         user_message="Test",
+        user_message_clean="Test",
         assistant_message="Response",
         project_name="test",
         session_id="sess",

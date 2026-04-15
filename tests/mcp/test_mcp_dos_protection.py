@@ -14,6 +14,22 @@ import time
 from typing import List
 
 import os
+
+# Skip all tests in this module if MCP server is not reachable
+def _check_mcp_available():
+    """Check if MCP server is available for integration testing."""
+    try:
+        import urllib.request
+        url = os.getenv("MCP_URL", "http://localhost:8002/mcp").replace("/mcp", "/health")
+        req = urllib.request.Request(url, method="GET")
+        urllib.request.urlopen(req, timeout=2)
+        return True
+    except Exception:
+        return False
+
+MCP_AVAILABLE = _check_mcp_available()
+pytestmark = pytest.mark.skipif(not MCP_AVAILABLE, reason="MCP server not available")
+
 MCP_URL = os.getenv("MCP_URL", "http://localhost:8002/mcp")
 HEADERS = {
     "Content-Type": "application/json",

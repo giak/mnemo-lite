@@ -20,6 +20,18 @@ sys.path.insert(0, '/app')
 from routes.conversations_routes import parse_claude_transcripts
 
 
+@pytest.fixture(autouse=True)
+def _clean_dedup_state():
+    """Remove deduplication state file before each test to prevent cross-test contamination."""
+    state_file = Path("/tmp/mnemo-conversations-state.json")
+    if state_file.exists():
+        state_file.unlink()
+    yield
+    # Cleanup after test too
+    if state_file.exists():
+        state_file.unlink()
+
+
 class TestConversationParsing:
     """Tests unitaires pour le parsing des transcripts Claude Code."""
 
@@ -52,12 +64,16 @@ class TestConversationParsing:
             for msg in messages:
                 f.write(json.dumps(msg) + '\n')
 
+        # Make file appear older to bypass 120s cooldown filter
+        import os
+        os.utime(transcript_file, (transcript_file.stat().st_mtime - 130, transcript_file.stat().st_mtime - 130))
+
         # Parser
         conversations = parse_claude_transcripts(projects_dir=str(tmp_path))
 
         # Vérifications
         assert len(conversations) == 1
-        user_text, assistant_text, session_id, timestamp = conversations[0]
+        user_text, assistant_text, session_id, timestamp, project_name = conversations[0]
         assert "capitale de la France" in user_text
         assert "Paris" in assistant_text
         assert session_id == "test-session"
@@ -88,10 +104,14 @@ class TestConversationParsing:
             for msg in messages:
                 f.write(json.dumps(msg) + '\n')
 
+        # Make file appear older to bypass 120s cooldown filter
+        import os
+        os.utime(transcript_file, (transcript_file.stat().st_mtime - 130, transcript_file.stat().st_mtime - 130))
+
         conversations = parse_claude_transcripts(projects_dir=str(tmp_path))
 
         assert len(conversations) == 1
-        user_text, assistant_text, session_id, timestamp = conversations[0]
+        user_text, assistant_text, session_id, timestamp, project_name = conversations[0]
         assert "Calcule" in user_text
         assert "2+2 = 4" in assistant_text
         assert "[Thinking:" in assistant_text  # Le thinking doit être inclus
@@ -112,6 +132,10 @@ class TestConversationParsing:
         with open(transcript_file, 'w') as f:
             for msg in messages:
                 f.write(json.dumps(msg) + '\n')
+
+        # Make file appear older to bypass 120s cooldown filter
+        import os
+        os.utime(transcript_file, (transcript_file.stat().st_mtime - 130, transcript_file.stat().st_mtime - 130))
 
         conversations = parse_claude_transcripts(projects_dir=str(tmp_path))
 
@@ -135,6 +159,10 @@ class TestConversationParsing:
             for msg in messages:
                 f.write(json.dumps(msg) + '\n')
 
+        # Make file appear older to bypass 120s cooldown filter
+        import os
+        os.utime(transcript_file, (transcript_file.stat().st_mtime - 130, transcript_file.stat().st_mtime - 130))
+
         conversations = parse_claude_transcripts(projects_dir=str(tmp_path))
 
         # Devrait n'avoir qu'une seule conversation (dédupliquée)
@@ -154,6 +182,10 @@ class TestConversationParsing:
         with open(transcript_file, 'w') as f:
             for msg in messages:
                 f.write(json.dumps(msg) + '\n')
+
+        # Make file appear older to bypass 120s cooldown filter
+        import os
+        os.utime(transcript_file, (transcript_file.stat().st_mtime - 130, transcript_file.stat().st_mtime - 130))
 
         conversations = parse_claude_transcripts(projects_dir=str(tmp_path))
 
@@ -178,6 +210,10 @@ class TestConversationParsing:
             for msg in messages:
                 f.write(json.dumps(msg) + '\n')
 
+        # Make file appear older to bypass 120s cooldown filter
+        import os
+        os.utime(normal_file, (normal_file.stat().st_mtime - 130, normal_file.stat().st_mtime - 130))
+
         conversations = parse_claude_transcripts(projects_dir=str(tmp_path))
 
         # Seul le transcript normal devrait être traité
@@ -193,6 +229,10 @@ class TestConversationParsing:
             f.write('{"message": {"role": "user", "content": [{"type": "text", "text": "Valid message"}]}}\n')
             f.write('{"message": {"role": "assistant", "content": [{"type": "text", "text": "Valid response"}]}}\n')
 
+        # Make file appear older to bypass 120s cooldown filter
+        import os
+        os.utime(transcript_file, (transcript_file.stat().st_mtime - 130, transcript_file.stat().st_mtime - 130))
+
         # Ne devrait pas crasher, juste ignorer les lignes invalides
         conversations = parse_claude_transcripts(projects_dir=str(tmp_path))
 
@@ -202,20 +242,20 @@ class TestConversationParsing:
 class TestConversationImportAPI:
     """Tests d'intégration pour l'API d'import."""
 
-    @pytest.mark.asyncio
-    async def test_import_endpoint_exists(self):
-        """Test que l'endpoint /v1/conversations/import existe."""
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_save_endpoint_exists(self):
+        """Test que l'endpoint /v1/conversations/save existe."""
         from fastapi.testclient import TestClient
         from main import app
 
         client = TestClient(app)
-        response = client.post("/v1/conversations/import")
+        # POST without required body params → should get 422 (validation error)
+        # not 404 (endpoint not found)
+        response = client.post("/v1/conversations/save")
 
-        # Devrait retourner 200 (même si aucune conversation)
-        assert response.status_code == 200
-        data = response.json()
-        assert "imported" in data
-        assert "skipped" in data
+        # 422 = endpoint exists but missing required params
+        # 404 = endpoint doesn't exist
+        assert response.status_code in (200, 422), f"Expected 200 or 422, got {response.status_code}"
 
 
 class TestEndToEnd:
@@ -256,13 +296,17 @@ class TestEndToEnd:
             for msg in messages:
                 f.write(json.dumps(msg) + '\n')
 
+        # Make file appear older to bypass 120s cooldown filter
+        import os
+        os.utime(transcript_file, (transcript_file.stat().st_mtime - 130, transcript_file.stat().st_mtime - 130))
+
         # 2. Parser les conversations
         conversations = parse_claude_transcripts(projects_dir=str(tmp_path))
 
         # 3. Vérifications
         assert len(conversations) == 3, f"Expected 3 conversations, got {len(conversations)}"
 
-        for i, (user_text, assistant_text, session_id, timestamp) in enumerate(conversations):
+        for i, (user_text, assistant_text, session_id, timestamp, project_name) in enumerate(conversations):
             expected_user, expected_assistant = conversations_data[i]
 
             assert expected_user in user_text, f"User text mismatch for conversation {i}"

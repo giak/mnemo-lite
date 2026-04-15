@@ -63,8 +63,8 @@ def test_initialization():
     assert service.device == "cpu"
     assert service._text_model is None  # Lazy loading
     assert service._code_model is None  # Lazy loading
-    assert service._text_load_attempted is False
-    assert service._code_load_attempted is False
+    assert service.text_circuit_breaker is not None  # Circuit breaker for error tracking
+    assert service.code_circuit_breaker is not None
 
 
 def test_initialization_with_env_defaults():
@@ -95,7 +95,7 @@ async def test_lazy_loading_text_model(dual_service, mock_sentence_transformer):
 
     # Model should be loaded now
     assert dual_service._text_model is not None
-    assert dual_service._text_load_attempted is True
+    assert dual_service._text_model is mock_sentence_transformer
     assert "text" in result
     assert len(result["text"]) == 768
 
@@ -115,7 +115,7 @@ async def test_lazy_loading_code_model(dual_service, mock_sentence_transformer):
 
     # Model should be loaded now
     assert dual_service._code_model is not None
-    assert dual_service._code_load_attempted is True
+    assert dual_service._code_model is mock_sentence_transformer
     assert "code" in result
     assert len(result["code"]) == 768
 
@@ -286,8 +286,8 @@ async def test_ram_usage_after_text_load(dual_service, mock_sentence_transformer
 @pytest.mark.anyio
 async def test_ram_budget_safeguard_blocks_code_model(dual_service, mock_sentence_transformer):
     """Test RAM budget safeguard prevents CODE model loading when budget exceeded."""
-    # Mock high RAM usage
-    with patch.object(dual_service, 'get_ram_usage_mb', return_value={'process_rss_mb': 950}):
+    # Mock high RAM usage (threshold is 6000 MB)
+    with patch.object(dual_service, 'get_ram_usage_mb', return_value={'process_rss_mb': 6500}):
         with pytest.raises(RuntimeError, match="RAM budget exceeded"):
             await dual_service.generate_embedding(
                 "def test(): pass",
@@ -374,8 +374,16 @@ async def test_model_loading_failure_text(dual_service):
         with pytest.raises(RuntimeError, match="Failed to load TEXT model"):
             await dual_service.generate_embedding("test", domain=EmbeddingDomain.TEXT)
 
-    # Second attempt should fail immediately (load_attempted = True)
-    with pytest.raises(RuntimeError, match="Text model loading failed previously"):
+    # Need enough failures to trip the circuit breaker (threshold=3)
+    for _ in range(2):  # Already 1 failure, need 2 more to reach threshold=3
+        with patch("services.dual_embedding_service.SentenceTransformer", side_effect=Exception("Model not found")):
+            try:
+                await dual_service.generate_embedding("test", domain=EmbeddingDomain.TEXT)
+            except RuntimeError:
+                pass
+
+    # Now circuit breaker should be OPEN
+    with pytest.raises(RuntimeError, match="TEXT embedding circuit breaker is"):
         await dual_service.generate_embedding("test", domain=EmbeddingDomain.TEXT)
 
 
@@ -388,8 +396,17 @@ async def test_model_loading_failure_code(dual_service):
             with pytest.raises(RuntimeError, match="Failed to load CODE model"):
                 await dual_service.generate_embedding("def test(): pass", domain=EmbeddingDomain.CODE)
 
-    # Second attempt should fail immediately
-    with pytest.raises(RuntimeError, match="Code model loading failed previously"):
+    # Need enough failures to trip the circuit breaker (threshold=3)
+    for _ in range(2):  # Already 1 failure, need 2 more to reach threshold=3
+        with patch.object(dual_service, 'get_ram_usage_mb', return_value={'process_rss_mb': 500}):
+            with patch("services.dual_embedding_service.SentenceTransformer", side_effect=Exception("Model not found")):
+                try:
+                    await dual_service.generate_embedding("def test(): pass", domain=EmbeddingDomain.CODE)
+                except RuntimeError:
+                    pass
+
+    # Now circuit breaker should be OPEN
+    with pytest.raises(RuntimeError, match="CODE embedding circuit breaker is"):
         await dual_service.generate_embedding("def test(): pass", domain=EmbeddingDomain.CODE)
 
 

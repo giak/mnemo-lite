@@ -104,9 +104,9 @@ async def test_streaming_pipeline_processes_all_files(tmp_path, clean_db):
         files.append(test_file)
 
     # Run streaming pipeline
-    from scripts.index_directory import run_streaming_pipeline
+    from scripts.index_directory import run_streaming_pipeline_sequential
 
-    stats = await run_streaming_pipeline(
+    stats = await run_streaming_pipeline_sequential(
         directory=tmp_path,
         repository="test_multi",
         verbose=False,
@@ -140,9 +140,9 @@ async def test_streaming_pipeline_continues_on_error(tmp_path, clean_db):
     valid2.write_text("export function good2() { return 2; }")
 
     # Run pipeline
-    from scripts.index_directory import run_streaming_pipeline
+    from scripts.index_directory import run_streaming_pipeline_sequential
 
-    stats = await run_streaming_pipeline(
+    stats = await run_streaming_pipeline_sequential(
         directory=tmp_path,
         repository="test_errors",
         verbose=False,
@@ -178,8 +178,8 @@ async def test_graph_construction_after_streaming(tmp_path, clean_db):
     """)
 
     # Run streaming pipeline (creates chunks)
-    from scripts.index_directory import run_streaming_pipeline
-    await run_streaming_pipeline(tmp_path, "test_graph", verbose=False, engine=clean_db)
+    from scripts.index_directory import run_streaming_pipeline_sequential
+    await run_streaming_pipeline_sequential(tmp_path, "test_graph", verbose=False, engine=clean_db)
 
     # Run graph construction
     from scripts.index_directory import build_graph_phase

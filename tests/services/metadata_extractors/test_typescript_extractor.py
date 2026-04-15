@@ -272,7 +272,9 @@ function myFunction() {
 
     calls = await ts_extractor.extract_calls(function_node, source_code)
 
-    assert 'this.service.fetchData' in calls
+    # EPIC-27: _clean_call_name extracts last identifier only
+    # this.service.fetchData() → 'fetchData'
+    assert 'fetchData' in calls
     assert len(calls) == 1
 
 
@@ -289,9 +291,10 @@ function myFunction() {
 
     calls = await ts_extractor.extract_calls(function_node, source_code)
 
-    # Should extract the chain
-    assert 'this.userService.getUser' in calls or 'getUser' in calls
-    assert 'then' in calls or 'data.save' in calls
+    # EPIC-27: _clean_call_name extracts last identifier only
+    # this.userService.getUser() → 'getUser', .then() → 'then', data.save() → 'save'
+    assert 'getUser' in calls
+    assert 'save' in calls or 'then' in calls
     # At least 2 calls should be found
     assert len(calls) >= 2
 
@@ -359,8 +362,10 @@ class MyClass {
 
     calls = await ts_extractor.extract_calls(class_node, source_code)
 
-    assert 'this.helperMethod' in calls
-    assert 'this.anotherHelper' in calls
+    # EPIC-27: _clean_call_name extracts last identifier only
+    # this.helperMethod() → 'helperMethod', this.anotherHelper() → 'anotherHelper'
+    assert 'helperMethod' in calls
+    assert 'anotherHelper' in calls
     assert len(calls) >= 2
 
 

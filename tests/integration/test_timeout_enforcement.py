@@ -78,7 +78,7 @@ class TestDualEmbeddingServiceTimeout:
             with patch.object(
                 service._text_model,
                 'encode',
-                side_effect=lambda text: time.sleep(20)  # Simulate slow encode
+                side_effect=lambda text, **kwargs: time.sleep(20)  # Simulate slow encode (accept **kwargs like convert_to_numpy)
             ):
                 # Override timeout to 1 second for fast test
                 original_timeout = get_timeout("embedding_generation_single")
@@ -188,7 +188,7 @@ class TestGraphConstructionServiceTimeout:
                     with pytest.raises(TimeoutError) as exc_info:
                         await service.build_graph_for_repository(
                             repository="test-repo",
-                            language="python"
+                            languages=["python"]
                         )
 
                     error = exc_info.value
@@ -209,7 +209,7 @@ class TestGraphTraversalServiceTimeout:
         service = GraphTraversalService(async_engine, redis_cache=None)
 
         # Mock the _execute_recursive_traversal to simulate slow operation
-        async def slow_traversal(start, direction, relationship, max_depth):
+        async def slow_traversal(start_node_id, direction, relationship, max_depth):
             await asyncio.sleep(10)  # Simulate slow traversal
             return []
 

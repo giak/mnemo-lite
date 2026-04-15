@@ -160,7 +160,10 @@ def reverse_string(text: str) -> str:
         )
 
         # Search with embedding
-        search_service = HybridCodeSearchService()
+        # HybridCodeSearchService requires engine; use a mock if no real DB
+        from unittest.mock import MagicMock
+        mock_engine = MagicMock()
+        search_service = HybridCodeSearchService(engine=mock_engine)
         results = await search_service.search_hybrid(
             query="validate email address",
             embedding_text=result['text'],
@@ -198,7 +201,9 @@ def reverse_string(text: str) -> str:
             EmbeddingDomain.TEXT
         )
 
-        search_service = HybridCodeSearchService()
+        from unittest.mock import MagicMock
+        mock_engine = MagicMock()
+        search_service = HybridCodeSearchService(engine=mock_engine)
         results = await search_service.search_hybrid(
             query="string manipulation reverse",
             embedding_text=result['text'],
@@ -229,7 +234,9 @@ def reverse_string(text: str) -> str:
             EmbeddingDomain.TEXT
         )
 
-        search_service = HybridCodeSearchService()
+        from unittest.mock import MagicMock
+        mock_engine = MagicMock()
+        search_service = HybridCodeSearchService(engine=mock_engine)
 
         # Search with hybrid (lexical + semantic)
         results_hybrid = await search_service.search_hybrid(
@@ -268,7 +275,9 @@ class TestEPIC18RobustnessAndEdgeCases:
 
         Use case: Si génération embedding échoue, fallback sur BM25.
         """
-        search_service = HybridCodeSearchService()
+        from unittest.mock import MagicMock
+        mock_engine = MagicMock()
+        search_service = HybridCodeSearchService(engine=mock_engine)
 
         # Search WITHOUT embedding (lexical only)
         results = await search_service.search_hybrid(
@@ -367,7 +376,9 @@ class TestEPIC18PerformanceBenchmarks:
     async def test_search_latency_with_embeddings(self, test_repository):
         """Mesure la latency de recherche hybride complète."""
         embedding_service = DualEmbeddingService()
-        search_service = HybridCodeSearchService()
+        from unittest.mock import MagicMock
+        mock_engine = MagicMock()
+        search_service = HybridCodeSearchService(engine=mock_engine)
 
         query = "validate email address"
 
