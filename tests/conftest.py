@@ -4,6 +4,17 @@ import pytest
 import pytest_asyncio
 import logging
 
+# Force test environment so the ASGI lifespan uses TEST_DATABASE_URL
+# instead of DATABASE_URL (production). Without this, the lifespan
+# overwrites app.state.db_engine with a production engine, causing
+# test isolation failures (e.g. test_pagination seeing production data).
+# IMPORTANT: Use os.environ[...] not setdefault — the Docker container
+# already sets ENVIRONMENT=development, so setdefault is a no-op!
+os.environ["ENVIRONMENT"] = "test"
+
+# Disable rate limiting in tests (accumulates across suite → 429s)
+os.environ.setdefault("MNEMO_RATE_LIMIT_ENABLED", "false")
+
 # Add project root (/app inside container) to sys.path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
@@ -106,39 +117,29 @@ async def dual_embedding_service():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db(test_engine):
-    """Provide a clean database for each test."""
+    """Provide a clean database for each test.
+
+    Uses separate transactions for core and optional tables.
+    This is critical: if an optional table TRUNCATE fails (table doesn't
+    exist), PostgreSQL aborts the entire transaction — which would also
+    roll back the core table TRUNCATEs, leaving stale data in the DB
+    and causing test isolation failures.
+    """
     from sqlalchemy import text
+    # Core tables — always exist, TRUNCATE in their own transaction
+    # so failures in optional tables can't roll back these TRUNCATEs.
     async with test_engine.connect() as conn:
-        # Fast truncate with CASCADE (EPIC-22: added metrics and alerts tables)
-        # Use TRUNCATE only if tables exist (they may not exist in older test DBs)
-        await conn.execute(text("""
-            DO $$
-            BEGIN
-                TRUNCATE TABLE events, code_chunks, nodes, edges CASCADE;
-                -- EPIC-22 tables (may not exist in all test DBs yet)
-                IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'metrics') THEN
-                    TRUNCATE TABLE metrics CASCADE;
-                END IF;
-                IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'alerts') THEN
-                    TRUNCATE TABLE alerts CASCADE;
-                END IF;
-                -- EPIC-24 tables (may not exist in all test DBs yet)
-                IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'memories') THEN
-                    TRUNCATE TABLE memories CASCADE;
-                END IF;
-                -- Rich metadata tables (EPIC-27)
-                IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'detailed_metadata') THEN
-                    TRUNCATE TABLE detailed_metadata CASCADE;
-                END IF;
-                IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'computed_metrics') THEN
-                    TRUNCATE TABLE computed_metrics CASCADE;
-                END IF;
-                IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'edge_weights') THEN
-                    TRUNCATE TABLE edge_weights CASCADE;
-                END IF;
-            END $$;
-        """))
+        await conn.execute(text("TRUNCATE TABLE events, code_chunks, nodes, edges CASCADE"))
         await conn.commit()
+    # Optional tables — may not exist in all test DBs;
+    # each gets its own transaction so a failure doesn't affect others.
+    for table in ('metrics', 'alerts', 'memories', 'detailed_metadata', 'computed_metrics', 'edge_weights'):
+        try:
+            async with test_engine.connect() as conn:
+                await conn.execute(text(f'TRUNCATE TABLE {table} CASCADE'))
+                await conn.commit()
+        except Exception:
+            pass  # Table doesn't exist yet — safe to ignore
     yield test_engine
 
 
@@ -253,24 +254,49 @@ def timer():
 
 @pytest_asyncio.fixture
 async def test_client(clean_db):
-    """Test client with real database."""
+    """Test client with real database.
+
+    Uses FastAPI dependency_overrides to guarantee all routes use
+    the test engine and mock embedding service, regardless of what
+    the lifespan does to app.state. Also sets app.state for code
+    that accesses it directly (e.g. MetricsMiddleware).
+    """
     from main import app
     from httpx import AsyncClient, ASGITransport
-
-    # Override database engine
-    app.state.db_engine = clean_db
-
-    # Use mock embeddings for speed
+    from dependencies import get_db_engine, get_embedding_service
     from services.embedding_service import MockEmbeddingService
-    app.state.embedding_service = MockEmbeddingService(
-        model_name="mock",
-        dimension=768
-    )
 
-    # Create AsyncClient with ASGI transport for FastAPI app
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+    mock_service = MockEmbeddingService(model_name="mock", dimension=768)
+
+    # Set app.state for middleware and other direct access
+    app.state.db_engine = clean_db
+    app.state.embedding_service = mock_service
+
+    # Override FastAPI dependencies to guarantee test engine/service
+    # are used by all routes. This is the idiomatic FastAPI testing
+    # pattern and prevents the lifespan or other code from accidentally
+    # using a production engine.
+    def override_get_db_engine():
+        return clean_db
+
+    def override_get_embedding_service():
+        return mock_service
+
+    # Save existing overrides to restore later (avoids wiping overrides
+    # set by other fixtures or conftest layers).
+    _saved_overrides = app.dependency_overrides.copy()
+    app.dependency_overrides[get_db_engine] = override_get_db_engine
+    app.dependency_overrides[get_embedding_service] = override_get_embedding_service
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Re-override app.state after lifespan (defensive for direct access)
+            app.state.db_engine = clean_db
+            app.state.embedding_service = mock_service
+            yield client
+    finally:
+        app.dependency_overrides = _saved_overrides
 
 
 @pytest_asyncio.fixture
@@ -278,21 +304,35 @@ async def test_client_with_real_embeddings(clean_db):
     """Test client with real embeddings (for embedding integration tests)."""
     from main import app
     from httpx import AsyncClient, ASGITransport
-
-    # Override database engine
-    app.state.db_engine = clean_db
-
-    # Use real dual embedding service for these tests
+    from dependencies import get_db_engine, get_embedding_service, DualEmbeddingServiceAdapter
     from services.dual_embedding_service import DualEmbeddingService
-    app.state.embedding_service = DualEmbeddingService(
-        device="cpu",
-        dimension=768
-    )
 
-    # Create AsyncClient with ASGI transport for FastAPI app
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+    dual_service = DualEmbeddingService(device="cpu", dimension=768)
+    adapter = DualEmbeddingServiceAdapter(dual_service)
+
+    # Set app.state for middleware and other direct access
+    app.state.db_engine = clean_db
+    app.state.embedding_service = adapter
+
+    # Override FastAPI dependencies for guaranteed test isolation
+    def override_get_db_engine():
+        return clean_db
+
+    def override_get_embedding_service():
+        return adapter
+
+    # Save existing overrides to restore later
+    _saved_overrides = app.dependency_overrides.copy()
+    app.dependency_overrides[get_db_engine] = override_get_db_engine
+    app.dependency_overrides[get_embedding_service] = override_get_embedding_service
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            app.state.db_engine = clean_db
+            yield client
+    finally:
+        app.dependency_overrides = _saved_overrides
 
 
 @pytest_asyncio.fixture

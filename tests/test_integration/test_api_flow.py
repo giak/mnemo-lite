@@ -119,10 +119,11 @@ class TestEventAPIFlow:
         """Test pagination works correctly."""
         # Create 10 events
         for i in range(10):
-            await test_client.post("/v1/events/", json={
+            resp = await test_client.post("/v1/events/", json={
                 "content": {"text": f"Event {i}"},
                 "metadata": {"index": i}
             })
+            assert resp.status_code == 201, f"Create event {i} failed: {resp.status_code}"
 
         # Get first page
         response = await test_client.post("/v1/search/", json={

@@ -243,22 +243,39 @@ async def test_client(clean_db: AsyncEngine):
     Test client with real database (no mocks).
 
     Provides a real FastAPI test client connected to test database.
+    Uses dependency_overrides to guarantee all routes use the test engine.
     """
     from main import app
-    from httpx import AsyncClient
-
-    # Override database engine
-    app.state.db_engine = clean_db
-
-    # Use mock embeddings for speed (unless testing embeddings specifically)
+    from httpx import AsyncClient, ASGITransport
+    from dependencies import get_db_engine, get_embedding_service
     from services.embedding_service import MockEmbeddingService
-    app.state.embedding_service = MockEmbeddingService(
-        model_name="mock",
-        dimension=768
-    )
 
-    async with AsyncClient(app=app, base_url="http://test") as client:
-        yield client
+    mock_service = MockEmbeddingService(model_name="mock", dimension=768)
+
+    # Set app.state for middleware and other direct access
+    app.state.db_engine = clean_db
+    app.state.embedding_service = mock_service
+
+    # Override FastAPI dependencies for guaranteed test isolation
+    def override_get_db_engine():
+        return clean_db
+
+    def override_get_embedding_service():
+        return mock_service
+
+    _saved_overrides = app.dependency_overrides.copy()
+    app.dependency_overrides[get_db_engine] = override_get_db_engine
+    app.dependency_overrides[get_embedding_service] = override_get_embedding_service
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Re-override app.state after lifespan (defensive)
+            app.state.db_engine = clean_db
+            app.state.embedding_service = mock_service
+            yield client
+    finally:
+        app.dependency_overrides = _saved_overrides
 
 
 @pytest_asyncio.fixture
@@ -269,13 +286,31 @@ async def test_client_with_real_embeddings(clean_db: AsyncEngine, real_embedding
     Use only when testing embedding functionality.
     """
     from main import app
-    from httpx import AsyncClient
+    from httpx import AsyncClient, ASGITransport
+    from dependencies import get_db_engine, get_embedding_service
 
+    # Set app.state for middleware and other direct access
     app.state.db_engine = clean_db
     app.state.embedding_service = real_embedding_service
 
-    async with AsyncClient(app=app, base_url="http://test") as client:
-        yield client
+    # Override FastAPI dependencies for guaranteed test isolation
+    def override_get_db_engine():
+        return clean_db
+
+    def override_get_embedding_service():
+        return real_embedding_service
+
+    _saved_overrides = app.dependency_overrides.copy()
+    app.dependency_overrides[get_db_engine] = override_get_db_engine
+    app.dependency_overrides[get_embedding_service] = override_get_embedding_service
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            app.state.db_engine = clean_db
+            yield client
+    finally:
+        app.dependency_overrides = _saved_overrides
 
 
 # ============================================================================
