@@ -65,47 +65,54 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting MnemoLite API in {ENVIRONMENT} mode")
 
     # 1. Initialize database engine
-    db_url_to_use = TEST_DATABASE_URL if ENVIRONMENT == "test" else DATABASE_URL
-
-    if not db_url_to_use:
-        logger.error(f"Database URL not set for environment '{ENVIRONMENT}'!")
-        app.state.db_engine = None  # Store None if no URL
+    # Skip if already set by test fixtures — prevents overwriting the test engine
+    # with a production engine when running via ASGITransport in tests.
+    if getattr(app.state, "db_engine", None) is not None:
+        logger.info("Database engine already set (likely by test fixture), skipping initialization")
     else:
-        try:
-            # Create SQLAlchemy Async Engine optimized for local usage
-            # Local apps don't need large connection pools
-            app.state.db_engine: AsyncEngine = create_async_engine(
-                db_url_to_use,
-                echo=DEBUG,  # Log SQL queries if DEBUG is True
-                pool_size=20,  # Reduced from 10 - sufficient for local app
-                max_overflow=10,  # Reduced from 5 - minimal overflow needed
-                pool_recycle=3600,  # Recycle connections after 1 hour
-                pool_pre_ping=True,  # Verify connection alive before use (fixes Docker restart)
-                future=True,
-                connect_args={
-                    "server_settings": {
-                        "jit": "off"  # Disable JIT for small queries (local usage)
-                    },
-                    "command_timeout": 60,  # 60 seconds timeout
-                }
-            )
-            logger.info(
-                f"Database engine created using: {db_url_to_use.split('@')[1] if '@' in db_url_to_use else '[URL hidden]'}"
-            )
+        db_url_to_use = TEST_DATABASE_URL if ENVIRONMENT == "test" else DATABASE_URL
 
-            # Optional: Test connection
-            async with app.state.db_engine.connect() as conn:
-                logger.info("Database connection test successful.")
+        if not db_url_to_use:
+            logger.error(f"Database URL not set for environment '{ENVIRONMENT}'!")
+            app.state.db_engine = None  # Store None if no URL
+        else:
+            try:
+                # Create SQLAlchemy Async Engine optimized for local usage
+                # Local apps don't need large connection pools
+                app.state.db_engine: AsyncEngine = create_async_engine(
+                    db_url_to_use,
+                    echo=DEBUG,  # Log SQL queries if DEBUG is True
+                    pool_size=20,  # Reduced from 10 - sufficient for local app
+                    max_overflow=10,  # Reduced from 5 - minimal overflow needed
+                    pool_recycle=3600,  # Recycle connections after 1 hour
+                    pool_pre_ping=True,  # Verify connection alive before use (fixes Docker restart)
+                    future=True,
+                    connect_args={
+                        "server_settings": {
+                            "jit": "off"  # Disable JIT for small queries (local usage)
+                        },
+                        "command_timeout": 60,  # 60 seconds timeout
+                    }
+                )
+                logger.info(
+                    f"Database engine created using: {db_url_to_use.split('@')[1] if '@' in db_url_to_use else '[URL hidden]'}"
+                )
 
-        except Exception as e:
-            logger.error(
-                "Failed to create database engine", error=str(e), exc_info=True
-            )
-            app.state.db_engine = None  # Set to None on failure
+                # Optional: Test connection
+                async with app.state.db_engine.connect() as conn:
+                    logger.info("Database connection test successful.")
+
+            except Exception as e:
+                logger.error(
+                    "Failed to create database engine", error=str(e), exc_info=True
+                )
+                app.state.db_engine = None  # Set to None on failure
 
     # 2. Pre-load embedding model (si mode=real)
-    embedding_mode = os.getenv("EMBEDDING_MODE", "real").lower()
-    if embedding_mode == "real":
+    # Skip if already set by test fixtures
+    if getattr(app.state, "embedding_service", None) is not None:
+        logger.info("Embedding service already set (likely by test fixture), skipping initialization")
+    elif os.getenv("EMBEDDING_MODE", "real").lower() == "real":
         try:
             logger.info("⏳ Pre-loading embedding model during startup...")
 
