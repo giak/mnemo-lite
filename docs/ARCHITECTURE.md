@@ -13,12 +13,14 @@
 4. [Pipeline d'Indexation](#4-pipeline-dindexation)
 5. [Recherche Hybride](#5-recherche-hybride)
 6. [Mémoire Sémantique](#6-mémoire-sémantique)
-7. [Graphe de Code](#7-graphe-de-code)
-8. [Cache Triple-Layer](#8-cache-triple-layer)
-9. [Schéma Base de Données](#9-schéma-base-de-données)
-10. [MCP - 33 Outils](#10-mcp---33-outils)
-11. [Secret Stripping (EPIC-42)](#11-secret-stripping-epic-42)
-12. [Déploiement](#12-déploiement)
+7. [Extraction d'Entités (GLiNER)](#7-extraction-dentités-gliner)
+8. [Worker Service](#8-worker-service)
+9. [Graphe de Code](#9-graphe-de-code)
+10. [Cache Triple-Layer](#10-cache-triple-layer)
+11. [Schéma Base de Données](#11-schéma-base-de-données)
+12. [MCP - 33 Outils](#12-mcp---33-outils)
+13. [Secret Stripping (EPIC-42)](#13-secret-stripping-epic-42)
+14. [Déploiement](#14-déploiement)
 
 ---
 
@@ -44,12 +46,14 @@ MnemoLite est un système cognitif de mémoire et d'intelligence de code **100% 
 │                         MnemoLite v5.0.0-dev                        │
 ├─────────────────────────────────────────────────────────────────────┤
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
-│  │  Vue 3   │  │  FastAPI │  │  MCP 1.12│  │  PostgreSQL 18    │   │
+│  │  Vue 3   │  │  FastAPI │  │ MCP 1.12.3│  │  PostgreSQL 18    │   │
 │  │   SPA    │  │  AsyncPG │  │  (33 tools)│  │  pgvector 0.8.1  │   │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘   │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Embeddings: nomic-embed-text (768D) + jina-code (768D)   │   │
+│  │  Embeddings: nomic-ai/nomic-embed-text-v1.5 (768D) +       │   │
+│  │             jinaai/jina-embeddings-v2-base-code (768D)      │   │
 │  │  Indexation: tree-sitter (15+ langs) + LSP (Pyright)       │   │
+│  │  Entity Extraction: GLiNER multi-v2.1 (zero hallucination)  │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -69,6 +73,7 @@ graph TB
         subgraph "⚙️ Backend Services"
             API["<b>FastAPI REST</b><br/>:8001"]
             MCP["<b>MCP Server</b><br/>Streamable HTTP :8002"]
+            WRK["<b>Worker</b><br/>Background Jobs"]
         end
         
         subgraph "💾 Data Layer"
@@ -95,7 +100,7 @@ graph TB
     classDef data fill:#2196F3,stroke:#1976D2,color:#fff
     classDef client fill:#9C27B0,stroke:#7B1FA2,color:#fff
     
-    class API,MCP service
+    class API,MCP,WRK service
     class Redis,PG data
     class Claude,Kilo client
 ```
@@ -107,6 +112,7 @@ graph TB
 | **Frontend** | 3000 | HTTP | Vue 3 SPA avec design SCADA |
 | **API REST** | 8001 | HTTP/HTTPS | FastAPI backend |
 | **MCP Server** | 8002 | Streamable HTTP | 33 outils pour LLM |
+| **Worker** | — | Background | Batch indexing + conversation import |
 | **PostgreSQL** | 5432 | TCP | Données + Vecteurs 768D |
 | **Redis** | 6379 | TCP | Cache L2 + Sessions |
 | **OpenObserve** | 5080 | HTTP | Logs + Traces + Metrics |
@@ -176,8 +182,8 @@ flowchart TB
         C["2️⃣ Parsing<br/><b>AST Tree-sitter</b><br/>Abstract Syntax Tree"]
         D["3️⃣ Chunking<br/><b>Semantic Split</b><br/>functions, classes, methods"]
         E["4️⃣ Métadonnées<br/><b>LSP Analysis</b><br/>types, signatures, imports"]
-        F["5️⃣ Embed TEXT<br/><b>nomic-embed-text</b><br/>768D vector"]
-        G["6️⃣ Embed CODE<br/><b>jina-embeddings-v2</b><br/>768D vector"]
+        F["5️⃣ Embed TEXT<br/><b>nomic-ai/nomic-embed-text-v1.5</b><br/>768D vector"]
+        G["6️⃣ Embed CODE<br/><b>jina-embeddings-v2-base-code</b><br/>768D vector"]
         H["7️⃣ Graphe<br/><b>Dependency Graph</b><br/>calls, imports"]
     end
 
@@ -215,7 +221,7 @@ flowchart TB
     end
 
     subgraph PROCESS["⚙️ Hybrid Search Pipeline"]
-        Q -->|"a)"| EMB["Embedding Generation<br/><b>nomic-embed-text-v1.5</b>"]
+        Q -->|"a)"| EMB["Embedding Generation<br/><b>nomic-ai/nomic-embed-text-v1.5</b>"]
         Q -->|"b)"| TOK["Tokenisation<br/><b>pg_trgm</b>"]
 
         subgraph LEXICAL["📝 Lexical Search"]
@@ -286,16 +292,38 @@ stateDiagram-v2
 
     Embedding --> Active: Success
     Active --> Consumed: mark_consumed()
+    Active --> Rated: rate_memory()
+    note right of Rated: outcome_factor (0.5–1.5)
 
+    Rated --> Active: More feedback
     Consumed --> Active: Refresh
     Consumed --> Decayed: decay_rate × time
+    Rated --> Decayed: decay_rate × time
 
     Decayed --> Consolidated: threshold (20)
-    Consolidated --> Summary: LLM summary生成
+    Consolidated --> Summary: consolidate_memory()
 
     Summary --> [*]: Auto-archive
     Active --> [*]: Manual delete
 ```
+
+### Outcome Feedback
+
+Chaque mémoire peut recevoir du **feedback** via `rate_memory()`, qui affecte son score de decay :
+
+| Feedback | Formule | Impact |
+|----------|---------|--------|
+| Positif (helpful=true) | `outcome_factor > 1.0` | Booste le score, ralentit le decay |
+| Négatif (helpful=false) | `outcome_factor < 1.0` | Réduit le score, accélère le decay |
+| Neutre (pas de feedback) | `outcome_factor = 1.0` | Pas d'impact |
+
+```sql
+outcome_factor = 1 + 0.5 × (positive - negative) / (positive + negative + 1)
+-- Range: (0.5, 1.5)
+-- Examples: (5,0)→1.33  (0,5)→0.67  (0,0)→1.0
+```
+
+Colonnes de tracking : `outcome_positive`, `outcome_negative`, `outcome_score`, `last_outcome_at`
 
 ### Décay Configuration
 
@@ -308,7 +336,7 @@ graph LR
         DRIFT["sys:drift<br/>rate=0.02<br/>35j half-life"] -->|"priority +0.3"| SCORE
     end
 
-    SCORE["final_score = rrf_score × exp(−decay_rate × age_days)"]
+    SCORE["final_score = relevance × decay × outcome_factor"]
 
     style CORE fill:#4CAF50,color:#fff
     style SCORE fill:#2196F3,color:#fff
@@ -319,16 +347,136 @@ graph LR
 ```
 When count(sys:history) > 20:
 ┌─────────────────────────────────────────────────────────────┐
-│  1. Search oldest 10 memories (ORDER BY created_at ASC)    │
-│  2. Generate LLM summary (~200 words)                      │
-│  3. Create new memory (type=note, tags=[sys:history:summary])│
-│  4. Soft-delete source memories (deleted_at = NOW())       │
+│  1. Agent calls search_memory to find memories to group     │
+│  2. LLM client generates summary (~200 words)              │
+│  3. Agent calls consolidate_memory(summary, source_ids)     │
+│  4. Soft-delete source memories (deleted_at = NOW())        │
+│  5. New memory created (type=note, tag suffix :summary)    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 7. Graphe de Code
+## 7. Extraction d'Entités (GLiNER)
+
+L'extraction d'entités utilise **GLiNER** (Generalist and Lightweight Model for NER) — un modèle NER local, déterministe, avec **zéro hallucination**. Ce service remplace l'ancien pipeline LM Studio / Ollama qui présentait des risques d'hallucination.
+
+### Architecture
+
+```mermaid
+flowchart TB
+    subgraph INPUT["📥 Mémoire"]
+        A["write_memory()\nou update_memory()"]
+    end
+
+    subgraph EXTRACTION["🏷️ Entity Extraction Pipeline"]
+        B["Filtrage\n<b>should_extract()</b>\nTypes: decision, reference,\nnote, investigation\nTags: sys:core, sys:anchor"]
+        C["GLiNER Service\n<b>gliner_multi-v2.1</b>\n7 types d'entités\nZero hallucination"]
+        D["Entity Extraction Service\n<b>Extract + Store</b>\nentities, concepts, tags"]
+    end
+
+    subgraph QUERY["🔍 Query Understanding"]
+        E["QueryUnderstandingService\n<b>Heuristiques déterministes</b>\nHL keywords (concepts)\nLL keywords (entités nommées)"]
+    end
+
+    subgraph OUTPUT["📤 Stockage"]
+        F["Colonnes mémoire:\nentities (jsonb)\nconcepts (jsonb)\ntags (array)"]
+        G["MCP Tools:\nextract_entities\nsearch_by_entity"]
+    end
+
+    A --> B --> C --> D --> F
+    D --> G
+    E --> G
+
+    style INPUT fill:#FF7043,stroke:#E64A19,color:#fff
+    style EXTRACTION fill:#E91E63,stroke:#C2185B,color:#fff
+    style QUERY fill:#9C27B0,stroke:#7B1FA2,color:#fff
+    style OUTPUT fill:#66BB6A,stroke:#388E3C,color:#fff
+```
+
+### Types d'Entités GLiNER
+
+| Type | Description | Exemple |
+|------|-------------|---------|
+| `technology` | Technologies, frameworks | React, PostgreSQL, FastAPI |
+| `product` | Produits, services | Docker, Redis, MnemoLite |
+| `file` | Fichiers et chemins | `api/main.py`, `config.yaml` |
+| `person` | Personnes | Alice, Bob |
+| `organization` | Organisations | Google, GitHub |
+| `concept` | Concepts abstraits | microservices, vector search |
+| `location` | Lieux | Paris, datacenter |
+
+### Avantages vs LLM
+
+| Critère | GLiNER | LM Studio / Ollama |
+|---------|--------|-------------------|
+| Hallucination | **Zéro** | Risque élevé |
+| Latence | ~50ms | 2-10s |
+| Dépendance externe | Aucune | Serveur LLM requis |
+| RAM | ~400 MB | 4-8 GB |
+| Déterminisme | ✅ Oui | ❌ Non |
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GLINER_MODEL_PATH` | `/app/models/gliner_multi-v2.1` | Chemin du modèle GLiNER |
+| `ENTITY_EXTRACTION_ENABLED` | `true` | Activer l'extraction automatique |
+| `ENTITY_EXTRACTION_MEMORY_TYPES` | `decision,reference,note,investigation` | Types déclenchant l'extraction |
+| `ENTITY_EXTRACTION_SYSTEM_TAGS` | `sys:core,sys:anchor,sys:pattern` | Tags déclenchant l'extraction |
+| `QUERY_UNDERSTANDING_ENABLED` | `true` | Activer l'extraction de mots-clés |
+| `QUERY_UNDERSTANDING_FALLBACK` | `true` | Fallback si extraction échoue |
+
+---
+
+## 8. Worker Service
+
+Le **Worker** exécute les tâches de fond lourdes pour ne pas bloquer l'API : import de conversations, indexing batch, et extraction d'entités en arrière-plan.
+
+### Architecture
+
+```mermaid
+flowchart LR
+    subgraph PRODUCERS["📤 Producers"]
+        A["API\nwrite_memory()\nconversation/save"]
+        B["MCP Server\nindex_project()"]
+    end
+
+    subgraph TRANSPORT["📨 Redis Streams"]
+        C["mnemo:conversations\nmnemo:indexing\nmnemo:entities"]
+    end
+
+    subgraph CONSUMER["⚙️ Worker Process"]
+        D["ConversationWorker\nImport + chunking"]
+        E["BatchIndexer\nCode indexing"]
+        F["EntityExtractor\nGLiNER extraction"]
+    end
+
+    subgraph STORAGE["💾 PostgreSQL"]
+        G["memories\ncode_chunks\ngraph_nodes"]
+    end
+
+    A -->|"publish"| C -->|"consume"| D --> G
+    B -->|"publish"| C -->|"consume"| E --> G
+    A -->|"publish"| C -->|"consume"| F --> G
+
+    style PRODUCERS fill:#4CAF50,stroke:#388E3C,color:#fff
+    style TRANSPORT fill:#2196F3,stroke:#1976D2,color:#fff
+    style CONSUMER fill:#FF9800,stroke:#F57C00,color:#fff
+    style STORAGE fill:#9C27B0,stroke:#7B1FA2,color:#fff
+```
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REDIS_HOST` | `redis` | Hôte Redis pour les streams |
+| `API_URL` | `http://api:8000` | URL de l'API interne |
+| `LOG_LEVEL` | `INFO` | Niveau de log |
+
+---
+
+## 9. Graphe de Code
 
 ```mermaid
 graph TD
@@ -409,7 +557,7 @@ Path length: 3 hops
 
 ---
 
-## 8. Cache Triple-Layer
+## 10. Cache Triple-Layer
 
 ```mermaid
 flowchart LR
@@ -469,7 +617,7 @@ redis:
 
 ---
 
-## 9. Schéma Base de Données
+## 11. Schéma Base de Données
 
 ```mermaid
 erDiagram
@@ -483,12 +631,18 @@ erDiagram
         uuid id PK
         string title "max 200"
         text content
-        enum memory_type "note|decision|task|..."
+        enum memory_type "note|decision|task|reference|conversation|investigation"
         array tags
         vector embedding "halfvec(768)"
         string author
         uuid project_id FK
         bool consumed "agent processed"
+        jsonb entities "GLiNER extracted entities"
+        jsonb concepts "extracted concepts"
+        int outcome_positive "positive feedback count"
+        int outcome_negative "negative feedback count"
+        float outcome_score "computed outcome score"
+        timestamptz last_outcome_at "last feedback timestamp"
         timestamptz created_at
         timestamptz updated_at
         timestamptz deleted_at "soft delete"
@@ -538,19 +692,21 @@ erDiagram
 | memories | embedding | HNSW | Vector search |
 | memories | tags | GIN | Tag filtering |
 | memories | created_at | B-tree | Time queries |
+| memories | outcome_score | B-tree (partial) | Outcome-filtered queries |
+| memories | entities | GIN | Entity search |
 | code_chunks | embedding_text | HNSW | Text search |
 | code_chunks | embedding_code | HNSW | Code search |
 | code_chunks | repository | B-tree | Repo filter |
 
 ---
 
-## 10. MCP - 33 Outils
+## 12. MCP - 33 Outils
 
 ```mermaid
 graph TD
     subgraph "🎯 MCP Server (FastMCP 1.12.3)"
         
-        subgraph "🧠 Memory (9)"
+        subgraph "🧠 Memory (10)"
             WM["write_memory"]
             RM["read_memory"]
             UM["update_memory"]
@@ -560,6 +716,7 @@ graph TD
             MC["mark_consumed"]
             CM["consolidate_memory"]
             CD["configure_decay"]
+            RTM["rate_memory"]
         end
 
         subgraph "📊 Indexing (7)"
@@ -590,6 +747,20 @@ graph TD
             GMD["get_module_data"]
         end
 
+        subgraph "🏷️ Entity Extraction (2)"
+            EE["extract_entities"]
+            SBE["search_by_entity"]
+        end
+
+        subgraph "🔗 Relationships (2)"
+            GRM["get_related_memories"]
+            GMG["get_memory_graph"]
+        end
+
+        subgraph "📦 Consolidation (1)"
+            SCT["suggest_consolidation"]
+        end
+
         subgraph "⚙️ Config (2)"
             SP["switch_project"]
             PNG["ping"]
@@ -601,6 +772,9 @@ graph TD
     style SC fill:#FF9800,stroke:#F57C00,color:#fff
     style IS fill:#9C27B0,stroke:#7B1FA2,color:#fff
     style GGS fill:#00BCD4,stroke:#00838F,color:#fff
+    style EE fill:#E91E63,stroke:#C2185B,color:#fff
+    style GRM fill:#795548,stroke:#5D4037,color:#fff
+    style SCT fill:#FF5722,stroke:#E64A19,color:#fff
     style SP fill:#607D8B,stroke:#455A64,color:#fff
 ```
 
@@ -645,7 +819,7 @@ sequenceDiagram
 
 ---
 
-## 11. Secret Stripping (EPIC-42)
+## 13. Secret Stripping (EPIC-42)
 
 Le **PrivacyService** réduit automatiquement les secrets avant stockage dans les mémoires.
 
@@ -705,97 +879,150 @@ flowchart LR
 
 ---
 
-## 12. Déploiement
+## 14. Déploiement
 
 ### Docker Compose
 
 ```yaml
-version: '3.8'
-
 services:
   # ─────────────────────────────────────────────
-  # Frontend Vue 3 SPA
+  # PostgreSQL 18 + pgvector + pg_partman
   # ─────────────────────────────────────────────
-  frontend:
-    build: ./frontend
-    ports: ["3000:3000"]
-    profiles: ["dev", "prod"]
-    depends_on: [api]
-
-  # ─────────────────────────────────────────────
-  # FastAPI REST API
-  # ─────────────────────────────────────────────
-  api:
-    build: ./api
-    ports: ["8001:8001"]
-    environment:
-      DATABASE_URL: postgresql://mnemo:mnemopass@postgres:5432/mnemolite
-      REDIS_URL: redis://redis:6379/0
-      EMBEDDING_MODE: real
-    depends_on: [postgres, redis]
-    profiles: ["dev", "prod"]
-
-  # ─────────────────────────────────────────────
-  # MCP Server (33 tools)
-  # ─────────────────────────────────────────────
-  mcp:
-    build: ./api
-    command: python -m api.mcp.server
-    ports: ["8002:8002"]
-    environment:
-      DATABASE_URL: postgresql://mnemo:mnemopass@postgres:5432/mnemolite
-      REDIS_URL: redis://redis:6379/0
-    depends_on: [postgres, redis]
-    profiles: ["dev", "prod"]
-
-  # ─────────────────────────────────────────────
-  # PostgreSQL 18 + Extensions
-  # ─────────────────────────────────────────────
-  postgres:
-    image: postgres:18
+  db:
+    build: ./db                    # pgvector/pgvector:pg18 + pg_partman
+    container_name: mnemo-postgres
     environment:
       POSTGRES_DB: mnemolite
       POSTGRES_USER: mnemo
       POSTGRES_PASSWORD: mnemopass
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    command: >
-      postgres
-      -c shared_preload_libraries=vector,pg_trgm
-      -c vector.ef_search=100
-    profiles: ["dev", "prod"]
+      - postgres_data:/var/lib/postgresql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    ports: ["127.0.0.1:5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mnemo -d mnemolite"]
 
   # ─────────────────────────────────────────────
   # Redis 7 Cache
   # ─────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    container_name: mnemo-redis
+    command: redis-server /usr/local/etc/redis/redis.conf
     volumes:
       - redis_data:/data
-    profiles: ["dev", "prod"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+
+  # ─────────────────────────────────────────────
+  # FastAPI REST API
+  # ─────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: mnemo-api
+    ports: ["127.0.0.1:8001:8000"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite
+      REDIS_URL: redis://redis:6379/0
+      EMBEDDING_MODEL: nomic-ai/nomic-embed-text-v1.5
+      CODE_EMBEDDING_MODEL: jinaai/jina-embeddings-v2-base-code
+      GLINER_MODEL_PATH: /app/models/gliner_multi-v2.1
+      ENTITY_EXTRACTION_ENABLED: "true"
+      MCP_PRIVACY_ENABLED: "true"
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    volumes:
+      - ./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro
+      - hf_cache:/root/.cache/huggingface
+
+  # ─────────────────────────────────────────────
+  # Worker (Background Jobs)
+  # ─────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: mnemo-worker
+    command: python -m workers.conversation_worker
+    environment:
+      REDIS_HOST: redis
+      API_URL: http://api:8000
+      GLINER_MODEL_PATH: /app/models/gliner_multi-v2.1
+    depends_on: [redis, api]
+    volumes:
+      - ./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro
+
+  # ─────────────────────────────────────────────
+  # MCP Server (33 tools)
+  # ─────────────────────────────────────────────
+  mcp:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: mnemo-mcp
+    command: python3 -u -m mnemo_mcp.server
+    ports: ["8002:8002"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    profiles: ["dev"]
+
+  # ─────────────────────────────────────────────
+  # Frontend Vue 3 SPA (dev)
+  # ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    container_name: mnemo-frontend
+    ports: ["3000:3000"]
+    depends_on: [api]
+    profiles: ["dev"]
+
+  # ─────────────────────────────────────────────
+  # Frontend Vue 3 SPA (prod)
+  # ─────────────────────────────────────────────
+  frontend-prod:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend.prod
+    container_name: mnemo-frontend-prod
+    ports: ["127.0.0.1:80:80"]
+    depends_on: [api]
+    profiles: ["prod"]
 
   # ─────────────────────────────────────────────
   # OpenObserve (Observability)
   # ─────────────────────────────────────────────
   openobserve:
-    image: openobserve/openobserve:latest
+    image: public.ecr.aws/zinclabs/openobserve:latest
+    container_name: mnemo-openobserve
     ports: ["5080:5080"]
     environment:
-      ZOOKEEPER_ENABLED: "true"
-      ZOOKEEPER_PORT: "2181"
-    profiles: ["dev"]
+      ZO_ROOT_USER_EMAIL: admin@mnemolite.local
+      ZO_ROOT_USER_PASSWORD: Complexpass#123
+      ZO_DATA_DIR: /data
+    volumes:
+      - openobserve_data:/data
 
 volumes:
   postgres_data:
   redis_data:
+  openobserve_data:
+  hf_cache:           # HuggingFace model cache (shared across containers)
 ```
 
 ### Variables d'Environnement
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | postgresql://... | PostgreSQL connection |
+| `DATABASE_URL` | postgresql+asyncpg://... | PostgreSQL connection |
 | `REDIS_URL` | redis://localhost:6379 | Redis connection |
 | `EMBEDDING_MODE` | real | real/mock |
 | `EMBEDDING_MODEL` | nomic-ai/nomic-embed-text-v1.5 | TEXT embedding |
@@ -803,6 +1030,9 @@ volumes:
 | `EMBEDDING_DIMENSION` | 768 | Vector dimension |
 | `MCP_PRIVACY_ENABLED` | true | Enable secret stripping |
 | `MCP_PORT` | 8002 | MCP server port |
+| `GLINER_MODEL_PATH` | /app/models/gliner_multi-v2.1 | GLiNER model path |
+| `ENTITY_EXTRACTION_ENABLED` | true | Enable auto entity extraction |
+| `QUERY_UNDERSTANDING_ENABLED` | true | Enable keyword extraction |
 
 ---
 
