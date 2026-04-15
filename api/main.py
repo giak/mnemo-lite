@@ -325,6 +325,11 @@ async def lifespan(app: FastAPI):
 
     if hasattr(app.state, "db_engine") and app.state.db_engine:
         await app.state.db_engine.dispose()
+        # Set to None so the next lifespan startup (e.g. in tests sharing
+        # the same app instance) doesn't see a non-None disposed engine
+        # and skip initialization. Routes are protected by dependency_overrides,
+        # but MetricsMiddleware reads app.state.db_engine directly.
+        app.state.db_engine = None
         logger.info("Database engine disposed.")
 
     # Cleanup embedding service
