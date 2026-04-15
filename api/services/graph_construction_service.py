@@ -1131,6 +1131,65 @@ class GraphConstructionService:
 
         return edges
 
+    async def _create_virtual_hierarchy_nodes(
+        self,
+        file_nodes: List[NodeModel]
+    ) -> List[NodeModel]:
+        """
+        Create virtual Package and Module nodes from file node metadata.
+
+        Extracts unique parent_package and parent_module values from file nodes
+        and creates virtual nodes for each, enabling structural hierarchy edges.
+
+        Args:
+            file_nodes: List of file-level NodeModel objects with parent metadata
+
+        Returns:
+            List of virtual NodeModel objects (Package + Module nodes)
+        """
+        virtual_nodes: List[NodeModel] = []
+        seen_packages: Dict[str, NodeModel] = {}
+        seen_modules: Dict[str, NodeModel] = {}
+
+        for file_node in file_nodes:
+            properties = file_node.properties or {}
+            repository = properties.get("repository", "")
+
+            # Create Package node if parent_package exists
+            parent_package = properties.get("parent_package")
+            if parent_package and parent_package not in seen_packages:
+                package_node = NodeModel(
+                    node_id=uuid.uuid4(),
+                    label=parent_package,
+                    node_type="Package",
+                    properties={
+                        "repository": repository,
+                        "is_virtual": True,
+                    },
+                    created_at=datetime.now(timezone.utc)
+                )
+                virtual_nodes.append(package_node)
+                seen_packages[parent_package] = package_node
+
+            # Create Module node if parent_module exists
+            parent_module = properties.get("parent_module")
+            if parent_module and parent_module not in seen_modules:
+                module_node = NodeModel(
+                    node_id=uuid.uuid4(),
+                    label=parent_module,
+                    node_type="Module",
+                    properties={
+                        "repository": repository,
+                        "is_virtual": True,
+                        "parent_package": parent_package,
+                    },
+                    created_at=datetime.now(timezone.utc)
+                )
+                virtual_nodes.append(module_node)
+                seen_modules[parent_module] = module_node
+
+        return virtual_nodes
+
     async def _generate_contains_edges(
         self,
         nodes: List[NodeModel]
