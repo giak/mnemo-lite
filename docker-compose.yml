@@ -286,14 +286,10 @@ services:
       - backend
     logging: *default-logging
 
-  # Ollama — runs on host (port 11434), accessed via host.docker.internal
-  # Pull model: ollama pull qwen3.5:4b (or qwen3.5:2b for CPU-only)
-
 volumes:
   postgres_data:
   redis_data:
   openobserve_data:
-  ollama_data:
   hf_cache:
 
 networks:
