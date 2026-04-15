@@ -25,6 +25,12 @@ logging.basicConfig(level=logging.DEBUG)
 # Import SQLAlchemy AsyncEngine for database tests
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 
+# Tables to TRUNCATE for test isolation.
+# Shared between _clean_test_db_at_session_start and clean_db to avoid
+# divergence — if you add a table here, both fixtures will cover it.
+_CORE_TABLES = ("events", "code_chunks", "nodes", "edges")
+_OPTIONAL_TABLES = ("metrics", "alerts", "memories", "detailed_metadata", "computed_metrics", "edge_weights")
+
 
 def _ensure_asyncpg_url(url: str) -> str:
     """Convert postgresql:// to postgresql+asyncpg:// for async SQLAlchemy.
@@ -57,6 +63,44 @@ def test_db_url():
         raise ValueError("TEST_DATABASE_URL environment variable not set")
 
     return _ensure_asyncpg_url(test_db_url)
+
+
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def _clean_test_db_at_session_start(test_db_url):
+    """TRUNCATE the test DB once before the entire suite starts.
+
+    This is a safety net against stale data left by previous crashed
+    test runs. Without it, leftover events/code_chunks/etc. cause
+    test isolation failures (e.g. test_pagination seeing 800+ events
+    instead of 10).
+
+    The function-scoped clean_db fixture handles per-test isolation,
+    but it can only truncate tables BEFORE each test — it cannot
+    remove data that was left behind by a previous pytest invocation
+    that crashed or was killed mid-suite.
+
+    autouse=True ensures this always runs, even if no test explicitly
+    requests it. scope="session" means it runs exactly once.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.exc import ProgrammingError
+
+    engine = create_async_engine(test_db_url, pool_size=2, max_overflow=0)
+    try:
+        # Core tables — always exist
+        async with engine.connect() as conn:
+            await conn.execute(text(f'TRUNCATE TABLE {", ".join(_CORE_TABLES)} CASCADE'))
+            await conn.commit()
+        # Optional tables — may not exist yet (e.g. before migrations run)
+        for table in _OPTIONAL_TABLES:
+            try:
+                async with engine.connect() as conn:
+                    await conn.execute(text(f'TRUNCATE TABLE {table} CASCADE'))
+                    await conn.commit()
+            except ProgrammingError:
+                pass  # Table doesn't exist yet — safe to ignore
+    finally:
+        await engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -126,19 +170,20 @@ async def clean_db(test_engine):
     and causing test isolation failures.
     """
     from sqlalchemy import text
+    from sqlalchemy.exc import ProgrammingError
     # Core tables — always exist, TRUNCATE in their own transaction
     # so failures in optional tables can't roll back these TRUNCATEs.
     async with test_engine.connect() as conn:
-        await conn.execute(text("TRUNCATE TABLE events, code_chunks, nodes, edges CASCADE"))
+        await conn.execute(text(f'TRUNCATE TABLE {", ".join(_CORE_TABLES)} CASCADE'))
         await conn.commit()
     # Optional tables — may not exist in all test DBs;
     # each gets its own transaction so a failure doesn't affect others.
-    for table in ('metrics', 'alerts', 'memories', 'detailed_metadata', 'computed_metrics', 'edge_weights'):
+    for table in _OPTIONAL_TABLES:
         try:
             async with test_engine.connect() as conn:
                 await conn.execute(text(f'TRUNCATE TABLE {table} CASCADE'))
                 await conn.commit()
-        except Exception:
+        except ProgrammingError:
             pass  # Table doesn't exist yet — safe to ignore
     yield test_engine
 
