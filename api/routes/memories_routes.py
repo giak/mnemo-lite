@@ -745,11 +745,11 @@ async def extract_entities_endpoint(
         Extraction result with entities, concepts, and auto_tags
     """
     try:
-        from services.lm_studio_client import LMStudioClient
+        from services.gliner_service import get_gliner_service
         from services.entity_extraction_service import EntityExtractionService
 
-        lm_client = LMStudioClient()
-        extraction_service = EntityExtractionService(engine=engine, lm_client=lm_client)
+        gliner_service = get_gliner_service()
+        extraction_service = EntityExtractionService(engine=engine, gliner_service=gliner_service)
 
         success = await extraction_service.extract_entities(
             memory_id=memory_id,
@@ -782,7 +782,7 @@ async def extract_entities_endpoint(
             return {
                 "success": False,
                 "memory_id": memory_id,
-                "message": "Extraction skipped or failed (LM Studio unavailable)",
+                "message": "Extraction skipped or failed (GLiNER unavailable or no entities found)",
             }
 
     except Exception as e:
