@@ -384,17 +384,39 @@ class PythonMetadataExtractor:
             if body_node:
                 attributes = {}
                 for child in body_node.children:
-                    # Look for annotated assignments (name: type = value)
-                    if child.type == "expression_statement":
+                    # Class attribute type annotations appear as direct
+                    # 'assignment' children in tree-sitter (e.g. 'name: str')
+                    # Structure: assignment → [identifier, ':', type, ('=', value)?]
+                    if child.type == "assignment":
+                        # Find identifier and type among children
+                        attr_name_node = None
+                        attr_type_node = None
+                        for sub in child.children:
+                            if sub.type == "identifier" and attr_name_node is None:
+                                attr_name_node = sub
+                            elif sub.type == "type":
+                                attr_type_node = sub
+
+                        if attr_name_node and attr_type_node:
+                            attr_name = source_bytes[attr_name_node.start_byte:attr_name_node.end_byte].decode("utf8")
+                            attr_type = source_bytes[attr_type_node.start_byte:attr_type_node.end_byte].decode("utf8")
+                            attributes[attr_name] = attr_type
+
+                    # Also check inside expression_statement wrappers
+                    elif child.type == "expression_statement":
                         for expr_child in child.children:
                             if expr_child.type == "assignment":
-                                # Get attribute name and type
-                                left_node = expr_child.child_by_field_name("left")
-                                type_node = expr_child.child_by_field_name("type")
+                                attr_name_node = None
+                                attr_type_node = None
+                                for sub in expr_child.children:
+                                    if sub.type == "identifier" and attr_name_node is None:
+                                        attr_name_node = sub
+                                    elif sub.type == "type":
+                                        attr_type_node = sub
 
-                                if left_node and type_node:
-                                    attr_name = source_bytes[left_node.start_byte:left_node.end_byte].decode("utf8")
-                                    attr_type = source_bytes[type_node.start_byte:type_node.end_byte].decode("utf8")
+                                if attr_name_node and attr_type_node:
+                                    attr_name = source_bytes[attr_name_node.start_byte:attr_name_node.end_byte].decode("utf8")
+                                    attr_type = source_bytes[attr_type_node.start_byte:attr_type_node.end_byte].decode("utf8")
                                     attributes[attr_name] = attr_type
 
                 if attributes:
