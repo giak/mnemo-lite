@@ -12,16 +12,17 @@ Configuration:
     MNEMO_RATE_LIMIT_ENABLED=true
 """
 
-import logging
 import os
 import time
+
+import structlog
 from collections import defaultdict
 from typing import Optional
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
