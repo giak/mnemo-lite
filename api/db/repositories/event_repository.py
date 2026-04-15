@@ -264,65 +264,80 @@ class EventRepository:
         self.logger.debug(f"search_vector: Executing with params: {params_data}")
 
         try:
-            db_result = await self._execute_query(query_data, params_data)
-            rows = db_result.mappings().all()
-            events = [EventModel.from_db_record(row) for row in rows]
+            # Use a single connection with transaction so that SET LOCAL
+            # ivfflat.probes persists across all queries (search + count + fallback).
+            # Without this, IVFFlat index with probes=1 misses results in
+            # other clusters, returning incomplete results.
+            async with self.engine.begin() as conn:
+                if vector is not None:
+                    # IVFFlat tuning: increase probes for better recall
+                    # (default probes=1 misses results in other clusters)
+                    # probes=100 ensures full recall even for small datasets
+                    # where rows are spread across many IVF lists.
+                    # SET LOCAL scopes this to the current transaction only.
+                    await conn.execute(text("SET LOCAL ivfflat.probes = 100"))
 
-            # === Phase 2: FALLBACK LOGIC ===
-            should_fallback = (
-                len(events) == 0  # Aucun résultat
-                and enable_fallback  # Fallback activé
-                and distance_threshold is not None  # Threshold était défini
-                and vector is not None  # C'est une recherche vectorielle
-                and not metadata  # Pas de filtre metadata (= vectoriel pur)
-                and not ts_start  # Pas de filtre temporel
-                and not ts_end
-            )
+                db_result = await conn.execute(query_data, params_data)
+                rows = db_result.mappings().all()
+                events = [EventModel.from_db_record(row) for row in rows]
 
-            if should_fallback:
-                self.logger.warning(
-                    f"Vector search with threshold {distance_threshold} returned 0 results. "
-                    f"Falling back to top-K mode (no threshold)."
+                # === Phase 2: FALLBACK LOGIC ===
+                should_fallback = (
+                    len(events) == 0  # Aucun résultat
+                    and enable_fallback  # Fallback activé
+                    and distance_threshold is not None  # Threshold était défini
+                    and vector is not None  # C'est une recherche vectorielle
+                    and not metadata  # Pas de filtre metadata (= vectoriel pur)
+                    and not ts_start  # Pas de filtre temporel
+                    and not ts_end
                 )
 
-                # Réessayer sans threshold
-                query_data_fallback, params_data_fallback = self.query_builder.build_search_vector_query(
-                    vector=vector,
-                    metadata=metadata,
-                    ts_start=ts_start,
-                    ts_end=ts_end,
-                    limit=limit,
-                    offset=offset,
-                    distance_threshold=None  # Désactiver threshold
-                )
+                if should_fallback:
+                    self.logger.warning(
+                        f"Vector search with threshold {distance_threshold} returned 0 results. "
+                        f"Falling back to top-K mode (no threshold)."
+                    )
 
-                db_result_fallback = await self._execute_query(query_data_fallback, params_data_fallback)
-                rows_fallback = db_result_fallback.mappings().all()
-                events = [EventModel.from_db_record(row) for row in rows_fallback]
+                    # Réessayer sans threshold
+                    query_data_fallback, params_data_fallback = self.query_builder.build_search_vector_query(
+                        vector=vector,
+                        metadata=metadata,
+                        ts_start=ts_start,
+                        ts_end=ts_end,
+                        limit=limit,
+                        offset=offset,
+                        distance_threshold=None  # Désactiver threshold
+                    )
 
-                self.logger.info(f"Fallback returned {len(events)} results in top-K mode.")
+                    # ivfflat.probes already set in this transaction
+                    db_result_fallback = await conn.execute(query_data_fallback, params_data_fallback)
+                    rows_fallback = db_result_fallback.mappings().all()
+                    events = [EventModel.from_db_record(row) for row in rows_fallback]
 
-            # Calculate total hits with a separate COUNT query
-            # Only do this if we have results or if no fallback was triggered
-            if len(events) > 0 or not should_fallback:
-                count_query, count_params = self.query_builder.build_count_query(
-                    vector=vector,
-                    metadata=metadata,
-                    ts_start=ts_start,
-                    ts_end=ts_end,
-                    distance_threshold=distance_threshold if not should_fallback else None
-                )
+                    self.logger.info(f"Fallback returned {len(events)} results in top-K mode.")
 
-                try:
-                    count_result = await self._execute_query(count_query, count_params)
-                    count_row = count_result.mappings().first()
-                    total_hits = count_row["total"] if count_row else 0
-                except Exception as e:
-                    self.logger.warning(f"Failed to get total count, using result length: {e}")
-                    total_hits = len(events)
-            else:
-                # No results and no fallback, total is 0
-                total_hits = 0
+                # Calculate total hits with a separate COUNT query
+                # Only do this if we have results or if no fallback was triggered
+                if len(events) > 0 or not should_fallback:
+                    count_query, count_params = self.query_builder.build_count_query(
+                        vector=vector,
+                        metadata=metadata,
+                        ts_start=ts_start,
+                        ts_end=ts_end,
+                        distance_threshold=distance_threshold if not should_fallback else None
+                    )
+
+                    try:
+                        # ivfflat.probes already set in this transaction
+                        count_result = await conn.execute(count_query, count_params)
+                        count_row = count_result.mappings().first()
+                        total_hits = count_row["total"] if count_row else 0
+                    except Exception as e:
+                        self.logger.warning(f"Failed to get total count, using result length: {e}")
+                        total_hits = len(events)
+                else:
+                    # No results and no fallback, total is 0
+                    total_hits = 0
 
             return events, total_hits
         except Exception as e:

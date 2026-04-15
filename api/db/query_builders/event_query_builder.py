@@ -70,9 +70,15 @@ class EventQueryBuilder(BaseQueryBuilder):
         Returns:
             Query and parameters tuple
         """
-        query_str = text("""
+        # Format embedding inline — asyncpg cannot CAST text param to vector
+        if embedding is not None:
+            embedding_sql = f"'{self._format_embedding_for_db(embedding)}'::vector"
+        else:
+            embedding_sql = "NULL"
+
+        query_str = text(f"""
             INSERT INTO events (id, content, metadata, embedding, timestamp)
-            VALUES (:id, CAST(:content AS JSONB), CAST(:metadata AS JSONB), :embedding, :timestamp)
+            VALUES (:id, CAST(:content AS JSONB), CAST(:metadata AS JSONB), {embedding_sql}, :timestamp)
             RETURNING id, content, metadata, embedding, timestamp
         """)
 
@@ -80,7 +86,6 @@ class EventQueryBuilder(BaseQueryBuilder):
             "id": event_id,
             "content": self._safe_json_dumps(content),
             "metadata": self._safe_json_dumps(metadata) if metadata else None,
-            "embedding": self._format_embedding_for_db(embedding),
             "timestamp": timestamp if timestamp else datetime.now(timezone.utc)
         }
 
@@ -238,11 +243,12 @@ class EventQueryBuilder(BaseQueryBuilder):
                     f"Vector dimension mismatch. Expected {self.vector_dimension}, got {len(vector)}"
                 )
 
-            select_parts.append("embedding <-> :vec_query AS similarity_score")
-            params_dict["vec_query"] = self._format_embedding_for_db(vector)
+            # Format vector inline — asyncpg cannot CAST text param to vector
+            vec_sql = f"'{self._format_embedding_for_db(vector)}'::vector"
+            select_parts.append(f"embedding <-> {vec_sql} AS similarity_score")
 
             if distance_threshold is not None:
-                conditions.append("embedding <-> :vec_query <= :dist_threshold")
+                conditions.append(f"embedding <-> {vec_sql} <= :dist_threshold")
                 params_dict["dist_threshold"] = distance_threshold
 
             order_by_clause = "ORDER BY similarity_score ASC"
@@ -310,10 +316,11 @@ class EventQueryBuilder(BaseQueryBuilder):
                     f"Vector dimension mismatch. Expected {self.vector_dimension}, got {len(vector)}"
                 )
 
-            params_dict["vec_query"] = self._format_embedding_for_db(vector)
+            # Format vector inline — asyncpg cannot CAST text param to vector
+            vec_sql = f"'{self._format_embedding_for_db(vector)}'::vector"
 
             if distance_threshold is not None:
-                conditions.append("embedding <-> :vec_query <= :dist_threshold")
+                conditions.append(f"embedding <-> {vec_sql} <= :dist_threshold")
                 params_dict["dist_threshold"] = distance_threshold
 
         # Handle metadata filter
@@ -355,16 +362,17 @@ class EventQueryBuilder(BaseQueryBuilder):
         Returns:
             Query and parameters tuple
         """
-        query_str = text("""
+        # Format embedding inline — asyncpg cannot CAST text param to vector
+        embedding_str = self._format_embedding_for_db(embedding)
+        query_str = text(f"""
             UPDATE events
-            SET embedding = :embedding
+            SET embedding = '{embedding_str}'::vector
             WHERE id = :event_id
             RETURNING id
         """)
 
         params = {
             "event_id": event_id,
-            "embedding": self._format_embedding_for_db(embedding)
         }
 
         self._log_query(query_str, params, "update embedding")
