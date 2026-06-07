@@ -74,6 +74,7 @@ class WriteMemoryTool(BaseMCPComponent):
         related_chunks: List[str] = None,
         resource_links: List[Dict[str, str]] = None,
         embedding_source: Optional[str] = None,
+        dedup_check: bool = True,
     ) -> Dict[str, Any]:
         """
         Create a new persistent memory.
@@ -92,9 +93,15 @@ class WriteMemoryTool(BaseMCPComponent):
             embedding_source: Optional focused text for embedding computation (EPIC-24).
                              If provided, embedding is computed on this instead of title+content.
                              Recommended: 200-400 word structured summary with subject, themes, entities.
+            dedup_check: Check for duplicate memories before creating (default: True).
+                        When duplicates are found, returns a warning with potential duplicates
+                        so the agent can decide to update_memory instead.
+                        Set to False to skip duplicate detection (e.g., for consolidation).
 
         Returns:
             Dict with id, title, memory_type, created_at, updated_at, embedding_generated
+            If duplicates found: also includes duplicate_warning and potential_duplicates
+            If near-matches found: also includes similar_memories
 
         Raises:
             ValueError: Invalid input parameters
@@ -180,6 +187,41 @@ class WriteMemoryTool(BaseMCPComponent):
                 embedding_source=embedding_source,
             )
 
+            # Jaccard dedup check: find potential duplicates before creating
+            duplicate_warning = None
+            potential_duplicates = []
+            similar_memories = []
+            true_dupes = []
+            if dedup_check:
+                try:
+                    potential_duplicates = await self.memory_repository.find_potential_duplicates(
+                        title=title,
+                        content=content,
+                        project_id=str(project_uuid) if project_uuid else None,
+                    )
+                    if potential_duplicates:
+                        # Check if any are true duplicates (Jaccard >= 0.9)
+                        true_dupes = [d for d in potential_duplicates if d.get("is_duplicate")]
+                        # Near-matches (0.7–0.9) are also surfaced as similar_memories
+                        near_dupes = [d for d in potential_duplicates if not d.get("is_duplicate")]
+                        if true_dupes:
+                            duplicate_warning = (
+                                f"⚠️ Potential duplicate detected! Found {len(true_dupes)} similar memory(ies). "
+                                f"Consider using update_memory(id='{true_dupes[0]['id']}', ...) instead of creating a new one. "
+                                f"Set dedup_check=False to force creation anyway."
+                            )
+                            logger.warning(
+                                "duplicate_detected",
+                                title=title[:50],
+                                duplicates=len(true_dupes),
+                                best_jaccard=true_dupes[0].get("jaccard_combined", 0),
+                            )
+                        if near_dupes:
+                            similar_memories = near_dupes[:3]
+                except Exception as e:
+                    # Graceful degradation: continue without dedup check
+                    logger.warning("dedup_check_failed", error=str(e))
+
             # CRITICAL FIX: Skip embedding generation in write_memory to avoid 10s+ cold start.
             # The MCP client has a 30s timeout and the middleware has a 5s timeout.
             # Embedding generation takes 10-50s on cold start, causing timeout errors.
@@ -217,7 +259,16 @@ class WriteMemoryTool(BaseMCPComponent):
                 content_preview=memory.content[:200] if memory.content else None,
             )
 
-            return response.model_dump(mode='json')
+            result = response.model_dump(mode='json')
+
+            # Add duplicate warning if found
+            if duplicate_warning:
+                result["duplicate_warning"] = duplicate_warning
+                result["potential_duplicates"] = true_dupes[:3]  # Only true dupes (near-matches go in similar_memories)
+            if similar_memories:
+                result["similar_memories"] = similar_memories
+
+            return result
 
         except ValueError as e:
             logger.error("Validation error in write_memory", error=str(e))
@@ -622,30 +673,6 @@ class DeleteMemoryTool(BaseMCPComponent):
                 can_restore=False,
             )
 
-            return response.model_dump(mode='json')
-            success = await self.memory_repository.delete_permanently(str(memory_uuid))
-
-            if not success:
-                raise RuntimeError(f"Failed to permanently delete memory {id}")
-
-            elapsed_ms = (time.time() - start_time) * 1000
-
-            logger.warning(
-                "Memory permanently deleted",
-                memory_id=id,
-                title=existing_memory.title,
-                elapsed_ms=f"{elapsed_ms:.2f}"
-            )
-
-            response = DeleteMemoryResponse(
-                id=memory_uuid,
-                deleted_at=datetime.now(timezone.utc),
-                permanent=True,
-                can_restore=False,
-            )
-
-            return response.model_dump(mode='json')
-
         except ValueError as e:
             logger.error("Validation error in delete_memory", error=str(e))
             raise
@@ -678,6 +705,7 @@ class SearchMemoryTool(BaseMCPComponent):
         tags: Optional[Union[str, List[str]]] = None,
         consumed: Optional[bool] = None,
         lifecycle_state: Optional[str] = None,
+        search_mode: str = "tag",  # "tag" (default, fast) | "hybrid" | "semantic"
         limit: int = 10,
         offset: int = 0,
         include_outcome: bool = False,
@@ -745,7 +773,9 @@ class SearchMemoryTool(BaseMCPComponent):
             # Embedding generation takes 10-50s on cold start, causing timeout errors.
             # Use lexical-only search instead — fast and still useful.
             query_embedding = None
-            is_tag_only = True  # Force tag-only/lexical search path
+            is_tag_only = search_mode not in ("hybrid", "semantic")  # tag-only for speed; use hybrid/semantic for vector search
+            if search_mode not in ("tag", "hybrid", "semantic"):
+                raise ValueError(f"search_mode must be 'tag', 'hybrid', or 'semantic', got '{search_mode}'")  # validated like memory_type
 
             # EPIC-32 Story 32.2: Check Redis cache for memory search
             redis = self._services.get("redis") if self._services else None
@@ -1573,5 +1603,101 @@ class ConfigureDecayTool(BaseMCPComponent):
             raise RuntimeError(f"Failed to configure decay: {e}") from e
 
 
+class ExportMemoriesTool(BaseMCPComponent):
+    """
+    Tool for exporting memories as JSON.
+
+    Returns all memories (or filtered by project) as a JSON-serializable
+    structure, excluding embedding vectors for bandwidth savings.
+
+    Usage:
+        export_memories()                       # All memories
+        export_memories(project_id="abc-123")     # Scoped to project
+        export_memories(include_deleted=True)     # Include soft-deleted
+    """
+
+    def get_name(self) -> str:
+        return "export_memories"
+
+    async def execute(
+        self,
+        ctx: Context,
+        project_id: Optional[str] = None,
+        include_deleted: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Export memories as JSON (no embeddings).
+
+        Args:
+            ctx: MCP context
+            project_id: Optional project UUID or project name (e.g., "mnemolite") to scope the export.
+                        If name provided, will be resolved to UUID (returns empty if project not found).
+                        None = all projects.
+            include_deleted: Include soft-deleted memories (default: False)
+
+        Returns:
+            Dict with export_format, exported_at, count, filters, memories list
+        """
+        try:
+            memory_repo = self._services.get("memory_repository")
+            if not memory_repo:
+                raise RuntimeError("Memory repository not available")
+
+            # Resolve project_id name to UUID (consistent with write_memory)
+            resolved_project_id = project_id
+            if project_id:
+                try:
+                    uuid.UUID(project_id)  # Already a UUID
+                except ValueError:
+                    # Not a UUID — resolve project name
+                    logger.debug(f"Resolving project name '{project_id}' to UUID for export")
+                    engine = self._services.get("engine")
+                    if engine:
+                        async with engine.begin() as conn:
+                            project_uuid = await resolve_project_id(
+                                name=project_id,
+                                conn=conn,
+                                auto_create=False  # Don't auto-create for export
+                            )
+                            if project_uuid:
+                                resolved_project_id = str(project_uuid)
+                                logger.info(f"Resolved project '{project_id}' to UUID {project_uuid} for export")
+                            else:
+                                logger.warning(f"Project '{project_id}' not found, falling back to all memories")
+                                resolved_project_id = None
+                    else:
+                        logger.warning("No engine available for project_id resolution in export")
+
+            memories = await memory_repo.export_memories(
+                project_id=resolved_project_id,
+                include_deleted=include_deleted,
+            )
+
+            envelope = {
+                "export_format": "mnemolite-memories-v1",
+                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "count": len(memories),
+                "filters": {
+                    "project_id": project_id,
+                    "include_deleted": include_deleted,
+                },
+                "memories": memories,
+            }
+
+            logger.info(
+                "memories.exported",
+                count=len(memories),
+                project_id=project_id,
+                include_deleted=include_deleted,
+            )
+
+            return envelope
+
+        except Exception as e:
+            logger.error("Failed to export memories", error=str(e))
+            raise RuntimeError(f"Failed to export memories: {e}") from e
+
+
+export_memories_tool = ExportMemoriesTool()
 system_snapshot_tool = SystemSnapshotTool()
 configure_decay_tool = ConfigureDecayTool()
