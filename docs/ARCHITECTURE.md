@@ -35,7 +35,7 @@ MnemoLite est un système cognitif de mémoire et d'intelligence de code **100% 
 | **Mémoire Sémantique** | Stockage avec embeddings + decay temporel | Connaissance persistante |
 | **Intelligence de Code** | Indexation AST, graphe de dépendances | Compréhension codebase |
 | **Recherche Hybride** | Lexical + Vectoriel + RRF + Reranking | Résultats précis |
-| **Intégration MCP** | 33 outils pour LLM (Claude, KiloCode) | Interface LLM native |
+| **Intégration MCP** | 34 outils pour LLM (Claude, KiloCode) | Interface LLM native |
 | **Secret Stripping** | 11 regex patterns + `<private>` tags | Sécurité (EPIC-42) |
 | **Cache Triple-Layer** | L1 → L2 → L3 avec fallback | Performance |
 
@@ -111,7 +111,7 @@ graph TB
 |---------|------|----------|-------------|
 | **Frontend** | 3000 | HTTP | Vue 3 SPA avec design SCADA |
 | **API REST** | 8001 | HTTP/HTTPS | FastAPI backend |
-| **MCP Server** | 8002 | Streamable HTTP | 33 outils pour LLM |
+| **MCP Server** | 8002 | Streamable HTTP | 34 outils pour LLM |
 | **Worker** | — | Background | Batch indexing + conversation import |
 | **PostgreSQL** | 5432 | TCP | Données + Vecteurs 768D |
 | **Redis** | 6379 | TCP | Cache L2 + Sessions |
@@ -508,12 +508,12 @@ graph TD
     C -->|"imports"| I
 
     classDef module fill:#336791,stroke:#1A237E,color:#fff
-    classDef class fill:#4CAF50,stroke:#388E3C,color:#fff
+    classDef cls fill:#4CAF50,stroke:#388E3C,color:#fff
     classDef func fill:#42A5F5,stroke:#1976D2,color:#fff
     classDef imp fill:#9E9E9E,stroke:#616161,color:#fff
 
     class A module
-    class B,C class
+    class B,C cls
     class D,E,F func
     class G,H,I imp
 ```
@@ -700,13 +700,13 @@ erDiagram
 
 ---
 
-## 12. MCP - 33 Outils
+## 12. MCP - 34 Outils
 
 ```mermaid
 graph TD
     subgraph "🎯 MCP Server (FastMCP 1.12.3)"
         
-        subgraph "🧠 Memory (10)"
+        subgraph "🧠 Memory (11)"
             WM["write_memory"]
             RM["read_memory"]
             UM["update_memory"]
@@ -717,6 +717,7 @@ graph TD
             CM["consolidate_memory"]
             CD["configure_decay"]
             RTM["rate_memory"]
+            EM["export_memories"]
         end
 
         subgraph "📊 Indexing (7)"
@@ -767,7 +768,7 @@ graph TD
         end
     end
 
-    style WM fill:#4CAF50,stroke:#388E3C,color:#fff
+    style WM,EM fill:#4CAF50,stroke:#388E3C,color:#fff
     style IP fill:#42A5F5,stroke:#1976D2,color:#fff
     style SC fill:#FF9800,stroke:#F57C00,color:#fff
     style IS fill:#9C27B0,stroke:#7B1FA2,color:#fff
@@ -956,7 +957,7 @@ services:
       - ./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro
 
   # ─────────────────────────────────────────────
-  # MCP Server (33 tools)
+  # MCP Server (34 tools)
   # ─────────────────────────────────────────────
   mcp:
     build:

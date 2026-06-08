@@ -40,6 +40,7 @@ class ConversationMessage:
     project_name: str
     session_id: str
     timestamp: str
+    source: str = "claude-code"
 
 
 class ConversationWorker:
@@ -156,7 +157,8 @@ class ConversationWorker:
                 assistant_message=data[b'assistant_message'].decode(),
                 project_name=data[b'project_name'].decode(),
                 session_id=data[b'session_id'].decode(),
-                timestamp=data[b'timestamp'].decode()
+                timestamp=data[b'timestamp'].decode(),
+                source=data.get(b'source', b'claude-code').decode()
             )
 
             success = await self.process_message(message)
@@ -330,7 +332,8 @@ class ConversationWorker:
                     "assistant_message": message.assistant_message,
                     "project_name": message.project_name,
                     "session_id": message.session_id,
-                    "timestamp": message.timestamp
+                    "timestamp": message.timestamp,
+                    "source": message.source,
                 }
             )
 

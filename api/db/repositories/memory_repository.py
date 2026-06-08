@@ -21,6 +21,7 @@ from mnemo_mcp.models.memory_models import (
     MemoryUpdate,
     MemoryFilters,
 )
+from utils.jaccard import jaccard_similarity
 
 
 class MemoryRepository:
@@ -758,6 +759,207 @@ class MemoryRepository:
             raise
         except Exception as e:
             raise RepositoryError(f"Failed to rate memory: {e}") from e
+
+    async def export_memories(
+        self,
+        project_id: Optional[str] = None,
+        include_deleted: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Export memories as JSON-serializable dicts (no embeddings).
+
+        Used by the REST export endpoint and MCP export_memories tool.
+        Excludes the embedding vector (768 floats) for bandwidth savings.
+        Reuses _row_to_memory() for consistent parsing.
+
+        Args:
+            project_id: Optional project UUID to scope the export (None = all projects)
+            include_deleted: Include soft-deleted memories (default: False)
+
+        Returns:
+            List of dicts with all memory fields except embedding
+
+        Raises:
+            RepositoryError: If query fails
+        """
+        try:
+            where_clauses = []
+            params: Dict[str, Any] = {}
+
+            if not include_deleted:
+                where_clauses.append("deleted_at IS NULL")
+
+            if project_id:
+                where_clauses.append("project_id = :project_id")
+                params["project_id"] = project_id
+
+            where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+            query = text(f"""
+                SELECT
+                    id, title, content, created_at, updated_at,
+                    memory_type, tags, author, project_id,
+                    embedding_model, related_chunks, resource_links,
+                    embedding_source, entities, concepts, auto_tags,
+                    outcome_positive, outcome_negative, outcome_score, last_outcome_at,
+                    consumed_at, consumed_by, deleted_at
+                FROM memories
+                {where_sql}
+                ORDER BY created_at ASC
+            """)
+
+            async with self.engine.begin() as conn:
+                result = await conn.execute(query, params)
+                rows = result.fetchall()
+
+            # Reuse _row_to_memory() for consistent parsing, then serialize
+            memories = []
+            for row in rows:
+                memory = self._row_to_memory(row, exclude_embedding=True)
+                memory_dict = memory.model_dump(mode='json')
+                # Remove embedding (excluded via exclude_embedding, but key may still be present)
+                memory_dict.pop("embedding", None)
+                memory_dict.pop("similarity_score", None)
+                # Add consumed_at/consumed_by from the raw row (not in Memory model)
+                memory_dict["consumed_at"] = (
+                    row.consumed_at.isoformat()
+                    if hasattr(row, 'consumed_at') and row.consumed_at and hasattr(row.consumed_at, 'isoformat')
+                    else None
+                )
+                memory_dict["consumed_by"] = (
+                    row.consumed_by
+                    if hasattr(row, 'consumed_by') and row.consumed_by
+                    else None
+                )
+                memories.append(memory_dict)
+
+            self.logger.info(
+                "Memories exported",
+                count=len(memories),
+                project_id=project_id,
+                include_deleted=include_deleted,
+            )
+
+            return memories
+
+        except Exception as e:
+            raise RepositoryError(f"Failed to export memories: {e}") from e
+
+    async def find_potential_duplicates(
+        self,
+        title: str,
+        content: str,
+        project_id: Optional[str] = None,
+        title_similarity_threshold: float = 0.3,
+        jaccard_threshold: float = 0.9,
+        limit: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """
+        Find potential duplicate memories before insertion.
+
+        Uses a two-stage approach:
+        1. SQL: pg_trgm similarity on title (fast, index-backed) to find candidates
+        2. Python: Jaccard similarity on title+content to confirm near-duplicates
+
+        Inspired by AgentMemory's auto-forget (Jaccard > 0.9 threshold).
+
+        Args:
+            title: Title of the new memory to check
+            content: Content of the new memory to check
+            project_id: Optional project UUID to scope the search
+            title_similarity_threshold: pg_trgm similarity threshold for SQL pre-filter (0.0-1.0)
+            jaccard_threshold: Jaccard threshold to flag as duplicate (0.0-1.0, default 0.9)
+            limit: Max candidates to return from SQL pre-filter
+
+        Returns:
+            List of dicts with: id, title, jaccard_title, jaccard_content, jaccard_combined, is_duplicate
+        """
+        try:
+            # Stage 1: SQL pg_trgm similarity on title (fast, uses GIN index)
+            where_clauses = [
+                "deleted_at IS NULL",
+                f"similarity(title, :title) >= :trgm_threshold",
+            ]
+            params: Dict[str, Any] = {
+                "title": title,
+                "trgm_threshold": title_similarity_threshold,
+                "limit": limit,
+            }
+
+            if project_id:
+                where_clauses.append("project_id = :project_id")
+                params["project_id"] = project_id
+
+            where_sql = " AND ".join(where_clauses)
+
+            query = text(f"""
+                SELECT id, title, content, memory_type, tags, created_at
+                FROM memories
+                WHERE {where_sql}
+                ORDER BY similarity(title, :title) DESC
+                LIMIT :limit
+            """)
+
+            async with self.engine.begin() as conn:
+                result = await conn.execute(query, params)
+                rows = result.fetchall()
+
+            if not rows:
+                return []
+
+            # Stage 2: Python Jaccard similarity on title + content
+            duplicates = []
+            combined_text = f"{title} {content}"
+
+            for row in rows:
+                existing_title = row.title
+                existing_content = row.content
+                existing_combined = f"{existing_title} {existing_content}"
+
+                jaccard_title = jaccard_similarity(title, existing_title)
+                jaccard_content = jaccard_similarity(content, existing_content)
+                jaccard_combined = jaccard_similarity(combined_text, existing_combined)
+
+                is_duplicate = (
+                    jaccard_title >= jaccard_threshold
+                    or jaccard_content >= jaccard_threshold
+                    or jaccard_combined >= jaccard_threshold
+                )
+
+                if is_duplicate or jaccard_title >= 0.7 or jaccard_combined >= 0.7:
+                    duplicates.append({
+                        "id": str(row.id),
+                        "title": existing_title,
+                        "content_preview": existing_content[:200] if existing_content else "",
+                        "memory_type": row.memory_type,
+                        "tags": row.tags if isinstance(row.tags, list) else [],
+                        "created_at": row.created_at.isoformat() if hasattr(row.created_at, 'isoformat') else str(row.created_at),
+                        "jaccard_title": round(jaccard_title, 3),
+                        "jaccard_content": round(jaccard_content, 3),
+                        "jaccard_combined": round(jaccard_combined, 3),
+                        "is_duplicate": is_duplicate,
+                    })
+
+            # Sort by combined Jaccard (highest first)
+            duplicates.sort(key=lambda d: d["jaccard_combined"], reverse=True)
+
+            self.logger.info(
+                "Duplicate check completed",
+                title=title[:50],
+                candidates=len(rows),
+                duplicates_found=len(duplicates),
+            )
+
+            return duplicates
+
+        except Exception as e:
+            self.logger.error(
+                "Failed to find potential duplicates",
+                error=str(e),
+                title=title[:50],
+            )
+            # Graceful degradation: return empty list on error
+            return []
 
     def _row_to_memory(
         self,

@@ -23,6 +23,7 @@ http://localhost:8001
 | DELETE | /{id} | Delete memory |
 | POST | /search | Search memories |
 | GET | /recent | Recent memories |
+| GET | /export | Export memories as JSON (downloadable, project-scoped) |
 
 ### Code Indexing (`/v1/code/index`)
 
@@ -77,6 +78,16 @@ curl -X POST http://localhost:8001/api/v1/memories \
     "memory_type": "decision",
     "tags": ["architecture", "cache"]
   }'
+```
+
+### Export Memories
+
+```bash
+# Export all memories
+curl http://localhost:8001/api/v1/memories/export -o memories.json
+
+# Export scoped to a project
+curl "http://localhost:8001/api/v1/memories/export?project_id=abc-123" -o project-memories.json
 ```
 
 ### Search Memories

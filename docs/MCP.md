@@ -1,10 +1,10 @@
-# MnemoLite MCP — 33 Tools
+# MnemoLite MCP — 34 Tools
 
 [![MCP](https://img.shields.io/badge/MCP-1.12.3-blue.svg)](https://modelcontextprotocol.io/)
 [![Python](https://img.shields.io/badge/Python-3.11+-green.svg)](https://www.python.org/)
 [![Version](https://img.shields.io/badge/version-v5.0.0--dev-orange.svg)](https://github.com/anomalyco/mnemolite)
 
-MnemoLite exposes 33 MCP tools for LLM integration via Streamable HTTP transport (port 8002).
+MnemoLite exposes 34 MCP tools for LLM integration via Streamable HTTP transport (port 8002).
 
 ## Overview
 
@@ -16,7 +16,7 @@ MnemoLite provides a comprehensive code intelligence platform with hybrid lexica
 
 ## Tools
 
-### Memory (9 tools)
+### Memory (11 tools)
 
 Semantic memory management with embeddings for persistent knowledge.
 
@@ -31,6 +31,8 @@ Semantic memory management with embeddings for persistent knowledge.
 | `mark_consumed` | Mark memories as processed by agent | ~10ms |
 | `consolidate_memory` | Compress history into summary | ~100ms |
 | `configure_decay` | Configure decay rules per tag pattern | ~10ms |
+| `rate_memory` | Rate memory outcome (positive/negative feedback) | ~10ms |
+| `export_memories` | Export memories as JSON (project-scoped, no embeddings) | ~50ms |
 
 **Use cases:**
 - Persistent knowledge base for agents
@@ -263,7 +265,7 @@ All write operations (`write_memory`, `update_memory`) automatically sanitize se
 
 | Category | Tools | Quick Start |
 |----------|-------|-------------|
-| Memory | 9 | `write_memory(title="...", content="...")` |
+| Memory | 11 | `write_memory(title="...", content="...")` |
 | Indexing | 7 | `index_project(project_path="/path")` |
 | Search | 1 | `search_code(query="...")` |
 | Analytics | 4 | `get_memory_health()` |
@@ -272,4 +274,4 @@ All write operations (`write_memory`, `update_memory`) automatically sanitize se
 
 ---
 
-**Version:** v5.0.0-dev | **MCP SDK:** 1.12.3 | **Transport:** Streamable HTTP
+**Version:** v5.0.0-dev | **MCP SDK:** 1.12.3 | **Transport:** Streamable HTTP | **Tools:** 34

@@ -572,6 +572,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         consolidate_memory_tool,
         mark_consumed_tool,
         rate_memory_tool,
+        export_memories_tool,
         system_snapshot_tool,
         configure_decay_tool,
     )
@@ -637,6 +638,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     consolidate_memory_tool.inject_services(services)
     mark_consumed_tool.inject_services(services)
     rate_memory_tool.inject_services(services)
+    export_memories_tool.inject_services(services)
     system_snapshot_tool.inject_services(services)
     configure_decay_tool.inject_services(services)
     get_memory_resource.inject_services(services)
@@ -684,7 +686,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
         components=[
             "ping_tool", "search_code_tool", "health_resource",
             "write_memory_tool", "update_memory_tool", "delete_memory_tool", "search_memory_tool", "read_memory_tool",
-            "consolidate_memory_tool", "mark_consumed_tool", "system_snapshot_tool", "configure_decay_tool",
+            "consolidate_memory_tool", "mark_consumed_tool", "rate_memory_tool", "export_memories_tool", "system_snapshot_tool", "configure_decay_tool",
             "get_memory_resource", "list_memories_resource", "search_memories_resource",
             "graph_node_details_resource", "find_callers_resource", "find_callees_resource",
             "index_project_tool", "reindex_file_tool", "index_incremental_tool", "index_markdown_workspace_tool", "index_status_resource",
@@ -964,6 +966,7 @@ def register_memory_components(mcp: FastMCP):
         consolidate_memory_tool,
         mark_consumed_tool,
         rate_memory_tool,
+        export_memories_tool,
         system_snapshot_tool,
         configure_decay_tool,
     )
@@ -993,6 +996,7 @@ def register_memory_components(mcp: FastMCP):
         related_chunks: List[str] | None = None,
         resource_links: List[Dict[str, str]] | None = None,
         embedding_source: Optional[str] = None,
+        dedup_check: bool = True,
     ) -> dict:
         """
         Create a new persistent memory with semantic embedding.
@@ -1012,14 +1016,22 @@ def register_memory_components(mcp: FastMCP):
             embedding_source: Optional focused text for embedding computation (EPIC-24).
                              If provided, embedding is computed on this instead of title+content.
                              Recommended: 200-400 word structured summary with subject, themes, entities.
+            dedup_check: Check for duplicate memories before creating (default: True).
+                        When duplicates are found (Jaccard similarity ≥ 0.9), returns a warning
+                        with potential_duplicates so the agent can decide to update_memory instead.
+                        Near-matches (Jaccard 0.7–0.9) are returned as similar_memories.
+                        Set to False to skip duplicate detection (e.g., for consolidation).
 
         Returns:
             MemoryResponse with id, title, memory_type, timestamps, embedding_generated
+            If duplicates found: also includes duplicate_warning and potential_duplicates
+            If near-matches found: also includes similar_memories
 
         Examples:
             - "User prefers async/await over callbacks"
             - "Decision: Chose Redis for L2 cache (see ADR-001)"
             - "TODO: Implement cursor-based pagination"
+            - Force creation despite duplicate: write_memory(..., dedup_check=False)
         """
         response = await write_memory_tool.execute(
             ctx=ctx,
@@ -1032,6 +1044,7 @@ def register_memory_components(mcp: FastMCP):
             related_chunks=related_chunks or [],
             resource_links=resource_links or [],
             embedding_source=embedding_source,
+            dedup_check=dedup_check,
         )
         return response
 
@@ -1331,6 +1344,39 @@ def register_memory_components(mcp: FastMCP):
         )
         return response
 
+    # Register export_memories tool
+    @mcp.tool()
+    async def export_memories(
+        ctx: Context,
+        project_id: Optional[str] = None,
+        include_deleted: bool = False,
+    ) -> dict:
+        """
+        Export memories as JSON (downloadable, no embeddings).
+
+        Returns all memories or scoped to a single project.
+        Excludes embedding vectors for bandwidth savings.
+        Soft-deleted memories are excluded by default.
+
+        Args:
+            project_id: Optional project UUID to scope the export (omit for all projects)
+            include_deleted: Include soft-deleted memories (default: False)
+
+        Returns:
+            Dict with export_format, exported_at, count, filters, memories list
+
+        Examples:
+            - export_memories()                          # All memories
+            - export_memories(project_id="abc-123")      # Scoped to project
+            - export_memories(include_deleted=True)      # Include soft-deleted
+        """
+        response = await export_memories_tool.execute(
+            ctx=ctx,
+            project_id=project_id,
+            include_deleted=include_deleted,
+        )
+        return response
+
     # Register get_system_snapshot tool
     @mcp.tool()
     async def get_system_snapshot(
@@ -1478,7 +1524,7 @@ def register_memory_components(mcp: FastMCP):
 
     logger.info(
         "mcp.components.memory.registered",
-        tools=["write_memory", "update_memory", "delete_memory", "search_memory", "read_memory"],
+        tools=["write_memory", "update_memory", "delete_memory", "search_memory", "read_memory", "export_memories"],
         resources=["memories://get/{id}", "memories://list", "memories://search/{query}"]
     )
 

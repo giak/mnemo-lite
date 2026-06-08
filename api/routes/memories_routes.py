@@ -4,7 +4,7 @@ Endpoints for Memories Monitor page displaying conversations, code, embeddings.
 """
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -431,6 +431,73 @@ async def delete_memory_endpoint(
     except Exception as e:
         logger.error(f"Failed to delete memory: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete memory.")
+
+
+@router.get("/export")
+async def export_memories(
+    project_id: Optional[str] = Query(None, description="Filter by project UUID (omit for all projects)"),
+    include_deleted: bool = Query(False, description="Include soft-deleted memories (default: false)"),
+    engine: AsyncEngine = Depends(get_db_engine),
+):
+    """
+    Export memories as a downloadable JSON file.
+
+    Returns all memories (or filtered by project) as a JSON array,
+    excluding the embedding vectors for bandwidth savings.
+    The response has Content-Disposition: attachment for browser download.
+
+    Args:
+        project_id: Optional project UUID to scope the export (omit for all projects)
+        include_deleted: Include soft-deleted memories (default: false)
+
+    Returns:
+        JSON array of memory objects (downloadable .json file)
+    """
+    import json as _json
+    from fastapi.responses import Response
+    from db.repositories.memory_repository import MemoryRepository
+
+    try:
+        repo = MemoryRepository(engine)
+        memories = await repo.export_memories(
+            project_id=project_id,
+            include_deleted=include_deleted,
+        )
+
+        # Build export envelope with metadata
+        envelope = {
+            "export_format": "mnemolite-memories-v1",
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "count": len(memories),
+            "filters": {
+                "project_id": project_id,
+                "include_deleted": include_deleted,
+            },
+            "memories": memories,
+        }
+
+        body = _json.dumps(envelope, indent=2, ensure_ascii=False)
+
+        # Build filename
+        if project_id:
+            filename = f"memories-project-{project_id[:8]}.json"
+        else:
+            filename = f"memories-all-{datetime.now(timezone.utc).strftime('%Y%m%d')}.json"
+
+        return Response(
+            content=body,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to export memories: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to export memories. Please try again later."
+        )
 
 
 @router.get("/{memory_id}")

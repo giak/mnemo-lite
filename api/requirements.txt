@@ -93,5 +93,6 @@ opentelemetry-semantic-conventions>=0.45b0
 
 # EPIC-28: Entity Extraction & Query Understanding (GLiNER)
 httpx>=0.27.0
+aiohttp>=3.9.0  # Multi-source conversation watcher daemon
 json-repair>=0.30.0
 gliner

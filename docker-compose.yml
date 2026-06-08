@@ -88,6 +88,8 @@ services:
       POLL_INTERVAL: ${POLL_INTERVAL:-30}
       IMPORT_HISTORICAL: ${IMPORT_HISTORICAL:-false}
       ENABLE_AUTO_IMPORT: ${ENABLE_AUTO_IMPORT:-false}
+      CONVERSATION_WATCHER_ENABLED: ${CONVERSATION_WATCHER_ENABLED:-false}
+      ACTIVE_PROJECT: ${ACTIVE_PROJECT:-mnemolite}
       OTLP_ENDPOINT: http://openobserve:5080/api/default/v1/traces
       OTLP_METRICS_ENDPOINT: http://openobserve:5080/api/default/v1/metrics
       OTLP_LOGS_ENDPOINT: http://openobserve:5080/api/default/logs/_json
@@ -115,7 +117,10 @@ services:
       - ./api/templates:/app/templates
       - ./.claude:/app/.claude:ro
       - ${CLAUDE_PROJECTS_DIR:-/home/giak/.claude/projects}:/host/.claude/projects:ro
+      - ${CODEBUFF_DIR:-/home/giak/.config/manicode/projects}:/host/.config/manicode/projects:ro
+      - ${OPENCODE_DIR:-/home/giak/.local/share/opencode}:/host/.local/share/opencode:ro
       - /home/giak/projects:/external/projects:ro
+      - mnemo_watcher_state:/root/.local/share/mnemo
       - hf_cache:/root/.cache/huggingface
     deploy:
       resources:
@@ -132,7 +137,16 @@ services:
       - sh
       - -c
       - |
-        if [ "${ENABLE_AUTO_IMPORT:-false}" = "true" ]; then
+        if [ "${CONVERSATION_WATCHER_ENABLED:-false}" = "true" ]; then
+          pip install -q aiohttp 2>/dev/null || true
+          nohup python3 /app/scripts/multi-watcher-daemon.py \
+            --api-url http://localhost:8000 \
+            --project-filter ${ACTIVE_PROJECT:-mnemolite} \
+            --claude-dir /host/.claude/projects \
+            --codebuff-dir /host/.config/manicode/projects \
+            --opencode-db /host/.local/share/opencode/opencode.db \
+            > /tmp/multi-watcher.log 2>&1 &
+        elif [ "${ENABLE_AUTO_IMPORT:-false}" = "true" ]; then
           nohup bash /app/scripts/conversation-auto-import.sh > /tmp/daemon.log 2>&1 &
         fi
         exec uvicorn main:app --host 0.0.0.0 --port 8000
@@ -290,6 +304,7 @@ volumes:
   postgres_data:
   redis_data:
   openobserve_data:
+  mnemo_watcher_state:
   hf_cache:
 
 networks:

@@ -318,7 +318,8 @@ async def queue_conversation(
     assistant_message: str = Body(...),
     project_name: str = Body(...),
     session_id: str = Body(...),
-    timestamp: Optional[str] = Body(None)
+    timestamp: Optional[str] = Body(None),
+    source: str = Body(default="claude-code")
 ) -> Dict[str, Any]:
     """
     Queue a conversation to Redis Streams for async processing by worker.
@@ -331,8 +332,9 @@ async def queue_conversation(
         user_message_clean: Cleaned message for title (without system tags)
         assistant_message: Assistant's response content
         project_name: Project name (e.g. "mnemolite", "truth-engine")
-        session_id: Claude Code session ID
+        session_id: Session ID
         timestamp: Optional ISO timestamp
+        source: Source tool tag ("claude-code", "codebuff", "opencode", "kilocode")
 
     Returns:
         {"success": bool, "message_id": str, "queued": bool}
@@ -369,13 +371,14 @@ async def queue_conversation(
                 b"assistant_message": assistant_message.encode('utf-8'),
                 b"project_name": project_name.encode('utf-8'),
                 b"session_id": session_id.encode('utf-8'),
-                b"timestamp": ts.encode('utf-8')
+                b"timestamp": ts.encode('utf-8'),
+                b"source": source.encode('utf-8'),
             }
         )
 
         logger.info(
             f"Queued conversation to Redis: {message_id.decode()} "
-            f"(project={project_name}, session={session_id[:12]})"
+            f"(project={project_name}, source={source}, session={session_id[:12]})"
         )
 
         return {
@@ -403,20 +406,22 @@ async def save_conversation(
     assistant_message: str = Body(...),
     project_name: str = Body(...),
     session_id: str = Body(...),
-    timestamp: Optional[str] = Body(None)
+    timestamp: Optional[str] = Body(None),
+    source: str = Body(default="claude-code")
 ) -> Dict[str, Any]:
     """
-    Save a single conversation from hook (NOT auto-import).
+    Save a single conversation from any source.
 
-    Called by centralized hook service with pre-extracted messages.
+    Called by multi-source watcher or hook service with pre-extracted messages.
 
     Args:
         user_message: User's message content
         user_message_clean: Cleaned message for title (without system tags)
         assistant_message: Assistant's response content
         project_name: Project name (e.g. "mnemolite", "truth-engine")
-        session_id: Claude Code session ID
+        session_id: Session ID
         timestamp: Optional ISO timestamp
+        source: Source tool tag ("claude-code", "codebuff", "opencode", "kilocode")
 
     Returns:
         {"success": bool, "memory_id": str}
@@ -454,6 +459,15 @@ async def save_conversation(
             title += "..."
         title += f" [{unique_suffix}]"
 
+        # Source display label for content header
+        source_labels = {
+            "claude-code": "Claude",
+            "codebuff": "Codebuff",
+            "opencode": "OpenCode",
+            "kilocode": "KiloCode",
+        }
+        source_label = source_labels.get(source, source)
+
         # Create content
         ts = timestamp or datetime.now().isoformat()
         content = f"""# Conversation - {ts}
@@ -461,11 +475,12 @@ async def save_conversation(
 ## 👤 User
 {user_message}
 
-## 🤖 Claude
+## 🤖 {source_label}
 {assistant_message}
 
 ---
 **Session**: {session_id}
+**Source**: {source}
 **Saved**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}"""
 
         # Determine date tag
@@ -475,12 +490,13 @@ async def save_conversation(
         except:
             date_tag = datetime.now().strftime("%Y%m%d")
 
-        # Tags
+        # Tags — include source and sys:project for project scoping
         tags = [
             "auto-saved",
-            "claude-code",
+            source,
+            f"sys:project:{project_name.lower()}",
             f"session:{session_id[:12]}",
-            f"date:{date_tag}"
+            f"date:{date_tag}",
         ]
 
         # Save via WriteMemoryTool

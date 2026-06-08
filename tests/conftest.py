@@ -23,7 +23,12 @@ sys.path.insert(0, project_root)
 logging.basicConfig(level=logging.DEBUG)
 
 # Import SQLAlchemy AsyncEngine for database tests
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+# Guard: skip if sqlalchemy not installed (e.g. running script-only tests locally)
+try:
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+except ImportError:
+    create_async_engine = None
+    AsyncEngine = None
 
 # Tables to TRUNCATE for test isolation.
 # Shared between _clean_test_db_at_session_start and clean_db to avoid

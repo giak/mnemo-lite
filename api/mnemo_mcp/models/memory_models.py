@@ -44,6 +44,8 @@ class MemoryType(str, Enum):
     REFERENCE = "reference"          # Documentation links, external resources
     CONVERSATION = "conversation"    # Dialogue context for multi-turn chats
     INVESTIGATION = "investigation"  # EPIC-24: Truth Engine investigation outputs
+    ARTICLE = "article"
+    QUINTESSENCE = "quintessence"
 
 
 class MemoryBase(BaseModel):

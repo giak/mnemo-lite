@@ -37,10 +37,11 @@ Zero external vector databases. Zero API dependencies. Zero cost. Complete priva
 * **Zero Dependencies:** stdlib `re` module, no external packages
 * **Toggle:** `MCP_PRIVACY_ENABLED` env var (default: `true`)
 
-### 🔌 MCP Integration (28 tools)
+### 🔌 MCP Integration (34 tools)
 * **Code Search:** `search_code` — hybrid search with 6 filter types
 * **Memory CRUD:** `write_memory` *(sanitized)*, `read_memory`, `update_memory` *(sanitized)*, `delete_memory`
 * **Memory Search:** `search_memory` — vector + lexical + tag-only optimization
+* **Memory Export:** `export_memories` — JSON export with project scoping
 * **Indexing:** `index_project`, `reindex_file`, `index_incremental`, `index_markdown_workspace`
 * **Analytics:** `get_indexing_stats`, `get_memory_health`, `get_cache_stats`, `clear_cache`
 * **Graph:** `get_graph_stats`, `traverse_graph`, `find_path`, `get_module_data`
@@ -133,7 +134,7 @@ docker compose --profile prod up -d  # Prod (Nginx)
 
 ## 📊 Project Status
 
-**Version:** 5.0.0-dev | **Tests:** 1570 functions (356/358 MCP passing) | **MCP Tools:** 28
+**Version:** 5.0.0-dev | **Tests:** 1570+ functions | **MCP Tools:** 34
 
 **Completed EPICs:** 28–36, 42 (Frontend Hardening, Test Infrastructure, Observability, MCP Integration, Search Performance, Design Polish, Backend API, Search UX, Production Readiness, **Secret Stripping**)
 

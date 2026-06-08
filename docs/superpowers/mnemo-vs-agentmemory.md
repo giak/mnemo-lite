@@ -1,9 +1,10 @@
 # 📊 Rapport Comparatif : MnemoLite vs AgentMemory
 
-> **Date** : Avril 2025  
+> **Date** : Juin 2025 (mise à jour)  
 > **Auteur** : Analyse automatisée via Codebuff  
 > **Version MnemoLite** : 5.0.0-dev  
 > **Version AgentMemory** : 0.8.4  
+> **Dernière mise à jour** : Juin 2025 — reflète PrivacyService (EPIC-42), GLiNER, Outcome Feedback, Worker, Hooks Claude Code  
 
 ---
 
@@ -34,12 +35,13 @@
 | **Embeddings** | 100% local (nomic-embed-text + jina-code, 768D) | Multi-provider (OpenAI, Cohere, Gemini, Voyage, local/Xenova) |
 | **Transport MCP** | Streamable HTTP :8002 + stdio | stdio + HTTP (:3111) |
 | **Outils MCP** | ~33 outils + 8 ressources + prompts | ~43 outils |
-| **Hooks automatiques** | Aucun | 12 hooks (session-start, pre-tool-use, etc.) |
+| **Hooks automatiques** | Partiel (2 hooks : Stop + UserPromptSubmit) | 12 hooks (session-start, pre-tool-use, etc.) |
 | **UI** | Vue 3 SPA complète (13 pages, SCADA) | Viewer temps réel (:3113) |
-| **Installation** | Docker Compose (6 conteneurs) | `npx @agentmemory/agentmemory` |
+| **Installation** | Docker Compose (8 conteneurs) | `npx @agentmemory/agentmemory` |
 | **RAM requise** | ~8-24 GB (avec modèles locaux) | ~512 MB |
 | **Observabilité** | OpenObserve + OpenTelemetry | Telemetry basique |
 | **Tests** | 1570+ tests (pytest) | Vitest (suite intégrée) |
+| **Privacy** | ✅ PrivacyService (EPIC-42, 12 patterns) | ✅ stripPrivateData (tags + regex) |
 | **Agents supportés** | Claude Desktop, Cursor, tout client MCP | Claude Code, Cursor, Aider, Gemini CLI, tout MCP/HTTP |
 
 ---
@@ -183,9 +185,10 @@ Plage : (0.5, 1.5) — les mémoires utiles déclinent plus lentement, les inuti
 | **QueryUnderstandingService** | Analyse et reformulation de requêtes |
 | **BM25RerankService** | Reranking post-recherche |
 | **CascadeCache** | L1 in-memory (100MB) + L2 Redis — hit rates combinés |
+| **PrivacyService** | ✅ EPIC-42 — Secret stripping auto (12 patterns), intégré write_memory / update_memory |
+| **Worker Service** | ✅ Background jobs via Redis Streams (conversation import, batch indexing, entity extraction) |
 | **OpenTelemetry** | Traces + métriques exportées vers OpenObserve |
 | **Circuit Breakers** | Protection contre pannes embedding, Redis, DB |
-| **Redis Streams** | Workers async pour entity extraction, conversation import |
 
 ---
 
@@ -321,16 +324,19 @@ La cristallisation convertit des **actions terminées** en **cristaux** compacts
 | **Decay temporel** | ✅ Exponentiel, configurable par tag (11 presets), outcome factor | ✅ forgetAfter TTL, contradiction Jaccard | MnemoLite — Plus fin et configurable |
 | **Outcome feedback** | ✅ rate_memory (helpful/unhelpful, score -1 à 1) | ❌ Non implémenté | **MnemoLite** |
 | **Consolidation** | ✅ LLM + TF-IDF clustering + soft-delete | ✅ Auto-consolidation 4-tier + crystallisation | AgentMemory — Pipeline plus mature |
-| **Déduplication** | ❌ Pas de dédup native | ✅ Jaccard similarity + titre unique | **AgentMemory** |
+| **Déduplication** | ✅ Jaccard similarity + pg_trgm (dedup_check=True) | ✅ Jaccard similarity + titre unique | **Égal** |
 | **Consumption tracking** | ✅ mark_consumed, consumed filter | ❌ Non implémenté | **MnemoLite** |
 | **Entity extraction** | ✅ GLiNER (zero-shot NER, local) | ❌ Pas d'extraction d'entités native | **MnemoLite** |
-| **Relations entre mémoires** | ✅ Graphe de relations (EPIC-29) | ✅ Graph edges + MemoryRelation | Égal |
+| **Relations entre mémoires** | ✅ Graphe de relations (EPIC-29) + get_related_memories + get_memory_graph | ✅ Graph edges + MemoryRelation | **Égal** |
 | **Snapshot boot** | ✅ get_system_snapshot (4x plus rapide) | ❌ Non implémenté | **MnemoLite** |
-| **Privacy/Secret stripping** | ❌ Aucun | ✅ Regex patterns complets | **AgentMemory** |
-| **Capture silencieuse** | ❌ Nécessite appel explicite | ✅ Hooks automatiques (12) | **AgentMemory** |
+| **Consolidation suggestion** | ✅ suggest_consolidation (TF-IDF clustering) | ❌ Non | **MnemoLite** |
+| **Worker / Background jobs** | ✅ Redis Streams (conversation import, batch indexing, entity extraction) | ❌ Non | **MnemoLite** |
+| **Privacy/Secret stripping** | ✅ PrivacyService (EPIC-42, 12 patterns, auto) | ✅ Regex patterns complets + `<private>` tags | **Égal** |
+| **Capture silencieuse** | ⚠️ Partiel (2 hooks : Stop + UserPromptSubmit) | ✅ Hooks automatiques (12) | **AgentMemory** |
 | **Team sharing** | ❌ Non implémenté | ✅ memory_team_share / memory_team_feed | **AgentMemory** |
-| **Export** | ❌ Pas d'export natif | ✅ JSON + Obsidian Markdown | **AgentMemory** |
+| **Export** | ✅ JSON export (REST + MCP, project scoping) | ✅ JSON + Obsidian Markdown | **AgentMemory** (Obsidian) |
 | **Audit trail** | ❌ Non implémenté | ✅ memory_audit + governance_delete | **AgentMemory** |
+| **Hooks Claude Code** | ⚠️ Partiel (2 hooks déployés) | ✅ 12 hooks complets | **AgentMemory** |
 
 ### 🖥️ Code Intelligence
 
@@ -580,23 +586,24 @@ La cristallisation convertit des **actions terminées** en **cristaux** compacts
 13. **System snapshot** — Boot agent 4x plus rapide que requêtes séquentielles
 14. **Vue 3 SPA complète** — 13 pages, SCADA dashboard, monitoring temps réel
 15. **1570+ tests** — Coverage extensive, pytest fixtures
+16. **PrivacyService (EPIC-42)** ✅ — Secret stripping automatique (12 patterns), intégré dans write_memory / update_memory
+17. **Worker Service** ✅ — Background jobs via Redis Streams (conversation import, batch indexing, entity extraction)
+18. **Hooks Claude Code** ⚠️ — 2 hooks déployés (Stop + UserPromptSubmit), scripts deploy-hooks-to-project.sh
 
 ### MnemoLite — Inconvénients ❌
 
-1. **Infrastructure lourde** — Docker Compose avec 6 conteneurs, PostgreSQL 18, Redis 7
-2. **Pas de capture silencieuse** — Toutes les opérations sont explicites (write_memory, search_memory)
-3. **Pas de hooks automatiques** — L'agent doit appeler les outils manuellement
-4. **Pas de privacy stripping** — Les secrets peuvent être stockés dans les mémoires
-5. **Pas de déduplication** — Mémoires dupliquées possibles
-6. **RAM élevée** — 8-24 GB (modèles embedding + GLiNER + PostgreSQL)
-7. **Installation complexe** — Docker Compose + variables d'environnement + seed DB
-8. **Cold start lent** — GLiNER ~10s, embeddings ~50s au premier appel
-9. **Pas d'orchestration agent** — Pas d'actions, routines, signals, leases, checkpoints
-10. **Pas de team features** — Pas de partage, pas de feed, pas de mesh sync
-11. **Pas d'export** — Pas d'export JSON ou Obsidian natif
-12. **Pas d'audit trail** — Pas de traçabilité des opérations
-13. **Pas de bridges agent** — Pas de sync avec MEMORY.md ou fichiers natifs agent
-14. **Modèle cognitive limité** — 6 types + 4 lifecycle vs 4-tier + crystals + lessons
+1. **Infrastructure lourde** — Docker Compose avec 8 conteneurs, PostgreSQL 18, Redis 7, OpenObserve
+2. **Capture silencieuse partielle** — 2 hooks déployés (vs 12 chez AgentMemory), pas de session-start/pre-tool-use
+3. ~~Pas de déduplication~~ ✅ **Jaccard dedup** — `dedup_check=True` par défaut dans write_memory, two-stage pg_trgm→Jaccard (0.9 threshold)
+4. **RAM élevée** — 8-24 GB (modèles embedding + GLiNER + PostgreSQL)
+5. **Installation complexe** — Docker Compose + variables d'environnement + seed DB
+6. **Cold start lent** — GLiNER ~10s, embeddings ~50s au premier appel
+7. **Pas d'orchestration agent** — Pas d'actions, routines, signals, leases, checkpoints
+8. **Pas de team features** — Pas de partage, pas de feed, pas de mesh sync
+9. ~~Pas d'export~~ ✅ JSON export — Export JSON natif (REST + MCP), pas d'Obsidian
+10. **Pas d'audit trail** — Pas de traçabilité des opérations
+11. **Pas de bridges agent** — Pas de sync avec MEMORY.md ou fichiers natifs agent
+12. **Modèle cognitive limité** — 6 types + 4 lifecycle vs 4-tier + crystals + lessons
 
 ### AgentMemory — Avantages ✅
 
@@ -640,34 +647,47 @@ La cristallisation convertit des **actions terminées** en **cristaux** compacts
 
 ### 🔥 Idées Haute Priorité (emprunts AgentMemory → MnemoLite)
 
-#### 1. Secret Stripping automatique
+#### 1. ~~Secret Stripping automatique~~ ✅ FAIT (EPIC-42)
 **Inspiration** : AgentMemory `stripPrivateData()`  
-**Implémentation MnemoLite** : Ajouter `strip_secrets()` dans `write_memory` et `update_memory` avant stockage.  
-**Patterns à implémenter** :
-- `<private>...</private>` tags
-- OpenAI keys (`sk-proj-*`, `sk-*`)
-- GitHub tokens (`ghp_*`, `github_pat_*`)
-- AWS keys (`AKIA*`)
-- Bearer tokens
-- JWT patterns (`eyJ...`)
-- Generic `api-key:`, `secret:`, `password:` patterns  
-**Effort** : ~2h  
-**Impact** : Sécurité critique
+**Statut** : **Implémenté** dans `api/services/privacy_service.py` — 12 patterns regex, auto-détection + redaction, intégré dans `write_memory` / `update_memory`.  
+**Patterns implémentés** :
+- OpenAI keys (`sk-proj-*`, `sk-*`, `sk-ant-*`) ✅
+- GitHub tokens (`ghp_*`, `github_pat_*`, `npm_*`) ✅
+- AWS keys (`AKIA*`) ✅
+- Bearer tokens ✅
+- JWT patterns (`eyJ...`) ✅
+- Generic `api-key:`, `secret:`, `password:` patterns ✅
+- `<private>...</private>` tags — ❌ Pas encore implémenté (différence vs AgentMemory)  
+**Effort réel** : ~4h  
+**Impact** : Sécurité critique ✅
 
-#### 2. Hooks automatiques Claude Code / Cursor
+#### 2. Hooks automatiques Claude Code / Cursor ⚠️ PARTIEL
 **Inspiration** : AgentMemory 12 hooks `.mjs`  
-**Implémentation MnemoLite** : Créer des hooks Claude Code qui appellent l'API MnemoLite automatiquement :
-- `session-start` → `get_system_snapshot()`
-- `post-tool-use` → `write_memory()` pour les observations importantes
-- `session-end` → `consolidate_memory()` pour les mémoires accumulées  
-**Effort** : ~4h  
+**Statut** : **2 hooks déployés** via scripts shell :
+- `Stop/auto-save.sh` → Sauvegarde conversation à la fin de session ✅
+- `UserPromptSubmit/auto-save-previous.sh` → Sauvegarde échange précédent ✅
+- `deploy-hooks-to-project.sh` → Déploie les stub hooks dans un projet ✅
+
+**Reste à implémenter** :
+- `session-start` → `get_system_snapshot()` ❌
+- `pre-tool-use` / `post-tool-use` → `write_memory()` pour observations ❌
+- `session-end` → `consolidate_memory()` ❌
+- `auto-consolidation` → Background périodique ❌  
+**Effort restant** : ~6h  
 **Impact** : Adoption massive — la mémoire devient invisible
 
-#### 3. Déduplication Jaccard
+#### 3. ~~Déduplication Jaccard~~ ✅ FAIT
 **Inspiration** : AgentMemory auto-forget (contradiction detection)  
-**Implémentation MnemoLite** : Dans `MemoryRepository.add()`, vérifier similarité titre+content avant insertion. Si Jaccard > 0.9, proposer mise à jour au lieu de création.  
-**Effort** : ~3h  
-**Impact** : Qualité des données mémoire
+**Statut** : **Implémenté** — two-stage dedup dans `MemoryRepository.find_potential_duplicates()`:
+- Stage 1: pg_trgm GIN index sur title (SQL, rapide)
+- Stage 2: Jaccard similarity Python (title + content + combined, threshold 0.9)
+- Intégré dans `write_memory` via `dedup_check=True` (défaut)
+- Retourne `duplicate_warning` + `potential_duplicates` pour Jaccard ≥ 0.9
+- Retourne `similar_memories` pour near-matches (0.7–0.9)
+- Pure Python `utils/jaccard.py` (aucune dépendance SQLAlchemy)
+- 24 tests unitaires  
+**Effort réel** : ~4h  
+**Impact** : Qualité des données mémoire ✅
 
 #### 4. Claude Bridge Sync (MEMORY.md)
 **Inspiration** : AgentMemory `memory_claude_bridge_sync`  
@@ -675,8 +695,10 @@ La cristallisation convertit des **actions terminées** en **cristaux** compacts
 **Effort** : ~4h  
 **Impact** : Compatibilité écosystème Claude Code
 
-#### 5. Export JSON + Obsidian
-**Inspiration** : AgentMemory `memory_export` + `memory_obsidian_export`  
+#### 5. ~~Export JSON~~ ✅ FAIT — Obsidian Markdown restant
+**Inspiration** : AgentMemory `memory_export` + `memory_obsidian_export`
+
+Export JSON implémenté : `GET /api/v1/memories/export` (REST téléchargeable) + outil MCP `export_memories(project_id?, include_deleted?)`. Export sans embedding, filtre par projet, enveloppe `mnemolite-memories-v1`.  
 **Implémentation MnemoLite** : Ajouter endpoints d'export :
 - `/api/memories/export?format=json` — Export complet
 - `/api/memories/export?format=obsidian` — Markdown avec frontmatter  
@@ -745,28 +767,28 @@ La cristallisation convertit des **actions terminées** en **cristaux** compacts
 
 ### Phase 1 — Quick Wins (1-2 jours)
 
-| # | Action | Effort | Impact | Fichier |
-|---|--------|--------|--------|---------|
-| 1 | **Secret stripping** | 2h | 🔴 Critique | `api/services/privacy_service.py` (nouveau) + intégration dans `write_memory` / `update_memory` |
-| 2 | **Déduplication Jaccard** | 3h | 🟡 Important | `api/db/repositories/memory_repository.py` — vérification avant insertion |
-| 3 | **Export JSON + Obsidian** | 3h | 🟢 Utile | `api/routes/memories_routes.py` + `api/services/export_service.py` (nouveau) |
+| # | Action | Effort | Impact | Fichier | Statut |
+|---|--------|--------|--------|---------|--------|
+| 1 | **Secret stripping** | 2h | 🔴 Critique | `api/services/privacy_service.py` + intégration write/update | ✅ **FAIT** (EPIC-42) |
+| 2 | **Déduplication Jaccard** | 3h | 🟡 Important | `api/utils/jaccard.py` + `api/db/repositories/memory_repository.py` + `api/mnemo_mcp/tools/memory_tools.py` | ✅ **FAIT** (dedup_check) |
+| 3 | **Export JSON** | 3h | 🟢 Utile | `api/routes/memories_routes.py` + `api/db/repositories/memory_repository.py` (export_memories) + MCP tool | ✅ **FAIT** (JSON only, pas Obsidian) |
 
 ### Phase 2 — Adoption (3-5 jours)
 
-| # | Action | Effort | Impact | Fichier |
-|---|--------|--------|--------|---------|
-| 4 | **Hooks Claude Code** | 4h | 🔴 Critique | `scripts/hooks/` (nouveaux .mjs) |
-| 5 | **Claude Bridge Sync** | 4h | 🟡 Important | `api/services/claude_bridge_service.py` (nouveau) |
-| 6 | **Audit Trail** | 4h | 🟡 Important | `api/db/repositories/audit_repository.py` + migration |
-| 7 | **Diagnostics + Auto-Heal** | 6h | 🟢 Utile | `api/services/memory_health_service.py` (nouveau) |
+| # | Action | Effort | Impact | Fichier | Statut |
+|---|--------|--------|--------|---------|--------|
+| 4 | **Hooks Claude Code** | 4h→6h restant | 🔴 Critique | `scripts/hooks/` + `scripts/deploy-hooks-to-project.sh` | ⚠️ **PARTIEL** (2/12 hooks) |
+| 5 | **Claude Bridge Sync** | 4h | 🟡 Important | `api/services/claude_bridge_service.py` (nouveau) | ❌ À faire |
+| 6 | **Audit Trail** | 4h | 🟡 Important | `api/db/repositories/audit_repository.py` + migration | ❌ À faire |
+| 7 | **Diagnostics + Auto-Heal** | 6h | 🟢 Utile | `api/services/memory_health_service.py` (nouveau) | ❌ À faire |
 
 ### Phase 3 — Enrichissement (1-2 semaines)
 
-| # | Action | Effort | Impact | Fichier |
-|---|--------|--------|--------|---------|
-| 8 | **Orchestration Agent basique** | 8h | 🟡 Important | `api/models/action_models.py` + `api/services/action_service.py` |
-| 9 | **Reflect / Insight Synthesis** | 6h | 🟢 Utile | `api/services/insight_service.py` (nouveau) |
-| 10 | **Git-Versioned Snapshots** | 4h | 🟢 Utile | `api/services/snapshot_service.py` (nouveau) |
+| # | Action | Effort | Impact | Fichier | Statut |
+|---|--------|--------|--------|---------|--------|
+| 8 | **Orchestration Agent basique** | 8h | 🟡 Important | `api/models/action_models.py` + `api/services/action_service.py` | ❌ À faire |
+| 9 | **Reflect / Insight Synthesis** | 6h | 🟢 Utile | `api/services/insight_service.py` (nouveau) | ❌ À faire |
+| 10 | **Git-Versioned Snapshots** | 4h | 🟢 Utile | `api/services/snapshot_service.py` (nouveau) | ❌ À faire |
 
 ---
 
@@ -779,8 +801,8 @@ La cristallisation convertit des **actions terminées** en **cristaux** compacts
 | **Code Intelligence** | ⭐⭐⭐⭐⭐ | ⭐ |
 | **Recherche Hybride** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
 | **Mémoire Sémantique** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
-| **Capture Automatique** | ⭐⭐ | ⭐⭐⭐⭐⭐ |
-| **Privacy/Sécurité** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Capture Automatique** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Privacy/Sécurité** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐½ |
 | **Orchestration Agent** | ⭐ | ⭐⭐⭐⭐⭐ |
 | **Observabilité** | ⭐⭐⭐⭐⭐ | ⭐⭐ |
 | **Simplicité installation** | ⭐⭐ | ⭐⭐⭐⭐⭐ |
@@ -796,11 +818,11 @@ La cristallisation convertit des **actions terminées** en **cristaux** compacts
 | **Code Intelligence** | **MnemoLite** | AgentMemory n'a rien de tout ça |
 | **Recherche Hybride** | **MnemoLite** | pg_trgm + HNSW + RRF + BM25 + cache |
 | **Mémoire Sémantique** | **Tie** | MnemoLite : decay fin, outcome, entities ; AgentMemory : 4-tier, capture, privacy |
-| **Capture Automatique** | **AgentMemory** | 12 hooks vs aucun |
-| **Privacy** | **AgentMemory** | Secret stripping vs rien |
+| **Capture Automatique** | **AgentMemory** | 12 hooks vs 2 hooks (MnemoLite en progrès) |
+| **Privacy** | **AgentMemory** (léger) | MnemoLite : PrivacyService (EPIC-42) ✅ ; AgentMemory : stripPrivateData + `<private>` tags (avantage : tags `<private>`)
 | **Orchestration Agent** | **AgentMemory** | Actions, routines, signals, leases |
 | **Observabilité** | **MnemoLite** | OpenTelemetry + OpenObserve + dashboards |
-| **Installation** | **AgentMemory** | `npx` vs Docker Compose 6 conteneurs |
+| **Installation** | **AgentMemory** | `npx` vs Docker Compose 8 conteneurs |
 | **Enterprise** | **MnemoLite** | PostgreSQL, Redis, ACID, partitioning, 1570+ tests |
 
 ---
@@ -814,15 +836,27 @@ MnemoLite et AgentMemory sont **complémentaires, pas concurrents**. Ils visent 
 
 **L'idéal serait un hybride** combinant :
 - La **Code Intelligence** de MnemoLite (AST, LSP, graphe, chunking, dual embedding)
-- La **Capture silencieuse + Privacy + Dédup** d'AgentMemory (hooks, secret stripping, Jaccard)
+- La **Capture silencieuse + Dédup** d'AgentMemory (hooks, Jaccard) — Privacy et Dédup désormais couverts par les deux
 - La **Recherche hybride** des deux (triple-stream + RRF + cache cascade)
 - L'**Orchestration agent** d'AgentMemory (actions, routines, signals)
 - L'**Observabilité** de MnemoLite (OpenTelemetry, dashboards, métriques)
 
+### Progrès depuis avril 2025
+
+| Recommandation | Statut | Détail |
+|---------------|--------|-------|
+| Phase 1 #1 : Secret stripping | ✅ **FAIT** | PrivacyService (EPIC-42), 12 patterns, intégré write/update |
+| Phase 1 #2 : Déduplication Jaccard | ✅ **FAIT** | utils/jaccard.py + find_potential_duplicates() + dedup_check=True, 24 tests |
+| Phase 2 #4 : Hooks Claude Code | ⚠️ **PARTIEL** | 2/12 hooks (Stop + UserPromptSubmit), deploy-scripts |
+| GLiNER Entity Extraction | ✅ **FAIT** | Nouveau feature non listée dans le rapport initial |
+| Outcome Feedback (rate_memory) | ✅ **FAIT** | Nouveau feature non listée dans le rapport initial |
+| Worker Service (Redis Streams) | ✅ **FAIT** | Nouveau feature non listée dans le rapport initial |
+
 ### Prochaine étape recommandée
 
-Implémenter les **Quick Wins de Phase 1** (secret stripping + déduplication + export) pour combler les lacunes de sécurité et qualité les plus flagrantes de MnemoLite, puis les **Hooks Claude Code** de Phase 2 pour l'adoption.
+Implémenter les **Quick Wins restants de Phase 1** (déduplication Jaccard + export JSON/Obsidian) puis compléter les **Hooks Claude Code** de Phase 2 (10 hooks restants) pour atteindre la capture silencieuse complète.
 
 ---
 
-*Fin du rapport — Généré le 13 avril 2025*
+
+*Fin du rapport — Généré le 13 avril 2025 — Mis à jour le juin 2025*
