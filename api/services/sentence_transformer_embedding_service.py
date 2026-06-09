@@ -89,6 +89,16 @@ EMBEDDING_MODELS = {
         "query_prefix": None,
         "document_prefix": None,
     },
+    # BGE-M3 : multilingue, 1024D, dense+sparse+colbert
+    # MTEB French leader, 8192 tokens context
+    "BAAI/bge-m3": {
+        "version": "bge-m3",
+        "dimension": 1024,
+        "uses_prompt_name": False,
+        "uses_prefix": True,
+        "query_prefix": "Represent this sentence for searching relevant passages: ",
+        "document_prefix": "Represent this passage for retrieval: ",
+    },
 }
 
 # Backward compatibility alias

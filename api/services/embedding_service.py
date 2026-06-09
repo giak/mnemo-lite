@@ -59,7 +59,7 @@ class MockEmbeddingService(EmbeddingServiceInterface):
     For production use, switch to SentenceTransformerEmbeddingService.
     """
 
-    def __init__(self, model_name: str = "simple-model", dimension: int = 768):
+    def __init__(self, model_name: str = "simple-model", dimension: int = 1024):
         """
         Initialise le service d'embedding.
 

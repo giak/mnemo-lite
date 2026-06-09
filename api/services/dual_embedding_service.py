@@ -99,7 +99,7 @@ class DualEmbeddingService:
         self,
         text_model_name: Optional[str] = None,
         code_model_name: Optional[str] = None,
-        dimension: int = 768,
+        dimension: int = 1024,  # BGE-M3
         device: str = "cpu",
         cache_size: int = 1000
     ):
@@ -121,7 +121,7 @@ class DualEmbeddingService:
 
         self.text_model_name = text_model_name or os.getenv(
             "EMBEDDING_MODEL",
-            "nomic-ai/nomic-embed-text-v1.5"
+            "BAAI/bge-m3"
         )
         self.code_model_name = code_model_name or os.getenv(
             "CODE_EMBEDDING_MODEL",
