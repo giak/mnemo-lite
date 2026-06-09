@@ -35,7 +35,7 @@ ALTER TABLE memories DROP CONSTRAINT IF EXISTS chk_memory_type;
 
 -- Add new constraint with 'investigation' type
 ALTER TABLE memories ADD CONSTRAINT chk_memory_type
-CHECK (memory_type IN ('note', 'decision', 'task', 'reference', 'conversation', 'investigation'));
+CHECK (memory_type IN ('note', 'decision', 'task', 'reference', 'conversation', 'investigation', 'article', 'quintessence'));
 
 COMMENT ON COLUMN memories.memory_type IS
 'Classification: note, decision, task, reference, conversation, investigation (EPIC-24)';
