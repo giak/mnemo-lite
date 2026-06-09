@@ -29,16 +29,30 @@ def api_get(path, params=None):
         die(f"API error: {e}")
 
 
-def api_post(path, data):
-    """POST request, return JSON or die."""
+def api_request(method, path, data=None):
+    """HTTP request, return JSON or die."""
     try:
-        resp = requests.post(f"{BASE_URL}{path}", json=data, timeout=TIMEOUT)
+        func = getattr(requests, method)
+        kwargs = {"timeout": TIMEOUT}
+        if data is not None:
+            kwargs["json"] = data
+        resp = func(f"{BASE_URL}{path}", **kwargs)
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.ConnectionError:
         die(f"API inaccessible sur {BASE_URL}")
     except Exception as e:
         die(f"API error: {e}")
+
+
+def api_post(path, data):
+    return api_request("post", path, data)
+
+
+def api_put(path, data):
+    return api_request("put", path, data)
+
+
 
 
 def die(msg):
@@ -111,6 +125,25 @@ def cmd_write(args):
     result = api_post("/api/v1/memories", payload)
     mid = result.get("id", "")[:8]
     ok(f"Mémoire créée: [{mid}] « {args.title or args.content[:40]}... »")
+
+def cmd_update(args):
+    payload = {}
+    if args.title is not None:
+        payload["title"] = args.title
+    if args.content is not None:
+        payload["content"] = args.content
+    if args.tags is not None:
+        payload["tags"] = [t.strip() for t in args.tags.split(",")] if args.tags else []
+    if args.type is not None:
+        payload["memory_type"] = args.type
+
+    if not payload:
+        die("Au moins un champ à modifier (--title, --content, --tags, --type)")
+
+    result = api_put(f"/api/v1/memories/{args.id}", payload)
+    mid = result.get("id", args.id)[:8]
+    ok(f"Mémoire mise à jour: [{mid}]")
+
 
 
 def cmd_memories(args):
@@ -186,6 +219,14 @@ def main():
     p_write.add_argument("--tags", help="Tags (séparés par des virgules)")
     p_write.add_argument("--type", default="note", help="Type de mémoire (note, investigation, article, quintessence)")
 
+    p_update = sub.add_parser("update", help="Mettre à jour une mémoire")
+    p_update.add_argument("id", help="ID de la mémoire")
+    p_update.add_argument("--title", "-t", help="Nouveau titre")
+    p_update.add_argument("--content", "-c", help="Nouveau contenu")
+    p_update.add_argument("--tags", help="Nouveaux tags (séparés par des virgules)")
+    p_update.add_argument("--type", help="Nouveau type")
+
+
     p_mem = sub.add_parser("memories", help="Lister les mémoires récentes")
     p_mem.add_argument("--limit", "-l", type=int, default=10, help="Nombre")
 
@@ -201,6 +242,7 @@ def main():
         "health": cmd_health,
         "search": cmd_search,
         "write": cmd_write,
+        "update": cmd_update,
         "memories": cmd_memories,
         "status": cmd_status,
     }
