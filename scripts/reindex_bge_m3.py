@@ -185,8 +185,8 @@ async def _main():
                 import numpy as np
                 params = [
                     {
-                        "emb": emb.tolist(),
-                        "half": emb.astype(np.float16).tolist(),
+                        "emb": str(emb.tolist()),
+                        "half": str(emb.astype(np.float16).tolist()),
                         "model": MODEL_NAME,
                         "id": mem_id,
                     }
