@@ -173,7 +173,7 @@ class DualEmbeddingService:
                     "embedding_mode": "mock",
                     "text_model": "MOCK",
                     "code_model": "MOCK",
-                    "dimension": dimension
+                    "dimension": self.text_dimension
                 }
             )
         else:
@@ -182,7 +182,7 @@ class DualEmbeddingService:
                 extra={
                     "text_model": self.text_model_name,
                     "code_model": self.code_model_name,
-                    "dimension": dimension,
+                    "dimension": self.text_dimension,
                     "device": device
                 }
             )
