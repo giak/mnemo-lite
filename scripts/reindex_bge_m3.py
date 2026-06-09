@@ -32,8 +32,9 @@ import traceback
 
 # --- Configuration ---
 MODEL_NAME = "BAAI/bge-m3"
-BATCH_SIZE = 100
-LOG_INTERVAL = 1000
+BATCH_SIZE = 25
+MAX_CONTENT_LENGTH = 2000  # Truncate before encoding (tokenizer is O(n) on input length)
+LOG_INTERVAL = 25  # Log every batch
 
 DOC_PREFIX = "Represent this passage for retrieval: "
 
@@ -167,7 +168,9 @@ async def _main():
                 break
 
             ids = [r[0] for r in rows]
-            texts = [f"{DOC_PREFIX}{r[1] or ''}" for r in rows]
+            # Truncate long content: tokenizer time scales linearly with input length
+            # 2M char docs would take hours without this
+            texts = [f"{DOC_PREFIX}{(r[1] or '')[:MAX_CONTENT_LENGTH]}" for r in rows]
             last_id = ids[-1]
 
             # Encode batch
