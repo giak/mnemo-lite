@@ -266,9 +266,10 @@ async def get_embedding_service(request: Request) -> EmbeddingServiceProtocol:
 
         # Create DualEmbeddingService (supports TEXT + CODE domains)
         dual_service = DualEmbeddingService(
-            text_model_name=os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5"),
+            text_model_name=os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
             code_model_name=os.getenv("CODE_EMBEDDING_MODEL", "jinaai/jina-embeddings-v2-base-code"),
-            dimension=int(os.getenv("EMBEDDING_DIMENSION", "768")),
+            text_dimension=int(os.getenv("EMBEDDING_DIMENSION", "1024")),
+            code_dimension=int(os.getenv("CODE_EMBEDDING_DIMENSION", "768")),
             device=os.getenv("EMBEDDING_DEVICE", "cpu"),
             cache_size=int(os.getenv("EMBEDDING_CACHE_SIZE", "1000"))
         )
