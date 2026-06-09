@@ -78,37 +78,39 @@ def cmd_health(args):
 
 
 def cmd_search(args):
-    data = api_get(f"/v1/search/", params={"vector_query": args.query, "limit": args.limit})
-    results = data.get("data", data.get("results", []))
-    meta = data.get("meta", {})
-    total = meta.get("total_hits", len(results))
+    body = {"query": args.query, "limit": args.limit}
+    if args.memory_type:
+        body["memory_type"] = args.memory_type
+    data = api_post("/api/v1/memories/search", body)
+    results = data.get("results", [])
+    total = data.get("total", len(results))
+    elapsed = data.get("search_time_ms", 0)
 
     if not results:
         print("Aucun résultat.")
         return
 
     print(f"\n{'═' * 60}")
-    print(f"📊 {total} résultat(s) (affichés: {len(results)})")
+    print(f"📊 {total} résultat(s) (affichés: {len(results)}) · {elapsed:.0f} ms")
     print(f"{'═' * 60}")
 
     for r in results:
         rid = r.get("id", "")[:8]
-        ts = r.get("timestamp", "")[:19]
-        content = r.get("content", {})
-        if isinstance(content, dict):
-            title = content.get("title", content.get("text", "(sans titre)"))
-        else:
-            title = str(content)[:80]
-        meta_tags = r.get("metadata", {})
-        tags = meta_tags.get("tags", meta_tags.get("source", ""))
+        ts = r.get("created_at", "")[:19]
+        title = r.get("title", "(sans titre)")
+        memory_type = r.get("memory_type", "?")
+        score = r.get("score", 0)
+        preview = (r.get("content_preview") or "")[:100]
+        tags = r.get("tags", [])
         print(f"\n  [{rid}] {ts}")
         print(f"  {title}")
+        print(f"  type={memory_type}  score={score:.3f}")
+        if preview:
+            print(f"  {preview}")
         if tags:
-            tag_str = tags if isinstance(tags, str) else ",".join(tags)
+            tag_str = tags if isinstance(tags, str) else ", ".join(tags)
             print(f"  tags: {tag_str}")
     print()
-
-
 def cmd_write(args):
     if not args.content:
         die("Usage: mnemo write --title '...' --content '...' [--tags 'a,b'] [--type note]")
@@ -212,6 +214,8 @@ def main():
     p_search = sub.add_parser("search", help="Rechercher dans les mémoires")
     p_search.add_argument("query", help="Texte à rechercher")
     p_search.add_argument("--limit", "-l", type=int, default=10, help="Nombre de résultats")
+    p_search.add_argument("--type", "-t", dest="memory_type", default=None,
+                       help="Filtrer par type de mémoire (note, investigation, article, quintessence, etc.)")
 
     p_write = sub.add_parser("write", help="Créer une mémoire")
     p_write.add_argument("--title", "-t", help="Titre")
