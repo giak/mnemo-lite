@@ -20,7 +20,7 @@
 set -euo pipefail
 
 API_BASE="http://localhost:8001"
-CURL_OPTS="-s --connect-timeout 5 --max-time 30"
+CURL_OPTS="-s --connect-timeout 5 --max-time 120"
 
 # ── Couleurs ────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -200,7 +200,7 @@ cmd_search() {
     [[ -z "\$query" ]] && die "Usage: mnemo search <query> [--limit N]"
     check_api
     ok "Recherche: « \$query »"
-    api_get "/v1/search/?vector_query=\$(python3 -c "import urllib.parse; print(urllib.parse.quote('\$query'))")&limit=\$limit" | fmt_search_results
+    api_get "/v1/search/?vector_query=\$(python3 -c 'import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))' "\$query")&limit=\$limit" | fmt_search_results
 }
 
 cmd_memories() {
@@ -256,58 +256,6 @@ cmd_read() {
     api_get "/v1/events/\$eid" | python3 -m json.tool 2>/dev/null || die "Mémoire introuvable"
 }
 
-cmd_code() {
-    local query="" limit=10 repo=""
-    while [[ \$# -gt 0 ]]; do
-        case "\$1" in
-            --limit) shift; limit="\$1" ;;
-            --repo) shift; repo="\$1" ;;
-            *) query="\$query \$1" ;;
-        esac
-        shift
-    done
-    query="\$(echo "\$query" | xargs)"
-    [[ -z "\$query" ]] && die "Usage: mnemo code <query> [--limit N] [--repo REPO]"
-    check_api
-
-    local filters="null"
-    [[ -n "\$repo" ]] && filters='{"repository":"'"\$repo"'"}'
-
-    local payload
-    payload=\$(python3 -c "
-import json
-p = {
-    'query': '$query',
-    'top_k': $limit,
-    'enable_lexical': True,
-    'enable_vector': True,
-    'filters': $filters
-}
-print(json.dumps(p))
-")
-
-    echo -e "\n\${CYAN}🔍 Recherche code: « \$query »\${NC}"
-    api_post "/v1/code/search" "\$payload" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-results = data.get('results', [])
-meta = data.get('metadata', {})
-if not results:
-    print('Aucun résultat.')
-    sys.exit(0)
-print(f'\n{"═"*60}')
-print(f'📄 {meta.get("total_results", len(results))} résultat(s) en {meta.get("execution_time_ms",0)}ms')
-print(f'{"═"*60}')
-for r in results[:$limit]:
-    f = r.get('file_path','')
-    n = r.get('name','')
-    s = r.get('source_code','')[:200]
-    sc = r.get('rrf_score',0)
-    print(f'\n  📍 {f}:{n}  (score: {sc:.3f})')
-    print(f'  {s}')
-    print()
-" 2>/dev/null
-}
 
 cmd_projects() {
     check_api
