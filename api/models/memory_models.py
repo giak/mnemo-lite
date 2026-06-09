@@ -63,10 +63,14 @@ class Memory(MemoryBase):
 
 
 class MemoryUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
     memory_type: Optional[str] = None
+    tags: Optional[List[str]] = None
+    author: Optional[str] = None
+    embedding_source: Optional[str] = None
     event_type: Optional[str] = None
     role_id: Optional[int] = None
-    content: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
     expiration: Optional[datetime.datetime] = None
     embedding: Optional[Union[List[float], str]] = None

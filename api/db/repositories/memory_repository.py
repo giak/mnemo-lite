@@ -191,7 +191,7 @@ class MemoryRepository:
 
             if memory_update.memory_type is not None:
                 update_fields.append("memory_type = :memory_type")
-                params["memory_type"] = memory_update.memory_type.value
+                params["memory_type"] = memory_update.memory_type
 
             if memory_update.tags is not None:
                 update_fields.append("tags = :tags")
