@@ -369,7 +369,7 @@ async def update_memory_endpoint(
         update = MemoryUpdate(
             title=request.title,
             content=request.content,
-            memory_type=MemoryType(request.memory_type) if request.memory_type else None,
+            memory_type=request.memory_type,
             tags=request.tags,
             author=request.author,
             embedding_source=request.embedding_source,
