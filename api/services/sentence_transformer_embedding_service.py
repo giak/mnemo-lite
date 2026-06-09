@@ -101,8 +101,8 @@ EMBEDDING_MODELS = {
     },
 }
 
-# Backward compatibility alias
-NOMIC_MODELS = EMBEDDING_MODELS
+# All available embedding models
+ALL_MODELS = EMBEDDING_MODELS
 
 
 class SentenceTransformerEmbeddingService:

@@ -99,7 +99,8 @@ class DualEmbeddingService:
         self,
         text_model_name: Optional[str] = None,
         code_model_name: Optional[str] = None,
-        dimension: int = 1024,  # BGE-M3
+        text_dimension: int = 1024,  # BGE-M3
+        code_dimension: int = 768,   # jina-v2-base-code
         device: str = "cpu",
         cache_size: int = 1000
     ):
@@ -127,7 +128,8 @@ class DualEmbeddingService:
             "CODE_EMBEDDING_MODEL",
             "jinaai/jina-embeddings-v2-base-code"
         )
-        self.dimension = dimension
+        self.text_dimension = text_dimension
+        self.code_dimension = code_dimension
         self.device = device
 
         # Models (lazy loaded, EXCEPT in mock mode)
@@ -201,14 +203,14 @@ class DualEmbeddingService:
 
         # Validate dimension
         test_emb = model.encode("test")
-        if len(test_emb) != self.dimension:
+        if len(test_emb) != self.text_dimension:
             raise ValueError(
                 f"TEXT model dimension mismatch: "
-                f"expected {self.dimension}, got {len(test_emb)}"
+                f"expected {self.text_dimension}, got {len(test_emb)}"
             )
 
         logger.info(
-            f"✅ TEXT model loaded: {self.text_model_name} ({self.dimension}D)"
+            f"✅ TEXT model loaded: {self.text_model_name} ({self.text_dimension}D)"
         )
         return model
 
@@ -228,14 +230,14 @@ class DualEmbeddingService:
 
         # Validate dimension
         test_emb = model.encode("def test(): pass")
-        if len(test_emb) != self.dimension:
+        if len(test_emb) != self.text_dimension:
             raise ValueError(
                 f"CODE model dimension mismatch: "
-                f"expected {self.dimension}, got {len(test_emb)}"
+                f"expected {self.text_dimension}, got {len(test_emb)}"
             )
 
         logger.info(
-            f"✅ CODE model loaded: {self.code_model_name} ({self.dimension}D)"
+            f"✅ CODE model loaded: {self.code_model_name} ({self.code_dimension}D)"
         )
         return model
 
@@ -443,7 +445,7 @@ class DualEmbeddingService:
 
         # Use hash as seed for reproducible random vector
         rng = np.random.default_rng(text_hash % (2**32))
-        mock_emb = rng.random(self.dimension).astype(np.float32)
+        mock_emb = rng.random(self.text_dimension).astype(np.float32)
 
         # Normalize to unit vector (like real embeddings)
         norm = np.linalg.norm(mock_emb)
@@ -534,7 +536,7 @@ class DualEmbeddingService:
         if not text or not text.strip():
             logger.warning("Empty text provided for embedding")
             # Return zero vector(s) with correct keys based on domain
-            zero_vector = [0.0] * self.dimension
+            zero_vector = [0.0] * self.text_dimension
             result = {}
             if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
                 result['text'] = zero_vector.copy()
@@ -677,7 +679,7 @@ class DualEmbeddingService:
 
         if not valid_texts:
             # All texts empty - return zero vectors
-            zero_vector = [0.0] * self.dimension
+            zero_vector = [0.0] * self.text_dimension
             results = []
             for _ in texts:
                 result = {}
@@ -703,7 +705,7 @@ class DualEmbeddingService:
                     results[i] = result
                 else:
                     # Empty text - use zero vector
-                    zero_vector = [0.0] * self.dimension
+                    zero_vector = [0.0] * self.text_dimension
                     result = {}
                     if domain in (EmbeddingDomain.TEXT, EmbeddingDomain.HYBRID):
                         result['text'] = zero_vector.copy()
@@ -785,7 +787,7 @@ class DualEmbeddingService:
                 results[valid_idx]['code'] = code_embeddings[i].tolist()
 
         # Fill empty positions with zero vectors
-        zero_vector = [0.0] * self.dimension
+        zero_vector = [0.0] * self.text_dimension
         for i, result in enumerate(results):
             if result is None:
                 result = {}
@@ -900,7 +902,7 @@ class DualEmbeddingService:
         return {
             "text_model_name": self.text_model_name,
             "code_model_name": self.code_model_name,
-            "dimension": self.dimension,
+            "dimension": self.text_dimension,
             "device": self.device,
             "text_model_loaded": self._text_model is not None,
             "code_model_loaded": self._code_model is not None,
