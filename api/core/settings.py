@@ -66,6 +66,70 @@ class AppSettings(BaseSettings):
     # === Environnement ===
     ENVIRONMENT: str = "development"
 
+    # === Base de donnees (etendu) ===
+    TEST_DATABASE_URL: str = ""
+    MCP_DATABASE_URL: str = ""
+    REDIS_HOST: str = "redis"
+    REDIS_PORT: int = 6379
+    POSTGRES_USER: str = "mnemo"
+    POSTGRES_PASSWORD: str = "mnemopass"
+    POSTGRES_DB: str = "mnemolite"
+    POSTGRES_PORT: int = 5432
+
+    # === Application ===
+    DEBUG: bool = False
+    LOG_LEVEL: str = "INFO"
+    SECRET_KEY: str = ""
+    API_PORT: int = 8001
+
+    # === Auth & Rate Limiting ===
+    MNEMO_AUTH_ENABLED: bool = False
+    MNEMO_API_KEYS: str = ""
+    MNEMO_RATE_LIMIT_ENABLED: bool = True
+    MNEMO_RATE_LIMIT_MAX: int = 100
+    MNEMO_RATE_LIMIT_WINDOW: int = 60
+
+    # === Auto-Import / Watcher ===
+    TYPESCRIPT_LSP_ENABLED: bool = True
+    CLAUDE_PROJECTS_DIR: str = "/home/user/.claude/projects"
+    CODEBUFF_DIR: str = "/home/user/.config/manicode/projects"
+    OPENCODE_DIR: str = "/home/user/.local/share/opencode"
+    ACTIVE_PROJECT: str = "mnemolite"
+    ENABLE_AUTO_IMPORT: bool = False
+    CONVERSATION_WATCHER_ENABLED: bool = True
+    POLL_INTERVAL: int = 30
+    IMPORT_HISTORICAL: bool = False
+    WATCHER_LOG_FORMAT: str = "text"
+
+    # === MCP Server ===
+    MCP_PRIVACY_ENABLED: bool = True
+    MCP_TRANSPORT: str = "http"
+    MCP_HTTP_HOST: str = "0.0.0.0"
+    MCP_HTTP_PORT: int = 8002
+    MCP_AUTH_MODE: str = "none"
+
+    # === Feature Flags ===
+    ENTITY_EXTRACTION_ENABLED: bool = True
+    ENTITY_EXTRACTION_MEMORY_TYPES: str = "decision,reference,note,investigation"
+    ENTITY_EXTRACTION_SYSTEM_TAGS: str = "sys:core,sys:anchor,sys:pattern"
+    QUERY_UNDERSTANDING_ENABLED: bool = False
+    QUERY_UNDERSTANDING_FALLBACK: bool = True
+    USE_ONNX: bool = False
+
+    # === Upload ===
+    UPLOAD_BATCH_SIZE: int = 10
+    UPLOAD_INDEXING_TIMEOUT: int = 300
+
+    # === Observabilite (OpenObserve) ===
+    O2_URL: str = "http://openobserve:5080"
+    O2_USER: str = ""
+    O2_PASSWORD: str = ""
+    OTLP_ENDPOINT: str = "http://openobserve:5080/api/default"
+    OTLP_METRICS_ENDPOINT: str = "http://openobserve:5080/api/default"
+
+    # === Frontend ===
+    VITE_API_URL: str = "http://localhost:8001"
+
     @model_validator(mode="after")
     def validate_embedding_config(self):
         """Valide et auto-deduit la configuration d'embedding."""
