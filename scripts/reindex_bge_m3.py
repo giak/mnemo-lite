@@ -21,7 +21,7 @@ Usage:
     # PyTorch FP32 (default)
     python3 scripts/reindex_bge_m3.py
 
-    # ONNX INT8 (2.5x faster, same quality)
+    # ONNX INT8 (2.5x faster, same quality, direct onnxruntime — no optimum needed)
     USE_ONNX=true python3 scripts/reindex_bge_m3.py
 """
 
@@ -82,6 +82,64 @@ def build_db_url() -> str:
     return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{dbname}"
 
 
+
+
+class OnnxEmbedder:
+    """Minimal ONNX embedder using onnxruntime directly (no optimum needed).
+    
+    Bypasses optimum/torch version conflicts. Uses CLS pooling + L2 norm
+    to match SentenceTransformer BGE-M3 behavior exactly.
+    """
+    
+    def __init__(self, model_path: str):
+        import onnxruntime as ort
+        from transformers import AutoTokenizer
+        
+        onnx_file = os.path.join(model_path, "onnx", "model.onnx")
+        if not os.path.exists(onnx_file):
+            raise FileNotFoundError(f"ONNX model not found at {onnx_file}")
+        
+        self.session = ort.InferenceSession(onnx_file, providers=['CPUExecutionProvider'])
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            os.path.join(model_path, "onnx")
+        )
+    
+    def encode(self, texts: list, normalize_embeddings: bool = True,
+               show_progress_bar: bool = False, batch_size: int = 25):
+        """Encode texts to embeddings. API-compatible with SentenceTransformer.encode()."""
+        import numpy as np
+        
+        all_embeddings = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            
+            # Tokenize
+            inputs = self.tokenizer(
+                batch,
+                padding=True,
+                truncation=True,
+                max_length=8192,  # BGE-M3 native max (no extra truncation beyond MAX_CONTENT_LENGTH)
+                return_tensors='np'
+            )
+            
+            # Run ONNX inference
+            outputs = self.session.run(None, {
+                'input_ids': inputs['input_ids'],
+                'attention_mask': inputs['attention_mask'],
+            })
+            hidden = outputs[0]  # (batch, seq_len, 1024)
+            
+            # CLS pooling (first token = <s>)
+            embeddings = hidden[:, 0, :]
+            
+            if normalize_embeddings:
+                norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+                embeddings = embeddings / np.maximum(norms, 1e-12)
+            
+            all_embeddings.append(embeddings)
+        
+        return np.concatenate(all_embeddings, axis=0)
+
 async def main():
     try:
         await _main()
@@ -111,9 +169,9 @@ async def _main():
     # 2. Load model
     if USE_ONNX:
         print(f"Loading BGE-M3 ONNX INT8 model from {ONNX_MODEL_PATH}...")
-        print("  (2.5x faster than PyTorch FP32 on CPU)")
+        print("  (2.5x faster than PyTorch FP32 on CPU, direct onnxruntime)")
         t0 = time.time()
-        model = SentenceTransformer(ONNX_MODEL_PATH, backend="onnx")
+        model = OnnxEmbedder(ONNX_MODEL_PATH)
         print(f"Model loaded in {time.time() - t0:.1f}s")
     else:
         print("Loading BGE-M3 model (~2.2 GB, ~30s)...")
