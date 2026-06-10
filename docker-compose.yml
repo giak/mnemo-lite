@@ -96,6 +96,7 @@ services:
       O2_USER: ${O2_USER:-admin@mnemolite.local}
       O2_PASSWORD: ${O2_PASSWORD:-Complexpass#123}
       GLINER_MODEL_PATH: /app/models/gliner_multi-v2.1
+      USE_ONNX: ${USE_ONNX:-false}
       ENTITY_EXTRACTION_ENABLED: ${ENTITY_EXTRACTION_ENABLED:-true}
       ENTITY_EXTRACTION_MEMORY_TYPES: ${ENTITY_EXTRACTION_MEMORY_TYPES:-decision,reference,note,investigation}
       ENTITY_EXTRACTION_SYSTEM_TAGS: ${ENTITY_EXTRACTION_SYSTEM_TAGS:-sys:core,sys:anchor,sys:pattern}
@@ -110,6 +111,7 @@ services:
     volumes:
       - ./api:/app
       - ./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro
+      - ./shared_volumes/models/bge-m3-onnx-int8:/app/models/bge-m3-onnx-int8:ro
       - ./workers:/app/workers
       - ./scripts:/app/scripts
       - ./db/migrations:/app/db/migrations:ro
