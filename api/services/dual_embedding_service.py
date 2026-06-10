@@ -16,7 +16,6 @@ EPIC-12 Story 12.1: Added timeout protection for embedding generation.
 EPIC-12 Story 12.3: Added circuit breaker to prevent fail-forever behavior.
 """
 
-import os
 import logging
 from api.core import get_settings
 import asyncio

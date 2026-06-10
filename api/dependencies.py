@@ -4,7 +4,6 @@ Fournit les fonctions d'injection pour les repositories et services.
 Respecte le principe d'inversion des dépendances (DIP).
 """
 
-import os
 import structlog
 from typing import Dict, Any, Optional, List
 from fastapi import Request, HTTPException, Depends

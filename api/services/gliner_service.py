@@ -4,7 +4,6 @@ GLiNER Service — Deterministic entity extraction.
 Uses GLiNER (Generalist and Lightweight Model for NER) to extract
 entities from text with zero hallucinations.
 """
-import os
 from typing import List, Dict, Any, Optional
 
 import structlog

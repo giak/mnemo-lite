@@ -9,7 +9,6 @@ Supports:
 - multilingual-e5-small (384D, fast multilingual)
 """
 
-import os
 import logging
 import asyncio
 from typing import List, Optional, Literal, Any
