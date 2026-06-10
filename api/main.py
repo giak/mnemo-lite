@@ -18,6 +18,7 @@ import uuid
 from typing import Optional
 import logging
 import sys
+from api.core import get_settings
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -112,7 +113,7 @@ async def lifespan(app: FastAPI):
     # Skip if already set by test fixtures
     if getattr(app.state, "embedding_service", None) is not None:
         logger.info("Embedding service already set (likely by test fixture), skipping initialization")
-    elif os.getenv("EMBEDDING_MODE", "real").lower() == "real":
+    elif get_settings().EMBEDDING_MODE == "real":
         try:
             logger.info("⏳ Pre-loading embedding model during startup...")
 
@@ -120,13 +121,14 @@ async def lifespan(app: FastAPI):
             from services.dual_embedding_service import DualEmbeddingService
             from dependencies import DualEmbeddingServiceAdapter
 
+            settings = get_settings()
             dual_service = DualEmbeddingService(
-                text_model_name=os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
-                code_model_name=os.getenv("CODE_EMBEDDING_MODEL", "jinaai/jina-embeddings-v2-base-code"),
-                text_dimension=int(os.getenv("EMBEDDING_DIMENSION", "1024")),
-                code_dimension=int(os.getenv("CODE_EMBEDDING_DIMENSION", "768")),
-                device=os.getenv("EMBEDDING_DEVICE", "cpu"),
-                cache_size=int(os.getenv("EMBEDDING_CACHE_SIZE", "1000"))
+                text_model_name=settings.EMBEDDING_MODEL,
+                code_model_name=settings.CODE_EMBEDDING_MODEL,
+                text_dimension=settings.EMBEDDING_DIMENSION,
+                code_dimension=settings.CODE_EMBEDDING_DIMENSION,
+                device=settings.EMBEDDING_DEVICE,
+                cache_size=settings.EMBEDDING_CACHE_SIZE
             )
 
             # Wrap with adapter for backward compatibility

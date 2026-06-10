@@ -24,6 +24,7 @@ from db.repositories.event_repository import EventRepository
 from services.embedding_service import MockEmbeddingService
 from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
 from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomain
+from api.core import get_settings
 from services.memory_search_service import MemorySearchService
 from services.event_processor import EventProcessor
 from services.notification_service import NotificationService
@@ -242,7 +243,7 @@ async def get_embedding_service(request: Request) -> EmbeddingServiceProtocol:
     logger.warning("Embedding service not in app.state, creating on demand")
 
     # Déterminer le mode
-    embedding_mode = os.getenv("EMBEDDING_MODE", "real").lower()
+    embedding_mode = get_settings().EMBEDDING_MODE
 
     if embedding_mode == "mock":
         logger.warning(
@@ -251,27 +252,28 @@ async def get_embedding_service(request: Request) -> EmbeddingServiceProtocol:
         )
         embedding_service = MockEmbeddingService(
             model_name="mock-model",
-            dimension=int(os.getenv("EMBEDDING_DIMENSION", "768"))
+            dimension=get_settings().EMBEDDING_DIMENSION
         )
 
     elif embedding_mode == "real":
+        settings = get_settings()
         logger.info(
             "✅ EMBEDDING MODE: DUAL (TEXT + CODE) - Phase 0 Story 0.2",
             extra={
                 "embedding_mode": "dual",
-                "text_model": os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5"),
-                "code_model": os.getenv("CODE_EMBEDDING_MODEL", "jinaai/jina-embeddings-v2-base-code")
+                "text_model": settings.EMBEDDING_MODEL,
+                "code_model": settings.CODE_EMBEDDING_MODEL
             }
         )
 
         # Create DualEmbeddingService (supports TEXT + CODE domains)
         dual_service = DualEmbeddingService(
-            text_model_name=os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
-            code_model_name=os.getenv("CODE_EMBEDDING_MODEL", "jinaai/jina-embeddings-v2-base-code"),
-            text_dimension=int(os.getenv("EMBEDDING_DIMENSION", "1024")),
-            code_dimension=int(os.getenv("CODE_EMBEDDING_DIMENSION", "768")),
-            device=os.getenv("EMBEDDING_DEVICE", "cpu"),
-            cache_size=int(os.getenv("EMBEDDING_CACHE_SIZE", "1000"))
+            text_model_name=settings.EMBEDDING_MODEL,
+            code_model_name=settings.CODE_EMBEDDING_MODEL,
+            text_dimension=settings.EMBEDDING_DIMENSION,
+            code_dimension=settings.CODE_EMBEDDING_DIMENSION,
+            device=settings.EMBEDDING_DEVICE,
+            cache_size=settings.EMBEDDING_CACHE_SIZE
         )
 
         # Wrap with adapter for backward compatibility
@@ -362,7 +364,7 @@ async def get_code_chunk_cache(request: Request) -> CodeChunkCache:
         return request.app.state.code_chunk_cache
 
     # Create cache singleton
-    cache_size_mb = int(os.getenv("L1_CACHE_SIZE_MB", "100"))
+    cache_size_mb = get_settings().L1_CACHE_SIZE_MB
     code_chunk_cache = CodeChunkCache(max_size_mb=cache_size_mb)
 
     # Store in app.state for singleton pattern
@@ -464,12 +466,9 @@ async def get_event_service(
     """
     # Configuration depuis env vars
     config = {
-        "auto_generate_embeddings": os.getenv("EMBEDDING_AUTO_GENERATE", "true").lower() == "true",
-        "embedding_fail_strategy": os.getenv("EMBEDDING_FAIL_STRATEGY", "soft"),  # soft | hard
-        "embedding_source_fields": os.getenv(
-            "EMBEDDING_SOURCE_FIELDS",
-            "text,body,message,content,title"
-        ).split(",")
+        "auto_generate_embeddings": get_settings().EMBEDDING_AUTO_GENERATE,
+        "embedding_fail_strategy": get_settings().EMBEDDING_FAIL_STRATEGY,  # soft | hard
+        "embedding_source_fields": get_settings().EMBEDDING_SOURCE_FIELDS.split(",")
     }
 
     return EventService(
@@ -508,7 +507,7 @@ async def get_redis_cache(request: Request) -> RedisCache:
         return request.app.state.redis_cache
 
     # Get Redis URL from environment
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    redis_url = get_settings().REDIS_URL
 
     # Create RedisCache singleton
     redis_cache = RedisCache(redis_url=redis_url)
@@ -709,7 +708,7 @@ async def get_metrics_collector(
 
     if redis_client is None:
         # Create new Redis client for metrics
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        redis_url = get_settings().REDIS_URL
         redis_client = aioredis.from_url(
             redis_url,
             decode_responses=False  # Keep bytes for INFO command

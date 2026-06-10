@@ -48,6 +48,12 @@ class AppSettings(BaseSettings):
     # === Device et cache ===
     EMBEDDING_DEVICE: str = "cpu"
     EMBEDDING_CACHE_SIZE: int = 1000
+    L1_CACHE_SIZE_MB: int = 100
+
+    # === Comportement embedding (EventService) ===
+    EMBEDDING_AUTO_GENERATE: bool = True
+    EMBEDDING_FAIL_STRATEGY: str = "soft"
+    EMBEDDING_SOURCE_FIELDS: str = "text,body,message,content,title"
 
     # === Entity extraction (GLiNER) ===
     GLINER_MODEL: str = "piEsposito/gliner-multi-v2.1"
@@ -63,7 +69,8 @@ class AppSettings(BaseSettings):
     def validate_embedding_config(self):
         """Valide et auto-deduit la configuration d'embedding."""
 
-        # 0. Validation EMBEDDING_MODE
+        # 0. Validation EMBEDDING_MODE (case-insensitive, backward compat)
+        self.EMBEDDING_MODE = self.EMBEDDING_MODE.lower()
         if self.EMBEDDING_MODE not in VALID_EMBEDDING_MODES:
             raise ValueError(
                 f"INVALID EMBEDDING_MODE: '{self.EMBEDDING_MODE}'. "
