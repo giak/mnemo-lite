@@ -151,7 +151,6 @@ async def main():
 
 async def _main():
     import numpy as np
-    from sentence_transformers import SentenceTransformer
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy.sql import text
 
@@ -174,6 +173,7 @@ async def _main():
         model = OnnxEmbedder(ONNX_MODEL_PATH)
         print(f"Model loaded in {time.time() - t0:.1f}s")
     else:
+        from sentence_transformers import SentenceTransformer
         print("Loading BGE-M3 model (~2.2 GB, ~30s)...")
         t0 = time.time()
         model = SentenceTransformer(MODEL_NAME, trust_remote_code=True)
