@@ -5,6 +5,7 @@ Provides semantic search with dual embeddings (TEXT and CODE domains)
 optimized for sub-20ms query time on 10k+ code chunks.
 """
 
+from api.core import get_settings
 import logging
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
@@ -91,7 +92,7 @@ class VectorSearchService:
         Raises:
             ValueError: If embedding is invalid or domain unknown
         """
-        expected_dim = int(os.environ.get("EMBEDDING_DIMENSION", "1024"))
+        expected_dim = get_settings().EMBEDDING_DIMENSION
         if not embedding or len(embedding) != expected_dim:
             raise ValueError(f"Embedding must be a {expected_dim}-dimensional vector")
 
