@@ -31,9 +31,7 @@ class GLiNERService:
         model_path: Optional[str] = None,
         entity_types: Optional[List[str]] = None,
     ):
-        self.model_path = model_path or os.getenv(
-            "GLINER_MODEL_PATH", "/app/models/gliner_multi-v2.1"
-        )
+        self.model_path = model_path or get_settings().GLINER_MODEL_PATH
         self.entity_types = entity_types or DEFAULT_ENTITY_TYPES
         self.model = None
         self._load_attempted = False

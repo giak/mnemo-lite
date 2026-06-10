@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from api.core import get_settings
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -20,8 +21,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/memories", tags=["memories"])
 
 # Read embedding model names from environment variables
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5")
-CODE_EMBEDDING_MODEL = os.getenv("CODE_EMBEDDING_MODEL", "jinaai/jina-embeddings-v2-base-code")
+EMBEDDING_MODEL = get_settings().EMBEDDING_MODEL
+CODE_EMBEDDING_MODEL = get_settings().CODE_EMBEDDING_MODEL
 
 
 @router.get("/stats")

@@ -16,6 +16,7 @@ Usage (inside Docker container):
 """
 
 import asyncio
+from api.core import get_settings
 import sys
 import os
 import time
@@ -129,7 +130,7 @@ async def main():
     print("=" * 70)
 
     # Get current model from env
-    current_model = os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5")
+    current_model = get_settings().EMBEDDING_MODEL
     print(f"\nCurrent EMBEDDING_MODEL: {current_model}")
 
     # Test current model

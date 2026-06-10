@@ -299,7 +299,8 @@ class CachedEmbeddingService:
 
 # Example usage for testing
 if __name__ == "__main__":
-    import asyncio
+    from api.core import get_settings
+import asyncio
 
     async def test_cache():
         # Create mock embedding service
@@ -307,7 +308,7 @@ if __name__ == "__main__":
             async def generate_embedding(self, text: str):
                 # Simulate slow operation
                 await asyncio.sleep(0.1)
-                return [0.1] * 768
+                return [0.1] * get_settings().EMBEDDING_DIMENSION
 
         # Create cached service
         mock_service = MockEmbeddingService()

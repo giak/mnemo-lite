@@ -18,6 +18,7 @@ EPIC-12 Story 12.3: Added circuit breaker to prevent fail-forever behavior.
 
 import os
 import logging
+from api.core import get_settings
 import asyncio
 from typing import List, Dict, Optional
 from enum import Enum
@@ -117,17 +118,11 @@ class DualEmbeddingService:
             cache_size: Not used (kept for backward compat)
         """
         # EPIC-18 Fix: Check EMBEDDING_MODE to support mock mode
-        self._embedding_mode = os.getenv("EMBEDDING_MODE", "real").lower()
+        self._embedding_mode = get_settings().EMBEDDING_MODE
         self._mock_mode = (self._embedding_mode == "mock")
 
-        self.text_model_name = text_model_name or os.getenv(
-            "EMBEDDING_MODEL",
-            "BAAI/bge-m3"
-        )
-        self.code_model_name = code_model_name or os.getenv(
-            "CODE_EMBEDDING_MODEL",
-            "jinaai/jina-embeddings-v2-base-code"
-        )
+        self.text_model_name = text_model_name or get_settings().EMBEDDING_MODEL
+        self.code_model_name = code_model_name or get_settings().CODE_EMBEDDING_MODEL
         self.text_dimension = text_dimension
         self.code_dimension = code_dimension
         self.device = device

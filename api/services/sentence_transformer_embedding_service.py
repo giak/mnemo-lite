@@ -15,6 +15,7 @@ import asyncio
 from typing import List, Optional, Literal, Any
 from enum import Enum
 import hashlib
+from api.core import get_settings
 
 import numpy as np
 
@@ -145,11 +146,8 @@ class SentenceTransformerEmbeddingService:
             cache_size: LRU cache size (0 to disable)
             device: PyTorch device ('cpu', 'cuda', 'mps')
         """
-        self.model_name = model_name or os.getenv(
-            "EMBEDDING_MODEL",
-            "nomic-ai/nomic-embed-text-v1.5"
-        )
-        self.dimension = dimension or int(os.getenv("EMBEDDING_DIMENSION", "768"))
+        self.model_name = model_name or get_settings().EMBEDDING_MODEL
+        self.dimension = dimension or get_settings().EMBEDDING_DIMENSION
         self.cache_size = cache_size
         self.device = device
 

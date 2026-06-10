@@ -133,11 +133,12 @@ async def main():
     engine = create_async_engine(database_url)
     
     # Create embedding service
+    settings = get_settings()
     embedding_service = DualEmbeddingService(
-        text_model_name=os.environ.get("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5"),
-        code_model_name=os.environ.get("CODE_EMBEDDING_MODEL", "jinaai/jina-embeddings-v2-base-code"),
-        dimension=int(os.environ.get("EMBEDDING_DIMENSION", "768")),
-        device=os.environ.get("EMBEDDING_DEVICE", "cpu"),
+        text_model_name=settings.EMBEDDING_MODEL,
+        code_model_name=settings.CODE_EMBEDDING_MODEL,
+        dimension=settings.EMBEDDING_DIMENSION,
+        device=settings.EMBEDDING_DEVICE,
         cache_size=1000
     )
     

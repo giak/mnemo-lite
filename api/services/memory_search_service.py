@@ -13,6 +13,7 @@ import traceback
 import sys
 
 from interfaces.repositories import EventRepositoryProtocol
+from api.core import get_settings
 from interfaces.services import EmbeddingServiceProtocol, MemorySearchServiceProtocol
 from models.memory_models import Memory
 from models.event_models import EventModel
@@ -29,7 +30,7 @@ class MemorySearchService(MemorySearchServiceProtocol):
     """
 
     # Constante pour la dimension attendue des vecteurs
-    EXPECTED_EMBEDDING_DIM = 1024  # Align with BAAI/bge-m3
+    EXPECTED_EMBEDDING_DIM = get_settings().EMBEDDING_DIMENSION  # From SSOT
 
     def __init__(
         self,

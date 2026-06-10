@@ -56,6 +56,7 @@ class AppSettings(BaseSettings):
     EMBEDDING_SOURCE_FIELDS: str = "text,body,message,content,title"
 
     # === Entity extraction (GLiNER) ===
+    GLINER_MODEL_PATH: str = "/app/models/gliner_multi-v2.1"
     GLINER_MODEL: str = "piEsposito/gliner-multi-v2.1"
 
     # === Base de donnees ===
