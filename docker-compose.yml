@@ -81,7 +81,6 @@ services:
       REDIS_URL: "redis://redis:6379/0"
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
       CODE_EMBEDDING_MODEL: ${CODE_EMBEDDING_MODEL:-jinaai/jina-embeddings-v2-base-code}
-      ENVIRONMENT: ${ENVIRONMENT:-development}
       CLAUDE_PROJECTS_DIR: /host/.claude/projects
       POLL_INTERVAL: ${POLL_INTERVAL:-30}
       IMPORT_HISTORICAL: ${IMPORT_HISTORICAL:-false}
