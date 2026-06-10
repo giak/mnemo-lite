@@ -1,4 +1,3 @@
-import os
 import json
 import asyncio
 from pathlib import Path
@@ -30,12 +29,12 @@ from sqlalchemy.event import listen
 from routes import health_routes, event_routes, search_routes, ui_routes, graph_routes, monitoring_routes, code_graph_routes, code_search_routes, code_indexing_routes, cache_admin_routes, lsp_routes, monitoring_routes_advanced, conversations_routes, autosave_monitoring_routes, dashboard_routes, batch_indexing_routes, indexing_error_routes, memories_routes, projects_routes, memory_relationship_routes, memory_graph_routes
 
 # Configuration de base
-DATABASE_URL = os.getenv("DATABASE_URL")
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+DATABASE_URL = get_settings().DATABASE_URL
+ENVIRONMENT = get_settings().ENVIRONMENT
+DEBUG = get_settings().DEBUG
 
 # Ajouter la lecture de TEST_DATABASE_URL
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
+TEST_DATABASE_URL = get_settings().TEST_DATABASE_URL
 
 logger = structlog.get_logger()
 
@@ -157,7 +156,7 @@ async def lifespan(app: FastAPI):
         app.state.embedding_service = None
 
     # 3. Initialize Redis L2 cache (EPIC-10 Story 10.2)
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    redis_url = get_settings().REDIS_URL
     try:
         from services.caches import RedisCache
 
@@ -237,7 +236,7 @@ async def lifespan(app: FastAPI):
         app.state.lsp_lifecycle_manager = None
 
     # 6. Initialize TypeScript LSP Client (EPIC-16 Story 16.3)
-    typescript_lsp_enabled = os.getenv("TYPESCRIPT_LSP_ENABLED", "true").lower() == "true"
+    typescript_lsp_enabled = get_settings().TYPESCRIPT_LSP_ENABLED
     if typescript_lsp_enabled:
         try:
             from services.lsp.typescript_lsp_client import TypeScriptLSPClient
@@ -279,7 +278,7 @@ async def lifespan(app: FastAPI):
         logger.info("⏳ Initializing monitoring alert service...")
 
         # Create Redis client for MetricsCollector
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        redis_url = get_settings().REDIS_URL
         redis_client = aioredis.from_url(redis_url, decode_responses=False)
 
         # Create MetricsCollector and MonitoringAlertService
@@ -449,10 +448,10 @@ app.add_middleware(MetricsMiddleware)
 # API Key authentication middleware
 from middleware.auth import APIKeyMiddleware
 from middleware.rate_limit import RateLimitMiddleware
-_auth_enabled = os.getenv("MNEMO_AUTH_ENABLED", "false").lower() == "true"
-_rate_limit_enabled = os.getenv("MNEMO_RATE_LIMIT_ENABLED", "true").lower() == "true"
-_rate_limit_max = int(os.getenv("MNEMO_RATE_LIMIT_MAX", "100"))
-_rate_limit_window = int(os.getenv("MNEMO_RATE_LIMIT_WINDOW", "60"))
+_auth_enabled = get_settings().MNEMO_AUTH_ENABLED
+_rate_limit_enabled = get_settings().MNEMO_RATE_LIMIT_ENABLED
+_rate_limit_max = get_settings().MNEMO_RATE_LIMIT_MAX
+_rate_limit_window = get_settings().MNEMO_RATE_LIMIT_WINDOW
 
 app.add_middleware(RateLimitMiddleware, max_requests=_rate_limit_max, window_seconds=_rate_limit_window, enabled=_rate_limit_enabled)
 app.add_middleware(APIKeyMiddleware, enabled=_auth_enabled)
