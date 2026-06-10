@@ -14,6 +14,7 @@ import time
 from typing import List
 
 import os
+from api.core import get_settings
 
 # Skip all tests in this module if MCP server is not reachable
 def _check_mcp_available():

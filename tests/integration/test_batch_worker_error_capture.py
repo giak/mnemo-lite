@@ -1,15 +1,15 @@
 import pytest
-import os
 import asyncio
 from pathlib import Path
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
+from api.core import get_settings
 
 
 @pytest.mark.asyncio
 async def test_worker_logs_parsing_errors_to_database():
     """Test that worker subprocess logs errors to indexing_errors table."""
-    db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    db_url = get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     engine = create_async_engine(db_url)

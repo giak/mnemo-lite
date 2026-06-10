@@ -15,6 +15,7 @@ from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import numpy as np
 
 from services.dual_embedding_service import (
+from api.core import get_settings
     DualEmbeddingService,
     EmbeddingDomain,
 )
@@ -73,6 +74,7 @@ def test_initialization_with_env_defaults():
         "EMBEDDING_MODEL": "env-text-model",
         "CODE_EMBEDDING_MODEL": "env-code-model",
     }):
+        get_settings.cache_clear()  # Pick up patched env vars
         service = DualEmbeddingService(dimension=768, device="cpu")
         assert service.text_model_name == "env-text-model"
         assert service.code_model_name == "env-code-model"

@@ -13,9 +13,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 from services.batch_indexing_producer import BatchIndexingProducer
 from services.batch_indexing_consumer import BatchIndexingConsumer
-import os
 import asyncio
 import shutil
+from api.core import get_settings
 
 
 def _ensure_asyncpg_url(url: str) -> str:
@@ -57,7 +57,7 @@ export class Calculator {
     import uuid
     test_repo = f"test_e2e_dist_{uuid.uuid4().hex[:8]}"
     redis_url = "redis://redis:6379/0"
-    db_url = _ensure_asyncpg_url(os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL"))
+    db_url = _ensure_asyncpg_url(get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL)
 
     # Thorough cleanup of existing data before test
     engine = create_async_engine(db_url)

@@ -11,13 +11,13 @@ from sqlalchemy import text
 from services.graph_construction_service import GraphConstructionService
 from db.repositories.code_chunk_repository import CodeChunkRepository
 from models.code_chunk_models import CodeChunkCreate
-import os
+from api.core import get_settings
 
 
 @pytest.mark.asyncio
 async def test_graph_nodes_have_correct_type_from_chunks():
     """Test that graph nodes extract type from chunk metadata."""
-    db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    db_url = get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     engine = create_async_engine(db_url)
@@ -127,7 +127,7 @@ async def test_graph_nodes_have_correct_type_from_chunks():
 @pytest.mark.asyncio
 async def test_graph_node_labels_not_truncated():
     """Test that node labels preserve full names."""
-    db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    db_url = get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     engine = create_async_engine(db_url)
@@ -182,7 +182,7 @@ async def test_graph_node_labels_not_truncated():
 @pytest.mark.asyncio
 async def test_graph_nodes_handle_missing_metadata():
     """Test fallback when chunk has no metadata or missing name."""
-    db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    db_url = get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     engine = create_async_engine(db_url)

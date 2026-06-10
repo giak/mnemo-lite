@@ -5,16 +5,16 @@ from sqlalchemy import text
 from services.batch_indexing_consumer import BatchIndexingConsumer
 from services.batch_indexing_producer import BatchIndexingProducer
 from pathlib import Path
-import os
 import asyncio
 import shutil
+from api.core import get_settings
 
 
 @pytest.mark.asyncio
 async def test_consumer_triggers_graph_with_correct_languages():
     """Test that consumer triggers graph construction with typescript/javascript."""
     # Setup
-    db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    db_url = get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL
     # SQLAlchemy async engine requires +asyncpg driver scheme
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)

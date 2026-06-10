@@ -35,11 +35,12 @@ from main import app  # Import the FastAPI app instance
 from db.repositories.event_repository import EventRepository, EventCreate, EventModel
 from dependencies import get_event_repository  # Import the dependency function
 from services.embedding_service import MockEmbeddingService as SimpleEmbeddingService  # Alias for compatibility
+from api.core import get_settings
 
 # --- Configuration ---
 # URL de la DB de test, DOIT être fournie via la variable d'environnement
 # TEST_DATABASE_URL
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
+TEST_DATABASE_URL = get_settings().TEST_DATABASE_URL
 # API_BASE_URL = "http://api:8000" # No longer needed with TestClient
 
 # --- Fixtures ---
@@ -48,9 +49,7 @@ TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 @pytest.fixture(scope="function")  # Revert scope to function
 async def test_db_pool():
     """Fixture pour créer et gérer la DB de test et un pool de connexion."""
-    test_url_with_driver = os.getenv(
-        "TEST_DATABASE_URL"
-    )  # Accepts postgresql:// or postgresql+asyncpg://
+    test_url_with_driver = get_settings().TEST_DATABASE_URL  # Accepts postgresql:// or postgresql+asyncpg://
     if not test_url_with_driver:
         pytest.fail("TEST_DATABASE_URL environment variable not set.")
 
@@ -303,8 +302,8 @@ async def test_direct_db_connection():
     """Teste la connexion directe à la base de données de test en utilisant TEST_DATABASE_URL."""
     conn = None
     # Lire la variable d'environnement
-    test_url_env = os.getenv("TEST_DATABASE_URL")
-    # postgres_password = os.getenv("POSTGRES_PASSWORD", "mnemopass") # On ne
+    test_url_env = get_settings().TEST_DATABASE_URL
+    # postgres_password = get_settings().POSTGRES_PASSWORD # On ne
     # lit plus la variable séparément
 
     if not test_url_env:

@@ -15,6 +15,10 @@ os.environ["ENVIRONMENT"] = "test"
 # Disable rate limiting in tests (accumulates across suite → 429s)
 os.environ.setdefault("MNEMO_RATE_LIMIT_ENABLED", "false")
 
+# Clear get_settings cache so AppSettings picks up the test env vars above
+from api.core import get_settings
+get_settings.cache_clear()
+
 # Add project root (/app inside container) to sys.path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
@@ -62,7 +66,7 @@ def test_db_url():
 
     Auto-converts postgresql:// to postgresql+asyncpg:// for async SQLAlchemy.
     """
-    test_db_url = os.getenv("TEST_DATABASE_URL")
+    test_db_url = get_settings().TEST_DATABASE_URL
 
     if not test_db_url:
         raise ValueError("TEST_DATABASE_URL environment variable not set")

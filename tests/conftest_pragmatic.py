@@ -48,7 +48,7 @@ async def test_engine() -> AsyncEngine:
     Auto-converts postgresql:// to postgresql+asyncpg:// for async SQLAlchemy.
     Scope: function (isolation between tests)
     """
-    test_db_url = os.getenv("TEST_DATABASE_URL")
+    test_db_url = get_settings().TEST_DATABASE_URL
     if not test_db_url:
         raise ValueError("TEST_DATABASE_URL not set")
 
@@ -395,6 +395,7 @@ def sample_python_code() -> str:
 
 import math
 from typing import List, Optional
+from api.core import get_settings
 
 
 class Calculator:

@@ -2,6 +2,7 @@ import os
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, AsyncEngine
+from api.core import get_settings
 
 
 @pytest.fixture(scope="session")
@@ -9,7 +10,7 @@ def db_url():
     """Returns PostgreSQL URL from environment or uses default Docker URL.
     Auto-converts postgresql:// to postgresql+asyncpg:// for async SQLAlchemy.
     """
-    url = os.getenv("TEST_DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
+    url = get_settings().TEST_DATABASE_URL or "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite"
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
     return url

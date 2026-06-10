@@ -23,7 +23,7 @@ import asyncio
 import time
 import statistics
 import psutil
-import os
+
 import sys
 from typing import List, Dict, Any
 
@@ -31,6 +31,7 @@ from typing import List, Dict, Any
 sys.path.insert(0, '/app')
 
 from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomain
+from api.core import get_settings
 
 
 # Test queries variées pour éviter le cache
@@ -333,7 +334,7 @@ async def main():
     print("="*80)
 
     # Configuration
-    embedding_mode = os.getenv('EMBEDDING_MODE', 'mock')
+    embedding_mode = get_settings().EMBEDDING_MODE
     print(f"\n📋 Configuration:")
     print(f"  Mode: {embedding_mode}")
     print(f"  Domain: TEXT (queries)")

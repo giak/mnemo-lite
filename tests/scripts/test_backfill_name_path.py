@@ -12,13 +12,13 @@ These tests verify:
 import pytest
 import uuid
 import asyncpg
-import os
 from scripts.backfill_name_path import backfill_name_path, validate_migration
+from api.core import get_settings
 
 
 def get_test_database_url() -> str:
     """Get TEST_DATABASE_URL with +asyncpg removed for asyncpg compatibility."""
-    database_url = os.getenv("TEST_DATABASE_URL")
+    database_url = get_settings().TEST_DATABASE_URL
     if "+asyncpg" in database_url:
         database_url = database_url.replace("+asyncpg", "")
     return database_url

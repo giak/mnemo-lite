@@ -18,13 +18,13 @@ Note: These tests require real embedding models (EMBEDDING_MODE=real) or
 
 import pytest
 import asyncio
-import os
 from pathlib import Path
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 
 from services.batch_indexing_producer import BatchIndexingProducer
 from services.batch_indexing_consumer import BatchIndexingConsumer
+from api.core import get_settings
 
 
 def _ensure_asyncpg_url(url: str) -> str:
@@ -56,7 +56,7 @@ async def test_full_batch_indexing_261_files():
     directory = Path("/app/code_test")
 
     # Use TEST_DATABASE_URL if available, otherwise use DATABASE_URL
-    test_db_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    test_db_url = get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL
     if not test_db_url:
         pytest.skip("No database URL available (TEST_DATABASE_URL or DATABASE_URL)")
     test_db_url = _ensure_asyncpg_url(test_db_url)
@@ -223,7 +223,7 @@ async def test_batch_indexing_empty_directory(tmp_path):
     directory = tmp_path / "empty"
     directory.mkdir()
 
-    raw_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    raw_url = get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL
     if not raw_url:
         pytest.skip("No database URL available")
     test_db_url = _ensure_asyncpg_url(raw_url)
@@ -266,7 +266,7 @@ async def test_batch_indexing_small_batch(tmp_path):
         file_path = directory / f"file{i}.ts"
         file_path.write_text(f"const x{i} = {i};\nexport default x{i};\n")
 
-    raw_url = os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+    raw_url = get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL
     if not raw_url:
         pytest.skip("No database URL available")
     test_db_url = _ensure_asyncpg_url(raw_url)

@@ -6,6 +6,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock
 from starlette.testclient import TestClient
 from fastapi import FastAPI
+from api.core import get_settings
 
 
 class TestAPIKeyMiddleware:
@@ -48,11 +49,13 @@ class TestAPIKeyMiddleware:
         from middleware.auth import APIKeyMiddleware
 
         os.environ["MNEMO_API_KEYS"] = "key1:owner1,key2:owner2"
+        get_settings.cache_clear()  # Invalidate cache after env change
         try:
             middleware = APIKeyMiddleware(app=None, enabled=True)
             assert middleware.api_keys == {"key1": "owner1", "key2": "owner2"}
         finally:
             del os.environ["MNEMO_API_KEYS"]
+        get_settings.cache_clear()  # Restore cache
 
     def test_disabled_middleware_passes_through(self):
         """Disabled middleware must not block requests."""

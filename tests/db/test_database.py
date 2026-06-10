@@ -8,6 +8,7 @@ import asyncpg
 import os
 
 from db.database import Database
+from api.core import get_settings
 
 
 # === Fixtures ===
@@ -386,16 +387,19 @@ async def test_dsn_priority_order():
 
     # Priority 1: Custom DSN (should override env)
     with patch.dict(os.environ, {"DATABASE_URL": "postgresql://env:pass@env:5432/env"}):
+        get_settings.cache_clear()  # Pick up patched env vars
         db = Database(dsn=custom_dsn)
         assert db.dsn == custom_dsn
 
     # Priority 2: Environment variable
     with patch.dict(os.environ, {"DATABASE_URL": "postgresql://env:pass@env:5432/env"}):
+        get_settings.cache_clear()  # Pick up patched env vars
         db = Database()
         assert db.dsn == "postgresql://env:pass@env:5432/env"
 
     # Priority 3: Default (when no custom or env)
     with patch.dict(os.environ, {}, clear=True):
+        get_settings.cache_clear()  # Pick up patched env vars
         db = Database()
         assert "postgresql://" in db.dsn
         assert "mnemolite" in db.dsn.lower()

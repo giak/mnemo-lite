@@ -1,9 +1,9 @@
 import pytest
-import os
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 from services.indexing_error_service import IndexingErrorService
 from models.indexing_error_models import IndexingErrorCreate
+from api.core import get_settings
 
 
 def _ensure_asyncpg_url(url: str) -> str:
@@ -18,7 +18,7 @@ def _ensure_asyncpg_url(url: str) -> str:
 @pytest.mark.asyncio
 async def test_log_error_creates_record():
     """Test that logging an error creates a database record."""
-    db_url = _ensure_asyncpg_url(os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL"))
+    db_url = _ensure_asyncpg_url(get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL)
     engine = create_async_engine(db_url)
     service = IndexingErrorService(engine)
 
@@ -59,7 +59,7 @@ async def test_log_error_creates_record():
 @pytest.mark.asyncio
 async def test_get_errors_by_repository():
     """Test retrieving errors filtered by repository."""
-    db_url = _ensure_asyncpg_url(os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL"))
+    db_url = _ensure_asyncpg_url(get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL)
     engine = create_async_engine(db_url)
     service = IndexingErrorService(engine)
 
@@ -90,7 +90,7 @@ async def test_get_errors_by_repository():
 @pytest.mark.asyncio
 async def test_get_errors_filtered_by_type():
     """Test retrieving errors filtered by error_type."""
-    db_url = _ensure_asyncpg_url(os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL"))
+    db_url = _ensure_asyncpg_url(get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL)
     engine = create_async_engine(db_url)
     service = IndexingErrorService(engine)
 
@@ -128,7 +128,7 @@ async def test_get_errors_filtered_by_type():
 @pytest.mark.asyncio
 async def test_get_errors_pagination():
     """Test pagination works correctly."""
-    db_url = _ensure_asyncpg_url(os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL"))
+    db_url = _ensure_asyncpg_url(get_settings().TEST_DATABASE_URL or get_settings().DATABASE_URL)
     engine = create_async_engine(db_url)
     service = IndexingErrorService(engine)
 

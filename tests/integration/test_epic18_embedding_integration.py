@@ -13,6 +13,7 @@ import time
 from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomain
 from services.hybrid_code_search_service import HybridCodeSearchService
 from services.code_indexing_service import CodeIndexingService
+from api.core import get_settings
 
 
 @pytest.mark.integration
@@ -28,8 +29,9 @@ class TestEPIC18MockModePerformance:
         Après: Mock mode génère embeddings par hash (~0ms).
         """
         # Ensure mock mode
-        original_mode = os.getenv('EMBEDDING_MODE')
+        original_mode = get_settings().EMBEDDING_MODE
         os.environ['EMBEDDING_MODE'] = 'mock'
+    get_settings.cache_clear()  # Invalidate cache
 
         try:
             service = DualEmbeddingService()
@@ -50,8 +52,10 @@ class TestEPIC18MockModePerformance:
             # Restore original mode
             if original_mode:
                 os.environ['EMBEDDING_MODE'] = original_mode
+        get_settings.cache_clear()
             else:
                 del os.environ['EMBEDDING_MODE']
+    get_settings.cache_clear()  # Restore cache
 
     @pytest.mark.asyncio
     async def test_mock_embeddings_are_deterministic(self):
@@ -61,6 +65,7 @@ class TestEPIC18MockModePerformance:
         Même query → même embedding (pour reproductibilité des tests).
         """
         os.environ['EMBEDDING_MODE'] = 'mock'
+    get_settings.cache_clear()  # Invalidate cache
 
         try:
             service = DualEmbeddingService()
@@ -75,8 +80,9 @@ class TestEPIC18MockModePerformance:
             print("\n✅ Mock embeddings are deterministic")
 
         finally:
-            if 'EMBEDDING_MODE' in os.environ:
+            if get_settings().EMBEDDING_MODE  # Will always be truthy but keep guard for safety:
                 del os.environ['EMBEDDING_MODE']
+    get_settings.cache_clear()  # Restore cache
 
 
 @pytest.mark.integration
@@ -305,7 +311,7 @@ class TestEPIC18RobustnessAndEdgeCases:
         assert len(result['text']) == 768, "Should be 768D"
 
         # All zeros in mock mode
-        if os.getenv('EMBEDDING_MODE') == 'mock':
+        if get_settings().EMBEDDING_MODE == 'mock':
             assert result['text'] == [0.0] * 768, "Mock mode: empty query → zero vector"
 
         print("\n✅ Empty query handled correctly")
@@ -361,13 +367,13 @@ class TestEPIC18PerformanceBenchmarks:
         max_latency = max(latencies)
 
         # Targets
-        if os.getenv('EMBEDDING_MODE') == 'mock':
+        if get_settings().EMBEDDING_MODE == 'mock':
             assert avg_latency < 10, f"Mock mode should be <10ms, got {avg_latency:.1f}ms"
         else:
             assert avg_latency < 50, f"Real mode should be <50ms, got {avg_latency:.1f}ms"
 
         print(f"\n📊 Embedding Generation Latency:")
-        print(f"   Mode: {os.getenv('EMBEDDING_MODE', 'mock')}")
+        print(f"   Mode: {get_settings().EMBEDDING_MODE}")
         print(f"   Avg: {avg_latency:.2f}ms")
         print(f"   Max: {max_latency:.2f}ms")
         print(f"   Min: {min(latencies):.2f}ms")

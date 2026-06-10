@@ -22,6 +22,7 @@ import tempfile
 from pathlib import Path
 import sys
 import os
+from api.core import get_settings
 
 
 @pytest.mark.integration
@@ -64,14 +65,15 @@ async function logValidation(email: string): Promise<void> {
         """)
 
         # Override environment variables for test
-        original_db_url = os.environ.get("DATABASE_URL")
-        original_embedding_mode = os.environ.get("EMBEDDING_MODE")
+        original_db_url = get_settings().DATABASE_URL
+        original_embedding_mode = get_settings().EMBEDDING_MODE
 
         # Use TEST_DATABASE_URL for indexing
-        test_db_url = os.environ.get("TEST_DATABASE_URL")
+        test_db_url = get_settings().TEST_DATABASE_URL
         if test_db_url:
             os.environ["DATABASE_URL"] = test_db_url
-        os.environ["EMBEDDING_MODE"] = "real"  # Need real embeddings for this test
+        os.environ["EMBEDDING_MODE"] = "real"
+        get_settings.cache_clear()  # Invalidate after env changes  # Need real embeddings for this test
 
         try:
             # Run indexing pipeline
@@ -234,8 +236,10 @@ async function logValidation(email: string): Promise<void> {
                 os.environ["DATABASE_URL"] = original_db_url
             else:
                 os.environ.pop("DATABASE_URL", None)
+            get_settings.cache_clear()  # Restore cache after cleanup
 
             if original_embedding_mode:
                 os.environ["EMBEDDING_MODE"] = original_embedding_mode
             else:
                 os.environ.pop("EMBEDDING_MODE", None)
+            get_settings.cache_clear()  # Restore cache after cleanup
