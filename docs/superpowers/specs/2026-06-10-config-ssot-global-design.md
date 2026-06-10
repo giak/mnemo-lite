@@ -13,7 +13,7 @@
 
 ### 1.2 Solution
 
-Etendre `AppSettings` a 38 champs couvrant 9 domaines. Tout le code (API, MCP, scripts) passe par `get_settings()`.
+Etendre `AppSettings` a 62 champs couvrant 9 domaines. Tout le code (API, MCP, scripts) passe par `get_settings()`.
 
 ### 1.3 Benefices
 
@@ -21,7 +21,7 @@ Etendre `AppSettings` a 38 champs couvrant 9 domaines. Tout le code (API, MCP, s
 |----------|---------|--------|
 | Fichiers a modifier pour changer DATABASE_URL | 15+ | 1 (.env) |
 | Validation config | Embedding seulement | Toute l'app |
-| Variables documentees | 17 | 38 |
+| Variables documentees | 17 | 62 |
 
 ## 2. AppSettings etendu
 
@@ -88,6 +88,7 @@ class AppSettings(BaseSettings):
     CONVERSATION_WATCHER_ENABLED: bool = True
     POLL_INTERVAL: int = 30
     IMPORT_HISTORICAL: bool = False
+    WATCHER_LOG_FORMAT: str = "text"
 
     # === MCP Server (+5) ===
     MCP_PRIVACY_ENABLED: bool = True
@@ -98,6 +99,8 @@ class AppSettings(BaseSettings):
 
     # === Feature Flags (+4) ===
     ENTITY_EXTRACTION_ENABLED: bool = True
+    ENTITY_EXTRACTION_MEMORY_TYPES: str = "decision,reference,note,investigation"
+    ENTITY_EXTRACTION_SYSTEM_TAGS: str = "sys:core,sys:anchor,sys:pattern"
     QUERY_UNDERSTANDING_ENABLED: bool = False
     QUERY_UNDERSTANDING_FALLBACK: bool = True
     USE_ONNX: bool = False
