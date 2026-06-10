@@ -6,7 +6,7 @@ Inspired by AgentMemory privacy.ts, validated against gitleaks/detect-secrets.
 EPIC-42: Secret Stripping & PII Redaction
 """
 
-import os
+from api.core import get_settings
 import re
 import time
 from typing import Dict, List, Tuple
@@ -93,7 +93,7 @@ class PrivacyService:
         return len(self._compiled)
 
     def __init__(self) -> None:
-        self.enabled = os.getenv("MCP_PRIVACY_ENABLED", "true").lower() == "true"
+        self.enabled = get_settings().MCP_PRIVACY_ENABLED
         self._compiled: List[Tuple[str, re.Pattern]] = []
 
         if self.enabled:

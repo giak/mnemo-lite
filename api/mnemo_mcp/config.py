@@ -8,6 +8,7 @@ Loads from environment variables with MCP_ prefix.
 from typing import List, Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from api.core import get_settings
 
 
 class MCPConfig(BaseSettings):
@@ -79,7 +80,7 @@ class MCPConfig(BaseSettings):
         # Database URL — fall back to DATABASE_URL if MCP_DATABASE_URL not set
         if not self.database_url:
             import os as _os
-            db_url = _os.getenv("DATABASE_URL", "")
+            db_url = get_settings().DATABASE_URL
             if db_url:
                 # Strip asyncpg prefix if present
                 self.database_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
@@ -100,7 +101,7 @@ class MCPConfig(BaseSettings):
         # HTTP transport warns without auth (skip in Docker/local dev)
         if self.transport == "http" and self.auth_mode == "none":
             import os as _os
-            if _os.getenv("ENVIRONMENT", "development") == "production":
+            if get_settings().ENVIRONMENT == "production":
                 errors.append(
                     "HTTP transport without authentication is insecure. "
                     "Set MCP_AUTH_MODE=api_key and MCP_API_KEYS=key:owner"

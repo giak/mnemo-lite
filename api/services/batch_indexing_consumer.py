@@ -9,7 +9,7 @@ import asyncio
 import subprocess
 import sys
 import json
-import os
+from api.core import get_settings
 from pathlib import Path
 from typing import Dict, List
 import redis.asyncio as redis
@@ -50,7 +50,7 @@ class BatchIndexingConsumer:
         db_url: str = None
     ):
         self.redis_url = redis_url
-        self.db_url = db_url or os.getenv("DATABASE_URL")
+        self.db_url = db_url or get_settings().DATABASE_URL
         self.redis_client: redis.Redis | None = None
 
     async def connect(self):

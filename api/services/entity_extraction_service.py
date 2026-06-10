@@ -9,7 +9,7 @@ Usage:
     await service.extract_entities(memory_id, title, content, memory_type, tags)
 """
 
-import os
+from api.core import get_settings
 import json
 from typing import List, Dict, Any
 
@@ -38,7 +38,7 @@ class EntityExtractionService:
     def __init__(self, engine: AsyncEngine, gliner_service: GLiNERService):
         self.engine = engine
         self.gliner_service = gliner_service
-        self.enabled = os.getenv("ENTITY_EXTRACTION_ENABLED", "true").lower() == "true"
+        self.enabled = get_settings().ENTITY_EXTRACTION_ENABLED
         logger.info("EntityExtractionService initialized", enabled=self.enabled)
 
     @staticmethod

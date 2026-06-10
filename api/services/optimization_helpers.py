@@ -394,8 +394,8 @@ query_cache = QueryResultCache()
 metrics = SimpleMetrics()
 
 # Configure logging based on environment
-import os
-if os.getenv("ENVIRONMENT") == "production":
+from api.core import get_settings
+if get_settings().ENVIRONMENT == "production":
     LogOptimizer.configure_for_production()
 else:
     LogOptimizer.configure_for_development()

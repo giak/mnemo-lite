@@ -20,6 +20,7 @@ import sys
 import asyncio
 import warnings
 import os
+from api.core import get_settings
 import base64
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -474,24 +475,18 @@ def _configure_mcp_otel():
         from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
         from opentelemetry.sdk.resources import Resource
 
-        otlp_endpoint = os.getenv(
-            "OTLP_ENDPOINT",
-            "http://openobserve:5080/api/default/v1/traces"
-        )
-        otlp_metrics_endpoint = os.getenv(
-            "OTLP_METRICS_ENDPOINT",
-            "http://openobserve:5080/api/default/v1/metrics"
-        )
+        otlp_endpoint = get_settings().OTLP_ENDPOINT
+        otlp_metrics_endpoint = get_settings().OTLP_METRICS_ENDPOINT
 
-        user = os.getenv("O2_USER", "admin@mnemolite.local")
-        password = os.getenv("O2_PASSWORD", "Complexpass#123")
+        user = get_settings().O2_USER or "admin@mnemolite.local"
+        password = get_settings().O2_PASSWORD or "Complexpass#123"
         auth_string = f"{user}:{password}"
         auth_bytes = base64.b64encode(auth_string.encode("utf-8")).decode("utf-8")
         otlp_headers = {"Authorization": f"Basic {auth_bytes}"}
 
         resource = Resource.create({
             "service.name": "mnemolite-mcp",
-            "deployment.environment": os.getenv("ENVIRONMENT", "development"),
+            "deployment.environment": get_settings().ENVIRONMENT,
         })
 
         trace.set_tracer_provider(TracerProvider(resource=resource))
