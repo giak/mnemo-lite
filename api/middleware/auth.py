@@ -13,7 +13,7 @@ Configuration:
 """
 
 import logging
-import os
+from api.core import get_settings
 from typing import Optional, Dict
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -64,7 +64,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
 
     def _load_keys_from_env(self) -> Dict[str, str]:
         """Load API keys from MNEMO_API_KEYS env var."""
-        keys_str = os.getenv("MNEMO_API_KEYS", "")
+        keys_str = get_settings().MNEMO_API_KEYS
         if not keys_str:
             return {}
 

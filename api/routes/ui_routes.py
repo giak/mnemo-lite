@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from typing import Optional, List
 
 from dependencies import get_event_repository, get_embedding_service, get_db_engine
+from api.core import get_settings
 from db.repositories.event_repository import EventRepository
 from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
 
@@ -706,7 +707,7 @@ async def lsp_stats(engine = Depends(get_db_engine)):
         cache_misses = 0
 
         try:
-            redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+            redis_url = get_settings().REDIS_URL
             redis_client = redis.from_url(redis_url, decode_responses=True)
 
             # Get cache stats from Redis (EPIC-10 pattern)

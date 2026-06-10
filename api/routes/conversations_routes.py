@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 import subprocess
 import os
+from api.core import get_settings
 import uuid
 
 from fastapi import APIRouter, HTTPException, Body, Request
@@ -346,8 +347,8 @@ async def queue_conversation(
         import redis
 
         # Connect to Redis
-        redis_host = os.getenv("REDIS_HOST", "redis")
-        redis_port = int(os.getenv("REDIS_PORT", "6379"))
+        redis_host = get_settings().REDIS_HOST
+        redis_port = get_settings().REDIS_PORT
 
         r = redis.Redis(
             host=redis_host,
@@ -564,8 +565,8 @@ async def autosave_metrics(request: Request) -> Dict[str, Any]:
 
         # Get Redis metrics
         try:
-            redis_host = os.getenv("REDIS_HOST", "redis")
-            redis_port = int(os.getenv("REDIS_PORT", "6379"))
+            redis_host = get_settings().REDIS_HOST
+            redis_port = get_settings().REDIS_PORT
 
             r = redis.Redis(
                 host=redis_host,

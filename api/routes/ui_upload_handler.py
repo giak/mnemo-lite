@@ -7,6 +7,7 @@ Separate module to handle long-running upload processing with progress tracking.
 import asyncio
 import logging
 import os
+from api.core import get_settings
 import time
 import uuid
 from pathlib import Path
@@ -27,8 +28,8 @@ from services.code_indexing_service import (
 logger = logging.getLogger(__name__)
 
 # Configuration
-BATCH_SIZE = int(os.getenv("UPLOAD_BATCH_SIZE", "10"))
-INDEXING_TIMEOUT = int(os.getenv("UPLOAD_INDEXING_TIMEOUT", "300"))  # 5 minutes per batch
+BATCH_SIZE = get_settings().UPLOAD_BATCH_SIZE
+INDEXING_TIMEOUT = get_settings().UPLOAD_INDEXING_TIMEOUT  # 5 minutes per batch
 
 
 def is_likely_binary(content: str, sample_size: int = 8192) -> bool:
