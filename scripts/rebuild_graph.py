@@ -2,6 +2,7 @@
 """Rebuild graph for a repository with EPIC-30 anonymous filtering."""
 
 import asyncio
+from api.core import get_settings
 import sys
 from pathlib import Path
 
@@ -19,7 +20,7 @@ async def main():
     print(f"   with EPIC-30 anonymous filtering enabled")
     print(f"=" * 80)
 
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@localhost:5432/mnemolite")
+    db_url = get_settings().DATABASE_URL
     engine = create_async_engine(db_url, echo=False)
 
     graph_service = GraphConstructionService(engine)

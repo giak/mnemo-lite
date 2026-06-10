@@ -26,6 +26,7 @@ Usage:
 """
 
 import asyncio
+from api.core import get_settings
 import os
 import sys
 import time
@@ -37,7 +38,7 @@ import traceback
 # --- Configuration ---
 MODEL_NAME = "BAAI/bge-m3"
 ONNX_MODEL_PATH = "/app/models/bge-m3-onnx-int8"  # Pre-exported ONNX INT8 model (EPIC-48)
-USE_ONNX = os.environ.get("USE_ONNX", "").lower() in ("true", "1", "yes")
+USE_ONNX = get_settings().USE_ONNX
 BATCH_SIZE = 25
 MAX_CONTENT_LENGTH = 2000  # Truncate before encoding (tokenizer is O(n) on input length)
 LOG_INTERVAL = 25  # Log every batch
@@ -52,7 +53,7 @@ def build_db_url() -> str:
     Priorite 2 : POSTGRES_* individuelles (fallback avec 'or' pour chaines vides)
     """
     # Priorite 1 : DATABASE_URL
-    db_url = os.environ.get("DATABASE_URL") or ""
+    db_url = get_settings().DATABASE_URL
     if db_url:
         print(f"Using DATABASE_URL from environment")
         # Mask password for logging
@@ -67,11 +68,11 @@ def build_db_url() -> str:
         return db_url
 
     # Priorite 2 : POSTGRES_* individuelles (avec 'or' pour chaines vides)
-    user = os.environ.get("POSTGRES_USER") or "mnemo"
-    password = os.environ.get("POSTGRES_PASSWORD") or "mnemo"
+    user = get_settings().POSTGRES_USER
+    password = get_settings().POSTGRES_PASSWORD
     host = os.environ.get("POSTGRES_HOST") or "db"
-    port = os.environ.get("POSTGRES_PORT") or "5432"
-    dbname = os.environ.get("POSTGRES_DB") or "mnemolite"
+    port = str(get_settings().POSTGRES_PORT)
+    dbname = get_settings().POSTGRES_DB
 
     print(f"Building DB URL from POSTGRES_* vars:")
     print(f"  User: {user}")

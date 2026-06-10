@@ -10,6 +10,7 @@ This script:
 """
 
 import asyncio
+from api.core import get_settings
 import sys
 import os
 from pathlib import Path
@@ -31,7 +32,7 @@ async def main():
     )
 
     # Database connection
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@localhost:5432/mnemolite")
+    db_url = get_settings().DATABASE_URL
     engine = create_async_engine(db_url, echo=False)
 
     # Repository info

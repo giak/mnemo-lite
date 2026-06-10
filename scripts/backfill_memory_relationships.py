@@ -11,6 +11,7 @@ Environment:
 """
 
 import os
+from api.core import get_settings
 import sys
 import asyncio
 import json
@@ -113,7 +114,7 @@ def store_relationships(engine, relationships: List[Dict[str, Any]]) -> int:
 
 
 def main():
-    database_url = os.getenv("DATABASE_URL", "postgresql+psycopg2://mnemo:mnemopass@localhost:5432/mnemolite")
+    database_url = get_settings().DATABASE_URL
     min_score = float(os.getenv("MIN_SCORE", "0.1"))
     chunk_size = int(os.getenv("CHUNK_SIZE", "1000"))
 

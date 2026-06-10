@@ -22,6 +22,7 @@ Example:
 """
 
 import asyncio
+from api.core import get_settings
 import asyncpg
 import os
 import sys
@@ -245,7 +246,7 @@ async def main():
     dry_run = "--dry-run" in sys.argv
 
     # Get database URL
-    database_url = os.getenv("DATABASE_URL")
+    database_url = get_settings().DATABASE_URL
 
     if not database_url:
         print("❌ DATABASE_URL environment variable not set")

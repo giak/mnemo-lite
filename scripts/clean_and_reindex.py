@@ -6,6 +6,7 @@ Usage:
 """
 
 import asyncio
+from api.core import get_settings
 import argparse
 import os
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -77,7 +78,7 @@ def main():
     parser.add_argument("--db-url", help="Database URL (default: from env)")
     args = parser.parse_args()
 
-    db_url = args.db_url or os.getenv("DATABASE_URL")
+    db_url = args.db_url or get_settings().DATABASE_URL
     if not db_url:
         print("❌ ERROR: DATABASE_URL not set")
         sys.exit(1)

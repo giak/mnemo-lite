@@ -20,9 +20,14 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 from base64 import b64encode
 
-O2_URL = os.getenv("O2_URL", "http://localhost:5080")
-O2_USER = os.getenv("O2_USER", "admin@mnemolite.local")
-O2_PASSWORD = os.getenv("O2_PASSWORD", "Complexpass#123")
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from api.core import get_settings
+O2_URL = get_settings().O2_URL
+O2_USER = get_settings().O2_USER or "admin@mnemolite.local"
+O2_PASSWORD = get_settings().O2_PASSWORD or "Complexpass#123"
 ORG = "default"
 
 auth_string = f"{O2_USER}:{O2_PASSWORD}"

@@ -9,6 +9,7 @@ Default: Process 10 memories only (POC mode)
 """
 
 import argparse
+from api.core import get_settings
 import asyncio
 import os
 import sys
@@ -87,7 +88,7 @@ async def main():
     print(f"POC: Memory Embedding Backfill (limit={args.limit})")
     print("=" * 60)
 
-    database_url = os.getenv("DATABASE_URL", "postgresql://mnemo:mnemo@db:5432/mnemolite")
+    database_url = get_settings().DATABASE_URL
     # Handle SQLAlchemy-style URLs (postgresql+asyncpg://)
     if database_url.startswith("postgresql+asyncpg://"):
         database_url = database_url.replace("postgresql+asyncpg://", "postgresql://", 1)

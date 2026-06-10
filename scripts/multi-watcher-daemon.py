@@ -37,6 +37,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from api.core import get_settings
+
 try:
     import aiohttp
 except ImportError:
@@ -62,7 +68,7 @@ def _configure_logging():
     Set WATCHER_LOG_FORMAT=json env var to emit JSON logs
     (useful when running in Docker alongside the API for OpenObserve ingestion).
     """
-    log_json = os.getenv("WATCHER_LOG_FORMAT", "").lower() == "json"
+    log_json = get_settings().WATCHER_LOG_FORMAT == "json"
 
     if structlog is not None:
         renderer = (
@@ -286,7 +292,7 @@ class ClaudeCodeSource(BaseSourceWatcher):
                  projects_dir: str = None, project_filter: Optional[str] = None):
         super().__init__(state, api_url, dry_run, project_filter)
         self.projects_dir = Path(
-            projects_dir or os.getenv("CLAUDE_PROJECTS_DIR",
+            projects_dir or get_settings().CLAUDE_PROJECTS_DIR or os.getenv("CLAUDE_PROJECTS_DIR",
                                       str(Path.home() / ".claude" / "projects"))
         )
 
@@ -450,7 +456,7 @@ class CodebuffSource(BaseSourceWatcher):
                  projects_dir: str = None, project_filter: Optional[str] = None):
         super().__init__(state, api_url, dry_run, project_filter)
         self.projects_dir = Path(
-            projects_dir or os.getenv("CODEBUFF_PROJECTS_DIR",
+            projects_dir or get_settings().CODEBUFF_DIR or os.getenv("CODEBUFF_PROJECTS_DIR",
                                        str(Path.home() / ".config" / "manicode" / "projects"))
         )
 
@@ -1165,7 +1171,7 @@ def build_sources(args, state: WatcherState) -> List[BaseSourceWatcher]:
     api_url = args.api_url
     dry_run = args.dry_run
     source_filter = args.source.lower() if args.source else None
-    project_filter = args.project_filter or os.getenv("ACTIVE_PROJECT")
+    project_filter = args.project_filter or get_settings().ACTIVE_PROJECT
 
     if project_filter:
         logger.info("project_filter_enabled", project=project_filter.lower())

@@ -7,6 +7,7 @@ Usage:
 """
 
 import asyncio
+from api.core import get_settings
 import argparse
 import sys
 from pathlib import Path
@@ -249,7 +250,7 @@ async def run_streaming_pipeline_sequential(
 
     # Database setup
     if engine is None:
-        db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
+        db_url = get_settings().DATABASE_URL
         engine = create_async_engine(db_url, echo=False)
         should_dispose = True
     else:
@@ -269,7 +270,7 @@ async def run_streaming_pipeline_sequential(
     # Load embedding model ONCE
     if verbose:
         print(f"\n🔧 Loading embedding model...")
-    os.environ["EMBEDDING_MODE"] = "real"
+    os.environ["EMBEDDING_MODE"] = get_settings().EMBEDDING_MODE  # From SSOT
     embedding_service = DualEmbeddingService()
 
     # Stream files one-at-a-time
@@ -503,10 +504,10 @@ async def phase2_embeddings(chunks: list, repository: str, verbose: bool = False
     print("=" * 80)
 
     # Override embedding mode to use real embeddings
-    os.environ["EMBEDDING_MODE"] = "real"
+    os.environ["EMBEDDING_MODE"] = get_settings().EMBEDDING_MODE  # From SSOT
 
     # Create database engine
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
+    db_url = get_settings().DATABASE_URL
     engine = create_async_engine(db_url, echo=False)
 
     embedding_service = DualEmbeddingService()
@@ -807,7 +808,7 @@ async def main():
     start_time = datetime.now()
 
     # Create database engine for graph construction
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite")
+    db_url = get_settings().DATABASE_URL
     engine = create_async_engine(db_url, echo=False)
 
     # Run sequential indexing pipeline

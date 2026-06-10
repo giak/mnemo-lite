@@ -15,6 +15,7 @@ Date: 2025-10-21
 """
 
 import asyncio
+from api.core import get_settings
 import asyncpg
 import os
 import sys
@@ -68,7 +69,7 @@ async def backfill_name_path(dry_run: bool = False, database_url: str = None) ->
     """
 
     if database_url is None:
-        database_url = os.getenv("DATABASE_URL")
+        database_url = get_settings().DATABASE_URL
         if not database_url:
             raise ValueError("DATABASE_URL environment variable not set")
 
@@ -293,7 +294,7 @@ async def validate_migration(database_url: str = None) -> bool:
     """
 
     if database_url is None:
-        database_url = os.getenv("DATABASE_URL")
+        database_url = get_settings().DATABASE_URL
 
     # Convert SQLAlchemy URL to asyncpg format
     if "+asyncpg" in database_url:

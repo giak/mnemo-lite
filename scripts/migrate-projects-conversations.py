@@ -4,6 +4,7 @@ Migrate conversations from 'projects' to correct project names.
 Fixes conversations that were imported with wrong project name.
 """
 import asyncio
+from api.core import get_settings
 import os
 import sys
 from pathlib import Path
@@ -21,7 +22,7 @@ async def migrate_conversations():
     """Migrate conversations from 'projects' to correct projects."""
 
     # Database connection
-    database_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemopass@localhost:5432/mnemolite")
+    database_url = get_settings().DATABASE_URL
     engine = create_async_engine(database_url)
 
     print("=" * 70)
