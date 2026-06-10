@@ -108,3 +108,4 @@ _DISABLED_*.py
 # Large files & submodules
 gliner_multi-v2.1/
 _study/
+shared_volumes/models/

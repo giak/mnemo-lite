@@ -91,8 +91,9 @@ class VectorSearchService:
         Raises:
             ValueError: If embedding is invalid or domain unknown
         """
-        if not embedding or len(embedding) != 768:
-            raise ValueError("Embedding must be a 768-dimensional vector")
+        expected_dim = int(os.environ.get("EMBEDDING_DIMENSION", "1024"))
+        if not embedding or len(embedding) != expected_dim:
+            raise ValueError(f"Embedding must be a {expected_dim}-dimensional vector")
 
         if embedding_domain not in ("TEXT", "CODE"):
             raise ValueError("embedding_domain must be 'TEXT' or 'CODE'")
