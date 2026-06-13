@@ -3,7 +3,6 @@ Conversation Worker - Consumes from Redis Streams and saves to API.
 Also consumes entity extraction requests and processes them via LM Studio.
 """
 import asyncio
-import time
 import json
 import structlog
 from dataclasses import dataclass
