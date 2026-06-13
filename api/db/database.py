@@ -7,7 +7,7 @@ with automatic pgvector type registration for vector similarity operations.
 """
 
 import asyncpg
-import os
+from api.core.settings import get_settings
 from api.core.settings import get_settings
 from pgvector.asyncpg import register_vector
 
@@ -48,9 +48,7 @@ class Database:
             - "postgresql://user:password@localhost/dbname?sslmode=require"
         """
         # Utilise le DSN fourni ou celui de l'environnement
-        self.dsn = dsn or os.environ.get(
-            "DATABASE_URL", "postgresql://user:password@localhost:5432/mnemolite_db"
-        )
+        self.dsn = dsn or get_settings().DATABASE_URL or "postgresql://user:password@localhost:5432/mnemolite_db"
         self._pool: asyncpg.Pool | None = None
         print(f"[Database Class] Initialized with DSN: {self.dsn}")  # Debug print
 

@@ -14,7 +14,6 @@ Usage:
     shutdown_otel()
 """
 
-import os
 import base64
 from api.core.settings import get_settings
 from typing import Optional
@@ -63,14 +62,8 @@ def configure_otel(
     """
     global _tracer_provider, _meter_provider
 
-    otlp_endpoint = os.getenv(
-        "OTLP_ENDPOINT",
-        "http://openobserve:5080/api/default/v1/traces"
-    )
-    otlp_metrics_endpoint = os.getenv(
-        "OTLP_METRICS_ENDPOINT",
-        "http://openobserve:5080/api/default/v1/metrics"
-    )
+    otlp_endpoint = f"{get_settings().OTLP_ENDPOINT}/v1/traces"
+    otlp_metrics_endpoint = f"{get_settings().OTLP_METRICS_ENDPOINT}/v1/metrics"
 
     otlp_headers = _get_otlp_headers()
 

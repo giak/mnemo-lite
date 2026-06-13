@@ -18,7 +18,6 @@ Usage:
 """
 
 import asyncio
-import os
 import base64
 from api.core.settings import get_settings
 import json
@@ -48,10 +47,7 @@ class OpenObserveLogProcessor:
         batch_size: int = 50,
         flush_interval: float = 5.0,
     ):
-        self.endpoint = endpoint or os.getenv(
-            "OTLP_LOGS_ENDPOINT",
-            "http://openobserve:5080/api/default/logs/_json",
-        )
+        self.endpoint = endpoint or f"{get_settings().OTLP_ENDPOINT}/logs/_json"
         self.batch_size = batch_size
         self.flush_interval = flush_interval
         self._buffer: List[Dict[str, Any]] = []
