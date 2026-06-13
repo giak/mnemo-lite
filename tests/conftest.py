@@ -60,6 +60,22 @@ def anyio_backend():
 
 
 @pytest.fixture(scope="session")
+def event_loop():
+    """Create a session-scoped event loop for async fixtures.
+
+    pytest-asyncio 0.21.1 requires a session-scoped event_loop fixture
+    for any session-scoped async fixtures (e.g. _clean_test_db_at_session_start).
+    Without this, pytest raises ScopeMismatch because the default event_loop
+    fixture is function-scoped.
+    """
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield loop
+    loop.close()
+
+
+@pytest.fixture(scope="session")
 def test_db_url():
     """
     Get TEST_DATABASE_URL for subprocess tests.
@@ -75,7 +91,7 @@ def test_db_url():
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
-async def _clean_test_db_at_session_start(test_db_url):
+async def _clean_test_db_at_session_start():
     """TRUNCATE the test DB once before the entire suite starts.
 
     This is a safety net against stale data left by previous crashed
@@ -90,7 +106,22 @@ async def _clean_test_db_at_session_start(test_db_url):
 
     autouse=True ensures this always runs, even if no test explicitly
     requests it. scope="session" means it runs exactly once.
+
+    Skip if sqlalchemy is not installed (e.g. running contract tests
+    that don't need a database).
     """
+    if create_async_engine is None:
+        return  # sqlalchemy not available — skip DB cleanup
+
+    # Also skip if TEST_DATABASE_URL is not set
+    try:
+        from api.core import get_settings
+        test_db_url = get_settings().TEST_DATABASE_URL
+        if not test_db_url:
+            return
+    except Exception:
+        return
+
     from sqlalchemy import text
     from sqlalchemy.exc import ProgrammingError
 
