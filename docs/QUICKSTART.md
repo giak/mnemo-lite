@@ -21,6 +21,25 @@ docker compose ps
 
 ## 2. Configurer MCP
 
+MnemoLite expose 29 outils MCP via SSE (Server-Sent Events) sur le port 8002.
+
+### Méthode moderne (recommandée) — Connexion directe SSE
+
+```json
+{
+  "mcpServers": {
+    "mnemolite": {
+      "type": "remote",
+      "url": "http://localhost:8002/mcp"
+    }
+  }
+}
+```
+
+> ⚠️ Le format exact (`type: "remote"` ou `transport: "sse"`) dépend du client. Voir [`MCP_SETUP.md`](../MCP_SETUP.md) pour les configurations détaillées.
+
+### Méthode legacy — Script bash
+
 Créer `.mcp.json` dans votre projet:
 
 ```json
