@@ -57,6 +57,21 @@ class DualEmbeddingServiceAdapter:
         """
         self._dual_service = dual_service
 
+    @property
+    def tokenizer(self):
+        """Expose text model tokenizer from underlying DualEmbeddingService."""
+        return self._dual_service.tokenizer
+
+    def ensure_ready_sync(self):
+        """Ensure underlying service models are loaded (sync, for executor threads)."""
+        self._dual_service.ensure_text_model_loaded()
+
+    def encode_sync(self, texts, normalize_embeddings: bool = True):
+        """Sync text encode via underlying DualEmbeddingService."""
+        return self._dual_service.encode_text_sync(
+            texts, normalize_embeddings=normalize_embeddings
+        )
+
     async def generate_embedding(self, text: str) -> List[float]:
         """
         Génère un embedding TEXT à partir d'un texte (backward compatible).

@@ -55,6 +55,13 @@ class AppSettings(BaseSettings):
     EMBEDDING_FAIL_STRATEGY: str = "soft"
     EMBEDDING_SOURCE_FIELDS: str = "text,body,message,content,title"
 
+    # === Chunking et limites d'embedding ===
+    EMBEDDING_PREFIX: str = "Represent this passage for retrieval: "
+    EMBEDDING_MAX_TOKENS: int = 8192  # Limite native BGE-M3
+    EMBEDDING_CHUNK_SIZE: int = 8000  # Taille des chunks (tokens) pour textes > MAX_TOKENS
+    EMBEDDING_CHUNK_OVERLAP: int = 256  # Overlap entre chunks consecutifs
+    EMBEDDING_MAX_CONTENT_LENGTH: int = 100_000  # Hard RAM safety limit (pas une limite semantique)
+
     # === Entity extraction (GLiNER) ===
     GLINER_MODEL_PATH: str = "/app/models/gliner_multi-v2.1"
     GLINER_MODEL: str = "piEsposito/gliner-multi-v2.1"
