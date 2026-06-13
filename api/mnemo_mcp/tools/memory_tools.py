@@ -15,6 +15,7 @@ Consolidation (Expanse Apex §V):
 
 import time
 import json
+import asyncio
 from typing import Optional, List, Dict, Any, Union
 import uuid
 from datetime import datetime, timezone
@@ -34,6 +35,9 @@ from mnemo_mcp.models.memory_models import (
 from db.repositories.memory_repository import MemoryRepository
 from services.embedding_service import EmbeddingServiceInterface
 from mnemo_mcp.tools.project_tools import resolve_project_id
+from utils.sql_vector import format_vector_for_sql
+from core.settings import get_settings
+from sqlalchemy import text as sa_text
 
 logger = structlog.get_logger()
 
@@ -235,6 +239,9 @@ class WriteMemoryTool(BaseMCPComponent):
             # EPIC-28: Trigger async entity extraction (non-blocking)
             self._trigger_entity_extraction(memory)
 
+            # Trigger async embedding generation (non-blocking)
+            self._trigger_async_embedding(memory, content, embedding_source)
+
             elapsed_ms = (time.time() - start_time) * 1000
 
             logger.info(
@@ -301,6 +308,47 @@ class WriteMemoryTool(BaseMCPComponent):
             redis.xadd("entity:extraction", {"payload": payload})
         except Exception as e:
             logger.debug("entity_extraction_trigger_failed", error=str(e))
+
+    def _trigger_async_embedding(self, memory: Any, content: str, embedding_source: Optional[str] = None) -> None:
+        """Schedule async embedding generation for the newly created memory.
+
+        Non-blocking: uses asyncio.create_task to generate the embedding
+        in the background. The embedding appears in the database within
+        seconds after write_memory returns (subsequent calls after the
+        BGE-M3 model is loaded).
+        """
+        async def _generate():
+            try:
+                settings = get_settings()
+                emb_svc = self._services.get("embedding_service")
+                if emb_svc is None:
+                    logger.debug("async_embedding_skipped", reason="no_embedding_service")
+                    return
+                text = embedding_source or content
+                embedding = await emb_svc.generate_embedding(text)
+                if embedding is None or len(embedding) == 0:
+                    return
+                if hasattr(embedding, 'tolist'):
+                    embedding = embedding.tolist()
+                embedding_str = format_vector_for_sql(embedding)
+                async with self.memory_repository.engine.begin() as conn:
+                    await conn.execute(
+                        sa_text(f"""
+                            UPDATE memories
+                            SET embedding = '{embedding_str}'::vector,
+                                embedding_half = '{embedding_str}'::halfvec,
+                                embedding_model = '{settings.EMBEDDING_MODEL}'
+                            WHERE id = :id
+                        """),
+                        {"id": memory.id}
+                    )
+                logger.info("async_embedding_generated", memory_id=str(memory.id))
+            except Exception as e:
+                logger.warning("async_embedding_failed", memory_id=str(memory.id), error=str(e)[:200])
+        try:
+            asyncio.create_task(_generate())
+        except Exception as e:
+            logger.debug("async_embedding_trigger_failed", error=str(e))
 
 
 class UpdateMemoryTool(BaseMCPComponent):
@@ -804,13 +852,15 @@ class SearchMemoryTool(BaseMCPComponent):
                     query_embedding_raw = await self.embedding_service.generate_embedding(query)
                     # DualEmbeddingService returns {"text": [...], "code": [...]} — extract TEXT
                     query_embedding = query_embedding_raw.get("text") if isinstance(query_embedding_raw, dict) else query_embedding_raw
+                    if hasattr(query_embedding, "tolist"):
+                        query_embedding = query_embedding.tolist()
                 except Exception as e:
                     logger.warning(f"Embedding generation failed, falling back to tag-only search: {e}")
 
             embedding_ms = (time.time() - start_time) * 1000
 
             # Try hybrid search if available AND embedding exists
-            if hasattr(self, 'hybrid_memory_search_service') and self.hybrid_memory_search_service and query_embedding:
+            if hasattr(self, 'hybrid_memory_search_service') and self.hybrid_memory_search_service and query_embedding is not None:
                 from mnemo_mcp.models.memory_models import MemoryFilters
 
                 filters = MemoryFilters(
@@ -890,7 +940,7 @@ class SearchMemoryTool(BaseMCPComponent):
                     lifecycle_state=lifecycle_state,
                 )
 
-                if query_embedding:
+                if query_embedding is not None:
                     memories_list, total_count = await self.memory_repository.search_by_vector(
                         vector=query_embedding,
                         filters=fallback_filters,
@@ -1286,7 +1336,6 @@ class MarkConsumedTool(BaseMCPComponent):
             raise RuntimeError(f"Failed to mark memories consumed: {e}") from e
 
 
-
 class RateMemoryTool(BaseMCPComponent):
     """
     Tool for rating a memory's helpfulness outcome.
@@ -1355,7 +1404,6 @@ class RateMemoryTool(BaseMCPComponent):
         except Exception as e:
             logger.error("Failed to rate memory", error=str(e), memory_id=memory_id)
             raise RuntimeError(f"Failed to rate memory: {e}") from e
-
 
 
 class SystemSnapshotTool(BaseMCPComponent):
@@ -1514,7 +1562,6 @@ class SystemSnapshotTool(BaseMCPComponent):
             raise RuntimeError(f"Failed to get system snapshot: {e}") from e
 
 
-
 # Singleton instances for registration
 write_memory_tool = WriteMemoryTool()
 update_memory_tool = UpdateMemoryTool()
@@ -1525,7 +1572,6 @@ consolidate_memory_tool = ConsolidateMemoryTool()
 mark_consumed_tool = MarkConsumedTool()
 rate_memory_tool = RateMemoryTool()
 # system_snapshot_tool defined after ConfigureDecayTool (line 1325)
-
 
 
 class ConfigureDecayTool(BaseMCPComponent):

@@ -326,10 +326,10 @@ class GetMemoryHealthTool(BaseMCPComponent):
 
             embedding_pct = round(with_embedding / total * 100, 1) if total > 0 else 0
 
-            rated_count = outcome_stats["rated_count"] if outcome_stats else 0
-            avg_score = outcome_stats["avg_score"] if outcome_stats and outcome_stats["avg_score"] else None
-            positive_count = outcome_stats["positive_count"] if outcome_stats else 0
-            negative_count = outcome_stats["negative_count"] if outcome_stats else 0
+            rated_count = outcome_stats[0] if outcome_stats else 0
+            avg_score = outcome_stats[1] if outcome_stats and outcome_stats[1] is not None else None
+            positive_count = outcome_stats[2] if outcome_stats else 0
+            negative_count = outcome_stats[3] if outcome_stats else 0
             positive_rate = f"{round(100 * positive_count / max(1, rated_count))}%" if rated_count > 0 else "N/A"
 
             return {

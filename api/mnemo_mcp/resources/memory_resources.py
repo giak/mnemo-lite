@@ -347,6 +347,8 @@ class SearchMemoriesResource(BaseMCPComponent):
                     query_embedding = await self.embedding_service.embed_query(query_text)
                 else:
                     query_embedding = await self.embedding_service.generate_embedding(query_text)
+                if hasattr(query_embedding, 'tolist'):
+                    query_embedding = query_embedding.tolist()
                 embedding_ms = (time.time() - embedding_start) * 1000
 
             # Use hybrid search service if available
@@ -419,7 +421,7 @@ class SearchMemoriesResource(BaseMCPComponent):
 
             else:
                 # Fallback to vector-only search (original behavior)
-                if not self.embedding_service or not query_embedding:
+                if not self.embedding_service or query_embedding is None:
                     raise RuntimeError("Embedding service not available")
 
                 memories, total_count = await self.memory_repository.search_by_vector(
