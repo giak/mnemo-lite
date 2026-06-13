@@ -221,6 +221,7 @@ services:
       - backend
     volumes:
       - ./api:/app
+      - ./.env:/app/.env:ro
       - ./tests:/app/tests
       - ./workers:/app/workers
       - ./scripts:/app/scripts
