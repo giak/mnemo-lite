@@ -231,7 +231,7 @@ def appsettings_defaults(project_root: Path) -> Dict[str, str]:
     return result
 
 
-def _ast_value_to_str(node: any) -> str:
+def _ast_value_to_str(node: ast.AST) -> str:
     """Convert an AST value node to its Python string representation."""
     import ast as _ast
     if isinstance(node, _ast.Constant):
@@ -244,9 +244,6 @@ def _ast_value_to_str(node: any) -> str:
         return node.id  # True, False, None
     elif isinstance(node, _ast.UnaryOp) and isinstance(node.op, _ast.USub):
         return f"-{_ast_value_to_str(node.operand)}"
-    elif isinstance(node, _ast.BinOp):
-        # e.g., 100_000
-        return _ast_value_to_str(node.left)
     else:
         return _ast.dump(node)
 
