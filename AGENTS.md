@@ -98,3 +98,13 @@ CTX: préférer au Bash brut pour sortie volumineuse — indexée dans base inte
 - ctx_execute_file(path, language, code) : fichier → sandbox, pas de chargement contexte
 - ctx_search(queries) : chercher dans contenu indexé
 - ctx_fetch_and_index(url) : fetch + indexer contenu web
+
+
+
+## Compression Contexte (Headroom)
+**CTX:** headroom MCP serveur disponible — compresser les tool outputs volumineux
+- Si tool output > 1000 tokens : appeler `headroom_compress` sur le contenu
+- headroom_compress supporte JSON/texte, préserve erreurs/anomalies
+- Si besoin de détail supplémentaire : `headroom_retrieve(hash)`
+- `headroom_stats` pour économies session
+- `memory_search` / `memory_save` pour mémoire persistante cross-agent
