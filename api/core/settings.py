@@ -64,6 +64,24 @@ class AppSettings(BaseSettings):
 
 
 
+    # Retry Configuration
+    CACHE_RETRY_MAX_ATTEMPTS: int = 3
+    CACHE_RETRY_BASE_DELAY: float = 0.5
+    CACHE_RETRY_MAX_DELAY: float = 5.0
+    CACHE_RETRY_JITTER: bool = True
+    DATABASE_RETRY_MAX_ATTEMPTS: int = 3
+    DATABASE_RETRY_BASE_DELAY: float = 1.0
+    DATABASE_RETRY_MAX_DELAY: float = 10.0
+    DATABASE_RETRY_JITTER: bool = True
+    EMBEDDING_RETRY_MAX_ATTEMPTS: int = 2
+    EMBEDDING_RETRY_BASE_DELAY: float = 2.0
+    EMBEDDING_RETRY_MAX_DELAY: float = 10.0
+    EMBEDDING_RETRY_JITTER: bool = True
+    DEFAULT_RETRY_MAX_ATTEMPTS: int = 3
+    DEFAULT_RETRY_BASE_DELAY: float = 1.0
+    DEFAULT_RETRY_MAX_DELAY: float = 30.0
+    DEFAULT_RETRY_JITTER: bool = True
+
     # Worker Configuration
     WORKER_POLL_INTERVAL: int = 5
     WORKER_BATCH_SIZE: int = 50

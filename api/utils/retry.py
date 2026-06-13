@@ -7,6 +7,7 @@ Date: 2025-10-22
 """
 
 import asyncio
+from api.core.settings import get_settings
 import random
 from typing import Callable, TypeVar, Optional, Tuple, Type
 from functools import wraps
@@ -191,34 +192,34 @@ def with_retry(config: Optional[RetryConfig] = None):
 
 # Cache operations: Fast retries (transient Redis failures)
 CACHE_RETRY_CONFIG = RetryConfig(
-    max_attempts=3,
-    base_delay=0.5,
-    max_delay=5.0,
-    jitter=True
+    max_attempts=get_settings().CACHE_RETRY_MAX_ATTEMPTS,
+    base_delay=get_settings().CACHE_RETRY_BASE_DELAY,
+    max_delay=get_settings().CACHE_RETRY_MAX_DELAY,
+    jitter=get_settings().CACHE_RETRY_JITTER
 )
 
 # Database operations: Medium retries (connection pool, deadlocks)
 DATABASE_RETRY_CONFIG = RetryConfig(
-    max_attempts=3,
-    base_delay=1.0,
-    max_delay=10.0,
-    jitter=True
+    max_attempts=get_settings().DATABASE_RETRY_MAX_ATTEMPTS,
+    base_delay=get_settings().DATABASE_RETRY_BASE_DELAY,
+    max_delay=get_settings().DATABASE_RETRY_MAX_DELAY,
+    jitter=get_settings().DATABASE_RETRY_JITTER
 )
 
 # Embedding operations: Conservative retries (slow operation)
 EMBEDDING_RETRY_CONFIG = RetryConfig(
-    max_attempts=2,
-    base_delay=2.0,
-    max_delay=10.0,
-    jitter=True
+    max_attempts=get_settings().EMBEDDING_RETRY_MAX_ATTEMPTS,
+    base_delay=get_settings().EMBEDDING_RETRY_BASE_DELAY,
+    max_delay=get_settings().EMBEDDING_RETRY_MAX_DELAY,
+    jitter=get_settings().EMBEDDING_RETRY_JITTER
 )
 
 # Default retry configuration
 DEFAULT_RETRY_CONFIG = RetryConfig(
-    max_attempts=3,
-    base_delay=1.0,
-    max_delay=30.0,
-    jitter=True
+    max_attempts=get_settings().DEFAULT_RETRY_MAX_ATTEMPTS,
+    base_delay=get_settings().DEFAULT_RETRY_BASE_DELAY,
+    max_delay=get_settings().DEFAULT_RETRY_MAX_DELAY,
+    jitter=get_settings().DEFAULT_RETRY_JITTER
 )
 
 

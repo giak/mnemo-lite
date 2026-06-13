@@ -10,6 +10,7 @@ EPIC-12 Story 12.3: Added circuit breaker for fault tolerance.
 from typing import Any, Optional
 import json
 import structlog
+from api.core.settings import get_settings
 from datetime import timedelta
 
 try:
