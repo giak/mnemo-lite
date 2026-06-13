@@ -75,7 +75,7 @@ def test_initialization_with_env_defaults():
         "CODE_EMBEDDING_MODEL": "env-code-model",
     }):
         get_settings.cache_clear()  # Pick up patched env vars
-        service = DualEmbeddingService(dimension=768, device="cpu")
+        service = DualEmbeddingService(text_dimension=768, code_dimension=768, device="cpu")
         assert service.text_model_name == "env-text-model"
         assert service.code_model_name == "env-code-model"
 
@@ -307,7 +307,7 @@ async def test_ram_budget_safeguard_blocks_code_model(dual_service, mock_sentenc
 @pytest.mark.anyio
 async def test_compute_similarity_identical_vectors():
     """Test similarity of identical vectors is 1.0."""
-    service = DualEmbeddingService(dimension=768, device="cpu")
+    service = DualEmbeddingService(text_dimension=768, code_dimension=768, device="cpu")
     emb = [1.0] * 768
 
     similarity = await service.compute_similarity(emb, emb)
@@ -317,7 +317,7 @@ async def test_compute_similarity_identical_vectors():
 @pytest.mark.anyio
 async def test_compute_similarity_orthogonal_vectors():
     """Test similarity of orthogonal vectors is 0.0."""
-    service = DualEmbeddingService(dimension=768, device="cpu")
+    service = DualEmbeddingService(text_dimension=768, code_dimension=768, device="cpu")
     emb1 = [1.0] + [0.0] * 767
     emb2 = [0.0, 1.0] + [0.0] * 766
 
@@ -328,7 +328,7 @@ async def test_compute_similarity_orthogonal_vectors():
 @pytest.mark.anyio
 async def test_compute_similarity_opposite_vectors():
     """Test similarity of opposite vectors is 0.0 (clipped from -1.0)."""
-    service = DualEmbeddingService(dimension=768, device="cpu")
+    service = DualEmbeddingService(text_dimension=768, code_dimension=768, device="cpu")
     emb1 = [1.0] * 768
     emb2 = [-1.0] * 768
 
@@ -340,7 +340,7 @@ async def test_compute_similarity_opposite_vectors():
 @pytest.mark.anyio
 async def test_compute_similarity_zero_vectors():
     """Test similarity with zero vectors returns 0.0."""
-    service = DualEmbeddingService(dimension=768, device="cpu")
+    service = DualEmbeddingService(text_dimension=768, code_dimension=768, device="cpu")
     emb_zero = [0.0] * 768
     emb_normal = [1.0] * 768
 
