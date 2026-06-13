@@ -198,6 +198,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}
       MCP_DATABASE_URL: postgresql://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/${POSTGRES_DB:-mnemolite}
+      TEST_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mnemo}:${POSTGRES_PASSWORD:-mnemopass}@db:5432/mnemolite_test
       REDIS_URL: redis://redis:6379/0
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
       CODE_EMBEDDING_MODEL: ${CODE_EMBEDDING_MODEL:-jinaai/jina-embeddings-v2-base-code}
