@@ -235,7 +235,50 @@ class DualEmbeddingService:
         )
         return model
 
-    def _encode_single_with_no_grad(self, model: SentenceTransformer, text: str):
+    def ensure_text_model_loaded(self):
+        """Ensure the text model is loaded (synchronous, for executor threads)."""
+        if self._text_model is None:
+            self._text_model = self._load_text_model_sync()
+
+    @property
+    def tokenizer(self):
+        """Expose text model tokenizer (SentenceTransformer).
+
+        Raises RuntimeError if model not loaded. Call ensure_text_model_loaded()
+        first (inside an executor thread, not the event loop).
+        """
+        if self._text_model is None:
+            raise RuntimeError(
+                "Text model not loaded. Call ensure_text_model_loaded() first "
+                "(in an executor thread to avoid blocking the event loop)."
+            )
+        return self._text_model.tokenizer
+
+    def encode_text_sync(self, texts, normalize_embeddings: bool = True):
+        """Sync text encoding via the text SentenceTransformer model.
+
+        Delegates to _encode_single_with_no_grad / _encode_batch_with_no_grad
+        to reuse torch.no_grad() + CUDA cache logic.
+
+        Args:
+            texts: Single string or list of strings to encode
+            normalize_embeddings: Whether to L2-normalize output vectors
+
+        Returns:
+            numpy array of embedding(s)
+        """
+        self.ensure_text_model_loaded()
+        model = self._text_model
+        if isinstance(texts, str):
+            return self._encode_single_with_no_grad(
+                model, texts, normalize_embeddings=normalize_embeddings
+            )
+        return self._encode_batch_with_no_grad(
+            model, texts, normalize_embeddings=normalize_embeddings,
+            show_progress_bar=False
+        )
+
+    def _encode_single_with_no_grad(self, model: SentenceTransformer, text: str, **kwargs):
         """
         Encode single text with torch.no_grad() to prevent memory accumulation.
 
@@ -245,13 +288,14 @@ class DualEmbeddingService:
         Args:
             model: Loaded SentenceTransformer model
             text: Text or code to encode
+            **kwargs: Forwarded to model.encode() (e.g., normalize_embeddings=True)
 
         Returns:
             Embedding vector (numpy array)
         """
         if TORCH_AVAILABLE and torch is not None:
             with torch.no_grad():
-                embedding = model.encode(text, convert_to_numpy=True)
+                embedding = model.encode(text, convert_to_numpy=True, **kwargs)
 
             # Clear CUDA cache if using GPU
             if torch.cuda.is_available():
@@ -260,13 +304,14 @@ class DualEmbeddingService:
             return embedding
         else:
             # Fallback without torch.no_grad() (shouldn't happen)
-            return model.encode(text, convert_to_numpy=True)
+            return model.encode(text, convert_to_numpy=True, **kwargs)
 
     def _encode_batch_with_no_grad(
         self,
         model: SentenceTransformer,
         texts: List[str],
-        show_progress_bar: bool = True
+        show_progress_bar: bool = True,
+        **kwargs
     ):
         """
         Encode batch of texts with torch.no_grad() to prevent memory accumulation.
@@ -286,7 +331,8 @@ class DualEmbeddingService:
                 embeddings = model.encode(
                     texts,
                     show_progress_bar=show_progress_bar,
-                    convert_to_numpy=True
+                    convert_to_numpy=True,
+                    **kwargs
                 )
 
             # Clear CUDA cache if using GPU
@@ -299,7 +345,8 @@ class DualEmbeddingService:
             return model.encode(
                 texts,
                 show_progress_bar=show_progress_bar,
-                convert_to_numpy=True
+                convert_to_numpy=True,
+                **kwargs
             )
 
     async def _ensure_text_model(self):

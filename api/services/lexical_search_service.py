@@ -184,7 +184,10 @@ class LexicalSearchService:
                 metadata
             FROM code_chunks
             WHERE {where_clause}
-              AND {similarity_expr} > :threshold
+              AND (
+                {similarity_expr} > :threshold
+                OR source_code ILIKE '%' || :query || '%'
+              )
             ORDER BY similarity_score DESC
             LIMIT :limit
         """
@@ -193,6 +196,9 @@ class LexicalSearchService:
 
         try:
             async with self.engine.connect() as conn:
+                                # Disable pg_trgm built-in 0.3 threshold so short queries (e.g. "Sumer")
+                # are not rejected before the ILIKE fallback is reached.
+                await conn.execute(text("SET pg_trgm.similarity_threshold = '0.001'"))
                 result = await conn.execute(text(query_sql), params)
                 rows = result.fetchall()
 

@@ -464,18 +464,26 @@ class CodeChunkRepository:
             self.logger.warning("add_batch called with empty chunks_data")
             return 0
 
-        query, params = self.query_builder.build_add_batch_query(chunks_data)
-        try:
-            self.logger.info(f"💾 Batch inserting {len(chunks_data)} chunks in single query")
-            db_result = await self._execute_query(
-                query, params, is_mutation=True, connection=connection
-            )
-            rows_affected = db_result.rowcount
-            self.logger.info(f"✅ Batch insert complete: {rows_affected} chunks stored")
-            return rows_affected
-        except Exception as e:
-            self.logger.error(f"Failed to batch insert {len(chunks_data)} chunks: {e}", exc_info=True)
-            raise RepositoryError(f"Failed to batch insert chunks: {e}") from e
+        # PostgreSQL limit: 32767 parameters per query
+        # Each chunk has ~17 columns → max ~1927 chunks per sub-batch
+        # Use conservative 1000 to stay well under the limit
+        SUB_BATCH_SIZE = 1000
+        total_inserted = 0
+
+        for i in range(0, len(chunks_data), SUB_BATCH_SIZE):
+            sub_batch = chunks_data[i:i + SUB_BATCH_SIZE]
+            query, params = self.query_builder.build_add_batch_query(sub_batch)
+            try:
+                db_result = await self._execute_query(
+                    query, params, is_mutation=True, connection=connection
+                )
+                total_inserted += db_result.rowcount
+            except Exception as e:
+                self.logger.error(f"Failed to batch insert sub-batch {i}-{i+len(sub_batch)}: {e}", exc_info=True)
+                raise RepositoryError(f"Failed to batch insert chunks at offset {i}: {e}") from e
+
+        self.logger.info(f"✅ Batch insert complete: {total_inserted} chunks stored in {(len(chunks_data) + SUB_BATCH_SIZE - 1) // SUB_BATCH_SIZE} sub-batches")
+        return total_inserted
 
     async def get_by_id(self, chunk_id: uuid.UUID) -> Optional[CodeChunkModel]:
         """Get code chunk by ID."""
