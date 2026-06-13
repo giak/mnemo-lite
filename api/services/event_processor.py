@@ -4,15 +4,13 @@ Implémente l'interface EventProcessorProtocol.
 """
 
 import logging
-from typing import Dict, Any, Optional, List
-import json
-from uuid import UUID
-from datetime import datetime, timezone, UTC
+from typing import Dict, Any, Optional
+from datetime import datetime, UTC
 
 from interfaces.services import EventProcessorProtocol, EmbeddingServiceProtocol
 from interfaces.repositories import EventRepositoryProtocol
 from models.event_models import EventModel
-from models.memory_models import Memory, MemoryCreate
+from models.memory_models import Memory
 
 # Configuration du logger
 logger = logging.getLogger(__name__)
