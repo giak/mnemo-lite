@@ -19,7 +19,6 @@ Usage:
 import sys
 import asyncio
 import warnings
-import os
 from api.core import get_settings
 import base64
 from contextlib import asynccontextmanager
