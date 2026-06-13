@@ -11,7 +11,6 @@ Model: nomic-embed-text-v1.5 (default)
 - MTEB score: ~65 (competitive with commercial models)
 """
 
-# import os (no longer needed - using get_settings())
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from api.core.settings import get_settings
