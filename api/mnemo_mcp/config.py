@@ -102,7 +102,6 @@ class MCPConfig(BaseSettings):
 
         # HTTP transport warns without auth (skip in Docker/local dev)
         if self.transport == "http" and self.auth_mode == "none":
-            import os as _os
             if get_settings().ENVIRONMENT == "production":
                 errors.append(
                     "HTTP transport without authentication is insecure. "
