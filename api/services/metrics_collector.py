@@ -13,11 +13,13 @@ Architecture:
 - No side effects (pure data collection)
 """
 
+import structlog
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy import text
 import psutil
+import redis.asyncio as aioredis
 
 logger = structlog.get_logger()
 

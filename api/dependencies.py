@@ -257,7 +257,7 @@ async def get_embedding_service(request: Request) -> EmbeddingServiceProtocol:
     logger.warning("Embedding service not in app.state, creating on demand")
 
     # Déterminer le mode
-    embedding_mode = get_settings().EMBEDDING_MODE
+    embedding_mode = get_app_settings().EMBEDDING_MODE
 
     if embedding_mode == "mock":
         logger.warning(
@@ -266,11 +266,11 @@ async def get_embedding_service(request: Request) -> EmbeddingServiceProtocol:
         )
         embedding_service = MockEmbeddingService(
             model_name="mock-model",
-            dimension=get_settings().EMBEDDING_DIMENSION
+            dimension=get_app_settings().EMBEDDING_DIMENSION
         )
 
     elif embedding_mode == "real":
-        settings = get_settings()
+        settings = get_app_settings()
         logger.info(
             "✅ EMBEDDING MODE: DUAL (TEXT + CODE) - Phase 0 Story 0.2",
             extra={
@@ -378,7 +378,7 @@ async def get_code_chunk_cache(request: Request) -> CodeChunkCache:
         return request.app.state.code_chunk_cache
 
     # Create cache singleton
-    cache_size_mb = get_settings().L1_CACHE_SIZE_MB
+    cache_size_mb = get_app_settings().L1_CACHE_SIZE_MB
     code_chunk_cache = CodeChunkCache(max_size_mb=cache_size_mb)
 
     # Store in app.state for singleton pattern
@@ -480,9 +480,9 @@ async def get_event_service(
     """
     # Configuration depuis env vars
     config = {
-        "auto_generate_embeddings": get_settings().EMBEDDING_AUTO_GENERATE,
-        "embedding_fail_strategy": get_settings().EMBEDDING_FAIL_STRATEGY,  # soft | hard
-        "embedding_source_fields": get_settings().EMBEDDING_SOURCE_FIELDS.split(",")
+        "auto_generate_embeddings": get_app_settings().EMBEDDING_AUTO_GENERATE,
+        "embedding_fail_strategy": get_app_settings().EMBEDDING_FAIL_STRATEGY,  # soft | hard
+        "embedding_source_fields": get_app_settings().EMBEDDING_SOURCE_FIELDS.split(",")
     }
 
     return EventService(
@@ -722,7 +722,7 @@ async def get_metrics_collector(
 
     if redis_client is None:
         # Create new Redis client for metrics
-        redis_url = get_settings().REDIS_URL
+        redis_url = get_app_settings().REDIS_URL
         redis_client = aioredis.from_url(
             redis_url,
             decode_responses=False  # Keep bytes for INFO command

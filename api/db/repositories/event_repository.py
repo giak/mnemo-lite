@@ -6,6 +6,7 @@ from typing_extensions import TypeAlias
 # Imports SQLAlchemy nécessaires
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.sql import text, select, update, delete
+from sqlalchemy.sql.expression import ColumnElement, TextClause
 
 from sqlalchemy.sql.elements import False_ # Import spécifique pour la vérification
 from sqlalchemy.engine import Result
