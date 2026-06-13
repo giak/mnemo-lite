@@ -1,13 +1,12 @@
 import uuid
 from datetime import datetime, timezone
-import json
 from typing import List, Dict, Any, Optional, Tuple, Union
 from typing_extensions import TypeAlias
 
 # Imports SQLAlchemy nécessaires
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
-from sqlalchemy.sql import text, Select, ColumnElement, insert, select, update, delete
-from sqlalchemy.sql.expression import literal_column, TextClause
+from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.sql import text, select, update, delete
+
 from sqlalchemy.sql.elements import False_ # Import spécifique pour la vérification
 from sqlalchemy.engine import Result
 from sqlalchemy import Table, Column, String, MetaData, TIMESTAMP
@@ -15,16 +14,15 @@ from sqlalchemy.dialects.postgresql import JSONB
 from pgvector.sqlalchemy import VECTOR # Import VECTOR type
 
 # Importations liées à Pydantic pour la validation et la sérialisation
-from pydantic import BaseModel, Field, field_validator
+
 
 # Importation pour le logging
-import logging
 
 # Import RepositoryError from base
 from .base import RepositoryError
 
 # Import the canonical EventModel using absolute path
-from models.event_models import EventModel, EventCreate, EventUpdate
+from models.event_models import EventModel, EventCreate
 
 # Import the extracted query builder
 from db.query_builders import EventQueryBuilder
