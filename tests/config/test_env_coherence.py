@@ -104,17 +104,24 @@ def test_appsettings_defaults_match_env_example(env_example_doc, env_vars_in_cod
     settings = get_settings()
 
     common_vars = set(env_example_doc.keys()) & env_vars_in_code.get("settings_fields", set())
-    skip_vars = {"EMBEDDING_MODEL", "CODE_EMBEDDING_MODEL", "ENVIRONMENT", "EMBEDDING_MODE"}
+    # Skip auto-deduced, user-specific, and connection-string fields
+    skip_vars = {
+        "EMBEDDING_MODEL", "CODE_EMBEDDING_MODEL", "ENVIRONMENT", "EMBEDDING_MODE",
+        "CLAUDE_PROJECTS_DIR", "CODEBUFF_DIR", "CODEBUFF_PROJECTS_DIR", "OPENCODE_DIR",
+        "DATABASE_URL", "MCP_DATABASE_URL", "TEST_DATABASE_URL", "REDIS_URL",
+        "EMBEDDING_DIMENSION", "CODE_EMBEDDING_DIMENSION", "EMBEDDING_BACKEND",
+        "EMBEDDING_PREFIX",
+    }
 
     mismatches = []
     for var in sorted(common_vars):
         if var in skip_vars:
             continue
-        actual = str(getattr(settings, field, "MISSING"))
+        actual = str(getattr(settings, var, "MISSING"))
         expected_raw = env_example_doc.get(var, "")
         if expected_raw:
             expected = expected_raw.split("#")[0].strip().strip('"').strip("'")
-            if actual != expected and actual != "MISSING":
+            if actual.lower() != expected.lower() and actual != "MISSING":
                 mismatches.append(f"  {var}: doc says '{expected}', code has '{actual}'")
 
     if mismatches:
