@@ -93,7 +93,9 @@ class VectorSearchService:
             ValueError: If embedding is invalid or domain unknown
         """
         expected_dim = get_settings().EMBEDDING_DIMENSION
-        if not embedding or len(embedding) != expected_dim:
+        if hasattr(embedding, 'tolist'):
+            embedding = embedding.tolist()
+        if embedding is None or len(embedding) != expected_dim:
             raise ValueError(f"Embedding must be a {expected_dim}-dimensional vector")
 
         if embedding_domain not in ("TEXT", "CODE"):

@@ -169,6 +169,8 @@ class MemorySearchService(MemorySearchServiceProtocol):
             
             # Génération de l'embedding pour la requête
             embedding = await self.embedding_service.generate_embedding(query)
+            if hasattr(embedding, 'tolist'):
+                embedding = embedding.tolist()
             
             # Recherche par vecteur
             vector_result = await self.search_by_vector(
@@ -267,8 +269,10 @@ class MemorySearchService(MemorySearchServiceProtocol):
             query_embedding = None
             if query: # Only generate if query is not empty
                 query_embedding = await self.embedding_service.generate_embedding(query)
+                if hasattr(query_embedding, 'tolist'):
+                    query_embedding = query_embedding.tolist()
             
-            if not query_embedding:
+            if query_embedding is None:
                 self.logger.info("No query text provided or embedding generation failed. Performing metadata/time search only.")
 
             

@@ -101,6 +101,8 @@ class EventService:
                     extra={"text_length": len(text), "text_preview": text[:50]}
                 )
                 event_data.embedding = await self.embedding_svc.generate_embedding(text)
+                if hasattr(event_data.embedding, 'tolist'):
+                    event_data.embedding = event_data.embedding.tolist()
                 self.logger.info(
                     "✅ Embedding generated successfully",
                     extra={"embedding_length": len(event_data.embedding)}

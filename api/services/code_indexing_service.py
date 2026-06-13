@@ -823,6 +823,8 @@ class CodeIndexingService:
                 text=chunk.source_code,
                 text_type=text_type_map.get(domain, "passage")
             )
+            if hasattr(legacy_emb, 'tolist'):
+                legacy_emb = legacy_emb.tolist()
 
             # Convert List[float] → Dict[str, List[float]]
             if isinstance(legacy_emb, list):

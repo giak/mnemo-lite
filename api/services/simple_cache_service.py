@@ -220,9 +220,11 @@ class CachedEmbeddingService:
 
         # Generate embedding
         embedding = await self.service.generate_embedding(text)
+        if hasattr(embedding, 'tolist'):
+            embedding = embedding.tolist()
 
         # Store in cache
-        if not skip_cache and embedding:
+        if not skip_cache and embedding is not None:
             self.cache.set(text, embedding)
 
         return embedding
@@ -300,7 +302,7 @@ class CachedEmbeddingService:
 # Example usage for testing
 if __name__ == "__main__":
     from api.core import get_settings
-import asyncio
+    import asyncio
 
     async def test_cache():
         # Create mock embedding service
