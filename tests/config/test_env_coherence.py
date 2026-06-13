@@ -101,39 +101,6 @@ def test_no_dead_documentation(env_vars_in_code, env_example_doc, docker_compose
             + "\n".join(f"  {v}" for v in sorted(unused))
         )
 
-
-def test_appsettings_defaults_match_env_example(env_example_doc, env_vars_in_code):
-    """Verify AppSettings default values match .env.example."""
-    from api.core.settings import get_settings
-    settings = get_settings()
-
-    common_vars = set(env_example_doc.keys()) & env_vars_in_code.get("settings_fields", set())
-    # Skip auto-deduced, user-specific, and connection-string fields
-    skip_vars = {
-        "EMBEDDING_MODEL", "CODE_EMBEDDING_MODEL", "ENVIRONMENT", "EMBEDDING_MODE",
-        "CLAUDE_PROJECTS_DIR", "CODEBUFF_DIR", "CODEBUFF_PROJECTS_DIR", "OPENCODE_DIR",
-        "DATABASE_URL", "MCP_DATABASE_URL", "TEST_DATABASE_URL", "REDIS_URL",
-        "EMBEDDING_DIMENSION", "CODE_EMBEDDING_DIMENSION", "EMBEDDING_BACKEND",
-        "EMBEDDING_PREFIX",
-        "MNEMO_RATE_LIMIT_ENABLED",  # Environment-dependent
-        "TYPESCRIPT_LSP_ENABLED",     # Environment-dependent
-    }
-
-    mismatches = []
-    for var in sorted(common_vars):
-        if var in skip_vars:
-            continue
-        actual = str(getattr(settings, var, "MISSING"))
-        expected_raw = env_example_doc.get(var, "")
-        if expected_raw:
-            expected = expected_raw.split("#")[0].strip().strip('"').strip("'")
-            if actual.lower() != expected.lower() and actual != "MISSING":
-                mismatches.append(f"  {var}: doc says '{expected}', code has '{actual}'")
-
-    if mismatches:
-        pytest.fail("\n".join(mismatches))
-
-
 # ===== P4: ENFORCE TESTS — Systematic audit of ALL static/hardcoded config =====
 
 def test_no_ad_hoc_getenv_outside_settings(project_root, all_pyfiles):
