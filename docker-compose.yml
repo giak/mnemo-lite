@@ -222,6 +222,7 @@ services:
     volumes:
       - ./api:/app
       - ./.env:/app/.env:ro
+      - ./.env.example:/app/.env.example:ro
       - ./tests:/app/tests
       - ./workers:/app/workers
       - ./scripts:/app/scripts
