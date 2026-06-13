@@ -185,7 +185,7 @@ async def dual_embedding_service():
 
     service = DualEmbeddingService(
         device="cpu",
-        text_dimension=768, code_dimension=768
+        text_dimension=1024, code_dimension=768
     )
 
     # Pre-load TEXT model (commonly used)
@@ -392,7 +392,7 @@ async def test_client_with_real_embeddings(clean_db):
     from dependencies import get_db_engine, get_embedding_service, DualEmbeddingServiceAdapter
     from services.dual_embedding_service import DualEmbeddingService
 
-    dual_service = DualEmbeddingService(device="cpu", text_dimension=768, code_dimension=768)
+    dual_service = DualEmbeddingService(device="cpu", text_dimension=1024, code_dimension=768)
     adapter = DualEmbeddingServiceAdapter(dual_service)
 
     # Set app.state for middleware and other direct access
