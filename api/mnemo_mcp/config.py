@@ -10,7 +10,6 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from api.core import get_settings
 
-
 class MCPConfig(BaseSettings):
     """
     MCP Server Configuration.
@@ -153,7 +152,6 @@ class MCPConfig(BaseSettings):
         if self.redis_url:
             return self.redis_url
         return get_settings().REDIS_URL
-
 
 # Global config instance
 config = MCPConfig()

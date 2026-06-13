@@ -374,7 +374,6 @@ class ConversationWorker:
 
 async def main():
     """Main entry point."""
-    import os
     from redis import Redis
 
     # Configuration from environment

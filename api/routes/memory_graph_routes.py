@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/memories", tags=["memory-graph"])
 
-
 class ConsolidateRequest(BaseModel):
     """Request body for memory consolidation."""
     title: str = Field(..., min_length=1)
@@ -27,7 +26,6 @@ class ConsolidateRequest(BaseModel):
     tags: Optional[List[str]] = None
     memory_type: Optional[str] = "note"
     author: Optional[str] = "consolidation"
-
 
 @router.get("/graph")
 async def get_memory_graph(
@@ -119,7 +117,6 @@ async def get_memory_graph(
         logger.error(f"Failed to get memory graph: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get memory graph: {e}")
 
-
 @router.get("/consolidation/suggestions")
 async def get_consolidation_suggestions(
     min_shared_entities: int = Query(2, ge=0),
@@ -175,7 +172,6 @@ async def get_consolidation_suggestions(
         logger.error(f"Failed to get consolidation suggestions: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get consolidation suggestions: {e}")
 
-
 @router.post("/consolidate")
 async def consolidate_memories(
     request: ConsolidateRequest,
@@ -196,8 +192,6 @@ async def consolidate_memories(
         try:
             from services.dual_embedding_service import DualEmbeddingService
             from dependencies import DualEmbeddingServiceAdapter
-            import os
-
             settings = get_settings()
             dual_service = DualEmbeddingService(
                 text_model_name=settings.EMBEDDING_MODEL,

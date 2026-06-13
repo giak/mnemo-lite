@@ -11,8 +11,6 @@ Configuration:
     MNEMO_RATE_LIMIT=100/60 (100 requests per 60 seconds)
     MNEMO_RATE_LIMIT_ENABLED=true
 """
-
-import os
 import time
 
 import structlog
@@ -23,7 +21,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 logger = structlog.get_logger(__name__)
-
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """

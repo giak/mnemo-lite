@@ -3,7 +3,6 @@ EPIC-26: Memories Monitor Backend API
 Endpoints for Memories Monitor page displaying conversations, code, embeddings.
 """
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 
@@ -23,7 +22,6 @@ router = APIRouter(prefix="/api/v1/memories", tags=["memories"])
 # Read embedding model names from environment variables
 EMBEDDING_MODEL = get_settings().EMBEDDING_MODEL
 CODE_EMBEDDING_MODEL = get_settings().CODE_EMBEDDING_MODEL
-
 
 @router.get("/stats")
 async def get_memories_stats(engine: AsyncEngine = Depends(get_db_engine)) -> Dict[str, Any]:
@@ -87,7 +85,6 @@ async def get_memories_stats(engine: AsyncEngine = Depends(get_db_engine)) -> Di
             status_code=500,
             detail="Failed to retrieve memories statistics. Please try again later."
         )
-
 
 @router.get("/recent")
 async def get_recent_memories(
@@ -153,7 +150,6 @@ async def get_recent_memories(
             status_code=500,
             detail="Failed to retrieve recent memories. Please try again later."
         )
-
 
 @router.get("/code-chunks/recent")
 async def get_recent_code_chunks(
@@ -232,7 +228,6 @@ async def get_recent_code_chunks(
             detail="Failed to retrieve recent code chunks. Please try again later."
         )
 
-
 # Write endpoint
 
 class MemoryCreateRequest(BaseModel):
@@ -244,14 +239,12 @@ class MemoryCreateRequest(BaseModel):
     author: Optional[str] = Field(None, max_length=100, description="Author attribution")
     embedding_source: Optional[str] = Field(None, description="Focused text for embedding (optional)")
 
-
 class MemoryCreateResponse(BaseModel):
     """Response for memory creation."""
     id: str
     title: str
     memory_type: str
     created_at: str
-
 
 @router.post("", response_model=MemoryCreateResponse, status_code=201)
 async def create_memory(
@@ -319,7 +312,6 @@ async def create_memory(
             detail="Failed to create memory. Please try again later."
         )
 
-
 # Update endpoint
 
 class MemoryUpdateRequest(BaseModel):
@@ -330,7 +322,6 @@ class MemoryUpdateRequest(BaseModel):
     tags: Optional[List[str]] = None
     author: Optional[str] = None
     embedding_source: Optional[str] = None
-
 
 @router.put("/{memory_id}")
 async def update_memory_endpoint(
@@ -397,7 +388,6 @@ async def update_memory_endpoint(
         logger.error(f"Failed to update memory: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update memory.")
 
-
 # Delete endpoint
 
 @router.delete("/{memory_id}")
@@ -432,7 +422,6 @@ async def delete_memory_endpoint(
     except Exception as e:
         logger.error(f"Failed to delete memory: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete memory.")
-
 
 @router.get("/export")
 async def export_memories(
@@ -500,7 +489,6 @@ async def export_memories(
             detail="Failed to export memories. Please try again later."
         )
 
-
 @router.get("/{memory_id}")
 async def get_memory_by_id(
     memory_id: str,
@@ -565,7 +553,6 @@ async def get_memory_by_id(
             detail="Failed to retrieve memory. Please try again later."
         )
 
-
 @router.get("/embeddings/health")
 async def get_embeddings_health(engine: AsyncEngine = Depends(get_db_engine)) -> Dict[str, Any]:
     """
@@ -628,7 +615,6 @@ async def get_embeddings_health(engine: AsyncEngine = Depends(get_db_engine)) ->
             detail="Failed to retrieve embeddings health. Please try again later."
         )
 
-
 # Search endpoint models and implementation
 
 class MemorySearchRequest(BaseModel):
@@ -638,7 +624,6 @@ class MemorySearchRequest(BaseModel):
     tags: List[str] = Field(default_factory=list, description="Filter by tags (AND logic)")
     limit: int = Field(20, ge=1, le=100, description="Max results")
     offset: int = Field(0, ge=0, description="Pagination offset")
-
 
 class MemorySearchResult(BaseModel):
     """Single memory search result."""
@@ -651,14 +636,12 @@ class MemorySearchResult(BaseModel):
     created_at: str
     score: float
 
-
 class MemorySearchResponse(BaseModel):
     """Response for memory search."""
     results: List[MemorySearchResult]
     total: int
     query: str
     search_time_ms: float
-
 
 @router.post("/search", response_model=MemorySearchResponse)
 async def search_memories(
@@ -745,7 +728,6 @@ async def search_memories(
             detail="Memory search failed. Please try again later."
         )
 
-
 @router.get("/decay/config")
 async def get_decay_config(engine: AsyncEngine = Depends(get_db_engine)) -> Dict[str, Any]:
     """
@@ -782,7 +764,6 @@ async def get_decay_config(engine: AsyncEngine = Depends(get_db_engine)) -> Dict
             detail="Failed to fetch decay configuration."
         )
 
-
 # EPIC-28: Entity extraction endpoint (called by worker)
 
 class EntityExtractionRequest(BaseModel):
@@ -791,7 +772,6 @@ class EntityExtractionRequest(BaseModel):
     content: str
     memory_type: str
     tags: List[str] = Field(default_factory=list)
-
 
 @router.post("/{memory_id}/extract-entities")
 async def extract_entities_endpoint(

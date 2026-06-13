@@ -4,7 +4,6 @@ Orchestrates event creation with auto-embedding generation.
 """
 
 import logging
-import os
 from typing import Dict, Any, Optional, List
 from uuid import UUID
 
@@ -12,9 +11,7 @@ from models.event_models import EventModel, EventCreate
 from interfaces.repositories import EventRepositoryProtocol
 from interfaces.services import EmbeddingServiceProtocol
 
-
 logger = logging.getLogger(__name__)
-
 
 class EventService:
     """

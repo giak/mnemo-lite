@@ -1,4 +1,3 @@
-import os
 import psutil
 import time
 from fastapi import APIRouter, Depends, HTTPException, Request, Request
@@ -38,7 +37,6 @@ api_request_duration = Histogram(
 )
 api_memory_usage = Gauge("api_memory_usage_bytes", "API memory usage in bytes")
 
-
 async def check_postgres_via_engine(engine: AsyncEngine):
     """Vérifie la connexion à la base de données PostgreSQL via SQLAlchemy engine."""
     try:
@@ -50,10 +48,8 @@ async def check_postgres_via_engine(engine: AsyncEngine):
         logger.error(f"PostgreSQL health check failed: {str(e)}")
         return {"status": "error", "message": str(e)}
 
-
 # Fonction check_chroma supprimée
 # async def check_chroma(): ...
-
 
 @router.get("/readiness", response_model=Dict[str, Any])
 async def readiness(db_engine: AsyncEngine = Depends(get_db_engine)) -> Dict[str, Any]:
@@ -88,7 +84,6 @@ async def readiness(db_engine: AsyncEngine = Depends(get_db_engine)) -> Dict[str
                 "details": str(e),
             },
         )
-
 
 @router.get("/health")
 async def health_check(
@@ -163,12 +158,10 @@ async def health_check(
 
     return JSONResponse(status_code=http_status_code, content=response_content)
 
-
 @router.get("/metrics")
 async def metrics():
     """Endpoint pour les métriques Prometheus."""
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
 
 @router.get("/api/v1/autosave/health")
 async def autosave_health_check(db_engine: AsyncEngine = Depends(get_db_engine)):
@@ -265,6 +258,5 @@ async def autosave_health_check(db_engine: AsyncEngine = Depends(get_db_engine))
     status_code = 200 if overall_status == "healthy" else 503
 
     return JSONResponse(status_code=status_code, content=response_content)
-
 
 # Fin du fichier
