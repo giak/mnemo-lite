@@ -750,7 +750,7 @@ class SearchMemoryTool(BaseMCPComponent):
         ctx: Context,
         query: Optional[str] = None,
         memory_type: Optional[str] = None,
-        tags: Optional[Union[str, List[str]]] = None,
+        tags: Optional[List[str]] = None,
         consumed: Optional[bool] = None,
         lifecycle_state: Optional[str] = None,
         search_mode: str = "tag",  # "tag" (default, fast) | "hybrid" | "semantic"
@@ -765,7 +765,7 @@ class SearchMemoryTool(BaseMCPComponent):
             ctx: MCP context
             query: Search query (natural language). Optional if tags provided.
             memory_type: Filter by type (note, decision, task, reference, conversation, investigation)
-            tags: Filter by tags — accepts string "sys:history" or list ["sys:history", "v15"]
+            tags: Filter by tags — list of strings, e.g. ["sys:history", "v15"]
             consumed: Filter by consumption status (None=all, True=consumed, False=fresh)
             lifecycle_state: Filter by lifecycle (None=all, "sealed", "candidate", "doubt", "summary")
             limit: Max results (1-50, default: 10)
@@ -775,9 +775,6 @@ class SearchMemoryTool(BaseMCPComponent):
         Returns:
             Dict with memories list, pagination, and search metadata
         """
-        # Normalize tags: accept string or list (tolerant to agent errors)
-        if isinstance(tags, str):
-            tags = [tags]
         if tags is not None:
             tags = [t.strip() for t in tags if t.strip()]
 
