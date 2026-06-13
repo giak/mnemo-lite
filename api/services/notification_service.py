@@ -5,12 +5,8 @@ Implémente l'interface NotificationServiceProtocol.
 
 import logging
 from typing import Dict, Any, Optional, List, Union
-import json
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import asyncio
-from datetime import datetime, timezone, UTC
+from datetime import datetime, UTC
 
 from interfaces.services import NotificationServiceProtocol
 
