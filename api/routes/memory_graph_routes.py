@@ -7,7 +7,8 @@ import logging
 from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from api.core import get_settings, Query, Request
+from api.core import get_settings
+from fastapi import Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncEngine
 

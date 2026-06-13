@@ -770,6 +770,7 @@ class IndexMarkdownWorkspaceTool(BaseMCPComponent):
                     logger.warning(f"Embedding generation failed: {e}")
 
             # 4. Store in DB
+            from sqlalchemy import text
             from db.repositories.code_chunk_repository import CodeChunkRepository
             chunk_repo = CodeChunkRepository(engine=engine)
 
@@ -781,8 +782,18 @@ class IndexMarkdownWorkspaceTool(BaseMCPComponent):
                 )
 
                 # Insert new chunks
+                from models.code_chunk_models import CodeChunkCreate
+                chunks_data = []
+                for c in all_chunks:
+                    chunk_dict = c.model_dump()
+                    # Carry over embedding_text set on the object
+                    if hasattr(c, 'embedding_text') and c.embedding_text is not None:
+                        chunk_dict['embedding_text'] = c.embedding_text
+                    if hasattr(c, 'embedding_code') and c.embedding_code is not None:
+                        chunk_dict['embedding_code'] = c.embedding_code
+                    chunks_data.append(CodeChunkCreate(**chunk_dict))
                 inserted = await chunk_repo.add_batch(
-                    chunks_data=[c.to_db_dict() for c in all_chunks],
+                    chunks_data=chunks_data,
                     connection=conn,
                 )
 

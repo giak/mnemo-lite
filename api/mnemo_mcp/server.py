@@ -90,6 +90,89 @@ _services_cache: dict = {}
 _services_initialized: bool = False
 
 
+
+class LazyEmbeddingService:
+    """Lazy-loads the embedding service on first use to avoid cold-start timeouts.
+    
+    The BGE-M3 model (~2.2 GB) takes 30-135s to load, which triggers MCP client
+    timeouts if done at server startup. This wrapper defers initialization until
+    the first search_memory or search_code call that requires embeddings.
+    """
+    
+    def __init__(self):
+        self._service = None
+        self._lock = asyncio.Lock()
+    
+    async def _ensure_initialized(self):
+        if self._service is not None:
+            return
+        async with self._lock:
+            if self._service is not None:
+                return
+            logger.info("lazy_embedding.initializing")
+
+            def _init_sync():
+                """Run synchronous model loading in a thread to avoid blocking the event loop."""
+                from services.dual_embedding_service import DualEmbeddingService
+                from core.settings import get_settings
+                s = get_settings()
+                dual = DualEmbeddingService(
+                    text_model_name=s.EMBEDDING_MODEL,
+                    code_model_name=s.CODE_EMBEDDING_MODEL,
+                    text_dimension=s.EMBEDDING_DIMENSION,
+                    code_dimension=s.CODE_EMBEDDING_DIMENSION,
+                    device=s.EMBEDDING_DEVICE,
+                    cache_size=getattr(s, 'EMBEDDING_CACHE_SIZE', 1000),
+                )
+                from dependencies import DualEmbeddingServiceAdapter
+                adapter = DualEmbeddingServiceAdapter(dual)
+                # Load text model + get tokenizer in this executor thread
+                # (SentenceTransformer.load is sync and heavy, must not run in event loop)
+                adapter.ensure_ready_sync()
+                tokenizer = adapter.tokenizer
+                return adapter, tokenizer
+
+            loop = asyncio.get_running_loop()
+            self._service, self._tokenizer = await loop.run_in_executor(None, _init_sync)
+            logger.info("lazy_embedding.initialized",
+                        has_tokenizer=self._tokenizer is not None)
+    
+    async def generate_embedding(self, text: str):
+        """Generate BGE-M3 embedding with auto-chunking for texts > MAX_TOKENS.
+        
+        Uses mean pooling for chunked texts (preserves 1 vector per memory).
+        The prefix is added here (centralized, not in callers).
+        """
+        if not text or not text.strip():
+            return []
+        await self._ensure_initialized()
+        loop = asyncio.get_running_loop()
+        tokenizer = self._tokenizer
+        service = self._service
+        
+        s = get_settings()
+        
+        def _encode():
+            full_text = s.EMBEDDING_PREFIX + text
+            tokens = tokenizer.encode(full_text)
+            if len(tokens) <= s.EMBEDDING_MAX_TOKENS:
+                return service.encode_sync(full_text, normalize_embeddings=True)
+            # Chunking for texts exceeding the token limit
+            import numpy as np
+            chunks = []
+            for i in range(0, len(tokens), s.EMBEDDING_CHUNK_SIZE):
+                chunk_tokens = tokens[i:i + s.EMBEDDING_CHUNK_SIZE + s.EMBEDDING_CHUNK_OVERLAP]
+                chunk_text = tokenizer.decode(chunk_tokens, skip_special_tokens=True)
+                chunks.append(chunk_text)
+            embeddings = service.encode_sync(chunks, normalize_embeddings=True)
+            if embeddings is None or len(embeddings) == 0:
+                return []
+            pooled = np.mean(embeddings, axis=0)
+            norm = np.linalg.norm(pooled)
+            return pooled / norm if norm > 0 else pooled
+        
+        return await loop.run_in_executor(None, _encode)
+
 async def _initialize_services() -> dict:
     """
     Initialize all services as module-level singletons.
@@ -165,8 +248,8 @@ async def _initialize_services() -> dict:
     # CRITICAL FIX: Skip embedding service initialization entirely.
     # write_memory and search_memory no longer use embeddings to avoid
     # the 10-50s cold start that triggers MCP client timeouts.
-    # Embeddings can be generated via the API REST endpoint if needed.
-    services["embedding_service"] = None
+    # Embeddings are lazy-loaded on first use via LazyEmbeddingService.
+    services["embedding_service"] = LazyEmbeddingService()
 
     # Create SQLAlchemy engine FIRST (needed by multiple services)
     sqlalchemy_engine = None
@@ -1142,6 +1225,7 @@ def register_memory_components(mcp: FastMCP):
         consumed: bool | None = None,
         lifecycle_state: str | None = None,
         include_outcome: bool = False,
+        search_mode: str = "tag",
     ) -> dict:
         """
         Search memories using semantic vector search.
@@ -1180,6 +1264,7 @@ def register_memory_components(mcp: FastMCP):
             consumed=consumed,
             lifecycle_state=lifecycle_state,
             include_outcome=include_outcome,
+            search_mode=search_mode,
         )
         return response
 
