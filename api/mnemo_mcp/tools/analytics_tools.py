@@ -5,7 +5,6 @@ Tools for cache management, indexing stats, and memory health observability.
 """
 import structlog
 import json
-import asyncio
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -76,28 +75,18 @@ class ClearCacheTool(BaseMCPComponent):
                 "all": "all cache layers (L1 + L2)"
             }
 
-            try:
-                response = await asyncio.wait_for(
-                    ctx.elicit(
-                        message=(
-                            f"Clear {layer} cache ({layer_desc[layer]})?\n\n"
-                            f"This will:\n"
-                            f"• Remove all cached data from {layer}\n"
-                            f"• Temporarily degrade performance until cache is repopulated\n"
-                            f"• Force all requests to hit slower storage layers\n"
-                            f"• Impact: {'Low (single process)' if layer == 'L1' else 'Medium (all processes)' if layer == 'L2' else 'High (all caches)'}\n\n"
-                            f"Proceed with cache clear?"
-                        ),
-                        schema=YesNoResponse
-                    ),
-                    timeout=5.0
-                )
-            except asyncio.TimeoutError:
-                return {
-                    "success": False,
-                    "message": "Elicitation timed out. Cache clear requires interactive MCP client.",
-                    "layer": layer
-                }
+            response = await ctx.elicit(
+                message=(
+                    f"Clear {layer} cache ({layer_desc[layer]})?\n\n"
+                    f"This will:\n"
+                    f"• Remove all cached data from {layer}\n"
+                    f"• Temporarily degrade performance until cache is repopulated\n"
+                    f"• Force all requests to hit slower storage layers\n"
+                    f"• Impact: {'Low (single process)' if layer == 'L1' else 'Medium (all processes)' if layer == 'L2' else 'High (all caches)'}\n\n"
+                    f"Proceed with cache clear?"
+                ),
+                schema=YesNoResponse
+            )
 
             if response.action != "accept" or response.data.choice == "no":
                 return {
