@@ -18,8 +18,7 @@ WHITELIST_UNDOCUMENTED = {
     "POSTGRES_DB",
     "POSTGRES_INITDB_ARGS",
     "OTLP_LOGS_ENDPOINT",
-    "MCP_REDIS_URL",  # Chargé via Pydantic MCP_ prefix, pas os.getenv
-    "MCP_TEST_DATABASE_URL",  # Chargé via Pydantic MCP_ prefix
+    # MCP vars now detected via test_all_pydantic_env_prefix_vars_documented
 }
 
 
@@ -65,7 +64,7 @@ def test_docker_compose_vars_documented(env_example_doc, docker_compose_env):
         )
 
 
-def test_no_dead_documentation(env_vars_in_code, env_example_doc, docker_compose_env):
+def test_no_dead_documentation(env_vars_in_code, env_example_doc, docker_compose_env, pydantic_env_vars):
     """Warn about env vars documented but NEVER used in code."""
     all_code_vars = (
         env_vars_in_code["os_getenv"]
@@ -74,6 +73,9 @@ def test_no_dead_documentation(env_vars_in_code, env_example_doc, docker_compose
         | env_vars_in_code.get("settings_fields", set())
         | docker_compose_env
     )
+    # Also consider pydantic env_prefix vars (loaded via SettingsConfigDict, not os.getenv)
+    for _class_vars in pydantic_env_vars.values():
+        all_code_vars.update(_class_vars)
     documented = set(env_example_doc.keys())
     frontend_vars = {v for v in documented if v.startswith("VITE_")}
     documented_backend = documented - frontend_vars
@@ -344,3 +346,37 @@ def test_no_password_defaults_in_source(project_root, all_pyfiles):
         if len(violations) > 15:
             msg += "\n... and " + str(len(violations)-15) + " more"
         pytest.fail(msg)
+
+
+def test_all_pydantic_env_prefix_vars_documented(pydantic_env_vars, env_example_doc):
+    """
+    ENFORCE: Every env var bound via pydantic SettingsConfigDict(env_prefix=...)
+    must be documented in .env.example.
+    """
+    documented = set(env_example_doc.keys())
+    
+    # Collect ALL pydantic-bound env vars
+    all_pydantic_vars = set()
+    for class_name, vars_set in pydantic_env_vars.items():
+        all_pydantic_vars.update(vars_set)
+    
+    # Special whitelist for vars that are internal/not meant for .env.example
+    # These are MCP server identity fields that rarely need configuration
+    INTERNAL_PYDANTIC_VARS = {
+        "MCP_SERVER_NAME", "MCP_SERVER_VERSION",  # Server identity
+        "MCP_CACHE_TTL_CODE_SEARCH", "MCP_CACHE_TTL_GRAPH",  # Cache internals
+        "MCP_CACHE_TTL_INDEX_STATUS", "MCP_CACHE_TTL_CACHE_STATS",
+        "MCP_CORS_ALLOW_CREDENTIALS", "MCP_CORS_ALLOW_METHODS",  # CORS internals
+        "MCP_CORS_ALLOW_HEADERS",
+        "MCP_API_KEYS",  # Set via runtime, not .env
+        "MCP_OAUTH_SECRET_KEY",  # Security - generated at runtime
+    }
+    
+    undocumented = all_pydantic_vars - documented - INTERNAL_PYDANTIC_VARS
+    
+    if undocumented:
+        pytest.fail(
+            f"{len(undocumented)} pydantic env_prefix var(s) NOT documented in .env.example:\n"
+            + "\n".join(f"  {v}" for v in sorted(undocumented))
+            + "\n\nAdd them to .env.example or to INTERNAL_PYDANTIC_VARS whitelist if intentionally internal."
+        )

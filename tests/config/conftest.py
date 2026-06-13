@@ -132,3 +132,70 @@ def docker_compose_env(project_root: Path) -> Set[str]:
             env_vars.add(name)
     return env_vars
 
+
+
+@pytest.fixture(scope="session")
+def pydantic_env_vars(project_root: Path) -> Dict[str, Set[str]]:
+    """
+    Extract env var names from ALL BaseSettings subclasses that use env_prefix.
+    Parses SettingsConfigDict for env_prefix and combines with field names.
+    Returns {class_name: set of full env var names}.
+    """
+    import ast as _ast
+    
+    result = {}
+    
+    # Files to scan for BaseSettings subclasses
+    settings_files = [
+        project_root / "api" / "core" / "settings.py",
+        project_root / "api" / "mnemo_mcp" / "config.py",
+        project_root / "workers" / "config" / "settings.py",
+    ]
+    
+    for sfile in settings_files:
+        if not sfile.exists():
+            continue
+        try:
+            tree = _ast.parse(sfile.read_text())
+            for node in _ast.walk(tree):
+                if isinstance(node, _ast.ClassDef):
+                    # Check if it inherits from BaseSettings
+                    is_basesettings = any(
+                        isinstance(base, _ast.Name) and base.id == "BaseSettings"
+                        for base in node.bases
+                    )
+                    if not is_basesettings:
+                        continue
+                    
+                    # Find the env_prefix
+                    prefix = ""
+                    for item in node.body:
+                        if isinstance(item, _ast.Assign):
+                            for target in item.targets:
+                                if isinstance(target, _ast.Name) and target.id == "model_config":
+                                    if isinstance(item.value, _ast.Call):
+                                        for kw in item.value.keywords:
+                                            if kw.arg == "env_prefix":
+                                                if isinstance(kw.value, _ast.Constant):
+                                                    prefix = kw.value.value
+                    
+                    # Extract field names (AnnAssign with type annotation)
+                    fields = set()
+                    for item in node.body:
+                        if isinstance(item, _ast.AnnAssign) and isinstance(item.target, _ast.Name):
+                            field_name = item.target.id
+                            if prefix:
+                                # Build env var name: PREFIX + UPPER_FIELD_NAME
+                                env_name = prefix + field_name.upper()
+                            else:
+                                # No prefix: env var name = field name uppercased
+                                # (works for AppSettings + workers Settings which use case_sensitive=False)
+                                env_name = field_name.upper()
+                            fields.add(env_name)
+                    
+                    if fields:
+                        result[node.name] = fields
+        except Exception:
+            pass
+    
+    return result
