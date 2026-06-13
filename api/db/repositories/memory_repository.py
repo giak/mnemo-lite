@@ -206,10 +206,10 @@ class MemoryRepository:
                 params["related_chunks"] = memory_update.related_chunks if memory_update.related_chunks else []
 
             if memory_update.resource_links is not None:
-                update_fields.append("resource_links = :resource_links::jsonb")
+                update_fields.append("resource_links = CAST(:resource_links AS jsonb)")
                 params["resource_links"] = json.dumps(memory_update.resource_links)
 
-            if regenerate_embedding and new_embedding:
+            if regenerate_embedding and new_embedding is not None:
                 from utils.sql_vector import format_vector_for_sql
                 embedding_str = f"'{format_vector_for_sql(new_embedding)}'::vector"
                 update_fields.append(f"embedding = {embedding_str}")

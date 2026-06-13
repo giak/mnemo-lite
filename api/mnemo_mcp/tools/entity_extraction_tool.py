@@ -94,7 +94,7 @@ class SearchByEntityTool:
             SELECT id::text, title, memory_type, tags, created_at::text, entities
             FROM memories
             WHERE deleted_at IS NULL
-              AND entities @> :entity_json::jsonb
+              AND entities @> CAST(:entity_json AS jsonb)
             ORDER BY created_at DESC
             LIMIT :limit
         """)

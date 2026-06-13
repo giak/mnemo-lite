@@ -390,7 +390,7 @@ async def create_alert_rule(rule: dict, engine: AsyncEngine = Depends(get_db_eng
                 INSERT INTO alert_rules
                     (name, alert_type, threshold, severity, cooldown_seconds, enabled, metadata)
                 VALUES
-                    (:name, :alert_type, :threshold, :severity, :cooldown_seconds, :enabled, :metadata::jsonb)
+                    (:name, :alert_type, :threshold, :severity, :cooldown_seconds, :enabled, CAST(:metadata AS jsonb))
             """), {
                 "name": rule.get("name", ""),
                 "alert_type": rule.get("alert_type", ""),
@@ -416,7 +416,7 @@ async def update_alert_rule(rule_id: str, rule: dict, engine: AsyncEngine = Depe
                     name = :name, alert_type = :alert_type,
                     threshold = :threshold, severity = :severity,
                     cooldown_seconds = :cooldown_seconds,
-                    enabled = :enabled, metadata = :metadata::jsonb,
+                    enabled = :enabled, metadata = CAST(:metadata AS jsonb),
                     updated_at = now()
                 WHERE id = :id
             """), {

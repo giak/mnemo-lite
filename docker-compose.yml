@@ -93,6 +93,7 @@ services:
       O2_USER: ${O2_USER:-admin@mnemolite.local}
       O2_PASSWORD: ${O2_PASSWORD:-Complexpass#123}
       GLINER_MODEL_PATH: /app/models/gliner_multi-v2.1
+      MCP_URL: http://mcp:8002/mcp
       USE_ONNX: ${USE_ONNX:-false}
       ENTITY_EXTRACTION_ENABLED: ${ENTITY_EXTRACTION_ENABLED:-true}
       ENTITY_EXTRACTION_MEMORY_TYPES: ${ENTITY_EXTRACTION_MEMORY_TYPES:-decision,reference,note,investigation}

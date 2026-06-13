@@ -31,6 +31,16 @@ logger = structlog.get_logger()
 # Pydantic Models
 # ============================================================================
 
+class YesNoResponse(BaseModel):
+    """Schema for yes/no elicitation responses."""
+    choice: str = Field(description="yes or no")
+
+
+class ChoiceResponse(BaseModel):
+    """Schema for multi-choice elicitation responses."""
+    choice: str = Field(description="selected option")
+
+
 class ElicitationRequest(BaseModel):
     """Configuration for elicitation prompt."""
 
@@ -98,24 +108,29 @@ async def request_confirmation(
     # Call MCP elicit API
     try:
         response = await ctx.elicit(
-            prompt=f"{title}\n\n{prompt_text}",
-            schema={"type": "string", "enum": options}
+            message=f"{title}\n\n{prompt_text}",
+            schema=YesNoResponse
         )
 
-        confirmed = response.value == "yes"
+        if response.action == "accept":
+            confirmed = response.data.choice == "yes"
+            selected = response.data.choice
+        else:
+            confirmed = False
+            selected = None
 
         logger.info(
             "elicitation.result",
             action=action,
             confirmed=confirmed,
-            selected=response.value,
+            selected=selected,
             dangerous=dangerous
         )
 
         return ElicitationResult(
             confirmed=confirmed,
-            selected_option=response.value,
-            cancelled=(response.value == "no")
+            selected_option=selected,
+            cancelled=not confirmed
         )
 
     except Exception as e:
@@ -177,11 +192,15 @@ async def request_choice(
     # Call MCP elicit API
     try:
         response = await ctx.elicit(
-            prompt=f"{question}\n\nSelect one:",
-            schema={"type": "string", "enum": all_options}
+            message=f"{question}\n\nSelect one:",
+            schema=ChoiceResponse
         )
 
-        selected = response.value
+        if response.action != "accept":
+            logger.info("elicitation.cancelled", question=question)
+            raise ValueError("User cancelled operation")
+
+        selected = response.data.choice
 
         if selected == "Cancel":
             logger.info("elicitation.cancelled", question=question)

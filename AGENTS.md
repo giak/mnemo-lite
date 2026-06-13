@@ -99,8 +99,6 @@ CTX: préférer au Bash brut pour sortie volumineuse — indexée dans base inte
 - ctx_search(queries) : chercher dans contenu indexé
 - ctx_fetch_and_index(url) : fetch + indexer contenu web
 
-
-
 ## Compression Contexte (Headroom)
 **CTX:** headroom MCP serveur disponible — compresser les tool outputs volumineux
 - Si tool output > 1000 tokens : appeler `headroom_compress` sur le contenu

@@ -519,6 +519,8 @@ class UpdateMemoryTool(BaseMCPComponent):
                     new_embedding_raw = await self.embedding_service.generate_embedding(embedding_text)
                     # DualEmbeddingService returns {"text": [...], "code": [...]} — extract TEXT
                     new_embedding = new_embedding_raw.get("text") if isinstance(new_embedding_raw, dict) else new_embedding_raw
+                    if hasattr(new_embedding, 'tolist'):
+                        new_embedding = new_embedding.tolist()
                     embedding_regenerated = True
 
                     logger.info(
@@ -1189,6 +1191,8 @@ class ConsolidateMemoryTool(BaseMCPComponent):
                     embedding_raw = await embedding_svc.generate_embedding(embedding_text)
                     # P0-2 FIX: DualEmbeddingService returns dict, extract TEXT
                     embedding = embedding_raw.get("text") if isinstance(embedding_raw, dict) else embedding_raw
+                    if hasattr(embedding, 'tolist'):
+                        embedding = embedding.tolist()
                 except Exception as e:
                     logger.warning("Embedding generation failed for consolidation", error=str(e))
 
