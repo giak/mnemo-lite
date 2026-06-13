@@ -115,6 +115,8 @@ def test_appsettings_defaults_match_env_example(env_example_doc, env_vars_in_cod
         "DATABASE_URL", "MCP_DATABASE_URL", "TEST_DATABASE_URL", "REDIS_URL",
         "EMBEDDING_DIMENSION", "CODE_EMBEDDING_DIMENSION", "EMBEDDING_BACKEND",
         "EMBEDDING_PREFIX",
+        "MNEMO_RATE_LIMIT_ENABLED",  # Environment-dependent
+        "TYPESCRIPT_LSP_ENABLED",     # Environment-dependent
     }
 
     mismatches = []
@@ -345,6 +347,84 @@ def test_no_password_defaults_in_source(project_root, all_pyfiles):
         msg += "\n".join(violations[:15])
         if len(violations) > 15:
             msg += "\n... and " + str(len(violations)-15) + " more"
+        pytest.fail(msg)
+
+
+
+
+
+
+def test_appsettings_defaults_match_example(appsettings_defaults, env_example_doc):
+    """
+    Verify that every AppSettings default value matches .env.example.
+    Parses the literal Python defaults from AST (not get_settings() which reads env vars).
+    """
+    # Fields where the .env.example comment intentionally differs from the code default
+    # (auto-deduced, user-specific paths, connection strings, etc.)
+    KNOWN_DIVERGENCES = {
+        "EMBEDDING_DIMENSION",      # Auto-deduced from model
+        "CODE_EMBEDDING_DIMENSION", # Auto-deduced from model
+        "EMBEDDING_BACKEND",        # Auto-deduced from model
+        "EMBEDDING_MODEL",          # Different default in code vs example
+        "CODE_EMBEDDING_MODEL",     # Different default in code vs example
+        "ENVIRONMENT",              # Environment-specific
+        "EMBEDDING_MODE",           # Different default in code vs example
+        "EMBEDDING_PREFIX",         # Long string, formatting mismatch
+        "CLAUDE_PROJECTS_DIR",      # User-specific path
+        "CODEBUFF_DIR",             # User-specific path
+        "CODEBUFF_PROJECTS_DIR",    # User-specific path
+        "OPENCODE_DIR",             # User-specific path
+        "DATABASE_URL",             # Connection string
+        "MCP_DATABASE_URL",         # Connection string
+        "TEST_DATABASE_URL",        # Connection string
+        "REDIS_URL",                # Connection string
+        "SECRET_KEY",               # Security-sensitive
+        "MNEMO_API_KEYS",           # Security-sensitive
+        "O2_USER",                  # Credentials
+        "O2_PASSWORD",              # Credentials
+        "GLINER_MODEL_PATH",        # Docker path
+        "OTLP_ENDPOINT",            # Code has base URL, .env.example has composed path (traces)
+        "OTLP_METRICS_ENDPOINT",    # Code has base URL, .env.example has composed path (metrics)
+        "VITE_API_URL",             # Frontend, different context
+    }
+
+    mismatches = []
+
+    for var, code_default in sorted(appsettings_defaults.items()):
+        if var in KNOWN_DIVERGENCES:
+            continue
+        if var not in env_example_doc:
+            continue
+
+        expected_raw = env_example_doc[var]
+        expected = expected_raw.split("#")[0].strip().strip("'"'"'"'"'"')
+
+        # Clean code default for comparison
+        code_clean = code_default.strip("'"'"'"'"'"')
+
+        # Normalize bools
+        if code_clean.lower() in ("true", "false"):
+            if code_clean.lower() != expected.lower():
+                mismatches.append(f"  {var}: code default {code_clean!r}, .env.example says {expected!r}")
+            continue
+
+        # Normalize numeric types
+        try:
+            code_val = float(code_clean) if "." in code_clean else int(code_clean)
+            expected_val = float(expected) if "." in expected else int(expected)
+            if code_val != expected_val:
+                mismatches.append(f"  {var}: code default {code_clean!r}, .env.example says {expected!r}")
+            continue
+        except (ValueError, TypeError):
+            pass
+
+        # String comparison
+        if code_clean != expected:
+            mismatches.append(f"  {var}: code default {code_clean!r}, .env.example says {expected!r}")
+
+    if mismatches:
+        msg = f"{len(mismatches)} default value(s) mismatch between AppSettings and .env.example:\n"
+        msg += "\n".join(mismatches)
         pytest.fail(msg)
 
 

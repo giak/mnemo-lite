@@ -198,3 +198,55 @@ def pydantic_env_vars(project_root: Path) -> Dict[str, Set[str]]:
             pass
     
     return result
+
+@pytest.fixture(scope="session")
+def appsettings_defaults(project_root: Path) -> Dict[str, str]:
+    """
+    Parse AppSettings field defaults from AST.
+    Returns {FIELD_NAME: default_value_as_string} for every annotated field.
+    Does NOT call get_settings() — captures the literal code defaults.
+    """
+    import ast as _ast
+    
+    settings_path = project_root / "api" / "core" / "settings.py"
+    if not settings_path.exists():
+        return {}
+    
+    result = {}
+    try:
+        tree = _ast.parse(settings_path.read_text())
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.ClassDef):
+                for item in node.body:
+                    if isinstance(item, _ast.AnnAssign) and isinstance(item.target, _ast.Name):
+                        field = item.target.id
+                        if field.startswith("_"):
+                            continue
+                        if item.value is not None:
+                            # Convert AST value to readable string
+                            default = _ast_value_to_str(item.value)
+                            result[field.upper()] = default
+    except Exception:
+        pass
+    return result
+
+
+def _ast_value_to_str(node: any) -> str:
+    """Convert an AST value node to its Python string representation."""
+    import ast as _ast
+    if isinstance(node, _ast.Constant):
+        return repr(node.value)
+    elif isinstance(node, _ast.List):
+        return str([_ast_value_to_str(e) for e in node.elts])
+    elif isinstance(node, _ast.Tuple):
+        return str(tuple(_ast_value_to_str(e) for e in node.elts))
+    elif isinstance(node, _ast.Name):
+        return node.id  # True, False, None
+    elif isinstance(node, _ast.UnaryOp) and isinstance(node.op, _ast.USub):
+        return f"-{_ast_value_to_str(node.operand)}"
+    elif isinstance(node, _ast.BinOp):
+        # e.g., 100_000
+        return _ast_value_to_str(node.left)
+    else:
+        return _ast.dump(node)
+
