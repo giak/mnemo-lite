@@ -69,7 +69,8 @@ class MCPConfig(BaseSettings):
         env_prefix="MCP_",
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore"
     )
 
     @model_validator(mode="after")
