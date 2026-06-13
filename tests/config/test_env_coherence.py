@@ -18,6 +18,8 @@ WHITELIST_UNDOCUMENTED = {
     "POSTGRES_DB",
     "POSTGRES_INITDB_ARGS",
     "OTLP_LOGS_ENDPOINT",
+    "MCP_REDIS_URL",  # Chargé via Pydantic MCP_ prefix, pas os.getenv
+    "MCP_TEST_DATABASE_URL",  # Chargé via Pydantic MCP_ prefix
 }
 
 

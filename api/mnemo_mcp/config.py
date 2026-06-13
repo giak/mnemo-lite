@@ -52,12 +52,12 @@ class MCPConfig(BaseSettings):
     cors_allow_methods: List[str] = Field(default_factory=lambda: ["GET", "POST", "OPTIONS"])
     cors_allow_headers: List[str] = Field(default_factory=lambda: ["Authorization", "Content-Type"])
 
-    # Database (must be set via MCP_DATABASE_URL env var)
-    database_url: str = ""
-    test_database_url: str = ""
+    # Database — SSOT via AppSettings; MCP_* env vars override from .env
+    database_url: Optional[str] = None  # MCP_DATABASE_URL override
+    test_database_url: Optional[str] = None  # MCP_TEST_DATABASE_URL override
 
-    # Redis
-    redis_url: str = "redis://redis:6379/0"
+    # Redis — SSOT via AppSettings; MCP_REDIS_URL override from .env
+    redis_url: Optional[str] = None  # MCP_REDIS_URL override
 
     # Cache settings
     cache_ttl_code_search: int = 300  # 5 minutes
@@ -75,29 +75,31 @@ class MCPConfig(BaseSettings):
 
     @model_validator(mode="after")
     def validate_config(self):
-        """Validate configuration at startup with clear error messages."""
+        """Validate config. DB/Redis SSOT via AppSettings with MCP_* overrides."""
         errors = []
 
-        # Database URL — fall back to DATABASE_URL if MCP_DATABASE_URL not set
-        if not self.database_url:
-            import os as _os
+        # Build database_url: MCP_DATABASE_URL field > AppSettings.DATABASE_URL
+        db_field = self.database_url  # Loaded from .env via MCP_ prefix
+        if db_field:
+            db_url = db_field
+        else:
             db_url = get_settings().DATABASE_URL
             if db_url:
-                # Strip asyncpg prefix if present
-                self.database_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
+                db_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
 
-        # Database URL still required
-        if not self.database_url:
+        if not db_url:
             errors.append(
-                "MCP_DATABASE_URL or DATABASE_URL is required. "
-                "Set it in .env or as environment variable. "
-                "Example: MCP_DATABASE_URL=postgresql://user:pass@host:5432/mnemolite"
+                "DATABASE_URL (or MCP_DATABASE_URL) is required. "
+                "Set in .env or as environment variable. "
+                "Example: DATABASE_URL=postgresql://user:pass@host:5432/mnemolite"
             )
-        elif not self.database_url.startswith("postgresql://"):
+        elif not db_url.startswith("postgresql://"):
             errors.append(
-                f"MCP_DATABASE_URL must start with 'postgresql://'. "
-                f"Got: {self.database_url[:20]}..."
+                f"DATABASE_URL must start with 'postgresql://'. Got: {db_url[:20]}..."
             )
+        else:
+            # Store resolved URL so self.database_url returns the string
+            object.__setattr__(self, 'database_url', db_url)
 
         # HTTP transport warns without auth (skip in Docker/local dev)
         if self.transport == "http" and self.auth_mode == "none":
@@ -127,6 +129,30 @@ class MCPConfig(BaseSettings):
             raise ValueError(error_msg)
 
         return self
+
+    @property
+    def resolved_database_url(self) -> str:
+        """Resolved DB URL: MCP_DATABASE_URL (from .env) > get_settings().DATABASE_URL."""
+        if self.database_url:
+            return self.database_url
+        db_url = get_settings().DATABASE_URL
+        if db_url:
+            return db_url.replace("postgresql+asyncpg://", "postgresql://")
+        return ""
+
+    @property
+    def resolved_test_database_url(self) -> str:
+        """Resolved test DB URL: MCP_TEST_DATABASE_URL (from .env) > TEST_DATABASE_URL."""
+        if self.test_database_url:
+            return self.test_database_url
+        return get_settings().TEST_DATABASE_URL or ""
+
+    @property
+    def resolved_redis_url(self) -> str:
+        """Resolved Redis URL: MCP_REDIS_URL (from .env) > REDIS_URL."""
+        if self.redis_url:
+            return self.redis_url
+        return get_settings().REDIS_URL
 
 
 # Global config instance
