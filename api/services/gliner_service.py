@@ -7,6 +7,7 @@ entities from text with zero hallucinations.
 from typing import List, Dict, Any, Optional
 
 import structlog
+from api.core import get_settings
 
 logger = structlog.get_logger(__name__)
 
