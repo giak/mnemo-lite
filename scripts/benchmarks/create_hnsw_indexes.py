@@ -5,7 +5,6 @@ Assumes pg_partman has created partitions named like 'events_pYYYYMMDD'.
 
 import asyncio
 import asyncpg
-import os
 from api.core.settings import get_settings
 import argparse
 from datetime import datetime
@@ -22,7 +21,6 @@ VECTOR_OPS = "vector_cosine_ops"  # or vector_l2_ops, vector_ip_ops
 
 # --- Functions ---
 
-
 async def get_partitions(pool, parent_table_name, schema_name="public"):
     """Retrieves a list of partition table names for a given parent table."""
     query = """
@@ -36,7 +34,6 @@ async def get_partitions(pool, parent_table_name, schema_name="public"):
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, parent_table_name, schema_name)
         return [row["partition_name"] for row in rows]
-
 
 async def create_index_concurrently(
     pool,
@@ -82,9 +79,7 @@ async def create_index_concurrently(
             # Reset timeout just in case connection is reused
             await conn.execute("SET statement_timeout = 0")
 
-
 # --- Main Execution ---
-
 
 async def main(parent_table_schema, parent_table_base_name):
     """Main function to find partitions and create indexes."""
@@ -141,7 +136,6 @@ async def main(parent_table_schema, parent_table_base_name):
     finally:
         await pool.close()
         print("Disconnected from database.")
-
 
 if __name__ == "__main__":
     # Assuming parent table is always public.events for now

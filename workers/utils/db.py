@@ -1,14 +1,12 @@
 """
 Database utilities for PostgreSQL connections
 """
-import os
 import asyncpg
 import psycopg2
 from psycopg2.extras import DictCursor
 from tenacity import retry, stop_after_attempt, wait_exponential
 import structlog
 from typing import Optional
-
 
 # Configuration du logger
 logger = structlog.get_logger(__name__)
@@ -115,7 +113,6 @@ def get_pg_connection():
         logger.error("postgres_connection_error", error=str(e))
         raise e
 
-
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=60))
 async def get_asyncpg_connection():
     """
@@ -134,7 +131,6 @@ async def get_asyncpg_connection():
     except Exception as e:
         logger.error("asyncpg_connection_error", error=str(e))
         raise e
-
 
 def execute_query(query, params=None, fetch_one=False, fetch_all=False, commit=True):
     """
@@ -165,7 +161,6 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False, commit=T
             conn.close()
         logger.error("execute_query_error", error=str(e), query=query)
         raise e
-
 
 async def execute_async_query(query, params=None, fetch_one=False, fetch_all=False):
     """

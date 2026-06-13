@@ -7,7 +7,6 @@ issues with docker exec -i.
 """
 import subprocess
 import sys
-import os
 from api.core.settings import get_settings
 
 def main():

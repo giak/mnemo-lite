@@ -19,7 +19,6 @@ sys.path.insert(0, '/app')
 import numpy as np
 from datetime import datetime
 
-
 async def main():
     print("=" * 70)
     print("E2E Test: embedding_source for Knowledge Graph of Investigations")
@@ -29,8 +28,7 @@ async def main():
     # Import services
     from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
     import asyncpg
-    import os
-from api.core.settings import get_settings
+    from api.core.settings import get_settings
 
     # Connect to database
     database_url = get_settings().DATABASE_URL or "postgresql://mnemo:mnemo@db:5432/mnemolite"
@@ -149,7 +147,6 @@ Mots-clés: Bardella Mercosur agriculteurs RN contradiction votes"""
     print()
     print("✅ embedding_source feature working correctly")
     print("✅ Memories with embedding_source show better semantic search results")
-
 
 if __name__ == "__main__":
     asyncio.run(main())

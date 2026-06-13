@@ -10,7 +10,6 @@ Environment:
     CHUNK_SIZE: Number of memories to process per batch (default: 1000)
 """
 
-import os
 from api.core import get_settings
 import sys
 import asyncio
@@ -22,7 +21,6 @@ import structlog
 from sqlalchemy import create_engine, text
 
 logger = structlog.get_logger()
-
 
 def get_entity_frequencies(engine) -> Tuple[Dict[str, int], int]:
     """Get document frequency for each entity and total memory count."""
@@ -40,7 +38,6 @@ def get_entity_frequencies(engine) -> Tuple[Dict[str, int], int]:
         total = result.scalar() or 0
 
     return entity_freq, total
-
 
 def fetch_memories_with_entities(engine, offset: int, limit: int) -> List[Dict[str, Any]]:
     """Fetch memories with their entities, concepts, tags."""
@@ -65,7 +62,6 @@ def fetch_memories_with_entities(engine, offset: int, limit: int) -> List[Dict[s
             })
         return memories
 
-
 def compute_tfidf_score(
     source: Dict[str, Any],
     target: Dict[str, Any],
@@ -87,7 +83,6 @@ def compute_tfidf_score(
 
     union_e = len(src_entities | tgt_entities)
     return min(1.0, tfidf_score / max(1, union_e))
-
 
 def store_relationships(engine, relationships: List[Dict[str, Any]]) -> int:
     """Batch insert relationships."""
@@ -111,7 +106,6 @@ def store_relationships(engine, relationships: List[Dict[str, Any]]) -> int:
         """), relationships)
 
     return len(relationships)
-
 
 def main():
     database_url = get_settings().DATABASE_URL
@@ -218,7 +212,6 @@ def main():
 
     logger.info("backfill_complete", total_relationships=total_relationships)
     print(f"\nBackfill complete: {total_relationships} relationships stored")
-
 
 if __name__ == "__main__":
     main()

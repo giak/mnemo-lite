@@ -21,7 +21,6 @@ from typing import List, Dict, Any
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-
 # Test queries demonstrating different search scenarios
 TEST_QUERIES = [
     # Exact match queries (lexical should boost these)
@@ -40,7 +39,6 @@ TEST_QUERIES = [
     "RN position agriculture européenne",
     "analyse politique élections",
 ]
-
 
 async def test_vector_only_search(
     memory_repository,
@@ -75,7 +73,6 @@ async def test_vector_only_search(
         })
 
     return results, elapsed_ms
-
 
 async def test_hybrid_search(
     hybrid_service,
@@ -117,7 +114,6 @@ async def test_hybrid_search(
 
     return results, elapsed_ms, response.metadata
 
-
 async def test_lexical_only_search(
     hybrid_service,
     query: str,
@@ -151,7 +147,6 @@ async def test_lexical_only_search(
 
     return results, elapsed_ms
 
-
 async def main():
     print("=" * 80)
     print("POC: Vector-Only vs Hybrid Search for Memories")
@@ -160,8 +155,7 @@ async def main():
     print()
 
     # Initialize services
-    import os
-from api.core.settings import get_settings
+    from api.core.settings import get_settings
     from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
     from services.hybrid_memory_search_service import HybridMemorySearchService
     from services.rrf_fusion_service import RRFFusionService
@@ -280,7 +274,6 @@ from api.core.settings import get_settings
     print("=" * 80)
 
     await engine.dispose()
-
 
 if __name__ == "__main__":
     asyncio.run(main())

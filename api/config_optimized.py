@@ -3,10 +3,8 @@ Optimized configuration for MnemoLite API.
 Performance-tuned settings for production workloads.
 """
 
-import os
 from api.core.settings import get_settings
 from typing import Dict, Any
-
 
 def get_optimized_db_config(environment: str = "production") -> Dict[str, Any]:
     """
@@ -79,7 +77,6 @@ def get_optimized_db_config(environment: str = "production") -> Dict[str, Any]:
             }
         }
 
-
 def get_cache_config(environment: str = "production") -> Dict[str, Any]:
     """
     Get cache configuration based on environment.
@@ -121,7 +118,6 @@ def get_cache_config(environment: str = "production") -> Dict[str, Any]:
                 "max_items": 20,
             }
         }
-
 
 def get_performance_config(environment: str = "production") -> Dict[str, Any]:
     """

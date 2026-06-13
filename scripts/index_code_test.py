@@ -9,7 +9,6 @@ Index code_test repository with full pipeline:
 
 import asyncio
 import sys
-import os
 from api.core.settings import get_settings
 from pathlib import Path
 from datetime import datetime

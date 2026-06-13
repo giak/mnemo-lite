@@ -7,7 +7,6 @@ Usage:
 """
 
 import asyncio
-import os
 import re
 import sys
 import uuid
@@ -27,7 +26,6 @@ from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomai
 from mnemo_mcp.models.memory_models import MemoryType, MemoryCreate
 
 logger = structlog.get_logger()
-
 
 def extract_metadata(filepath: Path) -> dict:
     """Extract metadata from investigation file."""
@@ -65,7 +63,6 @@ def extract_metadata(filepath: Path) -> dict:
         'subject': subject,
         'filepath': str(filepath),
     }
-
 
 async def import_investigation(
     repo: MemoryRepository,
@@ -107,7 +104,6 @@ async def import_investigation(
     memory = await repo.create(memory_create, embedding)
     
     return str(memory.id)
-
 
 async def main():
     if len(sys.argv) < 2:
@@ -183,7 +179,6 @@ async def main():
         print(f"Imported: {imported}")
         print(f"Skipped: {skipped}")
         print(f"Errors: {errors}")
-
 
 if __name__ == "__main__":
     asyncio.run(main())

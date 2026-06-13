@@ -4,7 +4,6 @@ Also consumes entity extraction requests and processes them via LM Studio.
 """
 import asyncio
 import time
-import os
 import json
 import structlog
 from dataclasses import dataclass
@@ -30,7 +29,6 @@ messages_processed_counter = None
 messages_failed_counter = None
 processing_duration_histogram = None
 
-
 @dataclass
 class ConversationMessage:
     """Message from Redis Streams."""
@@ -42,7 +40,6 @@ class ConversationMessage:
     session_id: str
     timestamp: str
     source: str = "claude-code"
-
 
 class ConversationWorker:
     """
@@ -375,7 +372,6 @@ class ConversationWorker:
             logger.error("api_unexpected_error", msg_id=message.id, error=str(e))
             return False  # Don't retry on unexpected errors
 
-
 async def main():
     """Main entry point."""
     import os
@@ -465,7 +461,6 @@ async def main():
     except KeyboardInterrupt:
         logger.info("received_sigint")
         await worker.stop()
-
 
 if __name__ == "__main__":
     asyncio.run(main())

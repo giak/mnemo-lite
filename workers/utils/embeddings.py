@@ -33,7 +33,6 @@ EMBEDDING_DIMENSION = get_settings().EMBEDDING_DIMENSION or 768
 # Singleton pour le modèle (chargé une seule fois)
 _MODEL_CACHE = None
 
-
 @lru_cache(maxsize=1)
 def get_model() -> SentenceTransformer:
     """
@@ -66,7 +65,6 @@ def get_model() -> SentenceTransformer:
             raise RuntimeError(f"Failed to load embedding model {EMBEDDING_MODEL}: {e}")
 
     return _MODEL_CACHE
-
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
 async def get_embedding(text: str, task_prefix: str = "search_document") -> List[float]:
@@ -137,7 +135,6 @@ async def get_embedding(text: str, task_prefix: str = "search_document") -> List
         logger.warning("using_fallback_random_embedding")
         return np.random.rand(EMBEDDING_DIMENSION).tolist()
 
-
 async def get_embedding_batch(texts: List[str], task_prefix: str = "search_document") -> List[List[float]]:
     """
     Génère des embeddings pour plusieurs textes en batch (plus efficace).
@@ -190,7 +187,6 @@ async def get_embedding_batch(texts: List[str], task_prefix: str = "search_docum
         logger.error("batch_embedding_error", error=str(e), num_texts=len(texts))
         # Fallback: un vecteur aléatoire par texte
         return [np.random.rand(EMBEDDING_DIMENSION).tolist() for _ in texts]
-
 
 def cosine_similarity(embedding1: List[float], embedding2: List[float]) -> float:
     """
