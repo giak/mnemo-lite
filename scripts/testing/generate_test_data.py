@@ -5,6 +5,7 @@ Ce script crée des événements fictifs avec différents contenus, métadonnée
 """
 
 import os
+from api.core.settings import get_settings
 import uuid
 import json
 import random

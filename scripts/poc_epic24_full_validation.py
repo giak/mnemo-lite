@@ -19,6 +19,7 @@ Expected results:
 import asyncio
 import sys
 import os
+from api.core.settings import get_settings
 import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple

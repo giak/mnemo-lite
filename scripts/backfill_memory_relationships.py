@@ -115,8 +115,8 @@ def store_relationships(engine, relationships: List[Dict[str, Any]]) -> int:
 
 def main():
     database_url = get_settings().DATABASE_URL
-    min_score = float(os.getenv("MIN_SCORE", "0.1"))
-    chunk_size = int(os.getenv("CHUNK_SIZE", "1000"))
+    min_score = get_settings().MIN_SCORE
+    chunk_size = get_settings().CHUNK_SIZE
 
     logger.info("backfill_start", database_url=database_url, min_score=min_score, chunk_size=chunk_size)
 

@@ -8,6 +8,7 @@ with automatic pgvector type registration for vector similarity operations.
 
 import asyncpg
 import os
+from api.core.settings import get_settings
 from pgvector.asyncpg import register_vector
 
 

@@ -3,6 +3,7 @@ import json
 import random
 import uuid
 import os
+from api.core.settings import get_settings
 import sys
 
 # Configuration

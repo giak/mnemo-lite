@@ -10,6 +10,7 @@ Index code_test repository with full pipeline:
 import asyncio
 import sys
 import os
+from api.core.settings import get_settings
 from pathlib import Path
 from datetime import datetime
 
@@ -28,7 +29,7 @@ async def main():
     from models.code_chunk_models import CodeChunkCreate
 
     # Database connection
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@localhost:5432/mnemolite")
+    db_url = get_settings().DATABASE_URL or "postgresql+asyncpg://mnemo:mnemo@localhost:5432/mnemolite"
     engine = create_async_engine(db_url, echo=False)
 
     repository = "code_test"

@@ -161,12 +161,13 @@ async def main():
 
     # Initialize services
     import os
+from api.core.settings import get_settings
     from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
     from services.hybrid_memory_search_service import HybridMemorySearchService
     from services.rrf_fusion_service import RRFFusionService
     from db.repositories.memory_repository import MemoryRepository
 
-    database_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@db:5432/mnemolite")
+    database_url = get_settings().DATABASE_URL or "postgresql+asyncpg://mnemo:mnemo@db:5432/mnemolite"
     engine = create_async_engine(database_url, echo=False)
 
     embedding_service = SentenceTransformerEmbeddingService()

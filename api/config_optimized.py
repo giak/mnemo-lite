@@ -4,6 +4,7 @@ Performance-tuned settings for production workloads.
 """
 
 import os
+from api.core.settings import get_settings
 from typing import Dict, Any
 
 
@@ -68,7 +69,7 @@ def get_optimized_db_config(environment: str = "production") -> Dict[str, Any]:
             "pool_size": 10,  # Moderate pool for development
             "max_overflow": 5,
             "pool_pre_ping": False,
-            "echo": os.getenv("DEBUG", "False").lower() == "true",
+            "echo": get_settings().DEBUG,
             "connect_args": {
                 "server_settings": {
                     "application_name": "mnemolite_dev",

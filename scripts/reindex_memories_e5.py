@@ -18,6 +18,7 @@ Usage (inside Docker container):
 import asyncio
 import sys
 import os
+from api.core.settings import get_settings
 import time
 import argparse
 

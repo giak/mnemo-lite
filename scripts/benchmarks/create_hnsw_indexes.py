@@ -6,11 +6,12 @@ Assumes pg_partman has created partitions named like 'events_pYYYYMMDD'.
 import asyncio
 import asyncpg
 import os
+from api.core.settings import get_settings
 import argparse
 from datetime import datetime
 
 # --- Configuration ---
-DB_URL = os.getenv("DATABASE_URL", "postgresql://mnemo:mnemo@localhost:5432/mnemolite")
+DB_URL = get_settings().DATABASE_URL or "postgresql://mnemo:mnemo@localhost:5432/mnemolite"
 PARENT_TABLE = "public.events"
 INDEX_TYPE = "hnsw"
 INDEX_COLUMN = "embedding"

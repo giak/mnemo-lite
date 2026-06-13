@@ -5,6 +5,7 @@ Runs KNN benchmark queries against the partitioned 'events' table.
 import asyncio
 import asyncpg
 import os
+from api.core.settings import get_settings
 import argparse
 import numpy as np
 import time
@@ -32,7 +33,7 @@ except ImportError as e:
     sys.exit(1)
 
 # --- Configuration ---
-DB_URL = os.getenv("DATABASE_URL", "postgresql://mnemo:mnemo@localhost:5432/mnemolite")
+DB_URL = get_settings().DATABASE_URL or "postgresql://mnemo:mnemo@localhost:5432/mnemolite"
 TABLE_NAME = "public.events"
 EMBEDDING_DIMENSION = 768  # nomic-embed-text-v1.5 embeddings
 DEFAULT_DB_DSN = os.environ.get(

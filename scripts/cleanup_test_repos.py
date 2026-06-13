@@ -19,6 +19,7 @@ Usage:
 import asyncio
 import argparse
 import os
+from api.core.settings import get_settings
 import sys
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
@@ -212,7 +213,7 @@ Examples:
 
     args = parser.parse_args()
 
-    db_url = args.db_url or os.getenv("DATABASE_URL")
+    db_url = args.db_url or get_settings().DATABASE_URL
     if not db_url:
         print("❌ ERROR: DATABASE_URL not set")
         sys.exit(1)

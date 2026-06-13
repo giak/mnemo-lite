@@ -10,6 +10,7 @@ import numpy as np
 import json
 import uuid
 import os
+from api.core.settings import get_settings
 import random
 from datetime import datetime, timedelta, timezone
 import time

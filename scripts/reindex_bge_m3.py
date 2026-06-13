@@ -28,6 +28,7 @@ Usage:
 import asyncio
 from api.core import get_settings
 import os
+from api.core.settings import get_settings
 import sys
 import time
 import traceback
@@ -73,7 +74,7 @@ def build_db_url() -> str:
     # Priorite 2 : POSTGRES_* individuelles (avec 'or' pour chaines vides)
     user = get_settings().POSTGRES_USER
     password = get_settings().POSTGRES_PASSWORD
-    host = os.environ.get("POSTGRES_HOST") or "db"
+    host = get_settings().POSTGRES_HOST
     port = str(get_settings().POSTGRES_PORT)
     dbname = get_settings().POSTGRES_DB
 

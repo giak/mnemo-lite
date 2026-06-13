@@ -20,6 +20,7 @@ Usage:
 import asyncio
 import os
 import base64
+from api.core.settings import get_settings
 import json
 from typing import Any, Dict, List, Optional
 
@@ -59,8 +60,8 @@ class OpenObserveLogProcessor:
         self._lock = asyncio.Lock()
         self._client: Optional[httpx.AsyncClient] = None
 
-        user = os.getenv("O2_USER", "admin@mnemolite.local")
-        password = os.getenv("O2_PASSWORD", "Complexpass#123")
+        user = get_settings().O2_USER
+        password = get_settings().O2_PASSWORD
         auth_string = f"{user}:{password}"
         auth_bytes = base64.b64encode(auth_string.encode("utf-8")).decode("utf-8")
         self._headers = {

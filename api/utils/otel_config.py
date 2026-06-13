@@ -16,6 +16,7 @@ Usage:
 
 import os
 import base64
+from api.core.settings import get_settings
 from typing import Optional
 
 from opentelemetry import trace, metrics
@@ -36,8 +37,8 @@ _meter_provider: Optional[MeterProvider] = None
 
 def _get_otlp_headers() -> dict:
     """Build Basic Auth headers for OpenObserve."""
-    user = os.getenv("O2_USER", "admin@mnemolite.local")
-    password = os.getenv("O2_PASSWORD", "Complexpass#123")
+    user = get_settings().O2_USER
+    password = get_settings().O2_PASSWORD
     auth_string = f"{user}:{password}"
     auth_bytes = base64.b64encode(auth_string.encode("utf-8")).decode("utf-8")
     return {"Authorization": f"Basic {auth_bytes}"}

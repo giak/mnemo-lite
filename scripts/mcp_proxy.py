@@ -8,6 +8,7 @@ issues with docker exec -i.
 import subprocess
 import sys
 import os
+from api.core.settings import get_settings
 
 def main():
     # Get DB URL from container
@@ -22,7 +23,7 @@ def main():
         db_url = ""
 
     # Override with env var if set
-    db_url = os.environ.get("MCP_DATABASE_URL", db_url)
+    db_url = get_settings().MCP_DATABASE_URL or db_url
 
     # Launch MCP server inside container
     proc = subprocess.Popen(

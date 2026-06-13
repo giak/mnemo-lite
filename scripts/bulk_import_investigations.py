@@ -129,7 +129,7 @@ async def main():
         print("[DRY-RUN MODE] No changes will be made")
     
     # Connect to database
-    database_url = os.environ.get("DATABASE_URL", "postgresql+asyncpg://mnemo:mnemo@postgres:5432/mnemolite")
+    database_url = get_settings().DATABASE_URL or "postgresql+asyncpg://mnemo:mnemo@postgres:5432/mnemolite"
     engine = create_async_engine(database_url)
     
     # Create embedding service

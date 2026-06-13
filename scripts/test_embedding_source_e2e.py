@@ -30,9 +30,10 @@ async def main():
     from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
     import asyncpg
     import os
+from api.core.settings import get_settings
 
     # Connect to database
-    database_url = os.getenv("DATABASE_URL", "postgresql://mnemo:mnemo@db:5432/mnemolite")
+    database_url = get_settings().DATABASE_URL or "postgresql://mnemo:mnemo@db:5432/mnemolite"
     if database_url.startswith("postgresql+asyncpg://"):
         database_url = database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
 
