@@ -12,6 +12,7 @@ from typing import Optional
 import httpx
 from redis import Redis
 from tenacity import retry, stop_after_attempt, wait_exponential
+from api.core.settings import get_settings
 from opentelemetry import trace, metrics
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.metrics import MeterProvider
@@ -248,7 +249,7 @@ class ConversationWorker:
             from sqlalchemy.sql import text as sql_text
 
             # Load GLiNER model
-            model_path = os.getenv("GLINER_MODEL_PATH", "/app/models/gliner_multi-v2.1")
+            model_path = get_settings().GLINER_MODEL_PATH
             model = GLiNER.from_pretrained(model_path)
 
             # Extract entities
@@ -279,7 +280,7 @@ class ConversationWorker:
             auto_tags = list(set(e["name"].lower().replace(" ", "-") for e in entities))
 
             # Save to DB
-            db_url = os.getenv("DATABASE_URL", "postgresql+psycopg2://mnemo:mnemopass@db:5432/mnemolite")
+            db_url = get_settings().DATABASE_URL
             engine = create_engine(db_url)
             with engine.begin() as conn:
                 conn.execute(sql_text("""
@@ -381,9 +382,9 @@ async def main():
     from redis import Redis
 
     # Configuration from environment
-    redis_host = os.getenv("REDIS_HOST", "localhost")
-    redis_port = int(os.getenv("REDIS_PORT", "6379"))
-    api_url = os.getenv("API_URL", "http://api:8000")
+    redis_host = get_settings().REDIS_HOST
+    redis_port = get_settings().REDIS_PORT
+    api_url = get_settings().API_URL
 
     # Configure structured logging
     structlog.configure(
@@ -397,13 +398,13 @@ async def main():
     # Configure OpenTelemetry
     global tracer, messages_processed_counter, messages_failed_counter, processing_duration_histogram
 
-    otlp_endpoint = os.getenv("OTLP_ENDPOINT", "http://openobserve:5080/api/default/v1/traces")
-    otlp_metrics_endpoint = os.getenv("OTLP_METRICS_ENDPOINT", "http://openobserve:5080/api/default/v1/metrics")
+    otlp_endpoint = f"{get_settings().OTLP_ENDPOINT}/v1/traces"
+    otlp_metrics_endpoint = f"{get_settings().OTLP_METRICS_ENDPOINT}/v1/metrics"
 
     # OpenObserve authentication
     import base64
-    o2_user = os.getenv("O2_USER", "admin@mnemolite.local")
-    o2_password = os.getenv("O2_PASSWORD", "Complexpass#123")
+    o2_user = get_settings().O2_USER
+    o2_password = get_settings().O2_PASSWORD
     auth_string = f"{o2_user}:{o2_password}"
     auth_bytes = base64.b64encode(auth_string.encode('utf-8')).decode('utf-8')
     otlp_headers = {"Authorization": f"Basic {auth_bytes}"}

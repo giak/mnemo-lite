@@ -9,19 +9,19 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 import structlog
 from typing import Optional
 
-from config.settings import Settings
 
 # Configuration du logger
 logger = structlog.get_logger(__name__)
 
-# Récupération des variables d'environnement
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "db")
-POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
-POSTGRES_USER = os.getenv("POSTGRES_USER", "mnemo")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "mnemopass")
-POSTGRES_DB = os.getenv("POSTGRES_DB", "mnemolite")
+# Use AppSettings SSOT
+from api.core.settings import get_settings
+_settings = get_settings()
 
-settings = Settings()
+POSTGRES_HOST = _settings.POSTGRES_HOST
+POSTGRES_PORT = str(_settings.POSTGRES_PORT)
+POSTGRES_USER = _settings.POSTGRES_USER
+POSTGRES_PASSWORD = _settings.POSTGRES_PASSWORD
+POSTGRES_DB = _settings.POSTGRES_DB
 
 # Global connection pool
 _pool: Optional[asyncpg.Pool] = None

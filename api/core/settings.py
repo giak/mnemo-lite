@@ -62,6 +62,11 @@ class AppSettings(BaseSettings):
     DATABASE_CIRCUIT_RECOVERY_TIMEOUT: int = 10
     DATABASE_CIRCUIT_HALF_OPEN_CALLS: int = 1
 
+
+
+    # Worker Configuration
+    WORKER_POLL_INTERVAL: int = 5
+    WORKER_BATCH_SIZE: int = 50
     # === Modele d'embedding texte (principal) ===
     EMBEDDING_MODEL: str = "BAAI/bge-m3"
     EMBEDDING_DIMENSION: Optional[int] = None  # Auto-deduit si None
@@ -95,7 +100,7 @@ class AppSettings(BaseSettings):
 
     # === Base de donnees ===
     DATABASE_URL: str = ""  # Read from .env; validated at startup in main.py
-    REDIS_URL: str = "redis://redis:6379/0"
+    REDIS_URL: str = "redis://redis:6379/0"  # Override with REDIS_HOST/PORT/PASSWORD/DB
 
     # === Environnement ===
     ENVIRONMENT: str = "development"
@@ -105,16 +110,20 @@ class AppSettings(BaseSettings):
     MCP_DATABASE_URL: str = ""
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
+    REDIS_PASSWORD: str = ""
+    REDIS_DB: int = 0
     POSTGRES_USER: str = "mnemo"
-    POSTGRES_PASSWORD: str = "mnemopass"
+    POSTGRES_PASSWORD: str = ""  # REQUIRED in production, no fallback
     POSTGRES_DB: str = "mnemolite"
     POSTGRES_PORT: int = 5432
+    POSTGRES_HOST: str = "db"
 
     # === Application ===
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
     SECRET_KEY: str = ""
     API_PORT: int = 8001
+    API_URL: str = "http://api:8000"
 
     # === Auth & Rate Limiting ===
     MNEMO_AUTH_ENABLED: bool = False
@@ -133,7 +142,17 @@ class AppSettings(BaseSettings):
     CONVERSATION_WATCHER_ENABLED: bool = True
     POLL_INTERVAL: int = 30
     IMPORT_HISTORICAL: bool = False
+    MIN_SCORE: float = 0.1
+    CHUNK_SIZE: int = 1000
+    CODEBUFF_PROJECTS_DIR: str = ""
+    OPENCODE_DB_PATH: str = ""
+    MNEMO_WATCHER_STATE: str = "/tmp/mnemo-watcher-state.json"
+    API_BASE_URL: str = "http://localhost:8001"
     WATCHER_LOG_FORMAT: str = "text"
+
+    # === SMTP ===
+    SMTP_HOST: str = "localhost"
+    SMTP_PORT: int = 25
 
     # === MCP Server ===
     MCP_PRIVACY_ENABLED: bool = True
@@ -156,8 +175,8 @@ class AppSettings(BaseSettings):
 
     # === Observabilite (OpenObserve) ===
     O2_URL: str = "http://openobserve:5080"
-    O2_USER: str = ""
-    O2_PASSWORD: str = ""
+    O2_USER: str = ""  # REQUIRED for OpenObserve
+    O2_PASSWORD: str = ""  # REQUIRED for OpenObserve, no fallback
     OTLP_ENDPOINT: str = "http://openobserve:5080/api/default"
     OTLP_METRICS_ENDPOINT: str = "http://openobserve:5080/api/default"
 

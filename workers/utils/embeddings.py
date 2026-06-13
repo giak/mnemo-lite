@@ -11,9 +11,10 @@ Model: nomic-embed-text-v1.5 (default)
 - MTEB score: ~65 (competitive with commercial models)
 """
 
-import os
+# import os (no longer needed - using get_settings())
 import numpy as np
 from sentence_transformers import SentenceTransformer
+from api.core.settings import get_settings
 from tenacity import retry, stop_after_attempt, wait_exponential
 import structlog
 from functools import lru_cache
@@ -23,9 +24,11 @@ from typing import List
 logger = structlog.get_logger()
 
 # Variables d'environnement
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-ai/nomic-embed-text-v1.5")
-EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "768"))
+# Use AppSettings SSOT
+ENVIRONMENT = get_settings().ENVIRONMENT
+EMBEDDING_MODEL = get_settings().EMBEDDING_MODEL
+# Use AppSettings (auto-deduced from model)
+EMBEDDING_DIMENSION = get_settings().EMBEDDING_DIMENSION or 768
 
 # Singleton pour le modèle (chargé une seule fois)
 _MODEL_CACHE = None

@@ -1,15 +1,29 @@
 """
-Shared fixtures for configuration tests.
+Shared fixtures for comprehensive project-wide config audit (P4).
+Couvre TOUS les fichiers Python du projet, pas seulement api/workers/scripts.
 """
 
 import ast
 import re
 from pathlib import Path
-from typing import Dict, Set
+from typing import Dict, List, Set
 
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+EXCLUDE_DIRS = {".git", ".venv", "frontend", "__pycache__", "archive", "legacy",
+                "node_modules", ".mypy_cache", ".pytest_cache", ".ruff_cache"}
+
+
+def _get_all_pyfiles(root: Path) -> List[Path]:
+    """Get ALL .py files in the project excluding noise dirs."""
+    files = []
+    for f in sorted(root.rglob("*.py")):
+        parts = f.parts
+        if not any(e in parts for e in EXCLUDE_DIRS):
+            files.append(f)
+    return files
 
 
 @pytest.fixture(scope="session")
@@ -18,61 +32,71 @@ def project_root() -> Path:
 
 
 @pytest.fixture(scope="session")
-def env_vars_in_code(project_root: Path) -> Dict[str, Set[str]]:
+def all_pyfiles(project_root: Path) -> List[Path]:
+    """All Python files in the project (excluding noise)."""
+    return _get_all_pyfiles(project_root)
+
+
+@pytest.fixture(scope="session")
+def env_vars_in_code(all_pyfiles: List[Path]) -> Dict[str, Set[str]]:
+    """
+    Scan ALL Python files for os.getenv, os.environ.get, os.environ[] calls.
+    Also parse ALL Settings/BaseSettings subclasses to extract their fields.
+    """
     result = {
         "os_getenv": set(),
         "os_environ_get": set(),
         "os_environ_direct": set(),
-        "settings_fields": set(),
+        "settings_fields": set(),       # AppSettings fields
+        "mcp_config_fields": set(),     # MCPConfig fields
+        "worker_settings_fields": set(),# workers Settings fields
+        "global_constants": {},         # file_path -> [(line, var_name, value)]
     }
 
-    source_dirs = [
-        project_root / "api",
-        project_root / "workers",
-        project_root / "scripts",
+    getenv_pat = re.compile(r"os\.getenv\s*\(\s*[\"']([A-Z_]+)[\"']")
+    envget_pat = re.compile(r"os\.environ\.get\s*\(\s*[\"']([A-Z_]+)[\"']")
+    envdir_pat = re.compile(r"os\.environ\s*\[\s*[\"']([A-Z_]+)[\"']")
+
+    for pyfile in all_pyfiles:
+        try:
+            text = pyfile.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+
+        relpath = pyfile.relative_to(PROJECT_ROOT)
+
+        for m in getenv_pat.finditer(text):
+            result["os_getenv"].add(m.group(1))
+        for m in envget_pat.finditer(text):
+            result["os_environ_get"].add(m.group(1))
+        for m in envdir_pat.finditer(text):
+            result["os_environ_direct"].add(m.group(1))
+
+    # Parse ALL Settings classes
+    settings_files = [
+        (PROJECT_ROOT / "api" / "core" / "settings.py", "settings_fields"),
+        (PROJECT_ROOT / "api" / "mnemo_mcp" / "config.py", "mcp_config_fields"),
+        (PROJECT_ROOT / "workers" / "config" / "settings.py", "worker_settings_fields"),
     ]
 
-    getenv_pat = re.compile(r"""os\.getenv\s*\(\s*["']([A-Z_]+)["']""")
-    envget_pat = re.compile(r"""os\.environ\.get\s*\(\s*["']([A-Z_]+)["']""")
-    envdir_pat = re.compile(r"""os\.environ\s*\[\s*["']([A-Z_]+)["']""")
-
-    for src_dir in source_dirs:
-        if not src_dir.exists():
-            continue
-        for pyfile in sorted(src_dir.rglob("*.py")):
-            if "node_modules" in str(pyfile) or "__pycache__" in str(pyfile):
-                continue
+    for sfile, field_key in settings_files:
+        if sfile.exists():
             try:
-                text = pyfile.read_text(encoding="utf-8", errors="ignore")
+                tree = ast.parse(sfile.read_text())
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ClassDef):
+                        for item in node.body:
+                            if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                                result[field_key].add(item.target.id)
             except Exception:
-                continue
-            for m in getenv_pat.finditer(text):
-                result["os_getenv"].add(m.group(1))
-            for m in envget_pat.finditer(text):
-                result["os_environ_get"].add(m.group(1))
-            for m in envdir_pat.finditer(text):
-                result["os_environ_direct"].add(m.group(1))
-
-    # Parse AppSettings class fields
-    settings_file = project_root / "api" / "core" / "settings.py"
-    if settings_file.exists():
-        try:
-            tree = ast.parse(settings_file.read_text())
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef) and node.name == "AppSettings":
-                    for item in node.body:
-                        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
-                            name = item.target.id
-                            if name.isupper():
-                                result["settings_fields"].add(name)
-        except Exception:
-            pass
+                pass
 
     return result
 
 
 @pytest.fixture(scope="session")
 def env_example_doc(project_root: Path) -> Dict[str, str]:
+    """Parse .env.example into {VAR_NAME: default_value}."""
     env_path = project_root / ".env.example"
     documented = {}
     if not env_path.exists():
@@ -82,10 +106,8 @@ def env_example_doc(project_root: Path) -> Dict[str, str]:
         line = line.strip()
         if not line or "=" not in line:
             continue
-        # Remove leading # and whitespace
         if line.startswith("#"):
             line = line[1:].strip()
-        # Split on first =
         if "=" in line:
             name, rest = line.split("=", 1)
             name = name.strip()
@@ -96,14 +118,17 @@ def env_example_doc(project_root: Path) -> Dict[str, str]:
 
 @pytest.fixture(scope="session")
 def docker_compose_env(project_root: Path) -> Set[str]:
+    """Extract env vars referenced in docker-compose.yml."""
     dc_path = project_root / "docker-compose.yml"
     env_vars = set()
     if not dc_path.exists():
         return env_vars
     text = dc_path.read_text()
-    pat = re.compile(r"""\$\{?([A-Z][A-Z_0-9]+)\}?""")
+    pat = re.compile(r"\$\{?([A-Z][A-Z_0-9]+)\}?")
+    OS_SHELL_VARS = {"HOME", "PWD", "UID", "GID", "PATH", "SHELL", "USER", "HOSTNAME"}
     for m in pat.finditer(text):
         name = m.group(1)
-        if name not in ("HOME", "PWD", "UID", "GID", "PATH", "SHELL", "USER"):
+        if name not in OS_SHELL_VARS:
             env_vars.add(name)
     return env_vars
+
