@@ -18,10 +18,10 @@ if not _HAS_LOCUST:
     HttpUser = object
     FastHttpUser = object
     # Support both @task and @task(weight)
-def task(*args, **kwargs):
-    if args and (callable(args[0]) or isinstance(args[0], (int, float))):
-        return lambda f: f
-    return args[0] if args else (lambda f: f)
+    def task(*args, **kwargs):
+        if args and (callable(args[0]) or isinstance(args[0], (int, float))):
+            return lambda f: f
+        return args[0] if args else (lambda f: f)
     between = lambda x, y: x
     TaskSet = object
 import random
