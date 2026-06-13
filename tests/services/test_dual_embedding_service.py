@@ -40,7 +40,8 @@ def dual_service():
     return DualEmbeddingService(
         text_model_name="mock-text-model",
         code_model_name="mock-code-model",
-        dimension=768,
+        text_dimension=1024,
+        code_dimension=768,
         device="cpu",
     )
 
@@ -54,13 +55,14 @@ def test_initialization():
     service = DualEmbeddingService(
         text_model_name="test-text",
         code_model_name="test-code",
-        dimension=768,
+        text_dimension=1024,
+        code_dimension=768,
         device="cpu",
     )
 
     assert service.text_model_name == "test-text"
     assert service.code_model_name == "test-code"
-    assert service.dimension == 768
+    assert service.text_dimension == 1024
     assert service.device == "cpu"
     assert service._text_model is None  # Lazy loading
     assert service._code_model is None  # Lazy loading
@@ -360,7 +362,8 @@ async def test_dimension_mismatch_detection(mock_sentence_transformer):
 
     service = DualEmbeddingService(
         text_model_name="test",
-        dimension=768,
+        text_dimension=1024,
+        code_dimension=768,
         device="cpu"
     )
 
@@ -428,7 +431,7 @@ def test_get_stats(dual_service):
     assert "code_model_loaded" in stats
     assert "process_rss_mb" in stats
 
-    assert stats["dimension"] == 768
+    assert stats["text_dimension"] == 1024
     assert stats["device"] == "cpu"
     assert stats["text_model_loaded"] is False
     assert stats["code_model_loaded"] is False

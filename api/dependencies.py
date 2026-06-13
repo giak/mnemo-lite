@@ -23,7 +23,7 @@ from db.repositories.event_repository import EventRepository
 from services.embedding_service import MockEmbeddingService
 from services.sentence_transformer_embedding_service import SentenceTransformerEmbeddingService
 from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomain
-from api.core import get_settings
+from api.core import get_settings as get_app_settings
 from services.memory_search_service import MemorySearchService
 from services.event_processor import EventProcessor
 from services.notification_service import NotificationService
@@ -521,7 +521,7 @@ async def get_redis_cache(request: Request) -> RedisCache:
         return request.app.state.redis_cache
 
     # Get Redis URL from environment
-    redis_url = get_settings().REDIS_URL
+    redis_url = get_app_settings().REDIS_URL
 
     # Create RedisCache singleton
     redis_cache = RedisCache(redis_url=redis_url)
