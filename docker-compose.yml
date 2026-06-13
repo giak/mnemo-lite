@@ -220,6 +220,7 @@ services:
       - backend
     volumes:
       - ./api:/app
+      - ./tests:/app/tests
       - ./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro
       - hf_cache:/root/.cache/huggingface
       - /home/giak/projects/truth-engine:/host/truth-engine:ro
