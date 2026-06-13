@@ -5,6 +5,7 @@ Verifie que generate_embedding() retourne list, pas ndarray.
 Verifie que format_vector_for_sql rejette ndarray.
 """
 
+import importlib.util
 import numpy as np
 import pytest
 from api.utils.sql_vector import format_vector_for_sql, format_halfvec_for_sql
@@ -51,6 +52,10 @@ class TestGenerateEmbeddingContract:
         )
 
 
+@pytest.mark.skipif(
+    not importlib.util.find_spec("sentence_transformers"),
+    reason="sentence_transformers not installed (Docker-only dependency)"
+)
 class TestDualEmbeddingServiceContract:
     """Simule le vrai bug : model.encode() retourne ndarray,
     generate_embedding() doit retourner list."""
@@ -114,6 +119,10 @@ class TestDualEmbeddingServiceContract:
         assert len(as_list) == 8
 
 
+@pytest.mark.skipif(
+    not importlib.util.find_spec("structlog"),
+    reason="structlog not installed (Docker-only dependency)"
+)
 class TestDualEncoderAdapterContract:
     """Teste le contrat de DualEncoderAdapter.generate_embedding()
     (dependencies.py) -- le site qui avait le bug.
