@@ -47,7 +47,7 @@ export function createFailure<T>(errors: Error[]): Result<T> {
 
         # Parse full file
         parser = get_parser("typescript")
-        tree = parser.parse(bytes(full_file_source, "utf8"))
+        tree = parser.parse(full_file_source)
 
         # Query for function declarations
         from tree_sitter import Query
@@ -104,7 +104,7 @@ export function createFailure<T>(errors: Error[]): Result<T> {
 '''
 
         parser = get_parser("typescript")
-        tree = parser.parse(bytes(full_file_source, "utf8"))
+        tree = parser.parse(full_file_source)
 
         # Extract function node
         from tree_sitter import Query, QueryCursor
@@ -150,7 +150,7 @@ export function third() { return "done"; }
 '''
 
         parser = get_parser("typescript")
-        tree = parser.parse(bytes(full_file_source, "utf8"))
+        tree = parser.parse(full_file_source)
 
         # Get all function nodes
         from tree_sitter import Query, QueryCursor
@@ -221,7 +221,7 @@ export function validateEmail(email: string): Result<string> {
 '''
 
         parser = get_parser("typescript")
-        tree = parser.parse(bytes(full_file_source, "utf8"))
+        tree = parser.parse(full_file_source)
 
         # Get validateEmail function (which calls createSuccess and createFailure)
         from tree_sitter import Query, QueryCursor
@@ -294,7 +294,7 @@ export function validateEmail(email: string): Result<string> {
 '''
 
         parser = get_parser("typescript")
-        tree = parser.parse(bytes(full_file_source, "utf8"))
+        tree = parser.parse(full_file_source)
 
         # Get getUser method
         from tree_sitter import Query, QueryCursor
@@ -352,7 +352,7 @@ class TestBackwardCompatibility:
         full_file_source = "// Empty file\n"
 
         parser = get_parser("typescript")
-        tree = parser.parse(bytes(full_file_source, "utf8"))
+        tree = parser.parse(full_file_source)
 
         extractor = TypeScriptMetadataExtractor("typescript")
 
@@ -375,7 +375,7 @@ export { Foo, Bar };
 '''
 
         parser = get_parser("typescript")
-        tree = parser.parse(bytes(full_file_source, "utf8"))
+        tree = parser.parse(full_file_source)
 
         extractor = TypeScriptMetadataExtractor("typescript")
         metadata = await extractor.extract_metadata(

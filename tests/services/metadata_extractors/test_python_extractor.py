@@ -23,7 +23,7 @@ def python_parser():
 async def test_extract_basic_import(python_extractor, python_parser):
     """Test extraction of basic import statement."""
     source_code = "import os"
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
 
     imports = await python_extractor.extract_imports(tree, source_code)
 
@@ -34,7 +34,7 @@ async def test_extract_basic_import(python_extractor, python_parser):
 async def test_extract_from_import(python_extractor, python_parser):
     """Test extraction of from...import statement."""
     source_code = "from pathlib import Path"
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
 
     imports = await python_extractor.extract_imports(tree, source_code)
 
@@ -45,7 +45,7 @@ async def test_extract_from_import(python_extractor, python_parser):
 async def test_extract_from_import_multiple(python_extractor, python_parser):
     """Test extraction of from...import with multiple names."""
     source_code = "from typing import List, Dict, Optional"
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
 
     imports = await python_extractor.extract_imports(tree, source_code)
 
@@ -56,7 +56,7 @@ async def test_extract_from_import_multiple(python_extractor, python_parser):
 async def test_extract_from_import_alias(python_extractor, python_parser):
     """Test extraction of import with alias."""
     source_code = "from datetime import datetime as dt"
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
 
     imports = await python_extractor.extract_imports(tree, source_code)
 
@@ -71,7 +71,7 @@ def my_function():
     result = calculate_total()
     return result
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     function_node = tree.root_node.children[0]  # function_definition
 
     calls = await python_extractor.extract_calls(function_node, source_code)
@@ -87,7 +87,7 @@ def my_function():
     result = service.fetch_data()
     return result
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     calls = await python_extractor.extract_calls(function_node, source_code)
@@ -103,7 +103,7 @@ def my_function():
     result = database.session.query(User).all()
     return result
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     calls = await python_extractor.extract_calls(function_node, source_code)
@@ -120,7 +120,7 @@ class User:
     name: str
     age: int
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     class_node = tree.root_node.children[0]  # decorated_definition
 
     metadata = await python_extractor.extract_metadata(source_code, class_node, tree)
@@ -138,7 +138,7 @@ class MyClass:
     def value(self):
         return self._value
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     class_node = tree.root_node.children[0]
 
     metadata = await python_extractor.extract_metadata(source_code, class_node, tree)
@@ -155,7 +155,7 @@ async def test_extract_metadata_with_async_decorator(python_extractor, python_pa
 async def fetch_data():
     return await database.query()
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     metadata = await python_extractor.extract_metadata(source_code, function_node, tree)
@@ -172,7 +172,7 @@ async def test_extract_type_hints_from_function(python_extractor, python_parser)
 def process_data(items: List[str], count: int) -> Dict[str, int]:
     return {}
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     metadata = await python_extractor.extract_metadata(source_code, function_node, tree)
@@ -191,7 +191,7 @@ async def test_extract_optional_type_hint(python_extractor, python_parser):
 def get_user(user_id: int) -> Optional[User]:
     return None
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     metadata = await python_extractor.extract_metadata(source_code, function_node, tree)
@@ -208,7 +208,7 @@ class User:
     age: int
     email: Optional[str] = None
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     class_node = tree.root_node.children[0]
 
     metadata = await python_extractor.extract_metadata(source_code, class_node, tree)
@@ -225,7 +225,7 @@ async def test_extract_type_hints_from_decorated_function(python_extractor, pyth
 def compute(x: int) -> str:
     return str(x)
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     function_node = tree.root_node.children[0]
     metadata = await python_extractor.extract_metadata(source_code, function_node, tree)
     assert "type_hints" in metadata
@@ -242,7 +242,7 @@ async def test_extract_union_type_hint(python_extractor, python_parser):
 def process(value: Union[int, str]) -> Union[float, None]:
     return None
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     function_node = tree.root_node.children[0]
     metadata = await python_extractor.extract_metadata(source_code, function_node, tree)
     assert "type_hints" in metadata
@@ -259,7 +259,7 @@ def test_user_creation():
     assert user.name == "John"
     mock.patch("database.save")
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     calls = await python_extractor.extract_calls(function_node, source_code)
@@ -282,7 +282,7 @@ class TestUser(unittest.TestCase):
         self.assertEqual(self.user.name, "John")
         self.assertTrue(self.user.is_active)
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     class_node = tree.root_node.children[0]
 
     calls = await python_extractor.extract_calls(class_node, source_code)
@@ -303,7 +303,7 @@ def process_data(items):
     breakpoint()
     return result
 """
-    tree = python_parser.parse(bytes(source_code, "utf8"))
+    tree = python_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     calls = await python_extractor.extract_calls(function_node, source_code)

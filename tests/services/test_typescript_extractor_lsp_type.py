@@ -18,7 +18,7 @@ export class Calculator {
 """
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(code, "utf8"))
+    tree = parser.parse(code)
 
     # Find class node
     class_node = tree.root_node.children[0]
@@ -48,7 +48,7 @@ class Calc {
 """
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(code, "utf8"))
+    tree = parser.parse(code)
 
     # Find class node, then method node
     class_node = tree.root_node.children[0]
@@ -70,7 +70,7 @@ async def test_extract_metadata_includes_lsp_type_for_function():
     code = "export function sum(arr) { return arr.reduce((a, b) => a + b, 0); }"
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(code, "utf8"))
+    tree = parser.parse(code)
 
     # Find function node
     export_statement = tree.root_node.children[0]
@@ -96,7 +96,7 @@ export interface User {
 """
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(code, "utf8"))
+    tree = parser.parse(code)
 
     # Find interface node
     export_statement = tree.root_node.children[0]
@@ -124,7 +124,7 @@ async def test_lsp_type_mapping_completeness():
     }
 
     for expected_lsp_type, (code, node_type) in test_cases.items():
-        tree = parser.parse(bytes(code, "utf8"))
+        tree = parser.parse(code)
 
         # Find the node by type
         def find_node_by_type(node, target_type):

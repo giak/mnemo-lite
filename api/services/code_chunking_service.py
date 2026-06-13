@@ -62,7 +62,7 @@ class LanguageParser(ABC):
 
     def parse(self, source_code: str) -> Tree:
         """Parse source code to AST tree."""
-        return self.parser.parse(bytes(source_code, "utf8"))
+        return self.parser.parse(source_code)
 
 
 class PythonParser(LanguageParser):

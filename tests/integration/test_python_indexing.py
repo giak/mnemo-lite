@@ -102,7 +102,7 @@ async def process_data(items: list[str]) -> dict:
 
     # Parse with tree-sitter
     parser = get_parser("python")
-    tree = parser.parse(bytes(source_code, "utf8"))
+    tree = parser.parse(source_code)
 
     # Find the function node
     function_node = None

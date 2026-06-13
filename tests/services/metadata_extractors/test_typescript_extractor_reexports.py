@@ -13,7 +13,7 @@ export { Success, Failure } from './types/result.type';
 """
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(source, "utf8"))
+    tree = parser.parse(source)
 
     extractor = TypeScriptMetadataExtractor("typescript")
     metadata = await extractor.extract_metadata(
@@ -43,7 +43,7 @@ export * from './types/result.type';
 """
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(source, "utf8"))
+    tree = parser.parse(source)
 
     extractor = TypeScriptMetadataExtractor("typescript")
     metadata = await extractor.extract_metadata(
@@ -69,7 +69,7 @@ export { createSuccess as makeSuccess } from './utils/result.utils';
 """
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(source, "utf8"))
+    tree = parser.parse(source)
 
     extractor = TypeScriptMetadataExtractor("typescript")
     metadata = await extractor.extract_metadata(
@@ -95,7 +95,7 @@ export type { ResultType, OptionType } from './types/result.type';
 """
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(source, "utf8"))
+    tree = parser.parse(source)
 
     extractor = TypeScriptMetadataExtractor("typescript")
     metadata = await extractor.extract_metadata(

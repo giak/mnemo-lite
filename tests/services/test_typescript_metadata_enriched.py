@@ -21,7 +21,7 @@ async function createUser(email: string, name: string): Promise<User> {
 """
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(source_code, "utf8"))
+    tree = parser.parse(source_code)
 
     # Find function node
     function_node = tree.root_node.children[0]
@@ -80,7 +80,7 @@ function complexFunction(x: number): number {
 """
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(source_code, "utf8"))
+    tree = parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     extractor = TypeScriptMetadataExtractor("typescript")

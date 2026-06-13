@@ -140,7 +140,7 @@ def cpu_bound_timeout(timeout: float, operation_name: Optional[str] = None):
         >>> @cpu_bound_timeout(timeout=5.0, operation_name="tree_sitter_parse")
         >>> def parse_code(self, source_code: str):
         ...     # Synchronous tree-sitter parsing
-        ...     tree = self.parser.parse(bytes(source_code, "utf8"))
+        ...     tree = self.parser.parse(source_code)
         ...     return tree
     """
     def decorator(func: Callable) -> Callable:

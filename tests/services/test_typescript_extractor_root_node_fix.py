@@ -24,7 +24,7 @@ async def test_extract_imports_with_tree_object(extractor):
     """
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(source_code, "utf-8"))
+    tree = parser.parse(source_code)
 
     # Pass Tree object
     imports = await extractor.extract_imports(tree, source_code)
@@ -44,7 +44,7 @@ async def test_extract_imports_with_node_object(extractor):
     """
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(source_code, "utf-8"))
+    tree = parser.parse(source_code)
 
     # Pass Node object (root_node) instead of Tree
     root_node = tree.root_node
@@ -66,7 +66,7 @@ async def test_extract_imports_both_cases_produce_same_result(extractor):
     """
 
     parser = get_parser("typescript")
-    tree = parser.parse(bytes(source_code, "utf-8"))
+    tree = parser.parse(source_code)
 
     # Extract with Tree
     imports_from_tree = await extractor.extract_imports(tree, source_code)

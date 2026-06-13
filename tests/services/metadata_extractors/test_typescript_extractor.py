@@ -27,7 +27,7 @@ def ts_parser():
 async def test_extract_named_imports_single(ts_extractor, ts_parser):
     """Test extraction of single named import."""
     source_code = "import { MyClass } from './models'"
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     imports = await ts_extractor.extract_imports(tree, source_code)
 
@@ -39,7 +39,7 @@ async def test_extract_named_imports_single(ts_extractor, ts_parser):
 async def test_extract_named_imports_multiple(ts_extractor, ts_parser):
     """Test extraction of multiple named imports."""
     source_code = "import { MyClass, MyFunction, MyInterface } from './models'"
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     imports = await ts_extractor.extract_imports(tree, source_code)
 
@@ -53,7 +53,7 @@ async def test_extract_named_imports_multiple(ts_extractor, ts_parser):
 async def test_extract_namespace_import(ts_extractor, ts_parser):
     """Test extraction of namespace import."""
     source_code = "import * as utils from 'lodash'"
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     imports = await ts_extractor.extract_imports(tree, source_code)
 
@@ -65,7 +65,7 @@ async def test_extract_namespace_import(ts_extractor, ts_parser):
 async def test_extract_default_import(ts_extractor, ts_parser):
     """Test extraction of default import."""
     source_code = "import React from 'react'"
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     imports = await ts_extractor.extract_imports(tree, source_code)
 
@@ -79,7 +79,7 @@ async def test_extract_side_effect_import(ts_extractor, ts_parser):
     # TODO: Side-effect imports not yet supported (tree-sitter query limitation)
     # Skip this test for now
     source_code = "import './styles.css'"
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     imports = await ts_extractor.extract_imports(tree, source_code)
 
@@ -91,7 +91,7 @@ async def test_extract_side_effect_import(ts_extractor, ts_parser):
 async def test_extract_re_export(ts_extractor, ts_parser):
     """Test extraction of re-export."""
     source_code = "export { MyService, MyHelper } from './services'"
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     imports = await ts_extractor.extract_imports(tree, source_code)
 
@@ -110,7 +110,7 @@ import React from 'react'
 import './styles.css'
 export { MyService } from './services'
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     imports = await ts_extractor.extract_imports(tree, source_code)
 
@@ -133,7 +133,7 @@ export class MyClass {
     }
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     imports = await ts_extractor.extract_imports(tree, source_code)
 
@@ -144,7 +144,7 @@ export class MyClass {
 async def test_extract_empty_file(ts_extractor, ts_parser):
     """Test extraction from empty file."""
     source_code = ""
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     imports = await ts_extractor.extract_imports(tree, source_code)
 
@@ -169,7 +169,7 @@ export class MyComponent implements OnInit {
     ) {}
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     imports = await ts_extractor.extract_imports(tree, source_code)
 
@@ -188,7 +188,7 @@ export class MyComponent implements OnInit {
 async def test_extract_metadata_includes_imports(ts_extractor, ts_parser):
     """Test that extract_metadata includes imports."""
     source_code = "import { MyClass } from './models'"
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     metadata = await ts_extractor.extract_metadata(source_code, tree.root_node, tree)
 
@@ -203,7 +203,7 @@ async def test_extract_metadata_graceful_degradation(ts_extractor, ts_parser):
     """Test graceful degradation on errors."""
     # Malformed code that might cause issues
     source_code = "import {"
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     metadata = await ts_extractor.extract_metadata(source_code, tree.root_node, tree)
 
@@ -227,7 +227,7 @@ function myFunction() {
     calculateTotal()
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     # Get the function node
     function_node = tree.root_node.children[0]
@@ -248,7 +248,7 @@ function myFunction() {
     processData()
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     calls = await ts_extractor.extract_calls(function_node, source_code)
@@ -267,7 +267,7 @@ function myFunction() {
     this.service.fetchData()
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     calls = await ts_extractor.extract_calls(function_node, source_code)
@@ -286,7 +286,7 @@ function myFunction() {
     this.userService.getUser().then(data => data.save())
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     calls = await ts_extractor.extract_calls(function_node, source_code)
@@ -308,7 +308,7 @@ function myFunction() {
     const service = new UserService()
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     calls = await ts_extractor.extract_calls(function_node, source_code)
@@ -332,7 +332,7 @@ class MyClass extends BaseClass {
     }
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     # Get the class node and extract all calls from it
     class_node = tree.root_node.children[0]
@@ -355,7 +355,7 @@ class MyClass {
     }
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     # Get the class node and extract all calls from it
     class_node = tree.root_node.children[0]
@@ -378,7 +378,7 @@ async function myFunction() {
     const result = await this.service.getData()
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     calls = await ts_extractor.extract_calls(function_node, source_code)
@@ -397,7 +397,7 @@ const myFunction = () => {
     validateInput()
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     # Get the arrow function node
     statement_node = tree.root_node.children[0]
@@ -417,7 +417,7 @@ function myFunction() {
     processData(validateInput(getUserData()))
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     calls = await ts_extractor.extract_calls(function_node, source_code)
@@ -438,7 +438,7 @@ function myFunction() {
     return x + 10
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
     function_node = tree.root_node.children[0]
 
     calls = await ts_extractor.extract_calls(function_node, source_code)
@@ -472,7 +472,7 @@ class UserComponent implements OnInit {
     }
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     # Get the loadUsers method node
     class_node = tree.root_node.children[0]
@@ -493,7 +493,7 @@ async def test_extract_calls_graceful_degradation(ts_extractor, ts_parser):
     """Test graceful degradation on malformed code."""
     # Malformed code
     source_code = "function test() { ("
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     calls = await ts_extractor.extract_calls(tree.root_node, source_code)
 
@@ -512,7 +512,7 @@ function myFunction() {
     this.service.fetchData()
 }
 """
-    tree = ts_parser.parse(bytes(source_code, 'utf8'))
+    tree = ts_parser.parse(source_code)
 
     metadata = await ts_extractor.extract_metadata(source_code, tree.root_node, tree)
 
