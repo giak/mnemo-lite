@@ -427,6 +427,8 @@ flowchart TB
 | `QUERY_UNDERSTANDING_ENABLED` | `true` | Activer l'extraction de mots-clés |
 | `QUERY_UNDERSTANDING_FALLBACK` | `true` | Fallback si extraction échoue |
 
+> **Note :** Les outils MCP `extract_entities` et `search_by_entity` sont enregistrés conditionnellement — ils ne sont disponibles que si le service GLiNER s'initialise correctement (modèle `gliner_multi-v2.1` accessible). Si le modèle est absent ou si l'initialisation échoue, ces outils ne sont pas exposés dans `tools/list`.
+
 ---
 
 ## 8. Worker Service
