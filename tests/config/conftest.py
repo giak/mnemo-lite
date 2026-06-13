@@ -49,7 +49,6 @@ def env_vars_in_code(all_pyfiles: List[Path]) -> Dict[str, Set[str]]:
         "os_environ_direct": set(),
         "settings_fields": set(),       # AppSettings fields
         "mcp_config_fields": set(),     # MCPConfig fields
-        "worker_settings_fields": set(),# workers Settings fields
         "global_constants": {},         # file_path -> [(line, var_name, value)]
     }
 
@@ -76,7 +75,7 @@ def env_vars_in_code(all_pyfiles: List[Path]) -> Dict[str, Set[str]]:
     settings_files = [
         (PROJECT_ROOT / "api" / "core" / "settings.py", "settings_fields"),
         (PROJECT_ROOT / "api" / "mnemo_mcp" / "config.py", "mcp_config_fields"),
-        (PROJECT_ROOT / "workers" / "config" / "settings.py", "worker_settings_fields"),
+
     ]
 
     for sfile, field_key in settings_files:
@@ -149,7 +148,7 @@ def pydantic_env_vars(project_root: Path) -> Dict[str, Set[str]]:
     settings_files = [
         project_root / "api" / "core" / "settings.py",
         project_root / "api" / "mnemo_mcp" / "config.py",
-        project_root / "workers" / "config" / "settings.py",
+
     ]
     
     for sfile in settings_files:

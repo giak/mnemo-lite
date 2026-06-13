@@ -5,10 +5,9 @@ import redis.asyncio as redis
 import structlog
 from typing import Optional, Dict, Any, Union
 
-from config.settings import Settings
+from api.core.settings import get_settings
 
 logger = structlog.get_logger(__name__)
-settings = Settings()
 
 # Global Redis connection
 _redis_client: Optional[redis.Redis] = None
@@ -21,10 +20,10 @@ async def get_redis_client() -> redis.Redis:
         logger.info("Creating Redis client connection")
         
         _redis_client = redis.Redis(
-            host=settings.redis_host,
-            port=settings.redis_port,
-            password=settings.redis_password,
-            db=settings.redis_db,
+            host=get_settings().REDIS_HOST,
+            port=get_settings().REDIS_PORT,
+            password=get_settings().REDIS_PASSWORD,
+            db=get_settings().REDIS_DB,
             decode_responses=True
         )
         

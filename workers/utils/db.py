@@ -34,11 +34,11 @@ async def get_pg_pool() -> asyncpg.Pool:
         
         try:
             _pool = await asyncpg.create_pool(
-                host=settings.postgres_host,
-                port=settings.postgres_port,
-                user=settings.postgres_user,
-                password=settings.postgres_password,
-                database=settings.postgres_db
+                host=_settings.POSTGRES_HOST,
+                port=_settings.POSTGRES_PORT,
+                user=_settings.POSTGRES_USER,
+                password=_settings.POSTGRES_PASSWORD,
+                database=_settings.POSTGRES_DB
             )
             
             # Test connection
@@ -195,11 +195,11 @@ async def get_db_pool() -> asyncpg.Pool:
         logger.info("Creating database connection pool")
         
         _pool = await asyncpg.create_pool(
-            host=settings.postgres_host,
-            port=settings.postgres_port,
-            user=settings.postgres_user,
-            password=settings.postgres_password,
-            database=settings.postgres_db,
+            host=_settings.POSTGRES_HOST,
+            port=_settings.POSTGRES_PORT,
+            user=_settings.POSTGRES_USER,
+            password=_settings.POSTGRES_PASSWORD,
+            database=_settings.POSTGRES_DB,
             min_size=5,
             max_size=20
         )
