@@ -221,6 +221,9 @@ services:
     volumes:
       - ./api:/app
       - ./tests:/app/tests
+      - ./workers:/app/workers
+      - ./scripts:/app/scripts
+      - ./db/migrations:/app/db/migrations:ro
       - ./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro
       - hf_cache:/root/.cache/huggingface
       - /home/giak/projects/truth-engine:/host/truth-engine:ro

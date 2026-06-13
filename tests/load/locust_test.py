@@ -3,8 +3,27 @@ Load Testing for MnemoLite API
 Usage: locust -f locust_load_test.py --host http://localhost:8001
 """
 
-from locust import HttpUser, task, between, TaskSet
-from locust.contrib.fasthttp import FastHttpUser
+try:
+    from locust import HttpUser, task, between, TaskSet
+    from locust.contrib.fasthttp import FastHttpUser
+    _HAS_LOCUST = True
+except (ImportError, RecursionError):
+    _HAS_LOCUST = False
+    # Pytest skip marker pour empecher la collecte
+    import pytest
+    pytestmark = pytest.mark.skip(reason="Load test - run with locust -f directly")
+
+if not _HAS_LOCUST:
+    # Dummy classes to prevent NameError on the class definitions below
+    HttpUser = object
+    FastHttpUser = object
+    # Support both @task and @task(weight)
+def task(*args, **kwargs):
+    if args and (callable(args[0]) or isinstance(args[0], (int, float))):
+        return lambda f: f
+    return args[0] if args else (lambda f: f)
+    between = lambda x, y: x
+    TaskSet = object
 import random
 import json
 import uuid
