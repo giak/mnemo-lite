@@ -35,6 +35,33 @@ class AppSettings(BaseSettings):
         case_sensitive=True,
     )
 
+    # === Timeouts (secondes, tous optionnels) ===
+    # Tous les timeouts sont lus depuis api/config/timeouts.py
+    TIMEOUT_TREE_SITTER: float = 5.0
+    TIMEOUT_EMBEDDING_SINGLE: float = 30.0
+    TIMEOUT_EMBEDDING_BATCH: float = 60.0
+    TIMEOUT_GRAPH_CONSTRUCTION: float = 300.0
+    TIMEOUT_GRAPH_TRAVERSAL: float = 5.0
+    TIMEOUT_VECTOR_SEARCH: float = 5.0
+    TIMEOUT_LEXICAL_SEARCH: float = 3.0
+    TIMEOUT_HYBRID_SEARCH: float = 10.0
+    TIMEOUT_CACHE_GET: float = 1.0
+    TIMEOUT_CACHE_PUT: float = 2.0
+    TIMEOUT_DATABASE_QUERY: float = 10.0
+    TIMEOUT_DATABASE_TRANSACTION: float = 30.0
+    TIMEOUT_INDEX_FILE: float = 60.0
+
+    # === Circuit Breakers (seuils, tous optionnels) ===
+    REDIS_CIRCUIT_FAILURE_THRESHOLD: int = 5
+    REDIS_CIRCUIT_RECOVERY_TIMEOUT: int = 30
+    REDIS_CIRCUIT_HALF_OPEN_CALLS: int = 1
+    EMBEDDING_CIRCUIT_FAILURE_THRESHOLD: int = 3
+    EMBEDDING_CIRCUIT_RECOVERY_TIMEOUT: int = 60
+    EMBEDDING_CIRCUIT_HALF_OPEN_CALLS: int = 1
+    DATABASE_CIRCUIT_FAILURE_THRESHOLD: int = 3
+    DATABASE_CIRCUIT_RECOVERY_TIMEOUT: int = 10
+    DATABASE_CIRCUIT_HALF_OPEN_CALLS: int = 1
+
     # === Modele d'embedding texte (principal) ===
     EMBEDDING_MODEL: str = "BAAI/bge-m3"
     EMBEDDING_DIMENSION: Optional[int] = None  # Auto-deduit si None

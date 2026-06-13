@@ -9,7 +9,8 @@ Epic: EPIC-12 Story 12.3
 """
 
 from dataclasses import dataclass
-import os
+
+from api.core.settings import get_settings
 
 
 @dataclass
@@ -20,23 +21,26 @@ class ServiceCircuitConfig:
     half_open_max_calls: int = 1
 
 
-# Redis Cache Circuit Breaker
-REDIS_CIRCUIT_CONFIG = ServiceCircuitConfig(
-    failure_threshold=int(os.getenv("REDIS_CIRCUIT_FAILURE_THRESHOLD", "5")),
-    recovery_timeout=int(os.getenv("REDIS_CIRCUIT_RECOVERY_TIMEOUT", "30")),
-    half_open_max_calls=int(os.getenv("REDIS_CIRCUIT_HALF_OPEN_CALLS", "1"))
-)
+def _load_circuit_configs() -> tuple:
+    """Load circuit breaker configs from AppSettings (centralized config)."""
+    s = get_settings()
+    return (
+        ServiceCircuitConfig(
+            failure_threshold=s.REDIS_CIRCUIT_FAILURE_THRESHOLD,
+            recovery_timeout=s.REDIS_CIRCUIT_RECOVERY_TIMEOUT,
+            half_open_max_calls=s.REDIS_CIRCUIT_HALF_OPEN_CALLS,
+        ),
+        ServiceCircuitConfig(
+            failure_threshold=s.EMBEDDING_CIRCUIT_FAILURE_THRESHOLD,
+            recovery_timeout=s.EMBEDDING_CIRCUIT_RECOVERY_TIMEOUT,
+            half_open_max_calls=s.EMBEDDING_CIRCUIT_HALF_OPEN_CALLS,
+        ),
+        ServiceCircuitConfig(
+            failure_threshold=s.DATABASE_CIRCUIT_FAILURE_THRESHOLD,
+            recovery_timeout=s.DATABASE_CIRCUIT_RECOVERY_TIMEOUT,
+            half_open_max_calls=s.DATABASE_CIRCUIT_HALF_OPEN_CALLS,
+        ),
+    )
 
-# Embedding Service Circuit Breaker
-EMBEDDING_CIRCUIT_CONFIG = ServiceCircuitConfig(
-    failure_threshold=int(os.getenv("EMBEDDING_CIRCUIT_FAILURE_THRESHOLD", "3")),
-    recovery_timeout=int(os.getenv("EMBEDDING_CIRCUIT_RECOVERY_TIMEOUT", "60")),
-    half_open_max_calls=int(os.getenv("EMBEDDING_CIRCUIT_HALF_OPEN_CALLS", "1"))
-)
 
-# PostgreSQL Circuit Breaker (for health checks only)
-DATABASE_CIRCUIT_CONFIG = ServiceCircuitConfig(
-    failure_threshold=int(os.getenv("DATABASE_CIRCUIT_FAILURE_THRESHOLD", "3")),
-    recovery_timeout=int(os.getenv("DATABASE_CIRCUIT_RECOVERY_TIMEOUT", "10")),
-    half_open_max_calls=int(os.getenv("DATABASE_CIRCUIT_HALF_OPEN_CALLS", "1"))
-)
+REDIS_CIRCUIT_CONFIG, EMBEDDING_CIRCUIT_CONFIG, DATABASE_CIRCUIT_CONFIG = _load_circuit_configs()
