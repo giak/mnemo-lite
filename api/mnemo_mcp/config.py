@@ -5,7 +5,7 @@ Pydantic Settings for MCP server configuration.
 Loads from environment variables with MCP_ prefix.
 """
 
-from typing import List, Literal
+from typing import List, Literal, Optional
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from api.core import get_settings
