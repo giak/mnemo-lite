@@ -2,31 +2,14 @@
 Alembic environment configuration for MnemoLite
 Phase 0 Story 0.1 - Async template with psycopg2 sync driver
 """
-import asyncio
-import os
-import sys
 from logging.config import fileConfig
 
 from sqlalchemy import pool, create_engine
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
-# ========================================================================
-# Add parent directory to path for imports
-# ========================================================================
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# ========================================================================
-# Import Settings
-# ========================================================================
-try:
-    from workers.config.settings import settings
-except ImportError:
-    # Fallback if workers/config not in path
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    from workers.config.settings import settings
+from api.core.settings import get_settings
 
 # ========================================================================
 # Alembic Config
@@ -38,12 +21,20 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # ========================================================================
+# Helper: build sync database URL for Alembic (needs psycopg2, not asyncpg)
+# ========================================================================
+def _get_sync_db_url() -> str:
+    """Return DATABASE_URL with +asyncpg replaced by +psycopg2 for Alembic sync driver."""
+    return get_settings().DATABASE_URL.replace("+asyncpg", "+psycopg2")
+
+
+# ========================================================================
 # Set DATABASE_URL dynamically from environment
 # ========================================================================
 # Override sqlalchemy.url from alembic.ini with settings
 # Use sync URL (psycopg2) for Alembic migrations
 if not config.get_main_option("sqlalchemy.url"):
-    config.set_main_option("sqlalchemy.url", settings.sync_database_url)
+    config.set_main_option("sqlalchemy.url", _get_sync_db_url())
 
 # ========================================================================
 # Target Metadata (for autogenerate support)
@@ -112,7 +103,7 @@ def run_migrations_online_sync() -> None:
     4. NullPool prevents connection pooling during migrations
     """
     connectable = create_engine(
-        settings.sync_database_url,
+        _get_sync_db_url(),
         poolclass=pool.NullPool,  # No pooling for migrations
     )
 
@@ -122,46 +113,9 @@ def run_migrations_online_sync() -> None:
     connectable.dispose()
 
 
-# ========================================================================
-# Online Migrations (Async version - optional, for future use)
-# ========================================================================
-async def run_async_migrations() -> None:
-    """Run migrations in 'online' mode using async engine.
-
-    NOTE: This is NOT recommended for Phase 0 because it requires
-    asyncpg which may conflict with psycopg2 in the same process.
-
-    Use run_migrations_online_sync() instead.
-    """
-    # Use sync URL even for async engine to avoid asyncpg conflicts
-    # This converts postgresql+asyncpg:// to postgresql+psycopg2://
-    sync_url = settings.sync_database_url
-
-    # Create engine config from sync URL
-    engine_config = config.get_section(config.config_ini_section, {})
-    engine_config["sqlalchemy.url"] = sync_url
-
-    connectable = create_engine(
-        sync_url,
-        poolclass=pool.NullPool,
-    )
-
-    with connectable.connect() as connection:
-        do_run_migrations(connection)
-
-    connectable.dispose()
-
-
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
-
-    Phase 0: Use SYNC engine (psycopg2) to avoid asyncpg conflicts.
-    """
-    # Use SYNC version (recommended)
+    """Run migrations in "online" mode."""
     run_migrations_online_sync()
-
-    # Async version disabled for Phase 0
-    # asyncio.run(run_async_migrations())
 
 
 # ========================================================================
