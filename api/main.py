@@ -1,4 +1,3 @@
-import json
 import asyncio
 from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, status
@@ -13,13 +12,9 @@ from middleware.metrics_middleware import MetricsMiddleware
 
 import structlog
 from fastapi.routing import APIRoute
-import uuid
-from typing import Optional
-import logging
-import sys
 from api.core import get_settings
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 # Import SQLAlchemy async engine creation
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
