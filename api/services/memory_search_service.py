@@ -4,13 +4,8 @@ Implémente l'interface MemorySearchServiceProtocol.
 """
 
 import logging
-from typing import List, Dict, Any, Optional, Union, Tuple
-import json
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
-import uuid
-import inspect
-import traceback
-import sys
 
 from interfaces.repositories import EventRepositoryProtocol
 from api.core import get_settings
