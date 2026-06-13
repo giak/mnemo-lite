@@ -1,7 +1,7 @@
 # Load .env file if it exists to potentially override defaults
 -include .env
 
-.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore db-create-test db-fill-test db-test-reset api-test-reset api-shell api-test api-test-file api-test-one api-coverage api-debug worker-shell worker-run certs benchmark lint lint-fix frontend-dev frontend-build frontend-typecheck frontend-test mcp-test mcp-shell o2-setup o2-export o2-help help
+.PHONY: up down build restart logs ps clean prune health db-up db-shell db-backup db-restore db-create-test db-fill-test db-test-reset api-shell api-test api-test-file api-test-one api-coverage api-debug api-restart api-logs worker-shell worker-run redis-cli redis-flush frontend-dev frontend-build frontend-typecheck frontend-test mcp-test mcp-shell mcp-restart mcp-logs reindex test-all o2-setup o2-export o2-help prod-up prod-down prod-restart prod-logs prod-clean certs benchmark lint lint-fix help
 
 # Variables
 COMPOSE_FILE := docker-compose.yml
@@ -89,6 +89,14 @@ db-fill-test:
 db-test-reset: db-create-test db-fill-test
 	@echo "Base de données de test réinitialisée et remplie avec succès."
 
+# Commandes Redis
+redis-cli:
+	docker compose -f $(COMPOSE_FILE) exec redis redis-cli
+
+redis-flush:
+	@echo "⚠️  Flushing all Redis data..."
+	docker compose -f $(COMPOSE_FILE) exec redis redis-cli FLUSHALL
+
 # Commandes pour l'API
 api-shell:
 	docker compose -f $(COMPOSE_FILE) exec api /bin/bash
@@ -119,6 +127,12 @@ api-debug:
 	@test -n "$(file)" || (echo "Error: 'file' parameter is required"; exit 1)
 	docker compose -f $(COMPOSE_FILE) exec -it -e PYTHONUNBUFFERED=1 -e DEBUG=1 -w /app api python -m pdb $(file)
 
+api-restart:
+	docker compose -f $(COMPOSE_FILE) restart api
+
+api-logs:
+	docker compose -f $(COMPOSE_FILE) logs -f --tail=50 api
+
 # Commandes pour les workers
 worker-shell:
 	docker compose -f $(COMPOSE_FILE) exec worker /bin/bash
@@ -130,16 +144,20 @@ worker-run:
 
 # Commandes pour le frontend (Vue 3)
 frontend-dev:
-	cd frontend && npm run dev
+	@echo "Starting Vue 3 dev server in Docker..."
+	docker compose -f $(COMPOSE_FILE) --profile dev up -d frontend
 
 frontend-build:
-	cd frontend && npm run build
+	@echo "Building frontend for production..."
+	docker compose -f $(COMPOSE_FILE) exec frontend npm run build
 
 frontend-typecheck:
-	cd frontend && npx vue-tsc --noEmit
+	@echo "Running typecheck in Docker..."
+	docker compose -f $(COMPOSE_FILE) exec frontend npx vue-tsc --noEmit
 
 frontend-test:
-	cd frontend && npx vitest run --reporter=verbose
+	@echo "Running frontend tests in Docker..."
+	docker compose -f $(COMPOSE_FILE) exec frontend npx vitest run --reporter=verbose
 
 # Commandes MCP
 mcp-test:
@@ -148,6 +166,12 @@ mcp-test:
 
 mcp-shell:
 	docker compose -f $(COMPOSE_FILE) exec api /bin/bash -c "cd /app && python -m mnemo_mcp.server"
+
+mcp-restart:
+	docker compose -f $(COMPOSE_FILE) restart mcp
+
+mcp-logs:
+	docker compose -f $(COMPOSE_FILE) logs -f --tail=50 mcp
 
 # Vérification de l'état des services (Nouvelle cible)
 health:
@@ -164,6 +188,14 @@ certs:
 # Benchmark
 benchmark:
 	docker compose -f $(COMPOSE_FILE) exec -w /app api python -m scripts.benchmarks.run_benchmark
+
+# Reindexation
+reindex:
+	docker compose -f $(COMPOSE_FILE) exec -w /app api python -m scripts.reindex_bge_m3
+
+# Tests combines
+test-all: api-test mcp-test frontend-test
+	@echo "All tests completed"
 
 # Commandes pour le linting
 lint:
@@ -221,6 +253,10 @@ help:
 	@echo "  make frontend-typecheck  - Run vue-tsc --noEmit"
 	@echo "  make frontend-test   - Run Vitest tests"
 	@echo ""
+	@echo "Redis:"
+	@echo "  make redis-cli       - Open Redis CLI"
+	@echo "  make redis-flush     - Flush all Redis data"
+	@echo ""
 	@echo "Database:"
 	@echo "  make db-up           - Start only database services"
 	@echo "  make db-shell        - Connect to PostgreSQL shell"
@@ -240,8 +276,10 @@ help:
 	@echo "  make api-debug file=<path> - Debug Python script with pdb"
 	@echo ""
 	@echo "MCP:"
-	@echo "  make mcp-test        - Run MCP tests (358 tests)"
+	@echo "  make mcp-test        - Run MCP tests"
 	@echo "  make mcp-shell       - MCP server shell"
+	@echo "  make mcp-restart     - Restart MCP server"
+	@echo "  make mcp-logs        - View MCP server logs"
 	@echo ""
 	@echo "Worker:"
 	@echo "  make worker-shell    - Connect to worker container shell"
@@ -260,4 +298,12 @@ help:
 	@echo "  make certs           - Generate self-signed certificates"
 	@echo "  make health          - Check API and PostgreSQL health"
 	@echo "  make benchmark       - Run performance benchmarks"
-	@echo "  make help            - Show this help" 
+	@echo "  make reindex         - Reindex all memories"
+	@echo "  make test-all        - Run all tests (API + MCP + frontend)"
+	@echo "  make help            - Show this help"
+	@echo ""
+	@echo "Production:"
+	@echo "  make prod-up         - Start production services (Nginx on :80)"
+	@echo "  make prod-down       - Stop production services"
+	@echo "  make prod-restart    - Restart production services"
+	@echo "  make prod-logs       - View production logs" 
