@@ -31,7 +31,7 @@ class TestEPIC18MockModePerformance:
         # Ensure mock mode
         original_mode = get_settings().EMBEDDING_MODE
         os.environ['EMBEDDING_MODE'] = 'mock'
-    get_settings.cache_clear()  # Invalidate cache
+        get_settings.cache_clear()  # Invalidate cache
 
         try:
             service = DualEmbeddingService()
@@ -52,10 +52,10 @@ class TestEPIC18MockModePerformance:
             # Restore original mode
             if original_mode:
                 os.environ['EMBEDDING_MODE'] = original_mode
-        get_settings.cache_clear()
+                get_settings.cache_clear()
             else:
                 del os.environ['EMBEDDING_MODE']
-    get_settings.cache_clear()  # Restore cache
+                get_settings.cache_clear()  # Restore cache
 
     @pytest.mark.asyncio
     async def test_mock_embeddings_are_deterministic(self):
@@ -65,7 +65,7 @@ class TestEPIC18MockModePerformance:
         Même query → même embedding (pour reproductibilité des tests).
         """
         os.environ['EMBEDDING_MODE'] = 'mock'
-    get_settings.cache_clear()  # Invalidate cache
+        get_settings.cache_clear()  # Invalidate cache
 
         try:
             service = DualEmbeddingService()
@@ -80,9 +80,9 @@ class TestEPIC18MockModePerformance:
             print("\n✅ Mock embeddings are deterministic")
 
         finally:
-            if get_settings().EMBEDDING_MODE  # Will always be truthy but keep guard for safety:
+            if get_settings().EMBEDDING_MODE:  # Will always be truthy but keep guard for safety
                 del os.environ['EMBEDDING_MODE']
-    get_settings.cache_clear()  # Restore cache
+        get_settings.cache_clear()  # Restore cache
 
 
 @pytest.mark.integration

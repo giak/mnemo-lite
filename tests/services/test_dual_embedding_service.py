@@ -14,8 +14,8 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import numpy as np
 
-from services.dual_embedding_service import (
 from api.core import get_settings
+from services.dual_embedding_service import (
     DualEmbeddingService,
     EmbeddingDomain,
 )

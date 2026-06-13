@@ -40,10 +40,13 @@ MODEL_NAME = "BAAI/bge-m3"
 ONNX_MODEL_PATH = "/app/models/bge-m3-onnx-int8"  # Pre-exported ONNX INT8 model (EPIC-48)
 USE_ONNX = get_settings().USE_ONNX
 BATCH_SIZE = 25
-MAX_CONTENT_LENGTH = 2000  # Truncate before encoding (tokenizer is O(n) on input length)
+from core.settings import get_settings
+
+# Content length safety limit from centralized config
+MAX_CONTENT_LENGTH = get_settings().EMBEDDING_MAX_CONTENT_LENGTH
 LOG_INTERVAL = 25  # Log every batch
 
-DOC_PREFIX = "Represent this passage for retrieval: "
+DOC_PREFIX = ""
 
 
 def build_db_url() -> str:

@@ -69,6 +69,7 @@ class TestAPIKeyMiddleware:
         import logging
         from middleware.auth import APIKeyMiddleware
 
-        with logging.getLogger("middleware.auth").setLevel(logging.WARNING):
-            middleware = APIKeyMiddleware(app=None, api_keys={}, enabled=True)
-            assert middleware.api_keys == {}
+        logger = logging.getLogger("middleware.auth")
+        logger.setLevel(logging.WARNING)
+        middleware = APIKeyMiddleware(app=None, api_keys={}, enabled=True)
+        assert middleware.api_keys == {}

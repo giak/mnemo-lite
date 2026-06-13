@@ -12,8 +12,8 @@ import pytest
 import time
 from pathlib import Path
 from sqlalchemy.ext.asyncio import create_async_engine
-from scripts.index_directory import (
 from api.core import get_settings
+from scripts.index_directory import (
     run_parallel_pipeline,
     run_streaming_pipeline_sequential,
     build_graph_phase,
@@ -24,7 +24,7 @@ from api.core import get_settings
 @pytest.fixture
 async def test_engine():
     """Create test database engine."""
-        db_url = get_settings().TEST_DATABASE_URL or "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite_test"
+    db_url = get_settings().TEST_DATABASE_URL or "postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite_test"
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     engine = create_async_engine(db_url, echo=False)
