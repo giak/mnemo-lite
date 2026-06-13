@@ -7,8 +7,6 @@ EPIC-24 Task 6: AUTOIMPORT One-Time Historical Import
 """
 import requests
 import sys
-from datetime import datetime
-
 
 def import_historical():
     """Run one-time import via API."""
@@ -94,7 +92,6 @@ def import_historical():
         print(f"Error: {e}")
         print()
         return 1
-
 
 if __name__ == "__main__":
     sys.exit(import_historical())

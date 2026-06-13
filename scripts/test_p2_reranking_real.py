@@ -12,7 +12,6 @@ Usage (inside Docker container):
 import asyncio
 import sys
 import os
-from api.core.settings import get_settings
 import time
 
 sys.path.insert(0, '/app')
@@ -25,7 +24,6 @@ TEST_QUERIES = [
     "authentication token JWT",
     "database migration postgresql",
 ]
-
 
 async def main():
     from sqlalchemy.ext.asyncio import create_async_engine
@@ -137,7 +135,6 @@ async def main():
     print("\n" + "=" * 70)
     print("✅ P2 Cross-encoder Reranking Test Complete")
     print("=" * 70)
-
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -11,7 +11,6 @@ Default: Process 10 memories only (POC mode)
 import argparse
 from api.core import get_settings
 import asyncio
-import os
 import sys
 from datetime import datetime
 
@@ -19,7 +18,6 @@ from datetime import datetime
 sys.path.insert(0, '/app')
 
 import asyncpg
-
 
 async def get_memories_without_embeddings(pool: asyncpg.Pool, limit: int = 10):
     """Fetch memories that don't have embeddings yet."""
@@ -34,7 +32,6 @@ async def get_memories_without_embeddings(pool: asyncpg.Pool, limit: int = 10):
         """, limit)
         return rows
 
-
 async def count_memories_without_embeddings(pool: asyncpg.Pool) -> int:
     """Count total memories needing embeddings."""
     async with pool.acquire() as conn:
@@ -42,7 +39,6 @@ async def count_memories_without_embeddings(pool: asyncpg.Pool) -> int:
             SELECT COUNT(*) FROM memories
             WHERE embedding IS NULL AND deleted_at IS NULL
         """)
-
 
 async def update_memory_embedding(pool: asyncpg.Pool, memory_id: str, embedding: list):
     """Update a single memory with its embedding."""
@@ -55,7 +51,6 @@ async def update_memory_embedding(pool: asyncpg.Pool, memory_id: str, embedding:
                 updated_at = NOW()
             WHERE id = $2
         """, embedding_str, memory_id)
-
 
 async def test_search(pool: asyncpg.Pool, query: str = "agriculture Mercosur"):
     """Test semantic search after backfill."""
@@ -76,7 +71,6 @@ async def test_search(pool: asyncpg.Pool, query: str = "agriculture Mercosur"):
             LIMIT 5
         """)
         return rows
-
 
 async def main():
     parser = argparse.ArgumentParser(description='POC: Backfill memory embeddings')
@@ -171,7 +165,6 @@ async def main():
 
     await pool.close()
     print("Done!")
-
 
 if __name__ == "__main__":
     asyncio.run(main())

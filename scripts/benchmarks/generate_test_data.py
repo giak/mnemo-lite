@@ -10,7 +10,6 @@ import numpy as np
 import json
 import uuid
 import os
-from api.core.settings import get_settings
 import random
 from datetime import datetime, timedelta, timezone
 import time
@@ -33,13 +32,11 @@ METADATA_STATUS_CODES = [200, 201, 204, 400, 401, 403, 404, 500, 503]
 
 # --- Helper Functions ---
 
-
 def generate_random_timestamp(start, end):
     """Génère un timestamp aléatoire entre start et end."""
     delta = end - start
     random_seconds = random.uniform(0, delta.total_seconds())
     return start + timedelta(seconds=random_seconds)
-
 
 def generate_random_embedding(dim):
     """Génère un vecteur embedding aléatoire normalisé."""
@@ -48,7 +45,6 @@ def generate_random_embedding(dim):
     if norm == 0:
         return np.zeros(dim).tolist()  # Éviter division par zéro
     return (vec / norm).tolist()
-
 
 def generate_random_event(embedding_dim):
     """Génère un enregistrement d'événement aléatoire."""
@@ -70,7 +66,6 @@ def generate_random_event(embedding_dim):
         json.dumps(metadata),  # metadata (json string)
         json.dumps({}),  # content (au lieu de raw_event)
     )
-
 
 async def main(num_events, db_dsn, embedding_dim):
     """Fonction principale pour générer et insérer les données."""
@@ -151,7 +146,6 @@ async def main(num_events, db_dsn, embedding_dim):
         if conn:
             await conn.close()
             print("Connexion à la base de données fermée.")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

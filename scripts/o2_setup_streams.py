@@ -13,13 +13,11 @@ Environment:
     O2_PASSWORD: OpenObserve password (default: Complexpass#123)
 """
 
-import os
 import json
 import sys
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 from base64 import b64encode
-
 
 import sys
 from pathlib import Path
@@ -97,7 +95,6 @@ STREAM_SETTINGS = {
     },
 }
 
-
 def api_call(method: str, path: str, payload: dict | None = None) -> dict | None:
     """Make an authenticated API call to OpenObserve."""
     url = f"{O2_URL}/api/{ORG}{path}"
@@ -114,7 +111,6 @@ def api_call(method: str, path: str, payload: dict | None = None) -> dict | None
         print(f"  ERROR {method} {path} -> {e}")
         return None
 
-
 def configure_stream_settings(stream_name: str, settings: dict) -> bool:
     """Create or update stream settings."""
     result = api_call("PUT", f"/streams/{stream_name}/settings", settings)
@@ -128,14 +124,12 @@ def configure_stream_settings(stream_name: str, settings: dict) -> bool:
         print(f"  FAIL Stream settings failed: {stream_name}")
         return False
 
-
 def list_streams() -> list[str]:
     """List all existing streams."""
     result = api_call("GET", "/streams")
     if result and "list" in result:
         return [s.get("name", "") for s in result["list"]]
     return []
-
 
 def main():
     print("=" * 60)
@@ -172,7 +166,6 @@ def main():
 
     if failed > 0:
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

@@ -2,7 +2,6 @@
 """
 Script to index the CV Generator project into MnemoLite for graph visualization testing.
 """
-import json
 import requests
 from pathlib import Path
 from typing import List, Dict, Any
@@ -21,7 +20,6 @@ SCAN_DIRS = [
 
 # File extensions to index
 EXTENSIONS = [".ts", ".tsx"]
-
 
 def find_typescript_files(base_dirs: List[Path], limit: int = 50) -> List[Path]:
     """Find TypeScript files in the given directories."""
@@ -45,7 +43,6 @@ def find_typescript_files(base_dirs: List[Path], limit: int = 50) -> List[Path]:
 
     return files
 
-
 def read_file_content(file_path: Path) -> str:
     """Read file content safely."""
     try:
@@ -53,7 +50,6 @@ def read_file_content(file_path: Path) -> str:
     except Exception as e:
         print(f"⚠️  Failed to read {file_path}: {e}")
         return ""
-
 
 def create_index_request(files: List[Path], repository_root: Path) -> Dict[str, Any]:
     """Create the index request payload."""
@@ -86,7 +82,6 @@ def create_index_request(files: List[Path], repository_root: Path) -> Dict[str, 
         "build_graph": True  # Build graph immediately
     }
 
-
 def index_repository(request_payload: Dict[str, Any]) -> Dict[str, Any]:
     """Send index request to MnemoLite API."""
     url = f"{API_BASE_URL}/v1/code/index"
@@ -104,7 +99,6 @@ def index_repository(request_payload: Dict[str, Any]) -> Dict[str, Any]:
         print(f"   Response: {response.text}")
         raise Exception(f"Index request failed: {response.status_code}")
 
-
 def get_graph_stats(repository: str) -> Dict[str, Any]:
     """Get graph statistics for the repository."""
     url = f"{API_BASE_URL}/v1/code/graph/stats/{repository}"
@@ -115,7 +109,6 @@ def get_graph_stats(repository: str) -> Dict[str, Any]:
     else:
         print(f"⚠️  Failed to get graph stats: {response.status_code}")
         return {}
-
 
 def main():
     """Main execution."""
@@ -178,7 +171,6 @@ def main():
         print(f"\n❌ Error: {e}")
         import traceback
         traceback.print_exc()
-
 
 if __name__ == "__main__":
     main()

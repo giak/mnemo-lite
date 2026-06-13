@@ -16,7 +16,6 @@ import asyncio
 import sys
 sys.path.insert(0, '/app')
 
-import numpy as np
 from datetime import datetime
 
 async def main():

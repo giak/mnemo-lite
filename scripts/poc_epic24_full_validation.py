@@ -19,10 +19,9 @@ Expected results:
 import asyncio
 import sys
 import os
-from api.core.settings import get_settings
 import time
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 sys.path.insert(0, '/app')
 
@@ -95,7 +94,6 @@ TEST_DOCUMENTS = [
     "La nouvelle recette de cuisine propose une variante du plat traditionnel avec des ingrédients de saison.",
 ]
 
-
 @dataclass
 class SearchResult:
     """Single search result with all metrics."""
@@ -106,7 +104,6 @@ class SearchResult:
     rrf_score: float = 0.0
     rerank_score: Optional[float] = None
 
-
 @dataclass
 class EvaluationMetrics:
     """Search quality metrics."""
@@ -114,7 +111,6 @@ class EvaluationMetrics:
     recall_at_5: float     # How many relevant docs in top-5
     mrr: float             # Mean Reciprocal Rank
     ndcg_at_5: float       # Normalized DCG
-
 
 def calculate_metrics(results: List[SearchResult], relevant_indices: List[int]) -> EvaluationMetrics:
     """Calculate search quality metrics."""
@@ -151,7 +147,6 @@ def calculate_metrics(results: List[SearchResult], relevant_indices: List[int]) 
         mrr=mrr,
         ndcg_at_5=ndcg
     )
-
 
 async def test_embedding_service():
     """P1: Test E5-base embedding service."""
@@ -210,7 +205,6 @@ async def test_embedding_service():
 
     return service
 
-
 async def test_cross_encoder_reranking():
     """P2: Test cross-encoder reranking service."""
     from services.cross_encoder_rerank_service import CrossEncoderRerankService
@@ -261,7 +255,6 @@ async def test_cross_encoder_reranking():
         print(f"\n  ⚠️ Reranker did not promote all relevant docs")
 
     return service
-
 
 async def test_hybrid_search_pipeline(embedding_service, reranker_service):
     """Full pipeline: P0 + P1 + P2 integration test."""
@@ -454,7 +447,6 @@ async def test_hybrid_search_pipeline(embedding_service, reranker_service):
     else:
         print(f"\n  ⚠️ EPIC-24 VALIDATION: Some checks failed")
 
-
 async def test_real_database():
     """Optional: Test on real MnemoLite database if available."""
     from sqlalchemy.ext.asyncio import create_async_engine
@@ -496,7 +488,6 @@ async def test_real_database():
         print(f"  Using synthetic test data only.")
         return False
 
-
 async def main():
     """Run full EPIC-24 validation POC."""
     print("=" * 70)
@@ -526,7 +517,6 @@ async def main():
     print("\n" + "=" * 70)
     print(f"POC completed in {total_time:.1f}s")
     print("=" * 70)
-
 
 if __name__ == "__main__":
     asyncio.run(main())

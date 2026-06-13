@@ -3,7 +3,6 @@ import json
 import random
 import uuid
 import os
-from api.core.settings import get_settings
 import sys
 
 # Configuration
@@ -14,12 +13,10 @@ API_ENDPOINT = "/v1/events/"
 API_URL = f"{API_BASE_URL.rstrip('/')}{API_ENDPOINT}"
 EMBEDDING_DIM = 768  # Doit correspondre à la définition VECTOR(768) dans le SQL (nomic-embed-text-v1.5)
 
-
 def generate_fake_embedding(dim: int) -> list[float]:
     """Génère une liste de floats aléatoires (entre -1 et 1)."""
     # return [0.0] * dim # Simple version avec des zéros
     return [random.uniform(-1.0, 1.0) for _ in range(dim)]
-
 
 def create_fake_event(
     message: str = "Fake event", source: str = "faker_script"
@@ -41,7 +38,6 @@ def create_fake_event(
         # "embedding": None
     }
     return payload
-
 
 def post_event(payload: dict):
     """Envoie une requête POST à l'API."""
@@ -71,7 +67,6 @@ def post_event(payload: dict):
             # L'erreur a déjà été affichée plus haut
             pass
         return None
-
 
 if __name__ == "__main__":
     num_events = 1

@@ -14,11 +14,8 @@ Usage:
 
 import asyncio
 import aiohttp
-import json
 import time
-from typing import Dict, Any
 import sys
-
 
 class OptimizationVerifier:
     """Verify that all optimizations are working."""
@@ -208,12 +205,10 @@ class OptimizationVerifier:
         else:
             print("\n⚠️ Some optimizations need attention.")
 
-
 async def main():
     """Main entry point."""
     verifier = OptimizationVerifier()
     await verifier.run_all_checks()
-
 
 if __name__ == "__main__":
     # Check if custom URL provided

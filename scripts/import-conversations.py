@@ -17,23 +17,20 @@ EPIC: EPIC-24 (Auto-save Conversations)
 
 import asyncio
 import json
-import glob
 import hashlib
 import sys
-import os
 from pathlib import Path
-from datetime import datetime, timedelta
-from typing import List, Tuple, Dict, Optional
+from datetime import datetime
+from typing import List, Tuple, Optional
 
 # Add MnemoLite to path
 sys.path.insert(0, '/app')
 
 from mnemo_mcp.tools.memory_tools import WriteMemoryTool
-from mnemo_mcp.models.memory_models import MemoryFilters, MemoryType
+from mnemo_mcp.models.memory_models import MemoryFilters
 from db.repositories.memory_repository import MemoryRepository
 from services.embedding_service import MockEmbeddingService
 from sqlalchemy.ext.asyncio import create_async_engine
-
 
 class ConversationImporter:
     """Simple conversation importer using MnemoLite MCP tools"""
@@ -307,7 +304,6 @@ class ConversationImporter:
         else:
             print("ℹ️  No new conversations to import")
 
-
 async def main():
     """Main entry point"""
     import argparse
@@ -345,7 +341,6 @@ async def main():
     finally:
         # Cleanup
         await importer.cleanup()
-
 
 if __name__ == '__main__':
     asyncio.run(main())

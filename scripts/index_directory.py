@@ -18,7 +18,6 @@ from dataclasses import dataclass
 # Add API to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
 
-
 @dataclass
 class FileProcessingResult:
     """Result of processing a single file atomically."""
@@ -26,7 +25,6 @@ class FileProcessingResult:
     success: bool
     chunks_created: int
     error_message: str = ""
-
 
 async def cleanup_repository(repository: str, engine):
     """
@@ -56,7 +54,6 @@ async def cleanup_repository(repository: str, engine):
 
         # Delete chunks by file_path pattern
         await conn.execute(text("DELETE FROM code_chunks WHERE repository = :repo"), {"repo": repository})
-
 
 async def process_file_atomically(
     file_path: Path,
@@ -178,7 +175,6 @@ async def process_file_atomically(
             error_message=str(e)
         )
 
-
 def detect_language(file_path: Path) -> str:
     """
     Detect programming language from file extension.
@@ -196,7 +192,6 @@ def detect_language(file_path: Path) -> str:
         return "python"
     else:
         return "typescript"  # default
-
 
 def scan_files(directory: Path) -> list[Path]:
     """Scan directory for TypeScript/JavaScript/Python files, applying filters."""
@@ -228,7 +223,6 @@ def scan_files(directory: Path) -> list[Path]:
         filtered.append(f)
 
     return sorted(filtered)
-
 
 async def run_streaming_pipeline_sequential(
     directory: Path,
@@ -316,7 +310,6 @@ async def run_streaming_pipeline_sequential(
         "errors": errors
     }
 
-
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -339,7 +332,6 @@ def parse_args():
         help="Enable verbose logging"
     )
     return parser.parse_args()
-
 
 def scan_directory(directory: Path, verbose: bool = False) -> dict:
     """
@@ -416,7 +408,6 @@ def scan_directory(directory: Path, verbose: bool = False) -> dict:
         }
     }
 
-
 async def phase1_chunking(files: list[Path], repository: str, verbose: bool = False):
     """
     Phase 1: Parse files and create semantic chunks.
@@ -482,7 +473,6 @@ async def phase1_chunking(files: list[Path], repository: str, verbose: bool = Fa
     print(f"   - Files failed: {len(errors)}")
 
     return all_chunks, errors
-
 
 async def phase2_embeddings(chunks: list, repository: str, verbose: bool = False):
     """
@@ -588,7 +578,6 @@ async def phase2_embeddings(chunks: list, repository: str, verbose: bool = False
 
     return success_count, errors
 
-
 async def phase3_metadata_extraction(
     chunks: list,
     repository: str,
@@ -624,7 +613,6 @@ async def phase3_metadata_extraction(
     from db.repositories.detailed_metadata_repository import DetailedMetadataRepository
     from db.repositories.computed_metrics_repository import ComputedMetricsRepository
     from tree_sitter_language_pack import get_parser
-    import json
 
     print("\n" + "=" * 80)
     print("📊 Phase 3/4: Detailed Metadata Extraction")
@@ -712,7 +700,6 @@ async def phase3_metadata_extraction(
 
     return (success_count, error_count)
 
-
 async def build_graph_phase(repository: str, engine) -> dict:
     """
     Phase 4: Build graph from indexed chunks.
@@ -779,7 +766,6 @@ async def build_graph_phase(repository: str, engine) -> dict:
             "error": str(e)
         }
 
-
 async def main():
     """Main entry point for directory indexer."""
     import os
@@ -844,7 +830,6 @@ async def main():
         for error in stats['errors'][:10]:  # Show first 10
             print(f"   - {error['file']}")
             print(f"     Error: {error['error'][:100]}")  # Truncate long errors
-
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -24,8 +24,7 @@ import time
 import signal
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Tuple, Optional, Set
-from collections import deque
+from typing import Dict, List, Tuple, Set
 
 # Watchdog for file monitoring
 try:
@@ -42,7 +41,6 @@ from api.mnemo_mcp.tools.memory_tools import WriteMemoryTool
 from api.db.repositories.memory_repository import MemoryRepository
 from api.services.embedding_service import MockEmbeddingService
 from sqlalchemy.ext.asyncio import create_async_engine
-
 
 class ConversationWatcherDaemon:
     """Main daemon class for watching and saving conversations"""
@@ -423,7 +421,6 @@ class ConversationWatcherDaemon:
             await self.cleanup()
             print("[INFO] Daemon stopped")
 
-
 class TranscriptEventHandler(FileSystemEventHandler):
     """Handler for file system events"""
 
@@ -459,7 +456,6 @@ class TranscriptEventHandler(FileSystemEventHandler):
         # Queue for processing
         asyncio.create_task(self.daemon.processing_queue.put(file_path))
 
-
 def main():
     """Main entry point"""
 
@@ -482,7 +478,6 @@ def main():
 
     # Run daemon
     asyncio.run(daemon.run())
-
 
 if __name__ == "__main__":
     main()

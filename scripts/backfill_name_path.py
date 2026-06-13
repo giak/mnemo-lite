@@ -17,7 +17,6 @@ Date: 2025-10-21
 import asyncio
 from api.core import get_settings
 import asyncpg
-import os
 import sys
 from pathlib import Path
 from collections import defaultdict
@@ -29,7 +28,6 @@ sys.path.insert(0, str(script_dir))
 sys.path.insert(0, str(script_dir / "api"))
 
 from services.symbol_path_service import SymbolPathService
-
 
 class ChunkRecord:
     """Simple wrapper for asyncpg.Record to provide attribute access."""
@@ -43,7 +41,6 @@ class ChunkRecord:
         self.start_line = record["start_line"]
         self.end_line = record["end_line"]
         self.language = record["language"]
-
 
 async def backfill_name_path(dry_run: bool = False, database_url: str = None) -> Dict[str, Any]:
     """
@@ -276,7 +273,6 @@ async def backfill_name_path(dry_run: bool = False, database_url: str = None) ->
     finally:
         await conn.close()
 
-
 async def validate_migration(database_url: str = None) -> bool:
     """
     Validate that migration was successful.
@@ -358,7 +354,6 @@ async def validate_migration(database_url: str = None) -> bool:
 
     finally:
         await conn.close()
-
 
 if __name__ == "__main__":
     import argparse

@@ -11,11 +11,9 @@ Environment:
 """
 
 from api.core import get_settings
-import sys
-import asyncio
 import json
 import math
-from typing import Dict, List, Set, Any, Tuple
+from typing import Dict, List, Any, Tuple
 
 import structlog
 from sqlalchemy import create_engine, text

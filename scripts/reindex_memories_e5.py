@@ -18,12 +18,10 @@ Usage (inside Docker container):
 import asyncio
 import sys
 import os
-from api.core.settings import get_settings
 import time
 import argparse
 
 sys.path.insert(0, '/app')
-
 
 async def reindex_memories(dry_run: bool = False, limit: int = None, batch_size: int = 32):
     """Re-generate embeddings for all memories using current EMBEDDING_MODEL."""
@@ -150,7 +148,6 @@ async def reindex_memories(dry_run: bool = False, limit: int = None, batch_size:
     print(f"Time: {elapsed/60:.1f} minutes")
     print(f"Rate: {processed/elapsed:.1f} memories/second")
 
-
 def main():
     parser = argparse.ArgumentParser(description="Re-index memories with E5-base")
     parser.add_argument("--dry-run", action="store_true", help="Show counts only")
@@ -163,7 +160,6 @@ def main():
         limit=args.limit,
         batch_size=args.batch_size
     ))
-
 
 if __name__ == "__main__":
     main()

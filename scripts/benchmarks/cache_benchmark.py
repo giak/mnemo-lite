@@ -16,7 +16,7 @@ Expected Results:
 import asyncio
 import time
 import statistics
-from typing import List, Dict, Any
+from typing import Dict, Any
 import sys
 from pathlib import Path
 import json

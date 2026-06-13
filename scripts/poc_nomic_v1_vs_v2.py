@@ -18,7 +18,6 @@ Usage (inside Docker container):
 import asyncio
 from api.core import get_settings
 import sys
-import os
 import time
 
 sys.path.insert(0, '/app')
@@ -46,7 +45,6 @@ TEST_DOCUMENTS = [
     "Marine Le Pen s'oppose à la Commission européenne sur le commerce.",
     "Investigation sur la stratégie électorale du Rassemblement National.",
 ]
-
 
 async def test_model_version(model_name: str):
     """Test a specific model version."""
@@ -122,7 +120,6 @@ async def test_model_version(model_name: str):
         "avg_max_similarity": avg_score,
     }
 
-
 async def main():
     print("=" * 70)
     print("POC: Nomic Embed v1.5 vs v2-MoE Comparison")
@@ -164,7 +161,6 @@ async def main():
     print("    - Better multilingual (French) understanding")
     print("    - Higher quality embeddings via MoE")
     print("    - ~10-20% better similarity scores")
-
 
 if __name__ == "__main__":
     asyncio.run(main())

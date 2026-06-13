@@ -13,7 +13,7 @@ Usage (inside Docker container):
 
 import asyncio
 import numpy as np
-from typing import List, Tuple
+from typing import List
 
 # Add api directory to path
 import sys

@@ -24,12 +24,10 @@ Example:
 import asyncio
 from api.core import get_settings
 import asyncpg
-import os
 import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Tuple
-
 
 class MigrationV2ToV3:
     """Migration handler for v2.0 → v3.0 content_hash backfill."""
@@ -239,7 +237,6 @@ class MigrationV2ToV3:
 
         return True
 
-
 async def main():
     """Main migration entry point."""
     # Parse arguments
@@ -284,7 +281,6 @@ async def main():
 
     finally:
         await migration.disconnect()
-
 
 if __name__ == "__main__":
     asyncio.run(main())

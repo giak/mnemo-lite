@@ -13,13 +13,11 @@ Environment:
     O2_PASSWORD: OpenObserve password (default: Complexpass#123)
 """
 
-import os
 import json
 import sys
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 from base64 import b64encode
-
 
 import sys
 from pathlib import Path
@@ -250,7 +248,6 @@ DASHBOARDS = [
     },
 ]
 
-
 def api_call(method: str, path: str, payload: dict | None = None) -> dict | None:
     """Make an authenticated API call to OpenObserve."""
     url = f"{O2_URL}/api/{ORG}{path}"
@@ -267,7 +264,6 @@ def api_call(method: str, path: str, payload: dict | None = None) -> dict | None
         print(f"  ERROR {method} {path} -> {e}")
         return None
 
-
 def create_dashboard(dashboard: dict) -> bool:
     """Create a dashboard in OpenObserve."""
     result = api_call("POST", "/dashboards", dashboard)
@@ -279,7 +275,6 @@ def create_dashboard(dashboard: dict) -> bool:
         title = dashboard.get("title", "unknown")
         print(f"  WARNING Dashboard may already exist: {title}")
         return True
-
 
 def main():
     print("=" * 60)
@@ -297,7 +292,6 @@ def main():
     print(f"\n{'=' * 60}")
     print(f"Results: {success}/{len(DASHBOARDS)} dashboards created")
     print(f"{'=' * 60}")
-
 
 if __name__ == "__main__":
     main()

@@ -5,18 +5,15 @@ Fixes conversations that were imported with wrong project name.
 """
 import asyncio
 from api.core import get_settings
-import os
 import sys
 from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-import re
 
 # Add API path
 sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
 
 from routes.conversations_routes import decode_project_path
-
 
 async def migrate_conversations():
     """Migrate conversations from 'projects' to correct projects."""
@@ -201,7 +198,6 @@ async def migrate_conversations():
     print("✅ Migration complete!")
 
     await engine.dispose()
-
 
 if __name__ == "__main__":
     asyncio.run(migrate_conversations())

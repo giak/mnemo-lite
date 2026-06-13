@@ -16,11 +16,9 @@ Decision criteria:
 
 import asyncio
 import time
-from pathlib import Path
 
 import psutil
 from sentence_transformers import SentenceTransformer
-
 
 def get_process_ram_mb():
     """Get current process RAM usage in MB."""
@@ -28,14 +26,12 @@ def get_process_ram_mb():
     mem_info = process.memory_info()
     return mem_info.rss / 1024 / 1024  # RSS = Resident Set Size (actual RAM)
 
-
 def format_ram(mb):
     """Format RAM size."""
     if mb < 1024:
         return f"{mb:.2f} MB"
     else:
         return f"{mb / 1024:.2f} GB"
-
 
 async def benchmark_code_model():
     """Benchmark jina-embeddings-v2-base-code model."""
@@ -198,7 +194,6 @@ def calculate_total(items):
     print()
 
     return verdict in ["OK", "CAUTION"]
-
 
 if __name__ == "__main__":
     print("Starting CODE model benchmark...")

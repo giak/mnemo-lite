@@ -12,7 +12,6 @@ This script:
 import asyncio
 from api.core import get_settings
 import sys
-import os
 from pathlib import Path
 from datetime import datetime
 

@@ -12,14 +12,12 @@ import time
 
 sys.path.insert(0, '/app')
 
-
 async def main():
     from services.sentence_transformer_embedding_service import (
         SentenceTransformerEmbeddingService,
         TextType,
         EMBEDDING_MODELS,
     )
-    import numpy as np
 
     print("=" * 60)
     print("Testing multilingual-e5-base integration")
@@ -86,7 +84,6 @@ async def main():
     print(f"\nTo use E5-base in production, set:")
     print('  EMBEDDING_MODEL="intfloat/multilingual-e5-base"')
     print("\nNote: First load downloads ~1.1GB model")
-
 
 if __name__ == "__main__":
     asyncio.run(main())

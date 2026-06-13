@@ -19,7 +19,6 @@ Usage (inside Docker container):
 
 import asyncio
 import sys
-import os
 import time
 import tracemalloc
 
@@ -67,7 +66,6 @@ MODELS = {
         "query_instruction": None,
     },
 }
-
 
 async def test_model(model_name: str, config: dict):
     """Test a specific model's performance."""
@@ -157,7 +155,6 @@ async def test_model(model_name: str, config: dict):
         "dimension": model.get_sentence_embedding_dimension(),
     }
 
-
 async def main():
     print("=" * 70)
     print("POC: Nomic v1.5 vs Snowflake Arctic-Embed-M v2.0")
@@ -244,7 +241,6 @@ async def main():
             print(f"  ⚠️  CONSIDER: Moderate improvement")
         else:
             print(f"  ❌ NOT RECOMMENDED for this use case")
-
 
 if __name__ == "__main__":
     asyncio.run(main())

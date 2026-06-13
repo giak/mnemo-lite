@@ -13,13 +13,11 @@ Environment:
     O2_PASSWORD: OpenObserve password (default: Complexpass#123)
 """
 
-import os
 import json
 import sys
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 from base64 import b64encode
-
 
 import sys
 from pathlib import Path
@@ -171,7 +169,6 @@ if exists(.method) && .method == "OPTIONS" {
     },
 ]
 
-
 def api_call(method: str, path: str, payload: dict | None = None) -> dict | None:
     """Make an authenticated API call to OpenObserve."""
     url = f"{O2_URL}/api/{ORG}{path}"
@@ -191,7 +188,6 @@ def api_call(method: str, path: str, payload: dict | None = None) -> dict | None
         print(f"  ERROR {method} {path} -> {e}")
         return None
 
-
 def create_function(name: str, vrl: str, order: int) -> bool:
     """Create or update a VRL function in OpenObserve."""
     payload = {
@@ -209,7 +205,6 @@ def create_function(name: str, vrl: str, order: int) -> bool:
     else:
         print(f"  FAIL Function creation failed: {name}")
         return False
-
 
 def main():
     print("=" * 60)
@@ -233,7 +228,6 @@ def main():
 
     if failed > 0:
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

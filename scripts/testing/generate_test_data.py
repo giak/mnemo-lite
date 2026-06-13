@@ -5,7 +5,6 @@ Ce script crée des événements fictifs avec différents contenus, métadonnée
 """
 
 import os
-from api.core.settings import get_settings
 import uuid
 import json
 import random
@@ -71,7 +70,6 @@ TAGS = [
     "private",
 ]
 
-
 async def generate_random_embedding():
     """Génère un vecteur d'embedding aléatoire."""
     # Générer un vecteur aléatoire
@@ -80,13 +78,11 @@ async def generate_random_embedding():
     embedding = embedding / np.linalg.norm(embedding)
     return embedding.tolist()
 
-
 def format_embedding_for_pgvector(embedding_list):
     """Formate une liste de flottants pour pgvector."""
     if embedding_list is None:
         return None
     return "[" + ",".join(map(str, embedding_list)) + "]"
-
 
 async def generate_event_content(category):
     """Génère un contenu aléatoire basé sur la catégorie."""
@@ -147,7 +143,6 @@ async def generate_event_content(category):
 
     return base_content
 
-
 async def generate_event_metadata(category, source):
     """Génère des métadonnées aléatoires."""
     # Métadonnées de base
@@ -181,7 +176,6 @@ async def generate_event_metadata(category, source):
         )
 
     return metadata
-
 
 async def insert_events(conn, num_events):
     """Insère un nombre spécifié d'événements aléatoires dans la base de données."""
@@ -226,7 +220,6 @@ async def insert_events(conn, num_events):
             print(f"  {i + 1} événements générés...")
 
     print("Génération des données de test terminée.")
-
 
 async def create_test_nodes_and_edges(conn):
     """Crée des noeuds et des arêtes de test pour le graphe conceptuel."""
@@ -297,7 +290,6 @@ async def create_test_nodes_and_edges(conn):
 
     print("Création du graphe de test terminée.")
 
-
 async def main():
     """Fonction principale."""
     print(f"Connexion à la base de données: {DATABASE_URL}")
@@ -338,7 +330,6 @@ async def main():
 
     except Exception as e:
         print(f"Erreur lors de la génération des données: {e}")
-
 
 if __name__ == "__main__":
     asyncio.run(main())

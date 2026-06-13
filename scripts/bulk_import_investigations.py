@@ -9,8 +9,6 @@ Usage:
 import asyncio
 import re
 import sys
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -18,8 +16,7 @@ from typing import Optional
 sys.path.insert(0, '/app')
 
 import structlog
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from db.repositories.memory_repository import MemoryRepository
 from services.dual_embedding_service import DualEmbeddingService, EmbeddingDomain

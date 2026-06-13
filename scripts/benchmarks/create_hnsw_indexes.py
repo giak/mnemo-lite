@@ -6,7 +6,6 @@ Assumes pg_partman has created partitions named like 'events_pYYYYMMDD'.
 import asyncio
 import asyncpg
 from api.core.settings import get_settings
-import argparse
 from datetime import datetime
 
 # --- Configuration ---

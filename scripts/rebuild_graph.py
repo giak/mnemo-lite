@@ -9,7 +9,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
 
 async def main():
-    import os
     from sqlalchemy.ext.asyncio import create_async_engine
     from services.graph_construction_service import GraphConstructionService
 

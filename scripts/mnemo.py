@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """MnemoLite CLI — Python rewrite. Zero quoting bugs."""
 import argparse
-import json
 import sys
-import urllib.parse
 
 try:
     import requests
@@ -13,7 +11,6 @@ except ImportError:
 
 BASE_URL = "http://localhost:8001"
 TIMEOUT = 120
-
 
 def api_get(path, params=None):
     """GET request, return JSON or die."""
@@ -27,7 +24,6 @@ def api_get(path, params=None):
         die("API timeout")
     except Exception as e:
         die(f"API error: {e}")
-
 
 def api_request(method, path, data=None):
     """HTTP request, return JSON or die."""
@@ -44,25 +40,18 @@ def api_request(method, path, data=None):
     except Exception as e:
         die(f"API error: {e}")
 
-
 def api_post(path, data):
     return api_request("post", path, data)
 
-
 def api_put(path, data):
     return api_request("put", path, data)
-
-
-
 
 def die(msg):
     print(f"❌ {msg}", file=sys.stderr)
     sys.exit(1)
 
-
 def ok(msg):
     print(f"✅ {msg}")
-
 
 def cmd_health(args):
     data = api_get("/readiness")
@@ -75,7 +64,6 @@ def cmd_health(args):
         print(f"   BDD: {'✅' if db else '❌'}")
     else:
         die(f"API status: {status}")
-
 
 def cmd_search(args):
     body = {"query": args.query, "limit": args.limit}
@@ -146,8 +134,6 @@ def cmd_update(args):
     mid = result.get("id", args.id)[:8]
     ok(f"Mémoire mise à jour: [{mid}]")
 
-
-
 def cmd_memories(args):
     data = api_get("/api/v1/memories/recent", params={"limit": args.limit})
     memories = data.get("data", data.get("memories", []))
@@ -164,7 +150,6 @@ def cmd_memories(args):
         mtype = m.get("memory_type", m.get("type", "?"))
         print(f"  [{mid}] {ts}  [{mtype}] {title}")
     print()
-
 
 def cmd_status(args):
     print()
@@ -204,7 +189,6 @@ def cmd_status(args):
         pass
     print()
 
-
 def main():
     parser = argparse.ArgumentParser(description="MnemoLite CLI")
     sub = parser.add_subparsers(dest="command")
@@ -230,7 +214,6 @@ def main():
     p_update.add_argument("--tags", help="Nouveaux tags (séparés par des virgules)")
     p_update.add_argument("--type", help="Nouveau type")
 
-
     p_mem = sub.add_parser("memories", help="Lister les mémoires récentes")
     p_mem.add_argument("--limit", "-l", type=int, default=10, help="Nombre")
 
@@ -252,7 +235,6 @@ def main():
     }
 
     commands[args.command](args)
-
 
 if __name__ == "__main__":
     main()
