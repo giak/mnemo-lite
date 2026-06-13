@@ -824,6 +824,7 @@ class SearchMemoryTool(BaseMCPComponent):
 
             # EPIC-32 Story 32.2: Check Redis cache for memory search
             redis = self._services.get("redis") if self._services else None
+            cache_key = None  # Initialize before conditional assignment
             if redis:
                 try:
                     import hashlib as _hashlib
