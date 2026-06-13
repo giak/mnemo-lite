@@ -636,6 +636,7 @@ async def server_lifespan(mcp: FastMCP) -> AsyncGenerator[None, None]:
     # Store services in mcp for access in registration functions
     mcp._services = services
 
+
     # Inject services into registered components
     from mnemo_mcp.tools.test_tool import ping_tool
     from mnemo_mcp.tools.search_tool import search_code_tool
@@ -835,6 +836,8 @@ def create_mcp_server() -> FastMCP:
 
     # Story 23.7: Configuration tools and resources
     register_config_components(mcp)
+
+
 
     # EPIC-28: Entity extraction tools
     register_entity_tools(mcp)
@@ -2515,25 +2518,28 @@ def register_entity_tools(mcp: FastMCP) -> None:
     from mcp.server.fastmcp import Context
     from typing import Dict, Any
 
-    mcp_services = getattr(mcp, "_services", {})
+    @mcp.tool()
+    async def extract_entities(memory_id: str) -> Dict[str, Any]:
+        """Re-extract entities from an existing memory using LM Studio."""
+        services = getattr(mcp, "_services", {})
+        tool = services.get("extract_entities_tool")
+        if not tool:
+            return {"error": "Entity extraction service not available", "success": False}
+        return await tool.execute(memory_id=memory_id)
 
-    if mcp_services.get("extract_entities_tool"):
-        @mcp.tool()
-        async def extract_entities(memory_id: str) -> Dict[str, Any]:
-            """Re-extract entities from an existing memory using LM Studio."""
-            tool = mcp_services["extract_entities_tool"]
-            return await tool.execute(memory_id=memory_id)
+    @mcp.tool()
+    async def search_by_entity(entity_name: str, limit: int = 10) -> Dict[str, Any]:
+        """Search memories containing a specific entity name."""
+        services = getattr(mcp, "_services", {})
+        tool = services.get("search_by_entity_tool")
+        if not tool:
+            return {"error": "Entity search service not available", "memories": [], "total": 0}
+        return await tool.execute(entity_name=entity_name, limit=limit)
 
-        @mcp.tool()
-        async def search_by_entity(entity_name: str, limit: int = 10) -> Dict[str, Any]:
-            """Search memories containing a specific entity name."""
-            tool = mcp_services["search_by_entity_tool"]
-            return await tool.execute(entity_name=entity_name, limit=limit)
-
-        logger.info(
-            "mcp.components.entity_tools.registered",
-            tools=["extract_entities", "search_by_entity"]
-        )
+    logger.info(
+        "mcp.components.entity_tools.registered",
+        tools=["extract_entities", "search_by_entity"]
+    )
 
 
 def register_relationship_tools(mcp: FastMCP) -> None:
