@@ -1,10 +1,10 @@
 """
-Tests unitaires pour reindex_bge_m3.py — EPIC-48 Story 48.3
+Tests unitaires pour reindex_bge_m3.py - EPIC-48 Story 48.3
 
 Couvre :
 - build_db_url() avec DATABASE_URL (cas nominal)
 - build_db_url() avec POSTGRES_* individuelles
-- build_db_url() avec POSTGRES_USER="" (le bug historique — chaine vide)
+- build_db_url() avec POSTGRES_USER="" (le bug historique : chaine vide)
 - build_db_url() avec fallback vers les defauts
 """
 
@@ -16,6 +16,29 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../scripts"))
 
 from reindex_bge_m3 import build_db_url
+
+# build_db_url() reads get_settings() from the legacy `core.settings` module
+# (scripts/reindex_bge_m3.py imports `from core.settings import get_settings`),
+# NOT from api.core.settings. This is the exact function whose lru_cache must
+# be cleared below. Note: the legacy module lives only inside the container
+# (absent from the repo, see EPIC-64 debt note), so this test file runs in
+# the container like the rest of the suite.
+from core.settings import get_settings
+
+
+@pytest.fixture(autouse=True)
+def _clear_settings_cache():
+    """Clear the get_settings lru_cache before and after each test.
+
+    build_db_url() reads get_settings() (lru_cache singleton). The cache is
+    populated with the real container env on first call, so the monkeypatch
+    setenv/delenv in the tests are no-ops without a cache_clear. Clearing the
+    cache before the test forces a re-read of the patched env; clearing it
+    after avoids leaking patched values into the next test file (EPIC-61 T4).
+    """
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 class TestBuildDbUrl:
@@ -48,7 +71,7 @@ class TestBuildDbUrl:
         """BUG HISTORIQUE : POSTGRES_USER="" (chaine vide) donnait user vide.
         L'operateur 'or' doit utiliser le defaut."""
         monkeypatch.delenv("DATABASE_URL", raising=False)
-        monkeypatch.setenv("POSTGRES_USER", "")  # chaine VIDE — pas absente
+        monkeypatch.setenv("POSTGRES_USER", "")  # chaine VIDE, pas absente
         monkeypatch.setenv("POSTGRES_PASSWORD", "mypass")
         monkeypatch.setenv("POSTGRES_HOST", "myhost")
         monkeypatch.setenv("POSTGRES_DB", "mydb")

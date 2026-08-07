@@ -2,10 +2,10 @@
 """
 Reindexe toutes les memoires avec BAAI/bge-m3 (1024D).
 
-EPIC-48 Story 48.3 — Semantic Search Optimization
+EPIC-48 Story 48.3 - Semantic Search Optimization
 
 Connexion DB (ordre de priorite) :
-1. DATABASE_URL (meme variable que l'API — fonctionnement garanti)
+1. DATABASE_URL (meme variable que l'API, fonctionnement garanti)
 2. POSTGRES_HOST/USER/PASSWORD/DB/PORT (fallback avec operateur 'or' pour chaines vides)
 
 Workflow:
@@ -21,7 +21,7 @@ Usage:
     # PyTorch FP32 (default)
     python3 scripts/reindex_bge_m3.py
 
-    # ONNX INT8 (2.5x faster, same quality, direct onnxruntime — no optimum needed)
+    # ONNX INT8 (2.5x faster, same quality, direct onnxruntime, no optimum needed)
     USE_ONNX=true python3 scripts/reindex_bge_m3.py
 """
 
@@ -53,7 +53,7 @@ DOC_PREFIX = ""
 def build_db_url() -> str:
     """Construit l'URL de connexion DB de maniere robuste.
 
-    Priorite 1 : DATABASE_URL (meme variable que l'API — garantie de fonctionner)
+    Priorite 1 : DATABASE_URL (meme variable que l'API, garantie de fonctionner)
     Priorite 2 : POSTGRES_* individuelles (fallback avec 'or' pour chaines vides)
     """
     # Priorite 1 : DATABASE_URL
@@ -72,11 +72,18 @@ def build_db_url() -> str:
         return db_url
 
     # Priorite 2 : POSTGRES_* individuelles (avec 'or' pour chaines vides)
-    user = get_settings().POSTGRES_USER
-    password = get_settings().POSTGRES_PASSWORD
-    host = get_settings().POSTGRES_HOST
+    # Le 'or' est obligatoire : pydantic-settings renvoie "" tel quel si la
+    # variable est presente mais vide (pas de fallback sur le defaut), et
+    # POSTGRES_PASSWORD a un defaut vide. Sans 'or', une URL invalide
+    # (utilisateur ou mot de passe vide) serait construite (EPIC-64).
+    # Password : le script prefere un defaut "mnemo" (URL fonctionnelle en
+    # dev) alors que le settings refuse le fallback en prod par design
+    # ("REQUIRED in production") : divergence volontaire, propre a ce script.
+    user = get_settings().POSTGRES_USER or "mnemo"
+    password = get_settings().POSTGRES_PASSWORD or "mnemo"
+    host = get_settings().POSTGRES_HOST or "db"
     port = str(get_settings().POSTGRES_PORT)
-    dbname = get_settings().POSTGRES_DB
+    dbname = get_settings().POSTGRES_DB or "mnemolite"
 
     print(f"Building DB URL from POSTGRES_* vars:")
     print(f"  User: {user}")
@@ -159,7 +166,7 @@ async def _main():
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy.sql import text
 
-    print(f"BGE-M3 Reindexing — EPIC-48 Story 48.3")
+    print(f"BGE-M3 Reindexing - EPIC-48 Story 48.3")
     backend = "ONNX INT8" if USE_ONNX else "PyTorch FP32"
     model_path = ONNX_MODEL_PATH if USE_ONNX else MODEL_NAME
     print(f"Model: {model_path}")
@@ -210,7 +217,7 @@ async def _main():
         print()
         sys.stdout.flush()
 
-        # 5. Reindex — cursor-based pagination (resilient to concurrent changes)
+        # 5. Reindex : cursor-based pagination (resilient to concurrent changes)
         last_id = ""  # empty string = start from beginning
         indexed = 0
         batch_num = 0
@@ -259,7 +266,7 @@ async def _main():
                 show_progress_bar=False,
             )
 
-            # Update DB in transaction — bulk executemany (1 round-trip vs 100)
+            # Update DB in transaction : bulk executemany (1 round-trip vs 100)
             async with engine.begin() as txn:
                 import numpy as np
                 params = [
