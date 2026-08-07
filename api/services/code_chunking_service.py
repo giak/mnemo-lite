@@ -795,8 +795,9 @@ class CodeChunkingService:
             )
             chunks.append(chunk)
 
-            # Move forward with overlap
-            i += lines_per_chunk - overlap_lines
+            # Move forward with overlap (ensure progress to avoid infinite loop)
+            step = max(1, lines_per_chunk - overlap_lines)
+            i += step
             chunk_num += 1
 
         logger.info(f"Fixed chunking: created {len(chunks)} chunks for {file_path}")

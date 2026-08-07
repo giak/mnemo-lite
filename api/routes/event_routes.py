@@ -158,16 +158,22 @@ async def delete_event(
 @router.post("/filter/metadata", response_model=List[EventModel])
 async def filter_events_by_metadata(
     service: Annotated[EventService, Depends(get_event_service)],
-    metadata_filter: Dict[str, Any] = Body(...),
+    body: Dict[str, Any] = Body(...),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> List[EventModel]:
     """
     Filtre les événements par métadonnées.
 
+    Accepts two body formats:
+    1. Direct metadata criteria: {"tags": ["circuit-9"], "status": "CONFIRME"}
+    2. Wrapped with operators: {"filters": {"tags": {"$contains": "circuit-9"}}}
+
+    Supports $contains operator for JSONB array fields (uses PostgreSQL ? operator).
+
     Args:
         service: Service injecté pour la gestion des événements
-        metadata_filter: Critères de filtrage (format: {"key": "value"})
+        body: Critères de filtrage (format direct ou avec clé 'filters' + opérateurs)
         limit: Nombre maximum de résultats à retourner
         offset: Index de départ pour la pagination
 
@@ -178,13 +184,30 @@ async def filter_events_by_metadata(
         HTTPException: En cas d'erreur lors du filtrage
     """
     try:
+        # Unwrap filters key if present (backward-compatible with documented API format)
+        if "filters" in body:
+            metadata_filter = body["filters"]
+        else:
+            metadata_filter = body
+
+        if not metadata_filter:
+            raise HTTPException(
+                status_code=422, detail="Filter criteria cannot be empty"
+            )
+
         return await service.filter_events_by_metadata(metadata_filter, limit, offset)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=422, detail=str(e)
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(
             f"Erreur lors du filtrage des événements par métadonnées: {str(e)}"
         )
         raise HTTPException(
-            status_code=500, detail="Filter failed"
+            status_code=500, detail=f"Filter failed: {str(e)}"
         )
 
 

@@ -775,11 +775,18 @@ class IndexMarkdownWorkspaceTool(BaseMCPComponent):
             chunk_repo = CodeChunkRepository(engine=engine)
 
             async with engine.begin() as conn:
-                # Delete existing chunks for this repository
-                await conn.execute(
-                    text("DELETE FROM code_chunks WHERE repository = :repo"),
-                    {"repo": repository}
-                )
+                # TEMP: Skip DELETE to allow incremental indexing
+                # await conn.execute(
+                #     text("DELETE FROM code_chunks WHERE repository = :repo"),
+                #     {"repo": repository}
+                # )
+                # Delete chunks for files being re-indexed (avoid duplicates)
+                file_paths = [f.path for f in md_files]
+                for fpath in file_paths:
+                    await conn.execute(
+                        text("DELETE FROM code_chunks WHERE repository = :repo AND file_path = :fp"),
+                        {"repo": repository, "fp": fpath}
+                    )
 
                 # Insert new chunks
                 from models.code_chunk_models import CodeChunkCreate

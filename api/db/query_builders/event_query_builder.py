@@ -4,8 +4,7 @@ Query builder for Event repository operations.
 Extracts all query construction logic from EventRepository to simplify the repository class.
 """
 
-import uuid
-import json
+import re
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -13,6 +12,9 @@ from sqlalchemy.sql import text
 from sqlalchemy.sql.expression import TextClause
 
 from .base_query_builder import BaseQueryBuilder
+
+# Valid field name pattern for JSONB metadata keys (prevents SQL injection)
+_VALID_FIELD_PATTERN = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 
 
 class EventQueryBuilder(BaseQueryBuilder):
@@ -168,6 +170,11 @@ class EventQueryBuilder(BaseQueryBuilder):
         """
         Build SELECT query with metadata filters.
 
+        Supports:
+        - Simple key-value matching via @> containment: {"status": "CONFIRME"}
+        - $contains operator for JSONB array fields: {"tags": {"$contains": "circuit-9"}}
+        - Mixed: simple fields use @>, $contains fields use ? operator
+
         Args:
             metadata_criteria: Metadata criteria to filter by
             limit: Maximum results
@@ -182,19 +189,55 @@ class EventQueryBuilder(BaseQueryBuilder):
         if not metadata_criteria:
             raise ValueError("Metadata criteria cannot be empty")
 
-        query_str = text("""
+        # Separate simple fields from $contains operators
+        simple_fields: Dict[str, Any] = {}
+        contains_conditions: list = []  # list of (field, value) tuples
+        param_index = 0
+
+        for key, value in metadata_criteria.items():
+            if isinstance(value, dict) and "$contains" in value:
+                # Validate field name to prevent SQL injection
+                if not _VALID_FIELD_PATTERN.match(key):
+                    raise ValueError(
+                        f"Invalid field name '{key}' for $contains operator. "
+                        f"Field names must match pattern: {_VALID_FIELD_PATTERN.pattern}"
+                    )
+                # Validate $contains value is a string (PostgreSQL ? operator requires text)
+                contains_val = value["$contains"]
+                if not isinstance(contains_val, str):
+                    raise ValueError(
+                        f"$contains value for field '{key}' must be a string, "
+                        f"got {type(contains_val).__name__}"
+                    )
+                contains_conditions.append((key, contains_val))
+            else:
+                simple_fields[key] = value
+
+        # Build WHERE clauses
+        conditions: List[str] = []
+        params: Dict[str, Any] = {"lim": limit, "off": offset}
+
+        # Simple fields: use @> containment
+        if simple_fields:
+            conditions.append("metadata @> CAST(:criteria AS jsonb)")
+            params["criteria"] = self._safe_json_dumps(simple_fields)
+
+        # $contains fields: use ? operator for JSONB arrays
+        for field, value in contains_conditions:
+            param_name = f"contains_val_{param_index}"
+            conditions.append(f"metadata->'{field}' ? :{param_name}")
+            params[param_name] = value
+            param_index += 1
+
+        where_clause = "WHERE " + " AND ".join(conditions)
+
+        query_str = text(f"""
             SELECT id, content, metadata, embedding, timestamp
             FROM events
-            WHERE metadata @> CAST(:criteria AS jsonb)
+            {where_clause}
             ORDER BY timestamp DESC
             LIMIT :lim OFFSET :off
         """)
-
-        params = {
-            "criteria": self._safe_json_dumps(metadata_criteria),
-            "lim": limit,
-            "off": offset
-        }
 
         self._log_query(query_str, params, "filter by metadata")
         return query_str, params

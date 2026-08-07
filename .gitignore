@@ -109,3 +109,6 @@ _DISABLED_*.py
 gliner_multi-v2.1/
 _study/
 shared_volumes/models/
+
+# Local tool artifacts
+.superpowers/
