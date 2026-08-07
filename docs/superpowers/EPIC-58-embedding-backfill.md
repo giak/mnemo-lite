@@ -1,9 +1,9 @@
 # 🔄 EPIC-58 : Backfill des embeddings manquants (861 mémoires) + P4-c rétroactif
 
-> **Status:** BACKLOG (proposé le 2026-08-07)
+> **Status:** ✅ DONE (implémenté et validé le 2026-08-07 : tests 5/5, dry-run réel OK)
 > **Priority:** P1 : 2,2 % du corpus invisible du vectoriel + cohérence avec EPIC-53
 > **Date:** 2026-08-07
-> **Effort:** 1-2 h
+> **Effort:** 1-2 h (réalisé en session)
 
 ## Problem Statement
 
@@ -12,36 +12,49 @@
 
 ## Cause racine (vérifiée dans le code le 2026-08-07)
 
-- `scripts/` ne contient que `backfill_memory_relationships.py` et `migrate_v2_to_v3.py` : **aucun backfill d'embeddings**.
 - `_trigger_async_embedding` (EPIC-53) s'exécute au write ; en cas d'échec (timeout, service down), rien ne retente : `embedding_half` reste NULL.
-- Un outil MCP `retry_indexing` existe pour le **code** (indexation code), pas pour les **mémoires**.
+- Le POC `scripts/backfill_memory_embeddings.py` existant était obsolète : colonne `embedding` seule (pas `embedding_half`), modèle nomic-768 (pas bge-m3), pas d'`embedding_source`, pas de retry.
+- Un outil MCP `retry_indexing` existe pour le **code**, pas pour les **mémoires**.
+
+## Implémentation (2026-08-07)
+
+**Choix KISS pour T2.1** : script CLI (pas de route admin ni d'outil MCP), c'est une opération de maintenance one-shot, cohérente avec `backfill_memory_relationships.py` et `backfill_name_path.py`. `--limit N` (0 = tout) + `--dry-run`.
+
+`scripts/backfill_memory_embeddings.py` (réécrit, POC → production) :
+- **T1.1** : `SELECT id, title, content, embedding_source FROM memories WHERE embedding_half IS NULL AND deleted_at IS NULL ORDER BY created_at DESC`
+- **T1.2** : texte vectorisé `title. {embedding_source or content}` (contrat EPIC-53 exact, `_build_embedding_text`) ; service réel `DualEmbeddingServiceAdapter` (bge-m3, même config que le boot API) ; retry backoff exponentiel `2**attempt` (pattern `_generate_embedding_with_retry`, pas tenacity, cohérent avec le repo)
+- **T1.3** : idempotent par construction (`WHERE embedding_half IS NULL`)
+- **T2.2** : rapport `{total, processed, failed, duration_seconds}` + logs par mémoire + RESTE à la fin
+- Écriture : `embedding ::vector`, `embedding_half ::halfvec`, `embedding_model = EMBEDDING_MODEL` (contrat EPIC-53)
 
 ## Stories / Tasks
 
 | Story | Task | Statut |
 |---|---|---|
-| S1. Outil de backfill | T1.1 Requête SQL `SELECT id, title, content, embedding_source FROM memories WHERE embedding_half IS NULL` | ⬜ |
-| | T1.2 Régénération avec retry/backoff (tenacity, comme le worker) et texte `title + embedding_source or content` (cohérent EPIC-53) | ⬜ |
-| | T1.3 Idempotence : relancer ne régénère pas l'existant (WHERE embedding_half IS NULL) | ⬜ |
-| S2. Exposition | T2.1 Route admin REST (`POST /api/v1/admin/backfill-embeddings`) OU outil MCP (`backfill_memories_embeddings`) : choisir le plus KISS | ⬜ |
-| | T2.2 Rapport : nombre traité, nombre en échec (après retries), durée | ⬜ |
-| S3. Tests | T3.1 `test_backfill_missing_only` : seules les mémoires `embedding_half IS NULL` sont traitées | ⬜ |
-| | T3.2 `test_backfill_retry_on_failure` : échec embedding → retry avec backoff, pas d'abandon | ⬜ |
-| | T3.3 `test_backfill_idempotent` : relancer ne régénère pas l'existant | ⬜ |
+| S1. Outil de backfill | T1.1 Requête SQL `WHERE embedding_half IS NULL` | ✅ |
+| | T1.2 Retry/backoff exponentiel + texte EPIC-53 (`title. source-or-content`) | ✅ |
+| | T1.3 Idempotence (WHERE embedding_half IS NULL) | ✅ |
+| S2. Exposition | T2.1 Script CLI `--limit` / `--dry-run` (choix KISS vs route/MCP) | ✅ |
+| | T2.2 Rapport traité/échec/durée/restant | ✅ |
+| S3. Tests | T3.1 `test_backfill_missing_only` | ✅ |
+| | T3.2 `test_backfill_retry_on_failure` (fail_first=1 → 2 appels, failed=0) | ✅ |
+| | T3.3 `test_backfill_idempotent` (2e run : 0 appel) | ✅ |
+| S4. Bonus | T4.1 `test_backfill_dry_run_writes_nothing` + `test_build_embedding_text_contract_epic53` | ✅ |
 
 ## Fichiers
 
-- `scripts/backfill_memory_embeddings.py` (nouveau) ou route dans `api/routes/`.
-- `api/mnemo_mcp/tools/indexing_tools.py` (si outil MCP retenu) ou `api/routes/memories_routes.py`.
-- `tests/mnemo_mcp/test_indexing_tools.py` ou `tests/api/test_memories_routes.py`.
+- `scripts/backfill_memory_embeddings.py` (réécrit : POC → production)
+- `tests/scripts/test_backfill_memory_embeddings.py` (nouveau, 5 tests, DB de test réelle)
 
-## Validation
+## Validation (résultats réels 2026-08-07)
 
-- Après exécution : requête `SELECT count(*) FROM memories WHERE embedding_half IS NULL` → proche de 0 (hors échecs résiduels rapportés).
-- Une mémoire précédemment invisible (ex. consolidée `58cc0e69`) retrouvée par une recherche vectorielle.
+1. ✅ Tests : **5/5 passed** (`tests/scripts/test_backfill_memory_embeddings.py`), avec cleanup autouse inter-tests.
+2. ✅ Dry-run réel sur la DB prod : **861 mémoires sans embedding_half** confirmées, embedding **1024D (bge-m3)** généré correctement, 0 échec.
+3. ⚠️ Exécution complète (861 mémoires) : **non lancée en session** (opération de maintenance longue, à lancer par l'opérateur : `docker compose exec api python scripts/backfill_memory_embeddings.py`).
+4. ⚠️ Préexistant documenté : `test_reindex_bge_m3.py` 5 F (même famille singleton `get_settings`, prouvé par stash), hors périmètre.
 
 ## Régressions
 
-- Le backfill n'écrit que la colonne embedding : aucun risque sur le contenu, les tags ou les relations.
-- Idempotent par construction (WHERE embedding_half IS NULL) : relance sans danger.
-- La route admin doit être protégée (auth) ou en tout cas documentée comme opération de maintenance.
+- Le backfill n'écrit que les colonnes embedding : aucun risque sur le contenu, les tags ou les relations.
+- Idempotent par construction : relance sans danger.
+- Script CLI : aucune surface d'attaque réseau (pas de route admin à protéger).
