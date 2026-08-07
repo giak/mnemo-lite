@@ -1,6 +1,6 @@
 # ⚡ EPIC-68 : Optimisation du boot de l'API (8-13 min → cible < 2 min)
 
-> **Status:** DONE (implémenté le 2026-08-07, piste B ; validation boot au prochain restart)
+> **Status:** DONE (implémenté le 2026-08-07, piste B ; **boot validé au restart du 2026-08-07 ~22 h 35** : startup ~6 s, health immédiat)
 > **Priority:** P2 (confort de dev et de déploiement, aucun impact fonctionnel)
 > **Date:** 2026-08-07
 > **Effort:** 1-2 h
@@ -27,8 +27,8 @@ Le démarrage de `mnemo-api` prend **~8-13 minutes** (diagnostic EPIC-55) : pré
 |---|---|---|
 | S1. Mesure | T1.1 Baseline : boot ~8-13 min (EPIC-55), goulot = `await dual_service.preload_models()` (chargement torch synchrone des 2 modèles) ; `USE_ONNX` non implémenté dans le service → piste A écartée (code neuf + risque qualité) | ✅ |
 | S2. Optimisation | T2.1 Piste B : helper `_preload_embedding_models` (try/except log) + `asyncio.create_task` NON bloquant en dev/test ; **fail-fast conservé en production** (await synchrone, décision documentée) ; tâche stockée dans `app.state.embedding_preload_task` et annulée au shutdown (pattern `alert_monitoring_task`, review) | ✅ |
-| S3. Validation | T3.1 Code : syntaxe OK, `test_api_flow.py` 18/18 (lifespan mock inchangé), impact tests zéro (fixtures real définissent `app.state.embedding_service` → skip) ; **boot < 2 min à mesurer au prochain restart** (différé : le backfill events EPIC-62 tourne, un recreate le tuerait) | ✅ (partiel) |
-| | T3.2 Recherches (texte + code) : mêmes modèles torch, zéro changement de qualité ; validation empirique au prochain restart | ⬜ (différé) |
+| S3. Validation | T3.1 Code : syntaxe OK, `test_api_flow.py` 18/18 (lifespan mock inchangé), impact tests zéro (fixtures real définissent `app.state.embedding_service` → skip) ; **boot mesuré au restart du 2026-08-07 22 h 35** | ✅ |
+| | T3.2 Validation empirique au restart : search text réel **200 en 0,58 s** (lazy-load fonctionnel, bge-m3 chargé) ; verdict final de la tâche async pas encore loggé sous contention avec le backfill memory EPIC-67 (à revérifier à CPU libre) | ✅ (partiel, point suivi) |
 
 ## Fichiers
 
@@ -42,12 +42,16 @@ Le démarrage de `mnemo-api` prend **~8-13 minutes** (diagnostic EPIC-55) : pré
 | `test_api_flow.py` (lifespan mock) | **18/18 passed** |
 | Impact tests real embeddings | Zéro : fixture `test_client_with_real_embeddings` définit `app.state.embedding_service` → le lifespan saute le bloc real ; `test_full_pipeline` n'utilise pas le lifespan |
 | Comportement prod | Inchangé : `ENVIRONMENT=production` → await synchrone (fail-fast) ; dev/test → boot immédiat + préchargement en fond |
-| Boot réel (< 2 min) | **À mesurer au prochain restart du conteneur** (après fin du backfill events EPIC-62, ~1500 restants) |
+| Boot réel (< 2 min) | **VALIDÉ le 2026-08-07 22 h 35** : `docker compose restart api` ; shutdown de l'ancien process 22 h 35 min 26 s Z → startup complet 22 h 35 min 33 s Z (**~6 s**) ; GET /health 200 immédiat (conteneur + host port 8001) ; Docker `Up (healthy)` |
+| Lazy-load réel | `GET /api/v1/memories/search?query=bonjour&limit=1` → **200 en 0,58 s** (modèle text chargé, encode le query sous contention avec le backfill memory) |
+| Preload async (tâche de fond) | Tâche lancée (warning jina après le startup = chargement code en cours) ; verdict final non loggé après ~40 min sous contention (bug code dimension 768 vs 1024 préexistant, voir EPIC-69) : point à revérifier à CPU libre |
 
 ## Validation
 
-- `time` de boot (restart mnemo-api) : cible < 2 min.
-- `GET /health` 200 ; aucune erreur de préchargement dans les logs ; recherches fonctionnelles.
+- `docker compose restart api` le 2026-08-07 22 h 35 : startup app **~6 s** (22 h 35 min 26 → 22 h 35 min 33 Z), contre 8-13 min avant.
+- `GET /health` 200 immédiat (conteneur + host 8001) ; Docker `healthy` ; **aucun crash** de preload (le try/except du helper loggue sans faire crasher, comportement voulu).
+- Lazy-load fonctionnel : search text 200 en 0,58 s.
+- Point suivi : verdict final de la tâche async (complétion ou erreur code) non loggé sous contention ; à revérifier une fois le backfill memory EPIC-67 fini (la tâche est annulée au shutdown, rechargée à chaque boot).
 
 ## Régressions
 
