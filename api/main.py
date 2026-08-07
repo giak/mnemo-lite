@@ -38,6 +38,26 @@ class ErrorResponse(BaseModel):
     detail: str
 
 
+async def _preload_embedding_models(dual_service) -> None:
+    """Précharge les modèles d'embedding en arrière-plan (EPIC-68).
+
+    Le boot ne doit plus attendre ~5-10 min de chargement CPU (bge-m3 +
+    jina-code). La tâche tourne en fond ; le premier appel d'embedding
+    attend le chargement via les locks du DualEmbeddingService au lieu du
+    boot. Une erreur est loggée sans faire crasher l'app : le lazy-load du
+    service prend le relais au premier usage.
+    """
+    try:
+        await dual_service.preload_models()
+        logger.info("Embedding models pre-loaded in background (EPIC-68)")
+    except Exception as e:
+        logger.error(
+            "Background embedding preload failed",
+            error=str(e),
+            exc_info=True,
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # EPIC-22 Story 22.6: Configure logging with trace_id propagation
@@ -130,12 +150,20 @@ async def lifespan(app: FastAPI):
 
             # Wrap with adapter for backward compatibility
             embedding_service = DualEmbeddingServiceAdapter(dual_service)
-
-            # Pre-load BOTH models at startup (TEXT + CODE)
-            await dual_service.preload_models()
-
-            logger.info("✅ Both embedding models pre-loaded successfully")
             app.state.embedding_service = embedding_service
+
+            if ENVIRONMENT == "production":
+                # Fail-fast conservé en production (décision documentée) :
+                # ne pas démarrer sans modèles d'embedding prêts.
+                await dual_service.preload_models()
+            else:
+                # EPIC-68 : preload asynchrone NON bloquant (dev/test).
+                # L'app (health) est disponible immédiatement ; les modèles
+                # se chargent en tâche de fond et le premier appel
+                # d'embedding attend cette tâche via les locks du service.
+                app.state.embedding_preload_task = asyncio.create_task(
+                    _preload_embedding_models(dual_service)
+                )
         except Exception as e:
             logger.error(
                 "❌ Failed to pre-load embedding model",
@@ -337,6 +365,21 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, "embedding_service") and app.state.embedding_service:
         del app.state.embedding_service
         logger.info("Embedding service cleaned up.")
+
+    # Cancel background embedding preload (EPIC-68) : tâche non bloquante
+    # en dev/test, annulée proprement au shutdown pour éviter les tâches
+    # orphelines ("Task was destroyed but it is pending").
+    if hasattr(app.state, "embedding_preload_task") and app.state.embedding_preload_task:
+        try:
+            app.state.embedding_preload_task.cancel()
+            try:
+                await app.state.embedding_preload_task
+            except asyncio.CancelledError:
+                pass
+        except Exception as e:
+            logger.warning("Error cancelling embedding preload task", error=str(e))
+        finally:
+            del app.state.embedding_preload_task
 
     # Cleanup Redis L2 cache (EPIC-10 Story 10.2)
     if hasattr(app.state, "redis_cache") and app.state.redis_cache:
