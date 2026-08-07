@@ -9,5 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy worker code
 COPY workers/ ./workers/
 
+# Copy api package (workers import api.core.settings)
+COPY api/ ./api/
+
 # Run worker
 CMD ["python", "-m", "workers.conversation_worker"]

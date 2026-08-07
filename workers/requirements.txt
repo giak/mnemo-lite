@@ -2,7 +2,8 @@ redis==5.0.1
 httpx==0.26.0
 structlog==24.1.0
 tenacity==8.2.3
-pydantic==2.5.3
+pydantic>=2.7.1
+pydantic-settings>=2.5.2  # required by api.core.settings (BaseSettings); pydantic-settings 2.5.2 requires pydantic>=2.7.0
 opentelemetry-api==1.22.0
 opentelemetry-sdk==1.22.0
 opentelemetry-exporter-otlp==1.22.0
