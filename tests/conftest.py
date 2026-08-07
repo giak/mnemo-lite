@@ -365,7 +365,7 @@ async def test_client(clean_db):
     from dependencies import get_db_engine, get_embedding_service
     from services.embedding_service import MockEmbeddingService
 
-    mock_service = MockEmbeddingService(model_name="mock", dimension=768)
+    mock_service = MockEmbeddingService(model_name="mock", dimension=1024)
 
     # Set app.state for middleware and other direct access
     app.state.db_engine = clean_db
@@ -400,11 +400,24 @@ async def test_client(clean_db):
 
 @pytest_asyncio.fixture
 async def test_client_with_real_embeddings(clean_db):
-    """Test client with real embeddings (for embedding integration tests)."""
+    """Test client with real embeddings (for embedding integration tests).
+
+    Force le mode EMBEDDING_MODE=real : conftest force mock globalement
+    (pour la vitesse de la suite), ce qui rendrait DualEmbeddingService
+    mock (hash, non semantique) et casserait les tests de similarite.
+    Restaure l'env apres le test (EPIC-62).
+    """
+    import os
+
     from main import app
     from httpx import AsyncClient, ASGITransport
     from dependencies import get_db_engine, get_embedding_service, DualEmbeddingServiceAdapter
     from services.dual_embedding_service import DualEmbeddingService
+    from api.core import get_settings as get_app_settings
+
+    _saved_mode = os.environ.get("EMBEDDING_MODE")
+    os.environ["EMBEDDING_MODE"] = "real"
+    get_app_settings.cache_clear()
 
     dual_service = DualEmbeddingService(device="cpu", text_dimension=1024, code_dimension=768)
     adapter = DualEmbeddingServiceAdapter(dual_service)
@@ -432,6 +445,11 @@ async def test_client_with_real_embeddings(clean_db):
             yield client
     finally:
         app.dependency_overrides = _saved_overrides
+        if _saved_mode is None:
+            os.environ.pop("EMBEDDING_MODE", None)
+        else:
+            os.environ["EMBEDDING_MODE"] = _saved_mode
+        get_app_settings.cache_clear()
 
 
 @pytest_asyncio.fixture
@@ -451,7 +469,7 @@ async def event_repository(clean_db):
 async def mock_embedding_service():
     """Mock embedding service for fast tests."""
     from services.embedding_service import MockEmbeddingService
-    return MockEmbeddingService(model_name="mock", dimension=768)
+    return MockEmbeddingService(model_name="mock", dimension=1024)
 
 
 @pytest_asyncio.fixture

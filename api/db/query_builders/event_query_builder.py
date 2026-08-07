@@ -20,12 +20,12 @@ _VALID_FIELD_PATTERN = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 class EventQueryBuilder(BaseQueryBuilder):
     """Builds SQL queries for EventRepository using SQLAlchemy Core."""
 
-    def __init__(self, vector_dimension: int = 768):
+    def __init__(self, vector_dimension: int = 1024):
         """
         Initialize the event query builder.
 
         Args:
-            vector_dimension: Expected dimension for embedding vectors (default: 768 for nomic-embed-text-v1.5)
+            vector_dimension: Expected dimension for embedding vectors (default: 1024 for BGE-M3, EPIC-62)
         """
         super().__init__()
         self.vector_dimension = vector_dimension

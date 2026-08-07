@@ -241,17 +241,19 @@ class TestEmbeddingIntegration:
                 "content": {"text": text}
             })
 
-        # Search for "Python programming"
-        response = await test_client_with_real_embeddings.post("/v1/search/", json={
-            "query": "Python programming",
-            "limit": 3
-        })
+        # Search for "Python programming" via the events vector path
+        # (POST /v1/search/ cherche dans memories depuis EPIC-59 ;
+        # la voie events est GET /v1/search/?vector_query=...)
+        response = await test_client_with_real_embeddings.get(
+            "/v1/search/",
+            params={"vector_query": "Python programming", "limit": 3},
+        )
 
         results = response.json()
-        assert len(results["events"]) > 0
+        assert len(results["data"]) > 0
 
         # Top results should be Python-related
-        top_result_texts = [e["content"]["text"] for e in results["events"][:2]]
+        top_result_texts = [e["content"]["text"] for e in results["data"][:2]]
         assert any("Python" in text for text in top_result_texts)
 
         # Pasta should not be in top results

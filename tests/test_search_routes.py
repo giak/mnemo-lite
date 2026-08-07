@@ -239,7 +239,7 @@ async def client(test_db_pool: asyncpg.Pool):  # Depends on the function-scoped 
 # --- Fonctions d'aide (Helper) ---
 
 
-def generate_fake_vector(dim: int = 768) -> List[float]:
+def generate_fake_vector(dim: int = 1024) -> List[float]:
     """Génère un vecteur factice de la dimension spécifiée."""
     return [random.uniform(0.0, 1.0) for _ in range(dim)]
 

@@ -66,6 +66,25 @@ class VectorSearchService:
         self.engine = engine
         self.ef_search = ef_search
 
+    @staticmethod
+    def _expected_dim_for_domain(embedding_domain: str) -> int:
+        """Dimension attendue selon le domaine (EPIC-62).
+
+        La table cible `code_chunks` est legacy 768D pour les DEUX domaines
+        (embedding_text_half et embedding_code_half = halfvec(768), verifie
+        en base). Le service utilisait EMBEDDING_DIMENSION (1024, bge-m3)
+        pour les deux, ce qui cassait toute recherche contre code_chunks
+        ("Embedding must be a 1024-dimensional vector" puis mismatch SQL
+        colonne 768).
+
+        -> 768 pour TEXT et CODE, aligne sur le schema legacy.
+        NB: la migration de code_chunks vers 1024 est une EPIC dediee.
+        """
+        settings = get_settings()
+        # Le schema legacy code_chunks fait foi (768 pour les deux domaines).
+        # CODE_EMBEDDING_DIMENSION = 768 (jina-code) couvre aussi TEXT ici.
+        return settings.CODE_EMBEDDING_DIMENSION or 768
+
     async def search(
         self,
         embedding: List[float],
@@ -92,7 +111,7 @@ class VectorSearchService:
         Raises:
             ValueError: If embedding is invalid or domain unknown
         """
-        expected_dim = get_settings().EMBEDDING_DIMENSION
+        expected_dim = self._expected_dim_for_domain(embedding_domain)
         if hasattr(embedding, 'tolist'):
             embedding = embedding.tolist()
         if embedding is None or len(embedding) != expected_dim:
