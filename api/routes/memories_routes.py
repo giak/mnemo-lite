@@ -554,6 +554,7 @@ async def _search_memories(
         filters = MemoryFilters(
             memory_type=memory_type_enum,
             tags=tags or [],
+            exclude_conversations=memory_type_enum is None,
         )
 
         # Search using hybrid service

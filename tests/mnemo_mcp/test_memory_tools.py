@@ -328,6 +328,56 @@ class TestWriteMemoryTool:
         assert response["embedding_generated"] is False
 
 
+    @pytest.mark.asyncio
+    async def test_async_embedding_text_includes_title(
+        self, mock_ctx, mock_memory_repository
+    ):
+        """P4-c: the vectorized text must include the title before content/embedding_source."""
+        import asyncio
+        from unittest.mock import patch
+
+        tool = WriteMemoryTool()
+
+        embedding_service = AsyncMock()
+        embedding_service.generate_embedding.return_value = [0.1, 0.2]
+
+        engine = MagicMock()
+        engine.begin.return_value.__aenter__.return_value.execute = AsyncMock()
+        mock_memory_repository.engine = engine
+
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "embedding_service": embedding_service,
+        })
+
+        memory = MagicMock()
+        memory.id = "mem-p4c"
+        memory.title = "Parrainages 2022"
+
+        with patch("mnemo_mcp.tools.memory_tools.get_settings") as mock_settings:
+            mock_settings.return_value.EMBEDDING_MODEL = "bge-m3"
+            # Case 1: embedding_source provided → title + embedding_source
+            tool._trigger_async_embedding(
+                memory,
+                "contenu long avec les chiffres parrainages",
+                "résumé court",
+            )
+            await asyncio.sleep(0.05)
+            # Case 2: no embedding_source → title + full content
+            tool._trigger_async_embedding(
+                memory,
+                "contenu long avec les chiffres parrainages",
+            )
+            await asyncio.sleep(0.05)
+
+        assert embedding_service.generate_embedding.await_count == 2
+        texts = [c.args[0] for c in embedding_service.generate_embedding.await_args_list]
+        assert texts[0].startswith("Parrainages 2022.")
+        assert "résumé court" in texts[0]
+        assert texts[1].startswith("Parrainages 2022.")
+        assert "contenu long avec les chiffres parrainages" in texts[1]
+
+
 class TestUpdateMemoryTool:
     """Tests for UpdateMemoryTool."""
 

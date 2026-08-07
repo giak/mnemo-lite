@@ -511,6 +511,9 @@ class MemoryRepository:
                         where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE :lc_summary)")
                         params["lc_summary"] = "%:summary"
 
+                if filters.exclude_conversations:
+                    where_clauses.append("memory_type != 'conversation'")
+
             where_sql = " AND ".join(where_clauses)
 
             # Format vector for pgvector halfvec (validated via helper)
@@ -576,6 +579,7 @@ class MemoryRepository:
         filters: Optional[MemoryFilters] = None,
         limit: int = 10,
         offset: int = 0,
+        query_text: Optional[str] = None,
     ) -> Tuple[List[Memory], int]:
         """
         Search memories by tags/filters only (no vector similarity).
@@ -642,6 +646,17 @@ class MemoryRepository:
                         where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE :lc_summary)")
                         params["lc_summary"] = "%:summary"
 
+                if filters.exclude_conversations:
+                    where_clauses.append("memory_type != 'conversation'")
+
+            if query_text:
+                # Text search: every word must appear in title or content (parameterized ILIKE, wildcards escaped)
+                words = [w for w in query_text.split() if w]
+                for i, word in enumerate(words):
+                    escaped = word.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                    where_clauses.append(f"(title ILIKE :qt{i} ESCAPE '\\' OR content ILIKE :qt{i} ESCAPE '\\')")
+                    params[f"qt{i}"] = f"%{escaped}%"
+
             where_sql = " AND ".join(where_clauses)
 
             query = text(f"""
@@ -674,10 +689,11 @@ class MemoryRepository:
             memories = [self._row_to_memory(row) for row in rows]
 
             self.logger.info(
-                "Tag-only search completed",
+                "Repository search completed",
                 count=len(memories),
                 total=total_count,
                 tags=filters.tags if filters else None,
+                query_text=query_text,
             )
 
             return memories, total_count

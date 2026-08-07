@@ -360,6 +360,10 @@ class MemoryFilters(BaseModel):
         None,
         description="Filter by memory type"
     )
+    exclude_conversations: bool = Field(
+        False,
+        description="Exclude memories of type 'conversation' (default search behavior for agents)"
+    )
     tags: List[str] = Field(
         default_factory=list,
         description="Filter by tags (AND logic - memory must have all tags)"

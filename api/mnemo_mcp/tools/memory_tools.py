@@ -16,6 +16,7 @@ Consolidation (Expanse Apex §V):
 import time
 import json
 import asyncio
+import re
 from typing import Optional, List, Dict, Any, Union
 import uuid
 from datetime import datetime, timezone
@@ -324,7 +325,8 @@ class WriteMemoryTool(BaseMCPComponent):
                 if emb_svc is None:
                     logger.debug("async_embedding_skipped", reason="no_embedding_service")
                     return
-                text = embedding_source or content
+                title = getattr(memory, "title", "") or ""
+                text = f"{title}. {embedding_source or content}" if title else (embedding_source or content)
                 embedding = await emb_svc.generate_embedding(text)
                 if embedding is None or len(embedding) == 0:
                     return
@@ -868,6 +870,7 @@ class SearchMemoryTool(BaseMCPComponent):
                     tags=tags or [],
                     consumed=consumed,
                     lifecycle_state=lifecycle_state,
+                    exclude_conversations=memory_type_enum is None,
                 )
 
                 # EPIC-32: Extract HL/LL keywords (deterministic, no LLM)
@@ -930,14 +933,21 @@ class SearchMemoryTool(BaseMCPComponent):
                     }
                 }
             else:
-                # Fallback: tag-only or repository search (no hybrid service)
+                # Fallback: text, tag-only or repository search (no hybrid service)
                 from mnemo_mcp.models.memory_models import MemoryFilters
-                effective_tags = tags if tags else ([query_stripped] if is_tag_only else [])
+                # A query shaped like a tag (e.g. "sys:history", "project:truth-engine") is a tag lookup, not free text.
+                # Restricted to the tag pattern so free text with a colon ("loi 76-528 : parrainages") stays text search.
+                looks_like_tag = bool(
+                    re.fullmatch(r"[a-z][a-z0-9_-]*(:[a-z0-9_.-]+)+", query_stripped, re.IGNORECASE)
+                    if query_stripped else False
+                )
+                effective_tags = tags or ([query_stripped] if looks_like_tag else [])
                 fallback_filters = MemoryFilters(
                     memory_type=memory_type_enum,
                     tags=effective_tags,
                     consumed=consumed,
                     lifecycle_state=lifecycle_state,
+                    exclude_conversations=memory_type_enum is None,
                 )
 
                 if query_embedding is not None:
@@ -949,6 +959,14 @@ class SearchMemoryTool(BaseMCPComponent):
                         distance_threshold=0.7,
                     )
                     search_mode = "vector_only"
+                elif query_stripped and not looks_like_tag:
+                    memories_list, total_count = await self.memory_repository.search_by_tags(
+                        filters=fallback_filters,
+                        limit=limit,
+                        offset=offset,
+                        query_text=query_stripped,
+                    )
+                    search_mode = "text"
                 else:
                     memories_list, total_count = await self.memory_repository.search_by_tags(
                         filters=fallback_filters,

@@ -575,6 +575,9 @@ class HybridMemorySearchService:
                 elif filters.lifecycle_state == "summary":
                     where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:summary')")
 
+            if filters.exclude_conversations:
+                where_clauses.append("memory_type != 'conversation'")
+
         where_sql = " AND ".join(where_clauses)
 
         # Optimized approach: ILIKE + trigram on title/embedding_source ONLY
@@ -680,6 +683,9 @@ class HybridMemorySearchService:
                 elif filters.lifecycle_state == "summary":
                     where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:summary')")
 
+            if filters.exclude_conversations:
+                where_clauses.append("memory_type != 'conversation'")
+
         where_sql = " AND ".join(where_clauses)
 
         # Format vector for pgvector halfvec (validated via helper)
@@ -784,6 +790,9 @@ class HybridMemorySearchService:
                 elif filters.lifecycle_state == "summary":
                     where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:summary')")
 
+            if filters.exclude_conversations:
+                where_clauses.append("memory_type != 'conversation'")
+
         where_sql = " AND ".join(where_clauses)
 
         # Build JSONB containment conditions for each keyword
@@ -880,6 +889,9 @@ class HybridMemorySearchService:
                     where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:doubt')")
                 elif filters.lifecycle_state == "summary":
                     where_clauses.append("EXISTS (SELECT 1 FROM unnest(tags) t WHERE t LIKE '%:summary')")
+
+            if filters.exclude_conversations:
+                where_clauses.append("memory_type != 'conversation'")
 
         where_sql = " AND ".join(where_clauses)
 

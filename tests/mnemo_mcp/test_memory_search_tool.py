@@ -289,7 +289,8 @@ class TestSearchMemoryTool:
 
         assert len(result["memories"]) == 1
         assert result["memories"][0]["id"] == "regression-test-id"
-        assert result["metadata"]["search_mode"] == "tag_only"
+        # P2: free-text query without search_mode now uses the text fallback
+        assert result["metadata"]["search_mode"] == "text"
 
     # ---- Input validation ----
 
@@ -519,13 +520,175 @@ class TestSearchMemoryTool:
         assert result["memories"][0]["id"] == "fallback-id"
         assert result["memories"][0]["title"] == "Fallback result"
 
+    # ---- P2: text fallback (query without search_mode) ----
+
+    @pytest.mark.asyncio
+    async def test_query_without_search_mode_uses_text_fallback(
+        self, mock_ctx, mock_memory_repository, mock_redis
+    ):
+        """Query without search_mode must use search_by_tags with query_text, never tag=[query]."""
+        tool = SearchMemoryTool()
+
+        mock_mem = _make_mock_memory(
+            memory_id="text-id",
+            title="Parrainages 2022",
+            content="Asselineau a recueilli 293 parrainages",
+            tags=["kernel"],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
+
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "redis": mock_redis,
+        })
+
+        result = await tool.execute(
+            ctx=mock_ctx,
+            query="Asselineau 293",
+            limit=5,
+        )
+
+        assert len(result["memories"]) == 1
+        assert result["metadata"]["search_mode"] == "text"
+        call_kwargs = mock_memory_repository.search_by_tags.call_args.kwargs
+        assert call_kwargs["query_text"] == "Asselineau 293"
+
+    @pytest.mark.asyncio
+    async def test_colon_free_text_uses_text_fallback(
+        self, mock_ctx, mock_memory_repository, mock_redis
+    ):
+        """Free text with a French colon must NOT be treated as a tag lookup."""
+        tool = SearchMemoryTool()
+
+        mock_mem = _make_mock_memory(
+            memory_id="colon-id",
+            title="Loi 76-528",
+            content="loi du 18 juin 1976 parrainages",
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
+
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "redis": mock_redis,
+        })
+
+        result = await tool.execute(ctx=mock_ctx, query="loi 76-528 : parrainages", limit=5)
+
+        assert result["metadata"]["search_mode"] == "text"
+        call_kwargs = mock_memory_repository.search_by_tags.call_args.kwargs
+        assert call_kwargs["query_text"] == "loi 76-528 : parrainages"
+
+    @pytest.mark.asyncio
+    async def test_multi_colon_tag_uses_tag_lookup(
+        self, mock_ctx, mock_memory_repository, mock_redis
+    ):
+        """Nested tags (sys:pattern:candidate) must be treated as a tag lookup, not free text."""
+        tool = SearchMemoryTool()
+
+        mock_mem = _make_mock_memory(
+            memory_id="nested-tag-id",
+            title="Nested",
+            content="x",
+            tags=["sys:pattern:candidate"],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
+
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "redis": mock_redis,
+        })
+
+        result = await tool.execute(ctx=mock_ctx, query="sys:pattern:candidate", limit=5)
+
+        assert result["metadata"]["search_mode"] == "tag_only"
+        filters = mock_memory_repository.search_by_tags.call_args.kwargs["filters"]
+        assert filters.tags == ["sys:pattern:candidate"]
+
+    @pytest.mark.asyncio
+    async def test_tags_without_query_stays_tag_only(
+        self, mock_ctx, mock_memory_repository, mock_redis
+    ):
+        """Tags-only listing must keep using search_by_tags without query_text."""
+        tool = SearchMemoryTool()
+
+        mock_mem = _make_mock_memory(memory_id="tag-id", title="Tagged", content="x", tags=["sys:anchor"])
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
+
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "redis": mock_redis,
+        })
+
+        result = await tool.execute(
+            ctx=mock_ctx,
+            query=None,
+            tags=["sys:anchor"],
+            limit=5,
+        )
+
+        assert result["metadata"]["search_mode"] == "tag_only"
+        call_kwargs = mock_memory_repository.search_by_tags.call_args.kwargs
+        assert call_kwargs.get("query_text") is None
+
+    # ---- P5-a: conversations excluded by default ----
+
+    @pytest.mark.asyncio
+    async def test_fallback_excludes_conversations_by_default(
+        self, mock_ctx, mock_memory_repository, mock_redis
+    ):
+        """Text fallback must exclude memory_type=conversation when no memory_type filter given."""
+        tool = SearchMemoryTool()
+
+        mock_memory_repository.search_by_tags.return_value = ([], 0)
+        mock_redis.get.return_value = None
+
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "redis": mock_redis,
+        })
+
+        await tool.execute(ctx=mock_ctx, query="parrainages", limit=5)
+
+        filters = mock_memory_repository.search_by_tags.call_args.kwargs["filters"]
+        assert filters.exclude_conversations is True
+
+    @pytest.mark.asyncio
+    async def test_explicit_memory_type_disables_conversation_exclusion(
+        self, mock_ctx, mock_memory_repository, mock_redis
+    ):
+        """Explicit memory_type=conversation must disable the exclusion."""
+        tool = SearchMemoryTool()
+
+        mock_memory_repository.search_by_tags.return_value = ([], 0)
+        mock_redis.get.return_value = None
+
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "redis": mock_redis,
+        })
+
+        await tool.execute(
+            ctx=mock_ctx,
+            query=None,
+            tags=["kernel"],
+            memory_type="conversation",
+            limit=5,
+        )
+
+        filters = mock_memory_repository.search_by_tags.call_args.kwargs["filters"]
+        assert filters.exclude_conversations is False
+
     # ---- Error handling ----
 
     @pytest.mark.asyncio
-    async def test_embedding_failure_falls_back_to_tag_search(
+    async def test_embedding_failure_falls_back_to_text_search(
         self, mock_ctx, mock_memory_repository, mock_redis
     ):
-        """Test that embedding failure falls back to tag-only search."""
+        """Test that embedding failure falls back to text search (not tag=[query])."""
         tool = SearchMemoryTool()
 
         mock_embedding = AsyncMock()
@@ -553,7 +716,10 @@ class TestSearchMemoryTool:
         )
 
         assert len(result["memories"]) == 1
-        assert result["metadata"]["search_mode"] == "tag_only"
+        # P2: query without search_mode → text fallback (even when hybrid embedding failed)
+        assert result["metadata"]["search_mode"] == "text"
+        call_kwargs = mock_memory_repository.search_by_tags.call_args.kwargs
+        assert call_kwargs.get("query_text") == "test query"
 
     # ---- Response structure ----
 
