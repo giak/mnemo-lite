@@ -25,6 +25,25 @@ from services.dual_embedding_service import (
 # Fixtures
 # ============================================================================
 
+@pytest.fixture(autouse=True)
+def _force_real_embedding_mode():
+    """Force EMBEDDING_MODE=real for this file.
+
+    tests/conftest.py sets EMBEDDING_MODE=mock at session level (full-suite
+    run optimization, EPIC-57). The mock branch short-circuits model loading
+    in _ensure_text_model/_ensure_code_model, so the tests that verify the
+    REAL loading contract (lazy loading, RAM safeguard, dimension check,
+    circuit breaker) would fail by design.
+
+    SentenceTransformer is patched in every test that loads a model, so no
+    real model is ever loaded: the file stays fast in the full-suite run.
+    """
+    with patch.dict("os.environ", {"EMBEDDING_MODE": "real"}, clear=False):
+        get_settings.cache_clear()  # Reload settings with real mode
+        yield
+        get_settings.cache_clear()  # Invalidate cache (env restored after with)
+
+
 @pytest.fixture
 def mock_sentence_transformer():
     """Mock SentenceTransformer model."""
