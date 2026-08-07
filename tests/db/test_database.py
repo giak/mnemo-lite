@@ -18,6 +18,7 @@ from api.core import get_settings
 def mock_env_vars(monkeypatch):
     """Set up test environment variables."""
     monkeypatch.setenv("DATABASE_URL", "postgresql://testuser:testpass@testhost:5432/testdb")
+    get_settings.cache_clear()  # Rebuild settings with the patched env var
 
 
 @pytest.fixture
@@ -69,6 +70,7 @@ def test_database_init_with_default_dsn(monkeypatch):
     """
     # Remove DATABASE_URL from environment
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    get_settings.cache_clear()  # Rebuild settings without the env var
 
     db = Database()
 
@@ -385,21 +387,28 @@ async def test_dsn_priority_order():
     """
     custom_dsn = "postgresql://custom:pass@custom:5432/custom"
 
-    # Priority 1: Custom DSN (should override env)
-    with patch.dict(os.environ, {"DATABASE_URL": "postgresql://env:pass@env:5432/env"}):
-        get_settings.cache_clear()  # Pick up patched env vars
-        db = Database(dsn=custom_dsn)
-        assert db.dsn == custom_dsn
+    try:
+        # Priority 1: Custom DSN (should override env)
+        with patch.dict(os.environ, {"DATABASE_URL": "postgresql://env:pass@env:5432/env"}):
+            get_settings.cache_clear()  # Pick up patched env vars
+            db = Database(dsn=custom_dsn)
+            assert db.dsn == custom_dsn
 
-    # Priority 2: Environment variable
-    with patch.dict(os.environ, {"DATABASE_URL": "postgresql://env:pass@env:5432/env"}):
-        get_settings.cache_clear()  # Pick up patched env vars
-        db = Database()
-        assert db.dsn == "postgresql://env:pass@env:5432/env"
+        # Priority 2: Environment variable
+        with patch.dict(os.environ, {"DATABASE_URL": "postgresql://env:pass@env:5432/env"}):
+            get_settings.cache_clear()  # Pick up patched env vars
+            db = Database()
+            assert db.dsn == "postgresql://env:pass@env:5432/env"
 
-    # Priority 3: Default (when no custom or env)
-    with patch.dict(os.environ, {}, clear=True):
-        get_settings.cache_clear()  # Pick up patched env vars
-        db = Database()
-        assert "postgresql://" in db.dsn
-        assert "mnemolite" in db.dsn.lower()
+        # Priority 3: Default (when no custom or env)
+        with patch.dict(os.environ, {}, clear=True):
+            get_settings.cache_clear()  # Pick up patched env vars
+            db = Database()
+            assert "postgresql://" in db.dsn
+            assert "mnemolite" in db.dsn.lower()
+    finally:
+        # Exception-safe restore of the settings cache with the real environment:
+        # patch.dict(clear=True) leaves a stale settings snapshot (no TEST_DATABASE_URL)
+        # in the lru_cache, which breaks session-scoped test_db_url for later test
+        # files (EPIC-61). Run even if an assert fails mid-test.
+        get_settings.cache_clear()

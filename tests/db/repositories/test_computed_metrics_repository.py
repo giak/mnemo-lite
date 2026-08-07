@@ -72,6 +72,8 @@ async def test_update_coupling_metrics(clean_db):
     # Update coupling
     updated = await repo.update_coupling(
         node_id=sample_node_id,
+        chunk_id=sample_chunk_id,
+        repository="test_repo",
         afferent_coupling=10,
         efferent_coupling=5
     )

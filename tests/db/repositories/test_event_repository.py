@@ -361,7 +361,7 @@ async def test_search_vector_metadata_only(mocker):
     mock_result = AsyncMock(spec=Result)
     mock_count_result = AsyncMock(spec=Result)  # Separate result for count query
     mock_builder = MagicMock(spec=EventQueryBuilder)  # Mock builder
-    mock_engine.connect.return_value.__aenter__.return_value = mock_connection
+    mock_engine.begin.return_value.__aenter__.return_value = mock_connection
 
     criteria = {"source": "search_test"}
     expected_id1 = uuid.uuid4()
@@ -468,7 +468,7 @@ async def test_search_vector_vector_only(mocker):
     mock_result = AsyncMock(spec=Result)
     mock_count_result = AsyncMock(spec=Result)  # Separate result for count query
     mock_builder = MagicMock(spec=EventQueryBuilder)  # Mock builder
-    mock_engine.connect.return_value.__aenter__.return_value = mock_connection
+    mock_engine.begin.return_value.__aenter__.return_value = mock_connection
 
     query_vector = [0.1, 0.9, 0.2]
     expected_id1 = uuid.uuid4()
@@ -496,8 +496,8 @@ async def test_search_vector_vector_only(mocker):
     mock_count_mappings.first.return_value = {'total': 1}
     mock_count_result.mappings.return_value = mock_count_mappings
 
-    # Execute will be called twice: once for search, once for count
-    mock_connection.execute.side_effect = [mock_result, mock_count_result]
+    # Execute is called three times: SET LOCAL ivfflat.probes (ignored), search, then count
+    mock_connection.execute.side_effect = [mock_result, mock_result, mock_count_result]
 
     # Define test_limit and test_offset before using them in mock_params_data
     test_limit = 10
@@ -537,14 +537,15 @@ async def test_search_vector_vector_only(mocker):
         distance_threshold=None # Updated default: 5.0 → None
     )
 
-    # Assert execute was called twice: once for search, once for count
-    assert mock_connection.execute.await_count == 2
-    # Verify first call was for search query
-    first_call = mock_connection.execute.await_args_list[0]
+    # Assert execute was called three times: SET LOCAL, search, then count
+    assert mock_connection.execute.await_count == 3
+    # Call 0 is SET LOCAL ivfflat.probes (result ignored)
+    # Verify second call was for search query
+    first_call = mock_connection.execute.await_args_list[1]
     assert first_call[0][0] == mock_query_data
     assert first_call[0][1] == mock_params_data
-    # Verify second call was for count query
-    second_call = mock_connection.execute.await_args_list[1]
+    # Verify third call was for count query
+    second_call = mock_connection.execute.await_args_list[2]
     assert second_call[0][0] == mock_count_query
     assert second_call[0][1] == mock_count_params
 
@@ -567,7 +568,7 @@ async def test_search_vector_hybrid(mocker):
     mock_result = AsyncMock(spec=Result)
     mock_count_result = AsyncMock(spec=Result)  # Separate result for count query
     mock_builder = MagicMock(spec=EventQueryBuilder)  # Mock builder
-    mock_engine.connect.return_value.__aenter__.return_value = mock_connection
+    mock_engine.begin.return_value.__aenter__.return_value = mock_connection
 
     query_vector = [0.5, 0.5]
     criteria = {"tag": "hybrid"}
@@ -596,8 +597,8 @@ async def test_search_vector_hybrid(mocker):
     mock_count_mappings.first.return_value = {'total': 1}
     mock_count_result.mappings.return_value = mock_count_mappings
 
-    # Execute will be called twice: once for search, once for count
-    mock_connection.execute.side_effect = [mock_result, mock_count_result]
+    # Execute is called three times: SET LOCAL ivfflat.probes (ignored), search, then count
+    mock_connection.execute.side_effect = [mock_result, mock_result, mock_count_result]
 
     # Define test_limit and test_offset before using them in mock_params_data
     test_limit = 5
@@ -647,14 +648,15 @@ async def test_search_vector_hybrid(mocker):
         distance_threshold=None # Updated default: 5.0 → None
     )
 
-    # Assert execute was called twice: once for search, once for count
-    assert mock_connection.execute.await_count == 2
-    # Verify first call was for search query
-    first_call = mock_connection.execute.await_args_list[0]
+    # Assert execute was called three times: SET LOCAL, search, then count
+    assert mock_connection.execute.await_count == 3
+    # Call 0 is SET LOCAL ivfflat.probes (result ignored)
+    # Verify second call was for search query
+    first_call = mock_connection.execute.await_args_list[1]
     assert first_call[0][0] == mock_query_data
     assert first_call[0][1] == mock_params_data
-    # Verify second call was for count query
-    second_call = mock_connection.execute.await_args_list[1]
+    # Verify third call was for count query
+    second_call = mock_connection.execute.await_args_list[2]
     assert second_call[0][0] == mock_count_query
     assert second_call[0][1] == mock_count_params
 
@@ -704,7 +706,8 @@ def test_build_add_query(query_builder: EventQueryBuilder):
     query_str_lower = str(query).lower() # For case-insensitive checks
 
     assert "insert into events" in query_str_lower
-    assert "values (:id, cast(:content as jsonb), cast(:metadata as jsonb), :embedding, :timestamp)" in query_str_lower
+    expected_vec_literal = EventModel._format_embedding_for_db(event_data.embedding)
+    assert f"values (:id, cast(:content as jsonb), cast(:metadata as jsonb), '{expected_vec_literal}'::vector, :timestamp)" in query_str_lower
     assert "returning id, content, metadata, embedding, timestamp" in query_str_lower
 
     # Check parameters
@@ -712,8 +715,8 @@ def test_build_add_query(query_builder: EventQueryBuilder):
     assert "id" in params and isinstance(uuid.UUID(params["id"]), uuid.UUID) # Check if ID is a valid UUID string
     assert params["content"] == json.dumps(event_data.content)
     assert params["metadata"] == json.dumps(event_data.metadata)
-    expected_embedding_str = EventModel._format_embedding_for_db(event_data.embedding)
-    assert params["embedding"] == expected_embedding_str
+    # Embedding is inlined as a ::vector literal (asyncpg cannot CAST a text param to vector), not a bound param
+    assert "embedding" not in params
     assert params["timestamp"] == event_data.timestamp
 
 
@@ -792,13 +795,15 @@ def test_build_search_vector_query_vector_only(query_builder: EventQueryBuilder)
     assert isinstance(query_tuple, tuple) and len(query_tuple) == 2
     query, params = query_tuple
     query_str = str(query).upper()
+    expected_vec_literal = EventModel._format_embedding_for_db(vector)
     assert "SELECT" in query_str
-    assert "EMBEDDING <-> :VEC_QUERY AS SIMILARITY_SCORE" in query_str
-    assert "WHERE EMBEDDING <-> :VEC_QUERY <= :DIST_THRESHOLD" in query_str
+    assert f"EMBEDDING <-> '{expected_vec_literal}'::VECTOR AS SIMILARITY_SCORE" in query_str
+    assert f"WHERE EMBEDDING <-> '{expected_vec_literal}'::VECTOR <= :DIST_THRESHOLD" in query_str
     assert "ORDER BY SIMILARITY_SCORE ASC" in query_str
     assert "LIMIT :LIM" in query_str
     assert "OFFSET :OFF" in query_str
-    assert params.get("vec_query") == EventModel._format_embedding_for_db(vector)
+    # Vector is inlined as a ::vector literal, not a bound parameter
+    assert "vec_query" not in params
     assert params.get("dist_threshold") == distance_threshold_test  # Check against explicit value
 
 
@@ -870,13 +875,15 @@ def test_build_search_vector_query_hybrid(query_builder: EventQueryBuilder):
     assert isinstance(query_tuple, tuple) and len(query_tuple) == 2
     query, params = query_tuple
     query_str = str(query).upper().replace('\n', ' ')
+    expected_vec_literal = EventModel._format_embedding_for_db(vector)
     assert "SELECT" in query_str
-    assert "EMBEDDING <-> :VEC_QUERY AS SIMILARITY_SCORE" in query_str
-    assert "WHERE EMBEDDING <-> :VEC_QUERY <= :DIST_THRESHOLD" in query_str
+    assert f"EMBEDDING <-> '{expected_vec_literal}'::VECTOR AS SIMILARITY_SCORE" in query_str
+    assert f"WHERE EMBEDDING <-> '{expected_vec_literal}'::VECTOR <= :DIST_THRESHOLD" in query_str
     assert "AND METADATA @> :MD_FILTER ::JSONB" in query_str # Added space before ::JSONB
     assert "ORDER BY SIMILARITY_SCORE ASC" in query_str
     assert "LIMIT :LIM" in query_str
-    assert params.get("vec_query") == EventModel._format_embedding_for_db(vector)
+    # Vector is inlined as a ::vector literal, not a bound parameter
+    assert "vec_query" not in params
     assert params.get("dist_threshold") == distance_threshold_val # Corrected: dist_threshold, use local var
     assert params.get("md_filter") == json.dumps(metadata)
     assert params.get("ts_start") == ts_start
