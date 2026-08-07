@@ -36,8 +36,13 @@ class TestMemoryType:
         assert MemoryType.CONVERSATION.value == "conversation"
 
     def test_memory_type_count(self):
-        """Test number of memory types."""
-        assert len(list(MemoryType)) == 6
+        """Test number of memory types.
+
+        NOTE, DECISION, TASK, REFERENCE, CONVERSATION, INVESTIGATION (6,
+        historique) + ARTICLE et QUINTESSENCE ajoutés ensuite (EPIC-60 / Truth
+        Engine) = 8. Garde-fou : toute évolution de l'enum doit MAJ ce test.
+        """
+        assert len(list(MemoryType)) == 8
 
 
 class TestMemoryBase:
