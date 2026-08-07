@@ -197,6 +197,7 @@ class AppSettings(BaseSettings):
     O2_PASSWORD: str = ""  # REQUIRED for OpenObserve, no fallback
     OTLP_ENDPOINT: str = "http://openobserve:5080/api/default"
     OTLP_METRICS_ENDPOINT: str = "http://openobserve:5080/api/default"
+    OTLP_ENABLED: bool = True  # Master switch for OTLP telemetry (tests set false)
 
     # === Frontend ===
     VITE_API_URL: str = "http://localhost:8001"

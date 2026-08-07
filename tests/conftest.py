@@ -12,6 +12,20 @@ import logging
 # already sets ENVIRONMENT=development, so setdefault is a no-op!
 os.environ["ENVIRONMENT"] = "test"
 
+# Force mock embeddings for the whole test suite: the ASGI lifespan
+# preloads real models (~10-30 s per TestClient) only when
+# EMBEDDING_MODE=real. With mock, the lifespan skips preloading and
+# dependencies.get_embedding_service() falls back to MockEmbeddingService
+# on demand. Tests that need real embeddings override this explicitly
+# (see test_client_with_real_embeddings fixture).
+os.environ["EMBEDDING_MODE"] = "mock"
+
+# Disable OTLP telemetry in tests: each TestClient lifespan shutdown flushes
+# traces/metrics/logs to OpenObserve with network timeouts (~30s+ per client),
+# which makes the full suite impractically slow. OTLP_ENABLED=False skips
+# the whole telemetry setup/shutdown in api/main.py lifespan.
+os.environ["OTLP_ENABLED"] = "false"
+
 # Disable rate limiting in tests (accumulates across suite → 429s)
 os.environ.setdefault("MNEMO_RATE_LIMIT_ENABLED", "false")
 

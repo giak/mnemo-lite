@@ -48,13 +48,16 @@ async def lifespan(app: FastAPI):
     from utils.otel_config import configure_otel, shutdown_otel
     from utils.otel_log_processor import get_log_processor
 
-    configure_otel(
-        service_name="mnemolite-api",
-        environment=ENVIRONMENT,
-    )
+    otlp_enabled = get_settings().OTLP_ENABLED
+    if otlp_enabled:
+        configure_otel(
+            service_name="mnemolite-api",
+            environment=ENVIRONMENT,
+        )
 
     log_processor = get_log_processor()
-    await log_processor.start()
+    if otlp_enabled:
+        await log_processor.start()
 
     # Initialisation au démarrage: Créer le moteur SQLAlchemy
     logger.info(f"Starting MnemoLite API in {ENVIRONMENT} mode")
@@ -316,9 +319,10 @@ async def lifespan(app: FastAPI):
     # Nettoyage à l'arrêt: Disposer le moteur
     logger.info("Shutting down MnemoLite API")
 
-    # Shutdown OpenTelemetry and log processor
-    shutdown_otel()
-    await log_processor.shutdown()
+    # Shutdown OpenTelemetry and log processor (same flag as startup)
+    if otlp_enabled:
+        shutdown_otel()
+        await log_processor.shutdown()
 
     if hasattr(app.state, "db_engine") and app.state.db_engine:
         await app.state.db_engine.dispose()
