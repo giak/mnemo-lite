@@ -101,18 +101,20 @@ class TestEventAPIFlow:
         for event_data in events:
             await test_client.post("/v1/events/", json=event_data)
 
-        # Search by metadata
-        response = await test_client.post("/v1/search/", json={
-            "metadata": {"lang": "python"},
-            "limit": 10
-        })
+        # Search events by metadata (EPIC-59 : POST /v1/search/ est unifié sur
+        # la recherche de mémoires ; la recherche d'événements par métadonnées
+        # passe par GET /v1/search/?filter_metadata=...)
+        import json as _json
+        response = await test_client.get(
+            "/v1/search/",
+            params={"filter_metadata": _json.dumps({"lang": "python"}), "limit": 10},
+        )
         assert response.status_code == 200
 
         results = response.json()
-        assert len(results["events"]) == 2
-        assert results["total"] == 2
+        assert len(results["data"]) == 2
 
-        for event in results["events"]:
+        for event in results["data"]:
             assert event["metadata"]["lang"] == "python"
 
     async def test_pagination(self, test_client):
@@ -125,26 +127,20 @@ class TestEventAPIFlow:
             })
             assert resp.status_code == 201, f"Create event {i} failed: {resp.status_code}"
 
-        # Get first page
-        response = await test_client.post("/v1/search/", json={
-            "limit": 3,
-            "offset": 0
-        })
+        # Get first page (GET /v1/search/ events, EPIC-59 : le POST est unifié
+        # sur les mémoires)
+        response = await test_client.get("/v1/search/", params={"limit": 3, "offset": 0})
         page1 = response.json()
-        assert len(page1["events"]) == 3
-        assert page1["total"] == 10
+        assert len(page1["data"]) == 3
 
         # Get second page
-        response = await test_client.post("/v1/search/", json={
-            "limit": 3,
-            "offset": 3
-        })
+        response = await test_client.get("/v1/search/", params={"limit": 3, "offset": 3})
         page2 = response.json()
-        assert len(page2["events"]) == 3
+        assert len(page2["data"]) == 3
 
         # Pages should have different events
-        page1_ids = {e["id"] for e in page1["events"]}
-        page2_ids = {e["id"] for e in page2["events"]}
+        page1_ids = {e["id"] for e in page1["data"]}
+        page2_ids = {e["id"] for e in page2["data"]}
         assert page1_ids.isdisjoint(page2_ids)
 
 
@@ -348,9 +344,8 @@ class TestConcurrentRequests:
             })
 
         async def search():
-            response = await test_client.post("/v1/search/", json={
-                "limit": 5
-            })
+            # GET /v1/search/ events (EPIC-59 : le POST est unifié sur les mémoires)
+            response = await test_client.get("/v1/search/", params={"limit": 5})
             return response.status_code == 200
 
         # Search 10 times concurrently

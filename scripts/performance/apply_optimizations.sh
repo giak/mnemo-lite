@@ -30,11 +30,11 @@ test_performance() {
         -d '{"content": {"text": "Performance test"}}' \
         -s -o /dev/null
 
-    # Test search
+    # Test search (query requis depuis EPIC-59 : POST /v1/search/ unifié)
     echo -n "Search: "
     time curl -X POST http://localhost:8001/v1/search/ \
         -H "Content-Type: application/json" \
-        -d '{"limit": 5}' \
+        -d '{"query": "perf test", "limit": 5}' \
         -s -o /dev/null
 
     echo ""

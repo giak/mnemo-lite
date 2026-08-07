@@ -90,7 +90,7 @@ asyncio.run(test_db())
     curl -X POST "$BASE_URL/v1/search/" \
         -H "Content-Type: application/json" \
         -d '{"query": "test", "limit": 5}' \
-        -s | jq -r '.events | length' | xargs -I {} echo "Search returned {} results"
+        -s | jq -r '.results | length' | xargs -I {} echo "Search returned {} results"
 fi
 
 # Load tests

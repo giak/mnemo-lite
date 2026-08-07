@@ -60,7 +60,7 @@ class CodeSearchTasks(TaskSet):
 
     @task(3)
     def search_code(self):
-        """Search for code with random queries."""
+        """Search memories with random queries (EPIC-59 unified format)."""
         query = random.choice(SAMPLE_CODE_QUERIES)
         with self.client.post(
             "/v1/search/",
@@ -73,7 +73,7 @@ class CodeSearchTasks(TaskSet):
         ) as response:
             if response.status_code == 200:
                 data = response.json()
-                if "events" in data:
+                if "results" in data:
                     response.success()
                 else:
                     response.failure(f"Invalid response format: {data}")
@@ -81,13 +81,15 @@ class CodeSearchTasks(TaskSet):
                 response.failure(f"Search failed: {response.status_code}")
 
     @task(2)
-    def filter_by_repository(self):
-        """Search within specific repository."""
+    def search_with_tags(self):
+        """Search memories filtered by a tag (EPIC-59: metadata filter no longer
+        supported on POST /v1/search/, replaced by tags)."""
         repo = random.choice(SAMPLE_REPOSITORIES)
         with self.client.post(
             "/v1/search/",
             json={
-                "metadata": {"repository": repo},
+                "query": random.choice(SAMPLE_CODE_QUERIES),
+                "tags": [repo],
                 "limit": 20
             },
             catch_response=True

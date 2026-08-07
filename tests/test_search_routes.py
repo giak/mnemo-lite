@@ -823,5 +823,89 @@ async def test_search_pagination(client: TestClient):
     assert len(data_p4) == 0
 
 
+# --- EPIC-59 : unification des POST de recherche sur _search_memories ---
+
+
+@pytest.mark.anyio
+async def test_post_search_returns_same_as_get(
+    client: TestClient, test_db_pool: asyncpg.Pool
+):
+    """EPIC-59 T2.1 : POST /v1/search/ et GET /api/v1/memories/search renvoient les mêmes résultats (id et ordre)."""
+    unique_tag = f"epic59-{uuid.uuid4().hex[:10]}"
+    async with test_db_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO memories (title, content, memory_type, tags) "
+            "VALUES ($1, $2, 'note', $3)",
+            f"EPIC59 {unique_tag}",
+            f"contenu de test pour {unique_tag}",
+            [unique_tag],
+        )
+    try:
+        resp_post = client.post("/v1/search/", json={"query": unique_tag, "limit": 10})
+        assert resp_post.status_code == 200, resp_post.text
+        resp_get = client.get(
+            "/api/v1/memories/search", params={"query": unique_tag, "limit": 10}
+        )
+        assert resp_get.status_code == 200, resp_get.text
+
+        post_results = resp_post.json()
+        get_results = resp_get.json()
+        assert "results" in post_results
+        assert "total" in post_results
+        post_ids = [r["id"] for r in post_results["results"]]
+        get_ids = [r["id"] for r in get_results["results"]]
+        assert post_ids == get_ids
+        assert post_ids, "La mémoire de test devrait être trouvée par la requête (match lexical)"
+    finally:
+        async with test_db_pool.acquire() as conn:
+            await conn.execute("DELETE FROM memories WHERE title LIKE 'EPIC59 %'")
+
+
+@pytest.mark.anyio
+async def test_post_search_empty_body_422(client: TestClient):
+    """EPIC-59 T2.2 : body vide ou sans query -> 422 (validation des entrées)."""
+    resp = client.post("/v1/search/", json={})
+    assert resp.status_code == 422
+    resp2 = client.post("/v1/search/", json={"limit": 5})
+    assert resp2.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_post_search_json_body_filters(
+    client: TestClient, test_db_pool: asyncpg.Pool
+):
+    """EPIC-59 T2.3 : body JSON avec memory_type et tags fonctionne et filtre."""
+    unique_tag = f"epic59-{uuid.uuid4().hex[:10]}"
+    async with test_db_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO memories (title, content, memory_type, tags) "
+            "VALUES ($1, $2, 'note', $3)",
+            f"EPIC59 {unique_tag}",
+            f"contenu {unique_tag}",
+            [unique_tag],
+        )
+        await conn.execute(
+            "INSERT INTO memories (title, content, memory_type, tags) "
+            "VALUES ($1, $2, 'reference', $3)",
+            f"EPIC59-ref {unique_tag}",
+            f"contenu reference {unique_tag}",
+            [unique_tag],
+        )
+    try:
+        resp = client.post(
+            "/v1/search/",
+            json={"query": unique_tag, "memory_type": "note", "limit": 10},
+        )
+        assert resp.status_code == 200, resp.text
+        results = resp.json()["results"]
+        assert results, "La note devrait être trouvée par la requête"
+        assert all(r["memory_type"] == "note" for r in results), (
+            "Le filtre memory_type=note devrait exclure la référence"
+        )
+    finally:
+        async with test_db_pool.acquire() as conn:
+            await conn.execute("DELETE FROM memories WHERE title LIKE 'EPIC59 %'")
+
+
 # TODO: Ajouter tests pour :
 # - Cas limites (ex: filtre vide ? {} )

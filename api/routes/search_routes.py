@@ -1,32 +1,35 @@
 """
 Routes pour la recherche de mémoires et d'événements.
+
+EPIC-59 : unification des POST de recherche sur la logique hybride unique
+(`_search_memories`, la même fonction que GET /api/v1/memories/search et
+l'outil MCP `search_memory`). Les routes orphelines mortes (POST /content,
+POST /similarity, GET /metadata) ont été supprimées en 2026-08-07.
 """
 
 import logging
-from typing import Dict, Any, List, Optional, Union
-from datetime import datetime
 import json
-import base64
+from datetime import datetime
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from models.event_models import EventModel
 from interfaces.services import MemorySearchServiceProtocol, EmbeddingServiceProtocol
-from dependencies import get_memory_search_service, get_embedding_service
+from dependencies import (
+    get_memory_search_service,
+    get_embedding_service,
+    get_db_engine,
+)
 from services.base import ServiceError
+from routes.memories_routes import MemorySearchResponse, _search_memories
 
 # Configuration du logger
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["search"])
-
-
-class SearchTextQuery(BaseModel):
-    """Modèle pour une requête de recherche textuelle."""
-
-    query: str
-    limit: int = 10
 
 
 class SearchResponseMeta(BaseModel):
@@ -45,64 +48,53 @@ class SearchResponse(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    """Modèle pour une requête de recherche POST."""
+    """Modèle pour une requête de recherche POST (recherche de mémoires).
 
-    query: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-    limit: int = Field(default=10, ge=1, le=1000)
-    offset: int = Field(default=0, ge=0)
-    ts_start: Optional[datetime] = None
-    ts_end: Optional[datetime] = None
+    EPIC-59 : contrat aligné sur la voie fiable `_search_memories`.
+    `query` est requis ; `metadata`/`ts_start`/`ts_end` (ancien contrat events)
+    ne sont plus supportés : utiliser GET /v1/search/?filter_metadata=... pour
+    le filtrage par métadonnées d'événements.
+    """
+
+    query: str = Field(..., min_length=1, max_length=500, description="Texte de recherche (requis)")
+    memory_type: Optional[str] = Field(
+        None,
+        description="Filtre par type de mémoire (note, decision, task, reference, conversation, investigation)",
+    )
+    tags: List[str] = Field(default_factory=list, description="Filtre par tags (logique ET)")
+    limit: int = Field(default=10, ge=1, le=100, description="Nombre maximum de résultats")
+    offset: int = Field(default=0, ge=0, description="Décalage pour la pagination")
 
 
-class TestSearchResponse(BaseModel):
-    """Response model for test-compatible search endpoint."""
-
-    events: List[EventModel]
-    total: int
-
-
-# POST route for test compatibility
-@router.post("/", response_model=TestSearchResponse)
+# POST route unifiée (EPIC-59) : délègue à _search_memories, la même fonction
+# que GET /api/v1/memories/search et l'outil MCP search_memory.
+@router.post("/", response_model=MemorySearchResponse)
 async def search_post(
     request: SearchRequest,
+    engine: AsyncEngine = Depends(get_db_engine),
     embedding_service: EmbeddingServiceProtocol = Depends(get_embedding_service),
-    memory_search_service: MemorySearchServiceProtocol = Depends(get_memory_search_service),
-) -> TestSearchResponse:
+) -> MemorySearchResponse:
     """
-    POST endpoint for search (test compatibility).
+    POST endpoint unifié sur la logique hybride des mémoires (EPIC-59).
 
-    Wraps the hybrid search functionality with a POST interface.
+    Retourne le même format et les mêmes résultats que
+    GET /api/v1/memories/search?query=... : un seul code path, plus de
+    divergence POST/GET.
     """
-    try:
-        # Generate embedding if query text provided
-        embedding = None
-        if request.query:
-            embedding = await embedding_service.generate_embedding(request.query)
-
-        # Call hybrid search
-        results, total_count = await memory_search_service.search_hybrid(
-            query=request.query or "",
-            metadata_filter=request.metadata or {},
-            limit=request.limit,
-            offset=request.offset,
-            ts_start=request.ts_start,
-            ts_end=request.ts_end,
-            distance_threshold=1.0  # Default threshold
-        )
-
-        # Return test-compatible response format
-        return TestSearchResponse(events=results, total=total_count)
-
-    except Exception as e:
-        logger.error(f"Error in search POST: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Search failed"
-        )
+    return await _search_memories(
+        query=request.query,
+        memory_type=request.memory_type,
+        tags=request.tags,
+        limit=request.limit,
+        offset=request.offset,
+        engine=engine,
+        embedding_service=embedding_service,
+    )
 
 
-# Nouvelle route principale qui supporte à la fois la recherche par métadonnées et la recherche vectorielle
+# GET route historique (événements) : recherche par métadonnées + vectorielle
+# sur la table `events` (legacy nomic-768). Conservée pour les clients
+# existants et le filtrage par métadonnées d'événements.
 @router.get("/", response_model=SearchResponse)
 async def search(
     filter_metadata: Optional[str] = Query(
@@ -136,7 +128,7 @@ async def search(
     ),
 ):
     """
-    Recherche hybride de mémoires (métadonnées + vectorielle)
+    Recherche hybride d'événements (métadonnées + vectorielle)
 
     - **filter_metadata**: Filtre JSON sur les métadonnées
     - **vector_query**: Texte de requête pour recherche vectorielle
@@ -223,113 +215,9 @@ async def search(
             limit=limit, offset=offset, total_hits=total_count
         )
         return SearchResponse(data=results, meta=response_meta)
-    
+
     except ServiceError as e:
         raise HTTPException(status_code=500, detail="Request failed")
     except Exception as e:
         logger.exception("Unexpected error during search", exc_info=True)
         raise HTTPException(status_code=500, detail="An unexpected error occurred during search.")
-
-
-@router.post("/content", response_model=SearchResponse)
-async def search_by_content(
-    query: SearchTextQuery,
-    search_service: MemorySearchServiceProtocol = Depends(get_memory_search_service),
-) -> SearchResponse:
-    """
-    Recherche des mémoires par leur contenu textuel.
-
-    Args:
-        query: La requête de recherche
-        search_service: Le service de recherche injecté
-
-    Returns:
-        Les résultats de la recherche
-    """
-    try:
-        logger.info(f"Recherche par contenu: '{query.query}'")
-        results = await search_service.search_by_content(query.query, query.limit)
-        return SearchResponse(
-            data=results,
-            meta=SearchResponseMeta(
-                limit=query.limit, offset=0, total_hits=len(results)
-            ),
-        )
-    except Exception as e:
-        logger.error(f"Erreur lors de la recherche par contenu: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Search failed",
-        )
-
-
-@router.post("/similarity", response_model=SearchResponse)
-async def search_by_similarity(
-    query: SearchTextQuery,
-    search_service: MemorySearchServiceProtocol = Depends(get_memory_search_service),
-) -> SearchResponse:
-    """
-    Recherche des mémoires par similarité sémantique.
-
-    Args:
-        query: La requête de recherche
-        search_service: Le service de recherche injecté
-
-    Returns:
-        Les résultats de la recherche
-    """
-    try:
-        logger.info(f"Recherche par similarité: '{query.query}'")
-        results = await search_service.search_by_similarity(query.query, query.limit)
-        return SearchResponse(
-            data=results,
-            meta=SearchResponseMeta(
-                limit=query.limit, offset=0, total_hits=len(results)
-            ),
-        )
-    except Exception as e:
-        logger.error(f"Erreur lors de la recherche par similarité: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Search failed",
-        )
-
-
-@router.get("/metadata", response_model=SearchResponse)
-async def search_by_metadata(
-    metadata_filter: str = Query(..., description="Filtre JSON pour les métadonnées"),
-    limit: int = Query(10, description="Nombre maximum de résultats"),
-    search_service: MemorySearchServiceProtocol = Depends(get_memory_search_service),
-) -> SearchResponse:
-    """
-    Recherche des mémoires par leurs métadonnées.
-
-    Args:
-        metadata_filter: Filtre JSON pour les métadonnées
-        limit: Nombre maximum de résultats
-        search_service: Le service de recherche injecté
-
-    Returns:
-        Les résultats de la recherche
-    """
-    try:
-        # Conversion du filtre JSON en dictionnaire
-        metadata_filter_dict = json.loads(metadata_filter)
-        logger.info(f"Recherche par métadonnées: {metadata_filter}")
-        results = await search_service.search_by_metadata(metadata_filter_dict, limit)
-        return SearchResponse(
-            data=results,
-            meta=SearchResponseMeta(limit=limit, offset=0, total_hits=len(results)),
-        )
-    except json.JSONDecodeError:
-        logger.error(f"Format JSON invalide pour le filtre: {metadata_filter}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Format JSON invalide pour le filtre de métadonnées",
-        )
-    except Exception as e:
-        logger.error(f"Erreur lors de la recherche par métadonnées: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Search failed",
-        )
