@@ -53,8 +53,8 @@ class TestHybridSearchIntegration:
         """Test basic vector search functionality."""
         service = VectorSearchService(engine=test_engine)
 
-        # Create dummy embedding (768D)
-        embedding = [0.1] * 768
+        # Create dummy embedding (1024D, bge-m3)
+        embedding = [0.1] * 1024
 
         results = await service.search(embedding=embedding, limit=10)
 
@@ -87,7 +87,7 @@ class TestHybridSearchIntegration:
         service = HybridCodeSearchService(engine=test_engine)
 
         # Create dummy embedding
-        embedding = [0.1] * 768
+        embedding = [0.1] * 1024
 
         response = await service.search(
             query="calculate total",
@@ -106,7 +106,7 @@ class TestHybridSearchIntegration:
         service = HybridCodeSearchService(engine=test_engine)
 
         # Create dummy embedding
-        embedding = [0.1] * 768
+        embedding = [0.1] * 1024
 
         response = await service.search(
             query="calculate total",
@@ -123,7 +123,7 @@ class TestHybridSearchIntegration:
         """Test hybrid search with automatic weight selection."""
         service = HybridCodeSearchService(engine=test_engine)
 
-        embedding = [0.1] * 768
+        embedding = [0.1] * 1024
 
         # Code-heavy query (has operators)
         response = await service.search_with_auto_weights(
@@ -175,15 +175,15 @@ class TestHybridSearchIntegration:
         """Test vector search with invalid embedding dimension."""
         service = VectorSearchService(engine=test_engine)
 
-        # Invalid dimension (not 768)
-        with pytest.raises(ValueError, match="768-dimensional vector"):
+        # Invalid dimension (not 1024)
+        with pytest.raises(ValueError, match="1024-dimensional vector"):
             await service.search(embedding=[0.1] * 100, limit=10)
 
     async def test_vector_search_invalid_embedding_domain(self, test_engine):
         """Test vector search with invalid embedding domain."""
         service = VectorSearchService(engine=test_engine)
 
-        embedding = [0.1] * 768
+        embedding = [0.1] * 1024
 
         with pytest.raises(ValueError, match="embedding_domain must be"):
             await service.search(
@@ -211,7 +211,7 @@ class TestHybridSearchIntegration:
         """Test vector search with statistics."""
         service = VectorSearchService(engine=test_engine)
 
-        embedding = [0.1] * 768
+        embedding = [0.1] * 1024
 
         results, stats = await service.search_with_stats(
             embedding=embedding,
@@ -229,8 +229,8 @@ class TestHybridSearchIntegration:
         """Test searching both TEXT and CODE embeddings in parallel."""
         service = VectorSearchService(engine=test_engine)
 
-        embedding_text = [0.1] * 768
-        embedding_code = [0.2] * 768
+        embedding_text = [0.1] * 1024
+        embedding_code = [0.2] * 1024
 
         text_results, code_results = await service.search_both_domains(
             embedding_text=embedding_text,
@@ -246,7 +246,7 @@ class TestHybridSearchIntegration:
         """Test that hybrid search meets performance targets."""
         service = HybridCodeSearchService(engine=test_engine)
 
-        embedding = [0.1] * 768
+        embedding = [0.1] * 1024
 
         response = await service.search(
             query="calculate total",
@@ -328,7 +328,7 @@ class TestHybridSearchAPI:
 
     async def test_hybrid_search_endpoint_with_embedding(self, client):
         """Test hybrid search endpoint with embedding."""
-        embedding = [0.1] * 768
+        embedding = [0.1] * 1024
 
         response = client.post(
             "/v1/code/search/hybrid",
@@ -377,7 +377,7 @@ class TestHybridSearchAPI:
 
     async def test_vector_search_endpoint(self, client):
         """Test vector-only search endpoint."""
-        embedding = [0.1] * 768
+        embedding = [0.1] * 1024
 
         response = client.post(
             "/v1/code/search/vector",
@@ -397,7 +397,7 @@ class TestHybridSearchAPI:
 
     async def test_vector_search_endpoint_invalid_domain(self, client):
         """Test vector search endpoint with invalid embedding domain."""
-        embedding = [0.1] * 768
+        embedding = [0.1] * 1024
 
         response = client.post(
             "/v1/code/search/vector",

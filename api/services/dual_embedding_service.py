@@ -222,12 +222,12 @@ class DualEmbeddingService:
             trust_remote_code=True
         )
 
-        # Validate dimension
+        # Validate dimension against CODE dimension, not TEXT
         test_emb = model.encode("def test(): pass")
-        if len(test_emb) != self.text_dimension:
+        if len(test_emb) != self.code_dimension:
             raise ValueError(
                 f"CODE model dimension mismatch: "
-                f"expected {self.text_dimension}, got {len(test_emb)}"
+                f"expected {self.code_dimension}, got {len(test_emb)}"
             )
 
         logger.info(

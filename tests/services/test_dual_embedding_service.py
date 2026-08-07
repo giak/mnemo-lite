@@ -36,11 +36,16 @@ def mock_sentence_transformer():
 
 @pytest.fixture
 def dual_service():
-    """Create DualEmbeddingService instance for testing."""
+    """Create DualEmbeddingService instance for testing.
+
+    text_dimension and code_dimension are both 768 to stay coherent with
+    mock_sentence_transformer.encode() which returns a 768D vector (both
+    dimension checks must pass with the mocked model).
+    """
     return DualEmbeddingService(
         text_model_name="mock-text-model",
         code_model_name="mock-code-model",
-        text_dimension=1024,
+        text_dimension=768,
         code_dimension=768,
         device="cpu",
     )
@@ -75,11 +80,18 @@ def test_initialization_with_env_defaults():
     with patch.dict("os.environ", {
         "EMBEDDING_MODEL": "env-text-model",
         "CODE_EMBEDDING_MODEL": "env-code-model",
+        # Unknown models are accepted only with explicit dimensions
+        # (settings validation in api/core/settings.py)
+        "EMBEDDING_DIMENSION": "1024",
+        "CODE_EMBEDDING_DIMENSION": "768",
     }):
         get_settings.cache_clear()  # Pick up patched env vars
-        service = DualEmbeddingService(text_dimension=1024, code_dimension=768, device="cpu")
-        assert service.text_model_name == "env-text-model"
-        assert service.code_model_name == "env-code-model"
+        try:
+            service = DualEmbeddingService(text_dimension=1024, code_dimension=768, device="cpu")
+            assert service.text_model_name == "env-text-model"
+            assert service.code_model_name == "env-code-model"
+        finally:
+            get_settings.cache_clear()  # Do not leak patched settings to other tests
 
 
 # ============================================================================
@@ -431,7 +443,52 @@ def test_get_stats(dual_service):
     assert "code_model_loaded" in stats
     assert "process_rss_mb" in stats
 
-    assert stats["text_dimension"] == 1024
+    assert stats["dimension"] == 768
     assert stats["device"] == "cpu"
     assert stats["text_model_loaded"] is False
     assert stats["code_model_loaded"] is False
+
+
+# ============================================================================
+# EPIC-56: CODE model dimension check (validate against code_dimension)
+# ============================================================================
+
+def test_code_model_load_accepts_768_when_code_dimension_768():
+    """EPIC-56: _load_code_model_sync must validate against code_dimension.
+
+    Regression: the check compared the CODE model output against
+    text_dimension (1024) instead of code_dimension (768), so a legitimate
+    768D code model raised at preload ("expected 1024, got 768").
+    """
+    service = DualEmbeddingService(
+        text_model_name="mock-text-model",
+        code_model_name="mock-code-model",
+        text_dimension=1024,
+        code_dimension=768,
+        device="cpu",
+    )
+    mock_model = Mock()
+    mock_model.encode = Mock(return_value=np.random.rand(768))
+
+    with patch("services.dual_embedding_service.SentenceTransformer", return_value=mock_model):
+        model = service._load_code_model_sync()
+
+    assert model is mock_model
+
+
+def test_code_model_load_rejects_wrong_dimension():
+    """EPIC-56: the dimension check stays active (raises on mismatch)."""
+    service = DualEmbeddingService(
+        text_model_name="mock-text-model",
+        code_model_name="mock-code-model",
+        text_dimension=1024,
+        code_dimension=768,
+        device="cpu",
+    )
+    mock_model = Mock()
+    mock_model.encode = Mock(return_value=np.random.rand(512))
+
+    with patch("services.dual_embedding_service.SentenceTransformer", return_value=mock_model):
+        with pytest.raises(ValueError, match="CODE model dimension mismatch"):
+            service._load_code_model_sync()
+
