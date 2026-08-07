@@ -29,6 +29,26 @@ from typing import Any, Dict
 trace_id_var = contextvars.ContextVar('trace_id', default=None)
 
 
+def _safe_add_logger_name(logger, method_name, event_dict):
+    """Add logger name to event dict, crash-safe on loggers without `name`.
+
+    Same contract as structlog.stdlib.add_logger_name, but tolerates
+    loggers without a `name` attribute (e.g. PrintLogger from the MCP
+    server config) instead of raising AttributeError.
+
+    Defensive only (EPIC-57): the root cause of the collection crash
+    (structlog.configure + add_logger_name + PrintLoggerFactory in
+    scripts/multi-watcher-daemon.py) is fixed; this guards the
+    logging_config path against the pattern reappearing.
+    """
+    record = event_dict.get("_record")
+    if record is not None:
+        event_dict["logger"] = record.name
+    elif hasattr(logger, "name"):
+        event_dict["logger"] = logger.name
+    return event_dict
+
+
 def add_trace_id_processor(logger, method_name, event_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
     Structlog processor that adds trace_id to all log entries.
@@ -86,7 +106,7 @@ def configure_logging():
 
             # Structlog default processors
             structlog.stdlib.add_log_level,
-            structlog.stdlib.add_logger_name,
+            _safe_add_logger_name,
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,

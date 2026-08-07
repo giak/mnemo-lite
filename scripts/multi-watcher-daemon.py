@@ -59,6 +59,16 @@ except ImportError:
 # Logging setup
 # ---------------------------------------------------------------------------
 
+def _add_watcher_name(_, __, event_dict):
+    """Attach a fixed logger name to events.
+
+    A PrintLogger has no `name` attribute, so structlog.stdlib.add_logger_name
+    would raise AttributeError. The daemon always logs under "watcher".
+    """
+    event_dict["logger"] = "watcher"
+    return event_dict
+
+
 def _configure_logging():
     """Configure structlog for the daemon.
 
@@ -67,6 +77,11 @@ def _configure_logging():
 
     Set WATCHER_LOG_FORMAT=json env var to emit JSON logs
     (useful when running in Docker alongside the API for OpenObserve ingestion).
+
+    Note: uses structlog.wrap_logger() (local config) instead of
+    structlog.configure() (global config). The global configure poisoned the
+    structlog config for any process importing this module (e.g. pytest test
+    collection), and crashed on add_logger_name over a PrintLogger.
     """
     log_json = get_settings().WATCHER_LOG_FORMAT == "json"
 
@@ -76,18 +91,15 @@ def _configure_logging():
             if log_json
             else structlog.dev.ConsoleRenderer()
         )
-        structlog.configure(
+        return structlog.wrap_logger(
+            structlog.PrintLogger(),
             processors=[
                 structlog.stdlib.add_log_level,
-                structlog.stdlib.add_logger_name,
+                _add_watcher_name,
                 structlog.processors.TimeStamper(fmt="iso"),
                 renderer,
             ],
-            context_class=dict,
-            logger_factory=structlog.PrintLoggerFactory(),
-            cache_logger_on_first_use=True,
         )
-        return structlog.get_logger("watcher")
     else:
         # Fallback: simple logger that mimics structlog's keyword API
         class _PrintLogger:
