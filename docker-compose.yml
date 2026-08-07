@@ -87,8 +87,8 @@ services:
       ENABLE_AUTO_IMPORT: ${ENABLE_AUTO_IMPORT:-false}
       CONVERSATION_WATCHER_ENABLED: ${CONVERSATION_WATCHER_ENABLED:-false}
       ACTIVE_PROJECT: ${ACTIVE_PROJECT:-mnemolite}
-      OTLP_ENDPOINT: http://openobserve:5080/api/default/v1/traces
-      OTLP_METRICS_ENDPOINT: http://openobserve:5080/api/default/v1/metrics
+      OTLP_ENDPOINT: http://openobserve:5080/api/default
+      OTLP_METRICS_ENDPOINT: http://openobserve:5080/api/default
       OTLP_LOGS_ENDPOINT: http://openobserve:5080/api/default/logs/_json
       O2_USER: ${O2_USER:-admin@mnemolite.local}
       O2_PASSWORD: ${O2_PASSWORD:-Complexpass#123}
@@ -171,8 +171,8 @@ services:
       - REDIS_PORT=6379
       - API_URL=http://api:8000
       - LOG_LEVEL=INFO
-      - OTLP_ENDPOINT=http://openobserve:5080/api/default/v1/traces
-      - OTLP_METRICS_ENDPOINT=http://openobserve:5080/api/default/v1/metrics
+      - OTLP_ENDPOINT=http://openobserve:5080/api/default
+      - OTLP_METRICS_ENDPOINT=http://openobserve:5080/api/default
       - OTLP_LOGS_ENDPOINT=http://openobserve:5080/api/default/logs/_json
       - O2_USER=${O2_USER:-admin@mnemolite.local}
       - O2_PASSWORD=${O2_PASSWORD:-Complexpass#123}
@@ -208,8 +208,8 @@ services:
       MCP_HTTP_PORT: "8002"
       MCP_AUTH_MODE: none
       MCP_PRIVACY_ENABLED: ${MCP_PRIVACY_ENABLED:-true}
-      OTLP_ENDPOINT: http://openobserve:5080/api/default/v1/traces
-      OTLP_METRICS_ENDPOINT: http://openobserve:5080/api/default/v1/metrics
+      OTLP_ENDPOINT: http://openobserve:5080/api/default
+      OTLP_METRICS_ENDPOINT: http://openobserve:5080/api/default
       OTLP_LOGS_ENDPOINT: http://openobserve:5080/api/default/logs/_json
       O2_USER: ${O2_USER:-admin@mnemolite.local}
       O2_PASSWORD: ${O2_PASSWORD:-Complexpass#123}
