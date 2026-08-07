@@ -14,7 +14,14 @@ from enum import Enum
 
 def _normalize_tags(tags: Optional[List[str]]) -> Optional[List[str]]:
     """
-    Normalize tags: trim, lowercase, deduplicate. (P3-2: extracted from 3 duplicates)
+    Normalize tags: trim, deduplicate, lowercase except the `status:`
+    namespace whose canonical case is UPPERCASE (EPIC-60).
+
+    EPIC-60 (2026-08-07): la casse canonique du namespace `status` est
+    MAJUSCULE (status:CONFIRME) pour fiabiliser la requête par statut
+    forensique. Le tag obsolète `fact:verifie` est remplacé par
+    `status:CONFIRME` (tous points d'écriture : MCP, REST, repo).
+    Tous les autres tags sont en minuscules.
 
     Args:
         tags: Raw tag list or None
@@ -26,7 +33,20 @@ def _normalize_tags(tags: Optional[List[str]]) -> Optional[List[str]]:
         return None
     if not tags:
         return []
-    cleaned = [tag.strip().lower() for tag in tags if tag.strip()]
+    cleaned = []
+    for tag in tags:
+        t = tag.strip()
+        if not t:
+            continue
+        if t.lower() == "fact:verifie":
+            # EPIC-60 : obsolète, remplacé par la casse canonique du statut
+            t = "status:CONFIRME"
+        elif t.lower().startswith("status:"):
+            value = t.split(":", 1)[1] if ":" in t else ""
+            t = f"status:{value.upper()}"
+        else:
+            t = t.lower()
+        cleaned.append(t)
     seen: set = set()
     unique_tags = []
     for tag in cleaned:
@@ -95,7 +115,7 @@ class MemoryBase(BaseModel):
     @field_validator('tags')
     @classmethod
     def validate_tags(cls, v: List[str]) -> List[str]:
-        """Validate tags: trim whitespace, remove duplicates, lowercase."""
+        """Validate tags: trim whitespace, remove duplicates, lowercase (status:* UPPERCASE, EPIC-60)."""
         result = _normalize_tags(v)
         return result if result is not None else []
 

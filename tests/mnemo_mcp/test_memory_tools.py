@@ -383,6 +383,105 @@ class TestWriteMemoryTool:
         assert "contenu long avec les chiffres parrainages" in texts[1]
 
 
+    # --- EPIC-60 : registre des conventions de tags (validation douce) ---
+
+    @pytest.mark.asyncio
+    async def test_write_warns_on_missing_status_tag(
+        self, mock_ctx, mock_memory_repository, sample_memory
+    ):
+        """EPIC-60 T3.1 : write d'une mémoire KERNEL sans status:* -> warning non bloquant."""
+        tool = WriteMemoryTool()
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "embedding_service": AsyncMock(),
+        })
+        mock_memory_repository.create.return_value = sample_memory
+
+        response = await tool.execute(
+            ctx=mock_ctx,
+            title="Test Memory",
+            content="Test content",
+            tags=["kernel", "sys:history"],
+        )
+
+        # Non bloquant : la mémoire est créée
+        assert response["id"] is not None
+        warnings = response.get("tag_warnings", [])
+        assert any("status" in w.lower() for w in warnings)
+
+    @pytest.mark.asyncio
+    async def test_write_warns_on_unknown_tag(
+        self, mock_ctx, mock_memory_repository, sample_memory
+    ):
+        """EPIC-60 T3.2 : namespace de tag inconnu -> warning, tag conservé."""
+        tool = WriteMemoryTool()
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "embedding_service": AsyncMock(),
+        })
+        mock_memory_repository.create.return_value = sample_memory
+
+        response = await tool.execute(
+            ctx=mock_ctx,
+            title="Test Memory",
+            content="Test content",
+            tags=["foo:bar"],
+        )
+
+        assert response["id"] is not None
+        assert any("foo" in w for w in response.get("tag_warnings", []))
+        # Le tag inconnu est conservé tel quel (validation douce)
+        create_call = mock_memory_repository.create.call_args[0][0]
+        assert "foo:bar" in create_call.tags
+
+    @pytest.mark.asyncio
+    async def test_status_case_normalized(
+        self, mock_ctx, mock_memory_repository, sample_memory
+    ):
+        """EPIC-60 T3.3 : status:confirme -> status:CONFIRME au write."""
+        tool = WriteMemoryTool()
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "embedding_service": AsyncMock(),
+        })
+        mock_memory_repository.create.return_value = sample_memory
+
+        await tool.execute(
+            ctx=mock_ctx,
+            title="Test Memory",
+            content="Test content",
+            tags=["status:confirme"],
+        )
+
+        create_call = mock_memory_repository.create.call_args[0][0]
+        assert "status:CONFIRME" in create_call.tags
+        assert not any(t == "status:confirme" for t in create_call.tags)
+
+    @pytest.mark.asyncio
+    async def test_fact_verifie_obsolete_replaced(
+        self, mock_ctx, mock_memory_repository, sample_memory
+    ):
+        """EPIC-60 T1.2 : fact:verifie (obsolète) -> status:CONFIRME + warning."""
+        tool = WriteMemoryTool()
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "embedding_service": AsyncMock(),
+        })
+        mock_memory_repository.create.return_value = sample_memory
+
+        response = await tool.execute(
+            ctx=mock_ctx,
+            title="Test Memory",
+            content="Test content",
+            tags=["fact:verifie"],
+        )
+
+        create_call = mock_memory_repository.create.call_args[0][0]
+        assert "status:CONFIRME" in create_call.tags
+        assert not any(t == "fact:verifie" for t in create_call.tags)
+        assert any("fact:verifie" in w for w in response.get("tag_warnings", []))
+
+
 class TestUpdateMemoryTool:
     """Tests for UpdateMemoryTool."""
 

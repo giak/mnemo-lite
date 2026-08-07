@@ -36,6 +36,7 @@ from mnemo_mcp.models.memory_models import (
 from db.repositories.memory_repository import MemoryRepository
 from services.embedding_service import EmbeddingServiceInterface
 from mnemo_mcp.tools.project_tools import resolve_project_id
+from mnemo_mcp.tag_registry import process_tags
 from utils.sql_vector import format_vector_for_sql
 from core.settings import get_settings
 from sqlalchemy import text as sa_text
@@ -179,12 +180,15 @@ class WriteMemoryTool(BaseMCPComponent):
                 except ValueError as e:
                     raise ValueError(f"Invalid related_chunks UUID: {e}")
 
+            # EPIC-60: normalisation douce des tags (casse canonique, obsolètes)
+            normalized_tags, tag_warnings = process_tags(tags)
+
             # Create MemoryCreate object
             memory_create = MemoryCreate(
                 title=title,
                 content=content,
                 memory_type=memory_type_enum,
-                tags=tags or [],
+                tags=normalized_tags,
                 author=author,
                 project_id=project_uuid,
                 related_chunks=related_chunks_uuids,
@@ -275,6 +279,9 @@ class WriteMemoryTool(BaseMCPComponent):
                 result["potential_duplicates"] = true_dupes[:3]  # Only true dupes (near-matches go in similar_memories)
             if similar_memories:
                 result["similar_memories"] = similar_memories
+            if tag_warnings:
+                result["tag_warnings"] = tag_warnings
+                logger.warning("write_memory.tag_warnings", warnings=tag_warnings, memory_id=str(memory.id))
 
             return result
 
@@ -468,6 +475,11 @@ class UpdateMemoryTool(BaseMCPComponent):
                     # Graceful degradation: continue without sanitization
                     logger.error("privacy_service.failed", error=str(e))
 
+            # EPIC-60: normalisation douce des tags au write
+            tag_warnings = []
+            if tags is not None:
+                tags, tag_warnings = process_tags(tags)
+
             # Create MemoryUpdate object
             memory_update = MemoryUpdate(
                 title=title,
@@ -558,12 +570,15 @@ class UpdateMemoryTool(BaseMCPComponent):
                 elapsed_ms=f"{elapsed_ms:.2f}"
             )
 
-            return {
+            result = {
                 "id": str(updated_memory.id),
                 "title": updated_memory.title,
                 "updated_at": updated_memory.updated_at.isoformat(),
                 "embedding_regenerated": embedding_regenerated,
             }
+            if tag_warnings:
+                result["tag_warnings"] = tag_warnings
+            return result
 
         except ValueError as e:
             logger.error("Validation error in update_memory", error=str(e))

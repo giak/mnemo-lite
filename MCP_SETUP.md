@@ -539,6 +539,42 @@ get_indexing_stats, get_memory_health,
 get_cache_stats, switch_project, ping
 ```
 
+## 8. Registre des conventions de tags (EPIC-60)
+
+Registre central des conventions de tags, appliqué au write (validation **douce**, jamais bloquante : un écart produit un `tag_warnings` dans la réponse, pas une erreur).
+
+### Règle générale
+
+- Les tags sont en **minuscules**, sauf le namespace `status` dont la casse canonique est **MAJUSCULE** : `status:CONFIRME`.
+- Un tag avec `:` doit utiliser un namespace réservé (ci-dessous). Un namespace inconnu (`foo:bar`) déclenche un warning et le tag est conservé tel quel.
+- Un tag sans `:` est un tag libre (aucune contrainte).
+
+### Namespaces réservés
+
+| Namespace | Casse / vocabulaire | Exemples |
+|---|---|---|
+| `status:*` | Valeur MAJUSCULE, vocabulaire contraint : `CONFIRME`, `DOUTE`, `REFUTE`, `VERIFIE` | `status:CONFIRME` |
+| `fact:*` | **Obsolète** : `fact:verifie` est remplacé automatiquement par `status:CONFIRME` (warning informatif) | `fact:verifie` → `status:CONFIRME` |
+| `project:*` | Valeur libre (nom de projet) | `project:truth-engine` |
+| `sys:*` | Valeur libre (tags système : history, core, anchor, pattern, drift...) | `sys:history`, `sys:core` |
+| `session:*` | Valeur libre (auto-import) | `session:<uuid>` |
+| `date:*` | Valeur libre (auto-import, format YYYYMMDD) | `date:20251030` |
+| `source:*` | Valeur libre (auto-import) | `source-s3` (tag libre), `source:chatgpt` |
+
+Namespaces **réservés mais non standardisés** (à venir, non observés en base) : `kind:*`, `memory:*`. Leur utilisation déclenche un warning « namespace inconnu » tant qu'ils ne sont pas standardisés.
+
+### Tags documentés (hors namespace)
+
+- `kernel` (et variantes `kernel-v2`, `kernel-apex`...) : mémoire issue du pipeline KERNEL. Une mémoire taguée `kernel*` **sans** tag `status:*` déclenche un warning (statut forensique manquant).
+- Tags techniques d'import : `claude-code`, `auto-imported`, `auto-saved`, `investigation`, `truth-engine`, `livre-cst`, `polarite-*`, `discriminant-*`.
+
+### Normalisation appliquée au write
+
+- `status:confirme` → `status:CONFIRME` (casse normalisée, warning au tool MCP).
+- `fact:verifie` → `status:CONFIRME` (obsolète ; remplacé par le modèle `MemoryCreate`/`MemoryUpdate`, donc sur tous les points d'écriture ; warning au tool MCP).
+- Trim + déduplication des tags (modèle `MemoryCreate`/`MemoryUpdate`).
+- Warning non bloquant (`tag_warnings` dans la réponse) : namespace inconnu, statut inconnu, mémoire `kernel*` sans `status:*`, casse normalisée.
+
 ---
 
-*Guide manuel — Dernière mise à jour : 2026-06-13*
+*Guide manuel — Dernière mise à jour : 2026-08-07 (ajout section 8 : registre des tags EPIC-60)*
