@@ -35,8 +35,10 @@ def mock_context():
     mock_ctx.session.get = Mock(side_effect=session_get)
     mock_ctx.session.set = Mock(side_effect=session_set)
 
-    # Mock elicit for elicitation (Story 23.11) - default to "yes" confirmation
-    mock_ctx.elicit = AsyncMock(return_value=MagicMock(value="yes"))
+    # Mock elicit for elicitation (Story 23.11) - respect request_confirmation contract
+    mock_ctx.elicit = AsyncMock(
+        return_value=MagicMock(action="accept", data=MagicMock(choice="yes"))
+    )
 
     return mock_ctx
 

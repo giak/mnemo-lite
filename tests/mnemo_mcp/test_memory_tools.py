@@ -29,8 +29,13 @@ from mnemo_mcp.models.memory_models import (
 def mock_ctx():
     """Mock MCP Context."""
     ctx = MagicMock()
-    # Mock elicit for elicitation (Story 23.11) - default to "yes" confirmation
-    ctx.elicit = AsyncMock(return_value=MagicMock(value="yes"))
+    # Mock elicit for elicitation (Story 23.11) - default to "yes" confirmation.
+    # Contract: request_confirmation() checks response.action == "accept"
+    # and response.data.choice == "yes" (see api/mnemo_mcp/elicitation.py).
+    ctx.elicit = AsyncMock(return_value=MagicMock(
+        action="accept",
+        data=MagicMock(choice="yes"),
+    ))
     return ctx
 
 

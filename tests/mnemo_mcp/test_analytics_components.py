@@ -97,8 +97,7 @@ def mock_services():
 def mock_context_elicit_yes():
     """Mock MCP context that confirms elicitation (yes)."""
     mock_ctx = AsyncMock()
-    mock_response = Mock()
-    mock_response.value = "yes"
+    mock_response = Mock(action="accept", data=Mock(choice="yes"))
     mock_ctx.elicit = AsyncMock(return_value=mock_response)
     return mock_ctx
 
@@ -107,8 +106,7 @@ def mock_context_elicit_yes():
 def mock_context_elicit_no():
     """Mock MCP context that cancels elicitation (no)."""
     mock_ctx = AsyncMock()
-    mock_response = Mock()
-    mock_response.value = "no"
+    mock_response = Mock(action="cancel", data=Mock(choice="no"))
     mock_ctx.elicit = AsyncMock(return_value=mock_response)
     return mock_ctx
 
@@ -134,9 +132,9 @@ async def test_clear_cache_tool_elicitation_yes(mock_services, mock_context_elic
 
     # Verify elicitation was called
     mock_context_elicit_yes.elicit.assert_called_once()
-    elicit_call_prompt = mock_context_elicit_yes.elicit.call_args[1]["prompt"]
-    assert "Clear all cache" in elicit_call_prompt
-    assert "High (all caches)" in elicit_call_prompt
+    elicit_call_message = mock_context_elicit_yes.elicit.call_args[1]["message"]
+    assert "Clear all cache" in elicit_call_message
+    assert "High (all caches)" in elicit_call_message
 
     # Verify cache was cleared
     mock_services["chunk_cache"].clear_all.assert_called_once()

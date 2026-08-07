@@ -28,7 +28,9 @@ from mnemo_mcp.elicitation import (
 def mock_context_confirm():
     """Mock MCP context that confirms action (user selects 'yes')."""
     ctx = MagicMock()
-    ctx.elicit = AsyncMock(return_value=MagicMock(value="yes"))
+    ctx.elicit = AsyncMock(return_value=MagicMock(
+        action="accept", data=MagicMock(choice="yes")
+    ))
     return ctx
 
 
@@ -36,7 +38,9 @@ def mock_context_confirm():
 def mock_context_cancel():
     """Mock MCP context that cancels action (user selects 'no')."""
     ctx = MagicMock()
-    ctx.elicit = AsyncMock(return_value=MagicMock(value="no"))
+    ctx.elicit = AsyncMock(return_value=MagicMock(
+        action="cancel", data=MagicMock(choice="no")
+    ))
     return ctx
 
 
@@ -44,7 +48,9 @@ def mock_context_cancel():
 def mock_context_choice():
     """Mock MCP context that selects an option."""
     ctx = MagicMock()
-    ctx.elicit = AsyncMock(return_value=MagicMock(value="Option B"))
+    ctx.elicit = AsyncMock(return_value=MagicMock(
+        action="accept", data=MagicMock(choice="Option B")
+    ))
     return ctx
 
 
@@ -77,8 +83,8 @@ async def test_request_confirmation_confirmed(mock_context_confirm):
     # Verify elicit was called
     mock_context_confirm.elicit.assert_called_once()
     call_args = mock_context_confirm.elicit.call_args
-    assert "Test Action" in call_args.kwargs["prompt"]
-    assert "Test details" in call_args.kwargs["prompt"]
+    assert "Test Action" in call_args.kwargs["message"]
+    assert "Test details" in call_args.kwargs["message"]
 
 
 @pytest.mark.asyncio
@@ -93,7 +99,8 @@ async def test_request_confirmation_cancelled(mock_context_cancel):
     # Verify result
     assert result.confirmed is False
     assert result.cancelled is True
-    assert result.selected_option == "no"
+    # On cancel, no selection is recorded (safe default, see request_confirmation)
+    assert result.selected_option is None
 
     # Verify elicit was called
     mock_context_cancel.elicit.assert_called_once()
@@ -112,10 +119,10 @@ async def test_request_confirmation_dangerous_flag(mock_context_confirm):
     # Verify result (still confirms)
     assert result.confirmed is True
 
-    # Verify prompt includes warning icon
+    # Verify message includes warning icon
     call_args = mock_context_confirm.elicit.call_args
-    assert "⚠️" in call_args.kwargs["prompt"]
-    assert "Delete Memory" in call_args.kwargs["prompt"]
+    assert "⚠️" in call_args.kwargs["message"]
+    assert "Delete Memory" in call_args.kwargs["message"]
 
 
 @pytest.mark.asyncio
@@ -151,12 +158,13 @@ async def test_request_choice_selected(mock_context_choice):
 
     # Verify elicit was called with Cancel added
     call_args = mock_context_choice.elicit.call_args
-    assert "Pick one:" in call_args.kwargs["prompt"]
+    assert "Pick one:" in call_args.kwargs["message"]
     schema = call_args.kwargs["schema"]
-    assert "Cancel" in schema["enum"]
-    assert "Option A" in schema["enum"]
-    assert "Option B" in schema["enum"]
-    assert "Option C" in schema["enum"]
+    enum = schema.model_json_schema()["properties"]["choice"]["enum"]
+    assert "Cancel" in enum
+    assert "Option A" in enum
+    assert "Option B" in enum
+    assert "Option C" in enum
 
 
 @pytest.mark.asyncio

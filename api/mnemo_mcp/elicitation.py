@@ -20,9 +20,10 @@ Usage:
     ...     # Proceed with deletion
 """
 import structlog
+from functools import lru_cache
 from mcp.server.fastmcp import Context
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from pydantic import BaseModel, Field, create_model
+from typing import List, Literal, Optional, Type
 
 logger = structlog.get_logger()
 
@@ -36,9 +37,20 @@ class YesNoResponse(BaseModel):
     choice: str = Field(description="yes or no")
 
 
-class ChoiceResponse(BaseModel):
-    """Schema for multi-choice elicitation responses."""
-    choice: str = Field(description="selected option")
+@lru_cache(maxsize=64)
+def _choice_schema(options: tuple) -> Type[BaseModel]:
+    """Build a choice schema exposing the given options as enum.
+
+    Preconditions: non-empty options (request_choice always appends "Cancel").
+    Duplicates are removed (order preserved) to keep the enum unambiguous.
+    """
+    if not options:
+        raise ValueError("_choice_schema requires at least one option")
+    unique = tuple(dict.fromkeys(options))
+    return create_model(
+        "ChoiceResponse",
+        choice=(Literal[unique], Field(description="selected option")),
+    )
 
 
 class ElicitationRequest(BaseModel):
@@ -193,7 +205,7 @@ async def request_choice(
     try:
         response = await ctx.elicit(
             message=f"{question}\n\nSelect one:",
-            schema=ChoiceResponse
+            schema=_choice_schema(tuple(all_options))
         )
 
         if response.action != "accept":
