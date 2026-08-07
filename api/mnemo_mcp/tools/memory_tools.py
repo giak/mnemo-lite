@@ -725,6 +725,8 @@ class DeleteMemoryTool(BaseMCPComponent):
                 can_restore=False,
             )
 
+            return response.model_dump(mode='json')
+
         except ValueError as e:
             logger.error("Validation error in delete_memory", error=str(e))
             raise
