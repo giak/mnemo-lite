@@ -148,7 +148,7 @@ docker compose --profile prod up -d  # Prod (Nginx)
 
 **Version:** 5.0.0-dev | **Tests:** 1893 fonctions | **MCP Tools:** 31 | **Memories:** ~39 700
 
-**Completed EPICs:** 55-68 (OTLP, dimensions, tests, backfills, REST unification, registre tags, boot), 69 PAUSED et 70 PARKED (volet code, focus recherche TEXTE). EPIC 28-42 : infrastructure, MCP, observabilité, secret stripping.
+**Completed EPICs:** 55-68 DONE (OTLP, dimensions, tests, backfills, REST unification, registre tags, boot, maintenance prod/skills), 69 PAUSED et 70 PARKED (volet code, focus recherche TEXTE). EPIC 28-42 : infrastructure, MCP, observabilité, secret stripping.
 
 ## 📜 License
 

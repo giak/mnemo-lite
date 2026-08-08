@@ -1,6 +1,6 @@
 # 🚀 EPIC-67 : Opérations de maintenance prod + dépendances externes (skills, KERNEL)
 
-> **Status:** EN COURS (2026-08-07 : S2 terminé ; S1 backfill relancé après la fin du backfill events EPIC-62, progression saine 0 ERROR)
+> **Status:** ✅ DONE (validé le 2026-08-08 : S1 backfill memory terminé `[856/856]` 0 ERROR, missing_half=0 ; S2 skills externes + KERNEL à jour)
 > **Priority:** P1 (backfill) / P2 (skills)
 > **Date:** 2026-08-07
 > **Effort:** variable (backfill : heures de calcul ; skills : 1 h)
