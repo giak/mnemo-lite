@@ -1,7 +1,7 @@
 # 🧩 EPIC-69 : Migration `code_chunks` - colonnes TEXT 768 → 1024 (CODE reste 768)
 
-> **Status:** BACKLOG (créé le 2026-08-07, issu du résidu documenté EPIC-62)
-> **Priority:** P2 : la voie TEXT de code_chunks est cassée depuis le passage à bge-m3 (insertions 1024D dans colonnes 768D)
+> **Status:** ⏸️ **PAUSED** (le 2026-08-08 : volet code mis en pause par décision utilisateur, focus sur la recherche TEXTE ; **absorbée dans l'EPIC-70** `EPIC-70-code-parked.md` qui consolide tout le périmètre code)
+> **Priority:** P2 (différée via EPIC-70, PARKED)
 > **Date:** 2026-08-07
 > **Effort:** 2-3 h + backfill des embeddings TEXT
 
