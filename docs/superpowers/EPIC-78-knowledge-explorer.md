@@ -1,6 +1,6 @@
 # 🧭 EPIC-78 : Knowledge Explorer — consulter le socle Truth Engine (faits, enquêtes, articles, relations)
 
-> **Status:** IN_PROGRESS — T0+T1 backend DONE (2026-08-08) ; reste T2-T6 frontend
+> **Status:** IN_PROGRESS — T0+T1 backend DONE, T2 page Socle DONE (2026-08-08) ; reste T3-T6 frontend
 > **Priority:** P1 : le besoin central « voir ce qui est lié » est aujourd'hui techniquement impossible
 > **Date:** 2026-08-08
 > **Effort:** 8-12 h (T0/T1 backend + T2-T6 frontend)
@@ -36,8 +36,15 @@ Nouveau routeur `api/routes/explorer_routes.py` (SQL direct, pattern `memory_gra
 - **`GET /api/v1/memories/explorer/stats`** (agrégats socle) : `by_type`, `status.confirmed/fact_checked/total`, `top_subjects` (filtre anti-bruit PRÉCIS : exclusions `session:/date:/source-/verifie-/status:/project:/memory:/trace:`, versions `t[0-9]+|v[0-9]+` via `!~*`, bruit corpus livre) , `timeline` par mois. Filtres : `project_id` optionnel (défaut = tout le socle, conversations exclues — les 153 `status:CONFIRME` récents sont hors project_id). **Validé live** : 5 957 éléments (4 808 investigations, 94 quintessences, 52 articles), 153 CONFIRME, sujets réels (14-juillet-2026, france, macron, iran, iceberg-max…).
 - **`GET /api/v1/memories/explorer/tree?subject=X`** (arborescence) : sujet → `investigations` / `facts` (quintessences + fact-check) / `others`. **Validé live** : `14-juillet-2026` = 318 éléments (256 investigations).
 
-### T2 — Page Socle (frontend, ~2-3 h)
-`Explorer.vue` onglet **Socle** : distribution par type (compteurs + barres), top sujets cliquables, couverture `status:CONFIRME`, timeline investigations. Zéro bruit conversation (filtre socle TE par défaut).
+### ✅ T2 — Page Socle (frontend, DONE)
+Nouvelle page `src/pages/Explorer.vue` (route `/explorer`, groupe Data, nav auto depuis le router) avec 3 onglets : **Socle** (implémenté) / **Explorer** (T3) / **Relations** (T4). Onglet Socle :
+- **4 cartes de stats** : total socle, enquêtes, fiches internes (quintessences), articles publiés.
+- **Distribution par type** : barres proportionnelles + compteurs par `memory_type` (icônes + couleurs par type).
+- **Couverture factuelle** : barres de progression `status:CONFIRME` et `fact-check` sur le total du socle, avec pourcentages.
+- **Top sujets** : liste cliquable (barres + compteurs) → clic = sélection du sujet + bascule sur l'onglet Explorer (prêt pour T3).
+- **Timeline des investigations** : barres mensuelles (compteur au survol, libellés YY-MM).
+- Fichiers : `src/types/explorer.ts` (types), `src/api/explorer.ts` (`getExplorerStats`), test `src/api/explorer.test.ts` (2 tests).
+- **Validé** : vue-tsc 0 erreur · vitest 31/31 · eslint 0 erreur · build OK · rendu navigateur vérifié (zéro erreur console).
 
 ### T3 — Explorer arborescence (frontend, ~3-4 h)
 Onglet **Explorer** : sélecteur de sujet → arborescence sujet → enquêtes → faits vérifiés → sources, chaque niveau cliquable, drill-down, badges de statut. Réutilise les patterns `loading/errors/empty`.
@@ -55,8 +62,8 @@ Extension de Search : filtres combinés (type + tags + statut + période) en s'a
 
 - [x] `GET /api/v1/memories/graph` renvoie une structure valide sans erreur (T0 ; nodes/edges vides tant que la table n'est pas peuplée)
 - [x] `related-by-tags` renvoie les top-N liées pour une fiche TE quelconque (validé : ARCOM/SREN/divergence 2022 sur la mémoire parrainages)
-- [ ] Page Explorer : 3 onglets (Socle / Explorer / Relations) + fiche enrichie (T2-T5)
-- [ ] `pnpm vue-tsc -b --noEmit` : 0 erreur · vitest vert · eslint 0 erreur · build OK (frontend)
+- [x] Page Explorer : 3 onglets (Socle implémenté ; Explorer T3, Relations T4, fiche enrichie T5) — onglet Socle livré en T2
+- [x] `pnpm vue-tsc -b --noEmit` : 0 erreur · vitest 31/31 · eslint 0 erreur · build OK (frontend, T2)
 - [x] Tests backend (pytest) pour les 3 nouveaux endpoints : `tests/routes/test_explorer_routes.py` **8/8** + zéro régression adjacente (26/26)
 
 ## Notes de décision

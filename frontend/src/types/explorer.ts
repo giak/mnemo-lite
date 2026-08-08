@@ -1,0 +1,22 @@
+/**
+ * EPIC-78: Knowledge Explorer Types
+ * TypeScript interfaces pour le Knowledge Explorer (page Explorer).
+ */
+
+export interface ExplorerStats {
+  /** Distribution par memory_type (ex. { investigation: 4808, article: 52 }) */
+  by_type: Record<string, number>
+  /** Couverture factuelle du socle */
+  status: {
+    /** Nombre de mémoires taggées status:CONFIRME */
+    confirmed: number
+    /** Nombre de mémoires taggées fact-check */
+    fact_checked: number
+    /** Nombre total d'éléments du socle (conversations exclues) */
+    total: number
+  }
+  /** Tags de sujet les plus présents (hors bruit technique) */
+  top_subjects: Array<{ tag: string; count: number }>
+  /** Investigations/articles/quintessences par mois (YYYY-MM) */
+  timeline: Array<{ month: string; count: number }>
+}

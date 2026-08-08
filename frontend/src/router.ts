@@ -28,6 +28,12 @@ const router = createRouter({
       meta: { navLabel: 'Memories', navGroup: 'Data' }
     },
     {
+      path: '/explorer',
+      name: 'explorer',
+      component: () => import('@/pages/Explorer.vue'),
+      meta: { navLabel: 'Explorer', navGroup: 'Data' }
+    },
+    {
       path: '/brain',
       name: 'brain',
       component: () => import('@/pages/Brain.vue'),
