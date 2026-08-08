@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted, nextTick, type Ref } from 'vue'
+import { onMounted, onUnmounted, nextTick, type Ref } from 'vue'
 
 /**
  * Composable for automatic canvas resizing in normal and fullscreen modes

@@ -27,15 +27,16 @@ describe('useCodeSearch', () => {
     const mockResults = [
       {
         chunk_id: '1',
-        content: 'async def fetch_data():',
+        source_code: 'async def fetch_data():',
         file_path: 'api/services/data.py',
         language: 'python',
         chunk_type: 'function',
-        name_path: ['fetch_data'],
-        line_start: 10,
-        line_end: 20,
-        score: 0.95,
-        search_type: 'hybrid',
+        name: 'fetch_data',
+        rrf_score: 0.95,
+        rank: 1,
+        metadata: {},
+        contribution: {},
+        related_nodes: [],
       },
     ]
 
@@ -92,14 +93,16 @@ describe('useCodeSearch', () => {
     results.value = [
       {
         chunk_id: '1',
-        content: 'test',
+        source_code: 'test',
         file_path: 'test.py',
         language: 'python',
         chunk_type: 'function',
-        line_start: 1,
-        line_end: 2,
-        score: 1.0,
-        search_type: 'hybrid',
+        name: 'test',
+        rrf_score: 1.0,
+        rank: 1,
+        metadata: {},
+        contribution: {},
+        related_nodes: [],
       },
     ]
 
@@ -148,14 +151,16 @@ describe('useCodeSearch', () => {
     results.value = [
       {
         chunk_id: '1',
-        content: 'test',
+        source_code: 'test',
         file_path: 'test.py',
         language: 'python',
         chunk_type: 'function',
-        line_start: 1,
-        line_end: 2,
-        score: 1.0,
-        search_type: 'hybrid',
+        name: 'test',
+        rrf_score: 1.0,
+        rank: 1,
+        metadata: {},
+        contribution: {},
+        related_nodes: [],
       },
     ]
     error.value = 'Some error'
@@ -176,25 +181,29 @@ describe('useCodeSearch', () => {
     results.value = [
       {
         chunk_id: '1',
-        content: 'test',
+        source_code: 'test',
         file_path: 'test.py',
         language: 'python',
         chunk_type: 'function',
-        line_start: 1,
-        line_end: 2,
-        score: 1.0,
-        search_type: 'hybrid',
+        name: 'test',
+        rrf_score: 1.0,
+        rank: 1,
+        metadata: {},
+        contribution: {},
+        related_nodes: [],
       },
       {
         chunk_id: '2',
-        content: 'test2',
+        source_code: 'test2',
         file_path: 'test2.py',
         language: 'python',
         chunk_type: 'class',
-        line_start: 1,
-        line_end: 2,
-        score: 0.9,
-        search_type: 'vector',
+        name: 'test2',
+        rrf_score: 0.9,
+        rank: 2,
+        metadata: {},
+        contribution: {},
+        related_nodes: [],
       },
     ]
 

@@ -15,7 +15,7 @@ let graphInstance: Graph | null = null
 // Setup resize handling with ResizeObserver (modern API)
 const { calculateSize } = useFullscreenResize(containerRef, (width, height) => {
   if (graphInstance) {
-    graphInstance.changeSize(width, height)
+    graphInstance.setSize(width, height)
   }
 })
 
@@ -63,7 +63,7 @@ const preparedData = computed(() => {
   // Prepare G6 data format
   const g6Nodes = props.nodes.map((node) => {
     const clusterId = clusters.get(node.id) || 0
-    const color = clusterColors[clusterId % clusterColors.length]
+    const color = clusterColors[clusterId % clusterColors.length] ?? '#3b82f6'
 
     return {
       id: node.id,
@@ -76,7 +76,7 @@ const preparedData = computed(() => {
       },
       // Size based on chunk_count or importance
       size: Math.max(15, Math.min(40, (node.metadata?.chunk_count || 1) * 3)),
-      data: node
+      data: node as unknown as Record<string, unknown>
     }
   })
 
@@ -210,12 +210,18 @@ watch(() => [props.nodes, props.edges], async () => {
 
 <template>
   <div class="force-graph-container">
-    <div ref="containerRef" class="graph-canvas"></div>
+    <div
+      ref="containerRef"
+      class="graph-canvas"
+    />
 
     <!-- Cluster Legend -->
-    <div v-if="preparedData.clusters.size > 0" class="cluster-legend">
+    <div
+      v-if="preparedData.clusters.size > 0"
+      class="cluster-legend"
+    >
       <div class="legend-title flex items-center gap-2">
-        <span class="scada-led scada-led-cyan"></span>
+        <span class="scada-led scada-led-cyan" />
         <span class="font-mono uppercase">Clusters by Folder</span>
       </div>
       <div class="legend-items">
@@ -227,10 +233,13 @@ watch(() => [props.nodes, props.edges], async () => {
           <div
             class="legend-dot"
             :style="{ backgroundColor: clusterColors[index % clusterColors.length] }"
-          ></div>
+          />
           <span class="legend-label font-mono">{{ folder }}</span>
         </div>
-        <div v-if="preparedData.clusters.size > 8" class="legend-item">
+        <div
+          v-if="preparedData.clusters.size > 8"
+          class="legend-item"
+        >
           <span class="legend-label text-gray-500 font-mono">+{{ preparedData.clusters.size - 8 }} more...</span>
         </div>
       </div>

@@ -70,7 +70,7 @@ describe('useMemorySearch', () => {
     await search('test', { memoryType: 'investigation' })
     await nextTick()
 
-    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body)
+    const callBody = JSON.parse(mockFetch.mock.calls[0]![1].body)
     expect(callBody.memory_type).toBe('investigation')
   })
 

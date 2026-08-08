@@ -5,6 +5,7 @@
 
 import { computed, type Ref } from 'vue'
 import { marked } from 'marked'
+import { markedHighlight } from 'marked-highlight'
 import hljs from 'highlight.js/lib/core'
 
 // Register commonly used languages
@@ -26,25 +27,30 @@ hljs.registerLanguage('json', json)
 hljs.registerLanguage('css', css)
 hljs.registerLanguage('html', xml)
 
-// Configure marked with highlight.js
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-  highlight: (code: string, lang: string) => {
-    if (lang && hljs.getLanguage(lang)) {
+// Configure marked with highlight.js (marked v15 : option `highlight` remplacée par le plugin marked-highlight)
+marked.use(
+  markedHighlight({
+    langPrefix: 'hljs language-',
+    highlight(code, lang) {
+      if (lang && hljs.getLanguage(lang)) {
+        try {
+          return hljs.highlight(code, { language: lang }).value
+        } catch {
+          // fall through to auto-detect
+        }
+      }
       try {
-        return hljs.highlight(code, { language: lang }).value
+        return hljs.highlightAuto(code).value
       } catch {
-        // fall through
+        return code
       }
     }
-    // Auto-detect language
-    try {
-      return hljs.highlightAuto(code).value
-    } catch {
-      return code
-    }
-  }
+  })
+)
+
+marked.setOptions({
+  breaks: true,
+  gfm: true
 })
 
 /**

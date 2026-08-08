@@ -20,6 +20,8 @@ export interface GraphNode {
   label: string
   type: string
   file_path?: string
+  start_line?: number
+  end_line?: number
   metadata?: Record<string, any>
   // Complexity metrics
   cyclomatic_complexity?: number
@@ -65,7 +67,7 @@ interface UseCodeGraphReturn {
   buildError: ReturnType<typeof ref<string | null>>
   repositories: ReturnType<typeof ref<string[]>>
   metrics: ReturnType<typeof ref<RepositoryMetrics | null>>
-  fetchStats: (repository: string) => Promise<void>
+  fetchStats: (repository?: string) => Promise<void>
   fetchGraphData: (repository: string, limit?: number) => Promise<void>
   fetchModuleGraphData: (repository: string, limit?: number) => Promise<void>
   buildGraph: (repository: string, language?: string) => Promise<void>

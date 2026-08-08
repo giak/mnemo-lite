@@ -70,7 +70,8 @@ onUnmounted(() => {
 const taxonomieByGroup = computed(() => {
   const groups: Record<string, any[]> = { 'PERMANENT': [], 'LONG TERME': [], 'MOYEN TERME': [], 'COURT TERME': [] }
   for (const tag of data.value.tags) {
-    if (groups[tag.group]) groups[tag.group].push(tag)
+    const bucket = groups[tag.group]
+    if (bucket) bucket.push(tag)
   }
   return Object.entries(groups).filter(([, items]) => items.length > 0)
 })
@@ -111,35 +112,48 @@ const formattedTime = computed(() => {
     <!-- Header -->
     <div class="flex items-center justify-between px-6 py-4 border-b-2 border-slate-700">
       <div class="flex items-center gap-4">
-        <span class="scada-led scada-led-cyan"></span>
-        <h1 class="text-2xl font-bold font-mono text-cyan-400 uppercase tracking-wider">Μ Expanse Memory</h1>
+        <span class="scada-led scada-led-cyan" />
+        <h1 class="text-2xl font-bold font-mono text-cyan-400 uppercase tracking-wider">
+          Μ Expanse Memory
+        </h1>
         <span class="scada-data text-slate-400 text-sm">
           {{ data.totalMemories.toLocaleString() }} memories | {{ data.totalChunks.toLocaleString() }} chunks
         </span>
       </div>
       <div class="flex items-center gap-4">
         <span class="text-xs font-mono text-slate-500">{{ formattedTime }}</span>
-        <button @click="refresh" :disabled="loading" class="scada-btn scada-btn-primary">
+        <button
+          :disabled="loading"
+          class="scada-btn scada-btn-primary"
+          @click="refresh"
+        >
           {{ loading ? 'LOADING' : 'REFRESH' }}
         </button>
       </div>
     </div>
 
     <!-- Error -->
-    <div v-if="error" class="mx-6 mt-4 bg-red-900/50 border-2 border-red-600 text-red-300 px-4 py-3 rounded">
+    <div
+      v-if="error"
+      class="mx-6 mt-4 bg-red-900/50 border-2 border-red-600 text-red-300 px-4 py-3 rounded"
+    >
       <span class="text-sm font-mono">{{ error }}</span>
     </div>
 
     <div class="p-6 space-y-6">
-
       <!-- Section 1: Taxonomie visuelle -->
       <div class="scada-panel">
         <div class="flex items-center gap-2 mb-4">
-          <span class="scada-led scada-led-cyan"></span>
-          <h2 class="scada-label text-cyan-400">Taxonomie (11 tags)</h2>
+          <span class="scada-led scada-led-cyan" />
+          <h2 class="scada-label text-cyan-400">
+            Taxonomie (11 tags)
+          </h2>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div v-for="[group, items] in taxonomieByGroup" :key="group">
+          <div
+            v-for="[group, items] in taxonomieByGroup"
+            :key="group"
+          >
             <div class="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-3 pb-2 border-b border-slate-700">
               {{ group }}
             </div>
@@ -154,11 +168,20 @@ const formattedTime = computed(() => {
                 @click="fetchByTag(tag.tag)"
               >
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="scada-led" :class="tagLedColors[tag.tag] || 'scada-led-cyan'"></span>
-                  <span class="text-xs font-mono font-bold" :class="selectedTag === tag.tag ? 'text-cyan-400' : 'text-slate-300'">
+                  <span
+                    class="scada-led"
+                    :class="tagLedColors[tag.tag] || 'scada-led-cyan'"
+                  />
+                  <span
+                    class="text-xs font-mono font-bold"
+                    :class="selectedTag === tag.tag ? 'text-cyan-400' : 'text-slate-300'"
+                  >
                     {{ tag.label }}
                   </span>
-                  <span class="ml-auto scada-data text-lg font-bold" :class="tag.count > 0 ? 'text-cyan-400' : 'text-slate-600'">
+                  <span
+                    class="ml-auto scada-data text-lg font-bold"
+                    :class="tag.count > 0 ? 'text-cyan-400' : 'text-slate-600'"
+                  >
                     {{ tag.count }}
                   </span>
                 </div>
@@ -175,35 +198,53 @@ const formattedTime = computed(() => {
       <!-- Section 2: Cycle de vie -->
       <div class="scada-panel">
         <div class="flex items-center gap-2 mb-4">
-          <span class="scada-led scada-led-yellow"></span>
-          <h2 class="scada-label text-cyan-400">Cycle de Vie</h2>
+          <span class="scada-led scada-led-yellow" />
+          <h2 class="scada-label text-cyan-400">
+            Cycle de Vie
+          </h2>
         </div>
         <div class="flex items-center gap-6 text-sm font-mono">
           <div class="flex items-center gap-2">
             <div class="px-3 py-2 rounded border border-amber-500 bg-amber-900/20">
-              <div class="text-[10px] text-slate-500 uppercase">Candidate</div>
-              <div class="scada-data text-amber-400 text-lg">{{ data.lifecycle.candidate }}</div>
+              <div class="text-[10px] text-slate-500 uppercase">
+                Candidate
+              </div>
+              <div class="scada-data text-amber-400 text-lg">
+                {{ data.lifecycle.candidate }}
+              </div>
             </div>
             <span class="text-slate-600 text-xl">──seal──→</span>
           </div>
           <div class="flex items-center gap-2">
             <div class="px-3 py-2 rounded border border-green-500 bg-green-900/20">
-              <div class="text-[10px] text-slate-500 uppercase">Sealed</div>
-              <div class="scada-data text-green-400 text-lg">{{ data.lifecycle.sealed }}</div>
+              <div class="text-[10px] text-slate-500 uppercase">
+                Sealed
+              </div>
+              <div class="scada-data text-green-400 text-lg">
+                {{ data.lifecycle.sealed }}
+              </div>
             </div>
             <span class="text-slate-600 text-xl">──→</span>
           </div>
           <div class="flex items-center gap-2">
             <div class="px-3 py-2 rounded border border-purple-500 bg-purple-900/20">
-              <div class="text-[10px] text-slate-500 uppercase">Anchor</div>
-              <div class="scada-data text-purple-400 text-lg">{{ data.lifecycle.sealed }}</div>
+              <div class="text-[10px] text-slate-500 uppercase">
+                Anchor
+              </div>
+              <div class="scada-data text-purple-400 text-lg">
+                {{ data.lifecycle.sealed }}
+              </div>
             </div>
           </div>
           <span class="text-slate-700 text-xl">|</span>
           <div class="flex items-center gap-2">
             <div class="px-3 py-2 rounded border border-red-500 bg-red-900/20">
-              <div class="text-[10px] text-slate-500 uppercase">Doubt</div>
-              <div class="scada-data text-red-400 text-lg">{{ data.lifecycle.doubt }}</div>
+              <div class="text-[10px] text-slate-500 uppercase">
+                Doubt
+              </div>
+              <div class="scada-data text-red-400 text-lg">
+                {{ data.lifecycle.doubt }}
+              </div>
             </div>
           </div>
         </div>
@@ -212,38 +253,66 @@ const formattedTime = computed(() => {
       <!-- Section 3: Santé -->
       <div class="scada-panel">
         <div class="flex items-center gap-2 mb-4">
-          <span class="scada-led" :class="data.health.drifts > 0 ? 'scada-led-red' : 'scada-led-green'"></span>
-          <h2 class="scada-label text-cyan-400">Santé</h2>
+          <span
+            class="scada-led"
+            :class="data.health.drifts > 0 ? 'scada-led-red' : 'scada-led-green'"
+          />
+          <h2 class="scada-label text-cyan-400">
+            Santé
+          </h2>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div class="bg-slate-800/50 border border-slate-700 rounded p-3">
-            <div class="text-[10px] font-mono text-slate-500 uppercase">Drifts</div>
-            <div class="scada-data text-2xl" :class="data.health.drifts > 0 ? 'text-red-400' : 'text-green-400'">
+            <div class="text-[10px] font-mono text-slate-500 uppercase">
+              Drifts
+            </div>
+            <div
+              class="scada-data text-2xl"
+              :class="data.health.drifts > 0 ? 'text-red-400' : 'text-green-400'"
+            >
               {{ data.health.drifts }}
             </div>
           </div>
           <div class="bg-slate-800/50 border border-slate-700 rounded p-3">
-            <div class="text-[10px] font-mono text-slate-500 uppercase">Traces</div>
-            <div class="scada-data text-2xl text-amber-400">{{ data.health.traces }}</div>
+            <div class="text-[10px] font-mono text-slate-500 uppercase">
+              Traces
+            </div>
+            <div class="scada-data text-2xl text-amber-400">
+              {{ data.health.traces }}
+            </div>
           </div>
           <div class="bg-slate-800/50 border border-slate-700 rounded p-3">
-            <div class="text-[10px] font-mono text-slate-500 uppercase">Consolidation</div>
-            <div class="scada-data text-2xl" :class="data.health.consolidationNeeded ? 'text-amber-400' : 'text-green-400'">
+            <div class="text-[10px] font-mono text-slate-500 uppercase">
+              Consolidation
+            </div>
+            <div
+              class="scada-data text-2xl"
+              :class="data.health.consolidationNeeded ? 'text-amber-400' : 'text-green-400'"
+            >
               {{ data.health.consolidationNeeded ? 'REQUISE' : 'OK' }}
             </div>
           </div>
           <div class="bg-slate-800/50 border border-slate-700 rounded p-3">
-            <div class="text-[10px] font-mono text-slate-500 uppercase">Decay Presets</div>
-            <div class="scada-data text-2xl text-cyan-400">{{ data.health.decayPresets }}</div>
+            <div class="text-[10px] font-mono text-slate-500 uppercase">
+              Decay Presets
+            </div>
+            <div class="scada-data text-2xl text-cyan-400">
+              {{ data.health.decayPresets }}
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Section 4: Memories filtrées -->
-      <div class="scada-panel" v-if="selectedTag">
+      <div
+        v-if="selectedTag"
+        class="scada-panel"
+      >
         <div class="flex items-center gap-2 mb-4">
-          <span class="scada-led scada-led-cyan"></span>
-          <h2 class="scada-label text-cyan-400">Memories — {{ selectedTag }}</h2>
+          <span class="scada-led scada-led-cyan" />
+          <h2 class="scada-label text-cyan-400">
+            Memories — {{ selectedTag }}
+          </h2>
           <span class="scada-data text-slate-400 text-sm ml-auto">{{ data.filteredMemories.length }}</span>
         </div>
         <div class="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
@@ -254,7 +323,7 @@ const formattedTime = computed(() => {
             @click="openMemoryDetail(memory)"
           >
             <div class="flex items-center gap-2 mb-1">
-              <span class="scada-led scada-led-green"></span>
+              <span class="scada-led scada-led-green" />
               <span class="text-xs font-mono text-cyan-400 truncate">{{ memory.title }}</span>
               <span class="ml-auto text-[10px] font-mono text-slate-500">{{ memory.memory_type }}</span>
             </div>
@@ -267,12 +336,14 @@ const formattedTime = computed(() => {
               <span class="ml-auto text-[9px] font-mono text-slate-600">{{ formatDate(memory.created_at) }}</span>
             </div>
           </div>
-          <div v-if="data.filteredMemories.length === 0" class="text-center text-slate-600 py-8 text-sm font-mono">
+          <div
+            v-if="data.filteredMemories.length === 0"
+            class="text-center text-slate-600 py-8 text-sm font-mono"
+          >
             NO MEMORIES WITH THIS TAG
           </div>
         </div>
       </div>
-
     </div>
 
     <!-- Memory Detail Modal -->
@@ -286,15 +357,17 @@ const formattedTime = computed(() => {
           <div class="bg-[#0d1424] border-2 border-cyan-700 rounded-lg shadow-2xl shadow-cyan-900/30 w-full max-w-3xl max-h-[85vh] flex flex-col mx-4">
             <!-- Header -->
             <div class="flex items-center gap-3 px-5 py-4 border-b-2 border-slate-700 flex-shrink-0">
-              <span class="scada-led scada-led-cyan"></span>
-              <h3 class="text-lg font-mono font-bold text-cyan-400 truncate flex-1">{{ selectedMemory.title }}</h3>
+              <span class="scada-led scada-led-cyan" />
+              <h3 class="text-lg font-mono font-bold text-cyan-400 truncate flex-1">
+                {{ selectedMemory.title }}
+              </h3>
               <span class="px-2 py-0.5 text-[10px] font-mono uppercase bg-slate-800 border border-slate-600 text-slate-400 rounded">
                 {{ selectedMemory.memory_type }}
               </span>
               <button
-                @click="closeModal"
                 class="text-slate-500 hover:text-cyan-400 transition-colors text-xl font-mono ml-2"
                 title="Fermer (ESC)"
+                @click="closeModal"
               >
                 ✕
               </button>
@@ -304,11 +377,18 @@ const formattedTime = computed(() => {
             <div class="flex items-center gap-4 px-5 py-3 bg-slate-900/50 border-b border-slate-800 text-[11px] font-mono text-slate-500 flex-shrink-0 flex-wrap">
               <div class="flex items-center gap-1.5">
                 <span class="text-slate-600">ID:</span>
-                <code class="text-cyan-600 cursor-pointer hover:text-cyan-400" @click="copyId(selectedMemory.id)" title="Copier l'ID">
+                <code
+                  class="text-cyan-600 cursor-pointer hover:text-cyan-400"
+                  title="Copier l'ID"
+                  @click="copyId(selectedMemory.id)"
+                >
                   {{ selectedMemory.id?.slice(0, 8) }}...
                 </code>
               </div>
-              <div class="flex items-center gap-1.5" v-if="selectedMemory.author">
+              <div
+                v-if="selectedMemory.author"
+                class="flex items-center gap-1.5"
+              >
                 <span class="text-slate-600">Author:</span>
                 <span class="text-slate-400">{{ selectedMemory.author }}</span>
               </div>
@@ -316,18 +396,27 @@ const formattedTime = computed(() => {
                 <span class="text-slate-600">Created:</span>
                 <span class="text-slate-400">{{ formatDate(selectedMemory.created_at) }}</span>
               </div>
-              <div class="flex items-center gap-1.5" v-if="selectedMemory.updated_at && selectedMemory.updated_at !== selectedMemory.created_at">
+              <div
+                v-if="selectedMemory.updated_at && selectedMemory.updated_at !== selectedMemory.created_at"
+                class="flex items-center gap-1.5"
+              >
                 <span class="text-slate-600">Updated:</span>
                 <span class="text-slate-400">{{ formatDate(selectedMemory.updated_at) }}</span>
               </div>
-              <div class="flex items-center gap-1.5" v-if="selectedMemory.score">
+              <div
+                v-if="selectedMemory.score"
+                class="flex items-center gap-1.5"
+              >
                 <span class="text-slate-600">Score:</span>
                 <span class="text-emerald-400">{{ selectedMemory.score?.toFixed(3) }}</span>
               </div>
             </div>
 
             <!-- Tags -->
-            <div class="flex items-center gap-1.5 px-5 py-3 flex-wrap flex-shrink-0" v-if="selectedMemory.tags?.length">
+            <div
+              v-if="selectedMemory.tags?.length"
+              class="flex items-center gap-1.5 px-5 py-3 flex-wrap flex-shrink-0"
+            >
               <span
                 v-for="tag in selectedMemory.tags"
                 :key="tag"
@@ -348,12 +437,18 @@ const formattedTime = computed(() => {
             <!-- Footer -->
             <div class="flex items-center justify-between px-5 py-3 border-t-2 border-slate-700 flex-shrink-0">
               <div class="flex items-center gap-2 text-[10px] font-mono text-slate-600">
-                <span v-if="selectedMemory.has_embedding" class="text-emerald-600">● embedding</span>
-                <span v-else class="text-red-600">○ no embedding</span>
+                <span
+                  v-if="selectedMemory.has_embedding"
+                  class="text-emerald-600"
+                >● embedding</span>
+                <span
+                  v-else
+                  class="text-red-600"
+                >○ no embedding</span>
               </div>
               <button
-                @click="closeModal"
                 class="scada-btn scada-btn-ghost text-xs"
+                @click="closeModal"
               >
                 CLOSE
               </button>
@@ -362,7 +457,6 @@ const formattedTime = computed(() => {
         </div>
       </Transition>
     </Teleport>
-
   </div>
 </template>
 

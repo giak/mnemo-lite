@@ -122,7 +122,7 @@ const getNodeColor = (type: string): string => {
     default: '#64748b'     // gray
   }
 
-  return baseColors[type || 'default'] || baseColors.default
+  return baseColors[type || 'default'] ?? baseColors.default ?? '#64748b'
 }
 
 // Extract readable name from label
@@ -634,9 +634,19 @@ onMounted(() => {
             type="text"
             placeholder="Search..."
             class="w-full px-2 py-1 pl-7 text-xs bg-slate-700 border-0 rounded text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-          />
-          <svg class="absolute left-2 top-1.5 w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          >
+          <svg
+            class="absolute left-2 top-1.5 w-3 h-3 text-gray-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
         </div>
       </div>
@@ -644,105 +654,141 @@ onMounted(() => {
       <!-- Type Filters (ultra-compact) -->
       <div class="flex items-center gap-1">
         <button
-          @click="toggleFilter('Class')"
           class="px-1.5 py-0.5 text-[10px] rounded transition-colors font-medium"
           :class="filterByType.includes('Class') ? 'bg-blue-500 text-white' : 'bg-slate-700 text-gray-400'"
           title="Toggle Classes"
+          @click="toggleFilter('Class')"
         >
           C
         </button>
         <button
-          @click="toggleFilter('Function')"
           class="px-1.5 py-0.5 text-[10px] rounded transition-colors font-medium"
           :class="filterByType.includes('Function') ? 'bg-green-500 text-white' : 'bg-slate-700 text-gray-400'"
           title="Toggle Functions"
+          @click="toggleFilter('Function')"
         >
           F
         </button>
         <button
-          @click="toggleFilter('Method')"
           class="px-1.5 py-0.5 text-[10px] rounded transition-colors font-medium"
           :class="filterByType.includes('Method') ? 'bg-purple-500 text-white' : 'bg-slate-700 text-gray-400'"
           title="Toggle Methods"
+          @click="toggleFilter('Method')"
         >
           M
         </button>
       </div>
 
-      <div class="h-4 w-px bg-slate-600"></div>
+      <div class="h-4 w-px bg-slate-600" />
 
       <!-- Layout Switcher (NEW) -->
       <div class="flex items-center gap-1">
         <span class="text-[10px] text-gray-500 mr-1 font-mono uppercase">Layout:</span>
         <button
-          @click="changeLayout('dagre')"
           class="px-2 py-0.5 text-[10px] rounded transition-colors font-medium"
           :class="currentLayout === 'dagre' ? 'bg-cyan-500 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
           title="Hierarchical tree layout (best for code)"
+          @click="changeLayout('dagre')"
         >
           Tree
         </button>
         <button
-          @click="changeLayout('radial')"
           class="px-2 py-0.5 text-[10px] rounded transition-colors font-medium"
           :class="currentLayout === 'radial' ? 'bg-cyan-500 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
           title="Radial layout with focus"
+          @click="changeLayout('radial')"
         >
           Radial
         </button>
         <button
-          @click="changeLayout('concentric')"
           class="px-2 py-0.5 text-[10px] rounded transition-colors font-medium"
           :class="currentLayout === 'concentric' ? 'bg-cyan-500 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
           title="Concentric circles (shows importance)"
+          @click="changeLayout('concentric')"
         >
           Circle
         </button>
         <button
-          @click="changeLayout('force')"
           class="px-2 py-0.5 text-[10px] rounded transition-colors font-medium"
           :class="currentLayout === 'force' ? 'bg-cyan-500 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
           title="Force-directed (natural clustering)"
+          @click="changeLayout('force')"
         >
           Force
         </button>
       </div>
 
       <!-- Focus indicator (if active) -->
-      <div v-if="focusNodeId" class="flex items-center gap-1.5 text-[10px] text-gray-500 px-2 py-0.5 bg-slate-700 rounded">
-        <span class="scada-led scada-led-yellow" style="width: 6px; height: 6px;"></span>
+      <div
+        v-if="focusNodeId"
+        class="flex items-center gap-1.5 text-[10px] text-gray-500 px-2 py-0.5 bg-slate-700 rounded"
+      >
+        <span
+          class="scada-led scada-led-yellow"
+          style="width: 6px; height: 6px;"
+        />
         <span class="text-amber-400 font-mono uppercase">Focus: {{ focusNodeId.slice(0, 6) }}</span>
       </div>
 
-      <div class="flex-1"></div>
+      <div class="flex-1" />
 
       <!-- Zoom Controls (ultra-compact) -->
       <div class="flex items-center gap-0.5">
         <button
-          @click="zoomIn"
           class="p-1 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded transition-colors"
           title="Zoom In"
+          @click="zoomIn"
         >
-          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
+          <svg
+            class="w-3 h-3"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"
+            />
           </svg>
         </button>
         <button
-          @click="zoomOut"
           class="p-1 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded transition-colors"
           title="Zoom Out"
+          @click="zoomOut"
         >
-          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM7 10h6" />
+          <svg
+            class="w-3 h-3"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM7 10h6"
+            />
           </svg>
         </button>
         <button
-          @click="resetView"
           class="p-1 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded transition-colors"
           title="Reset View"
+          @click="resetView"
         >
-          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <svg
+            class="w-3 h-3"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
           </svg>
         </button>
       </div>
@@ -753,33 +799,144 @@ onMounted(() => {
       <!-- Graph Container -->
       <div class="flex-1 relative">
         <!-- Depth Rings Background -->
-        <svg class="depth-rings-overlay absolute inset-0 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+        <svg
+          class="depth-rings-overlay absolute inset-0 pointer-events-none"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="xMidYMid meet"
+        >
           <defs>
-            <radialGradient id="depthGradient" cx="50%" cy="50%">
-              <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:0.08" />
-              <stop offset="20%" style="stop-color:#06b6d4;stop-opacity:0.05" />
-              <stop offset="40%" style="stop-color:#8b5cf6;stop-opacity:0.03" />
-              <stop offset="60%" style="stop-color:#3b82f6;stop-opacity:0.02" />
-              <stop offset="80%" style="stop-color:#64748b;stop-opacity:0.01" />
-              <stop offset="100%" style="stop-color:#1e293b;stop-opacity:0" />
+            <radialGradient
+              id="depthGradient"
+              cx="50%"
+              cy="50%"
+            >
+              <stop
+                offset="0%"
+                style="stop-color:#fbbf24;stop-opacity:0.08"
+              />
+              <stop
+                offset="20%"
+                style="stop-color:#06b6d4;stop-opacity:0.05"
+              />
+              <stop
+                offset="40%"
+                style="stop-color:#8b5cf6;stop-opacity:0.03"
+              />
+              <stop
+                offset="60%"
+                style="stop-color:#3b82f6;stop-opacity:0.02"
+              />
+              <stop
+                offset="80%"
+                style="stop-color:#64748b;stop-opacity:0.01"
+              />
+              <stop
+                offset="100%"
+                style="stop-color:#1e293b;stop-opacity:0"
+              />
             </radialGradient>
           </defs>
           <!-- Concentric circles representing depth levels -->
-          <circle cx="50" cy="50" r="8" fill="none" stroke="#fbbf24" stroke-width="0.15" stroke-opacity="0.15" />
-          <circle cx="50" cy="50" r="16" fill="none" stroke="#06b6d4" stroke-width="0.12" stroke-opacity="0.12" />
-          <circle cx="50" cy="50" r="24" fill="none" stroke="#8b5cf6" stroke-width="0.1" stroke-opacity="0.1" />
-          <circle cx="50" cy="50" r="32" fill="none" stroke="#3b82f6" stroke-width="0.08" stroke-opacity="0.08" />
-          <circle cx="50" cy="50" r="40" fill="none" stroke="#64748b" stroke-width="0.06" stroke-opacity="0.06" />
-          <circle cx="50" cy="50" r="48" fill="none" stroke="#475569" stroke-width="0.04" stroke-opacity="0.04" />
+          <circle
+            cx="50"
+            cy="50"
+            r="8"
+            fill="none"
+            stroke="#fbbf24"
+            stroke-width="0.15"
+            stroke-opacity="0.15"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="16"
+            fill="none"
+            stroke="#06b6d4"
+            stroke-width="0.12"
+            stroke-opacity="0.12"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="24"
+            fill="none"
+            stroke="#8b5cf6"
+            stroke-width="0.1"
+            stroke-opacity="0.1"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="32"
+            fill="none"
+            stroke="#3b82f6"
+            stroke-width="0.08"
+            stroke-opacity="0.08"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="40"
+            fill="none"
+            stroke="#64748b"
+            stroke-width="0.06"
+            stroke-opacity="0.06"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="48"
+            fill="none"
+            stroke="#475569"
+            stroke-width="0.04"
+            stroke-opacity="0.04"
+          />
 
           <!-- Radial gradient background -->
-          <circle cx="50" cy="50" r="50" fill="url(#depthGradient)" />
+          <circle
+            cx="50"
+            cy="50"
+            r="50"
+            fill="url(#depthGradient)"
+          />
 
           <!-- Depth level labels -->
-          <text x="50" y="8" font-size="1.5" fill="#fbbf24" fill-opacity="0.3" text-anchor="middle" font-family="monospace">D0</text>
-          <text x="50" y="16" font-size="1.3" fill="#06b6d4" fill-opacity="0.25" text-anchor="middle" font-family="monospace">D1</text>
-          <text x="50" y="24" font-size="1.2" fill="#8b5cf6" fill-opacity="0.2" text-anchor="middle" font-family="monospace">D2</text>
-          <text x="50" y="32" font-size="1.1" fill="#3b82f6" fill-opacity="0.15" text-anchor="middle" font-family="monospace">D3</text>
+          <text
+            x="50"
+            y="8"
+            font-size="1.5"
+            fill="#fbbf24"
+            fill-opacity="0.3"
+            text-anchor="middle"
+            font-family="monospace"
+          >D0</text>
+          <text
+            x="50"
+            y="16"
+            font-size="1.3"
+            fill="#06b6d4"
+            fill-opacity="0.25"
+            text-anchor="middle"
+            font-family="monospace"
+          >D1</text>
+          <text
+            x="50"
+            y="24"
+            font-size="1.2"
+            fill="#8b5cf6"
+            fill-opacity="0.2"
+            text-anchor="middle"
+            font-family="monospace"
+          >D2</text>
+          <text
+            x="50"
+            y="32"
+            font-size="1.1"
+            fill="#3b82f6"
+            fill-opacity="0.15"
+            text-anchor="middle"
+            font-family="monospace"
+          >D3</text>
         </svg>
 
         <div
@@ -787,26 +944,35 @@ onMounted(() => {
           class="g6-container border border-slate-700 rounded relative z-10"
           :class="{ 'opacity-50': loading }"
           style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95));"
-        ></div>
+        />
 
         <!-- Legend -->
         <div class="mt-4 space-y-2 text-xs font-mono">
           <div class="flex items-center gap-4">
             <div class="flex items-center gap-2">
               <div class="w-6 h-6 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center">
-                <span class="scada-led" style="width: 10px; height: 10px; background: #3b82f6;"></span>
+                <span
+                  class="scada-led"
+                  style="width: 10px; height: 10px; background: #3b82f6;"
+                />
               </div>
               <span class="text-gray-300 uppercase">Classes</span>
             </div>
             <div class="flex items-center gap-2">
               <div class="w-6 h-6 rounded-full bg-green-500 border-2 border-white flex items-center justify-center">
-                <span class="scada-led" style="width: 10px; height: 10px; background: #10b981;"></span>
+                <span
+                  class="scada-led"
+                  style="width: 10px; height: 10px; background: #10b981;"
+                />
               </div>
               <span class="text-gray-300 uppercase">Functions</span>
             </div>
             <div class="flex items-center gap-2">
               <div class="w-6 h-6 rounded-full bg-purple-500 border-2 border-white flex items-center justify-center">
-                <span class="scada-led" style="width: 10px; height: 10px; background: #8b5cf6;"></span>
+                <span
+                  class="scada-led"
+                  style="width: 10px; height: 10px; background: #8b5cf6;"
+                />
               </div>
               <span class="text-gray-300 uppercase">Methods</span>
             </div>
@@ -818,7 +984,10 @@ onMounted(() => {
       </div>
 
       <!-- Stats Panel -->
-      <div v-if="selectedNodeStats" class="w-80 flex-shrink-0">
+      <div
+        v-if="selectedNodeStats"
+        class="w-80 flex-shrink-0"
+      >
         <div class="scada-panel rounded-lg p-4 sticky top-4">
           <!-- Header with close button -->
           <div class="flex items-start justify-between mb-4">
@@ -835,7 +1004,9 @@ onMounted(() => {
                 {{ selectedNode?.type?.charAt(0).toUpperCase() }}
               </div>
               <div class="flex-1">
-                <h4 class="text-sm font-semibold text-gray-200">{{ extractNodeName(selectedNode!) }}</h4>
+                <h4 class="text-sm font-semibold text-gray-200">
+                  {{ extractNodeName(selectedNode!) }}
+                </h4>
                 <span
                   class="inline-block mt-1 px-2 py-0.5 text-xs rounded"
                   :class="{
@@ -850,12 +1021,22 @@ onMounted(() => {
               </div>
             </div>
             <button
-              @click="selectedNode = null"
               class="text-gray-500 hover:text-gray-300 transition-colors"
               title="Close"
+              @click="selectedNode = null"
             >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
@@ -863,11 +1044,17 @@ onMounted(() => {
           <!-- Metrics Grid -->
           <div class="grid grid-cols-2 gap-3 mb-4">
             <div class="bg-slate-900 rounded p-3 border-2 border-slate-700">
-              <div class="scada-label mb-1">Complexity</div>
-              <div class="text-xl scada-data text-amber-400">{{ selectedNodeStats.complexity }}</div>
+              <div class="scada-label mb-1">
+                Complexity
+              </div>
+              <div class="text-xl scada-data text-amber-400">
+                {{ selectedNodeStats.complexity }}
+              </div>
             </div>
             <div class="bg-slate-900 rounded p-3 border-2 border-slate-700">
-              <div class="scada-label mb-1">Depth</div>
+              <div class="scada-label mb-1">
+                Depth
+              </div>
               <div class="text-xl scada-data text-cyan-400">
                 {{ calculateDepths(focusNodeId!).get(selectedNode!.id) ?? '?' }}
               </div>
@@ -878,12 +1065,25 @@ onMounted(() => {
           <div class="space-y-3">
             <div>
               <div class="flex items-center gap-2 mb-2">
-                <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                <svg
+                  class="w-4 h-4 text-green-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                  />
                 </svg>
                 <span class="scada-label text-gray-300">Incoming ({{ selectedNodeStats.incomingCount }})</span>
               </div>
-              <div v-if="selectedNodeStats.incomingCount > 0" class="space-y-1 max-h-32 overflow-y-auto">
+              <div
+                v-if="selectedNodeStats.incomingCount > 0"
+                class="space-y-1 max-h-32 overflow-y-auto"
+              >
                 <div
                   v-for="node in selectedNodeStats.incomingNodes.slice(0, 5)"
                   :key="node?.id"
@@ -891,21 +1091,42 @@ onMounted(() => {
                 >
                   {{ node ? extractNodeName(node) : 'Unknown' }}
                 </div>
-                <div v-if="selectedNodeStats.incomingCount > 5" class="text-xs text-gray-500 pl-6">
+                <div
+                  v-if="selectedNodeStats.incomingCount > 5"
+                  class="text-xs text-gray-500 pl-6"
+                >
                   +{{ selectedNodeStats.incomingCount - 5 }} more...
                 </div>
               </div>
-              <div v-else class="text-xs text-gray-600 pl-6">No incoming dependencies</div>
+              <div
+                v-else
+                class="text-xs text-gray-600 pl-6"
+              >
+                No incoming dependencies
+              </div>
             </div>
 
             <div>
               <div class="flex items-center gap-2 mb-2">
-                <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                <svg
+                  class="w-4 h-4 text-red-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M5 10l7-7m0 0l7 7m-7-7v18"
+                  />
                 </svg>
                 <span class="scada-label text-gray-300">Outgoing ({{ selectedNodeStats.outgoingCount }})</span>
               </div>
-              <div v-if="selectedNodeStats.outgoingCount > 0" class="space-y-1 max-h-32 overflow-y-auto">
+              <div
+                v-if="selectedNodeStats.outgoingCount > 0"
+                class="space-y-1 max-h-32 overflow-y-auto"
+              >
                 <div
                   v-for="node in selectedNodeStats.outgoingNodes.slice(0, 5)"
                   :key="node?.id"
@@ -913,21 +1134,37 @@ onMounted(() => {
                 >
                   {{ node ? extractNodeName(node) : 'Unknown' }}
                 </div>
-                <div v-if="selectedNodeStats.outgoingCount > 5" class="text-xs text-gray-500 pl-6">
+                <div
+                  v-if="selectedNodeStats.outgoingCount > 5"
+                  class="text-xs text-gray-500 pl-6"
+                >
                   +{{ selectedNodeStats.outgoingCount - 5 }} more...
                 </div>
               </div>
-              <div v-else class="text-xs text-gray-600 pl-6">No outgoing dependencies</div>
+              <div
+                v-else
+                class="text-xs text-gray-600 pl-6"
+              >
+                No outgoing dependencies
+              </div>
             </div>
           </div>
 
           <!-- File Info -->
-          <div v-if="selectedNode?.file_path" class="mt-4 pt-4 border-t-2 border-slate-700">
-            <div class="scada-label mb-1">File Location</div>
+          <div
+            v-if="selectedNode?.file_path"
+            class="mt-4 pt-4 border-t-2 border-slate-700"
+          >
+            <div class="scada-label mb-1">
+              File Location
+            </div>
             <div class="text-xs text-gray-300 font-mono break-all">
               {{ selectedNode.file_path }}
             </div>
-            <div v-if="selectedNode.start_line" class="text-xs text-gray-500 mt-1 font-mono uppercase">
+            <div
+              v-if="selectedNode.start_line"
+              class="text-xs text-gray-500 mt-1 font-mono uppercase"
+            >
               Lines {{ selectedNode.start_line }}-{{ selectedNode.end_line || '?' }}
             </div>
           </div>

@@ -5,7 +5,7 @@
  * Draggable, transparent backdrop
  */
 import { API } from '@/config/api'
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 
 interface Props {
   tag: string | null
@@ -137,18 +137,28 @@ function formatDate(iso: string): string {
             @mousedown="onDragStart"
           >
             <div class="flex items-center gap-3">
-              <span class="scada-led scada-led-cyan"></span>
+              <span class="scada-led scada-led-cyan" />
               <h2 class="text-lg font-bold text-cyan-400 font-mono uppercase tracking-wide">
                 {{ tag }}
               </h2>
               <span class="scada-data text-slate-400 text-sm ml-2">[{{ memories.length }}]</span>
             </div>
             <button
-              @click="handleClose"
               class="text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-slate-700"
+              @click="handleClose"
             >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
@@ -156,18 +166,27 @@ function formatDate(iso: string): string {
           <!-- Content -->
           <div class="flex-1 overflow-y-auto p-4">
             <!-- Loading -->
-            <div v-if="loading" class="flex items-center justify-center py-12">
-              <div class="animate-spin rounded-full h-8 w-8 border-4 border-cyan-400 border-t-transparent"></div>
+            <div
+              v-if="loading"
+              class="flex items-center justify-center py-12"
+            >
+              <div class="animate-spin rounded-full h-8 w-8 border-4 border-cyan-400 border-t-transparent" />
               <span class="ml-3 text-gray-400 font-mono text-sm uppercase">Loading...</span>
             </div>
 
             <!-- Error -->
-            <div v-else-if="error" class="bg-red-900/50 border-2 border-red-600 rounded p-3 text-red-300 text-sm font-mono">
+            <div
+              v-else-if="error"
+              class="bg-red-900/50 border-2 border-red-600 rounded p-3 text-red-300 text-sm font-mono"
+            >
               {{ error }}
             </div>
 
             <!-- Memories list -->
-            <div v-else class="space-y-3">
+            <div
+              v-else
+              class="space-y-3"
+            >
               <div
                 v-for="memory in memories"
                 :key="memory.id"
@@ -177,7 +196,10 @@ function formatDate(iso: string): string {
                   <span class="font-mono text-cyan-400 text-sm font-bold">{{ memory.title }}</span>
                   <span class="text-[10px] font-mono text-slate-500 uppercase ml-2 flex-shrink-0">{{ memory.memory_type }}</span>
                 </div>
-                <div v-if="memory.content_preview" class="text-xs font-mono text-slate-400 mt-1 line-clamp-3">
+                <div
+                  v-if="memory.content_preview"
+                  class="text-xs font-mono text-slate-400 mt-1 line-clamp-3"
+                >
                   {{ memory.content_preview.substring(0, 200) }}
                 </div>
                 <div class="flex items-center gap-2 mt-2">
@@ -192,7 +214,10 @@ function formatDate(iso: string): string {
                 </div>
               </div>
 
-              <div v-if="memories.length === 0" class="text-center text-slate-600 py-8 text-sm font-mono">
+              <div
+                v-if="memories.length === 0"
+                class="text-center text-slate-600 py-8 text-sm font-mono"
+              >
                 NO MEMORIES WITH THIS TAG
               </div>
             </div>
@@ -200,7 +225,10 @@ function formatDate(iso: string): string {
 
           <!-- Footer -->
           <div class="border-t-2 border-slate-700 p-3 flex justify-end">
-            <button @click="handleClose" class="scada-btn scada-btn-primary text-sm">
+            <button
+              class="scada-btn scada-btn-primary text-sm"
+              @click="handleClose"
+            >
               CLOSE
             </button>
           </div>

@@ -32,25 +32,6 @@ const tabLabels: Record<string, string> = {
   search: 'Search'
 }
 
-const tabIcons: Record<string, string> = {
-  memories: 'M',
-  code: 'C',
-  events: 'E',
-  vocabf: 'V',
-  alerts: 'A',
-  metrics: 'Σ',
-  errors: '!',
-  decay: 'D',
-  cache: 'K',
-  lsp: 'L',
-  autosave: 'S',
-  batch: 'B',
-  graph: 'G',
-  computed: 'M',
-  weights: 'W',
-  search: 'Q'
-}
-
 function getTabCount(tab: string, data: any): number {
   const counts: Record<string, number> = {
     memories: data.memoriesCount || 0,
@@ -85,9 +66,15 @@ function getTabCount(tab: string, data: any): number {
         : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 border border-transparent'"
       @click="emit('select', tab)"
     >
-      <span class="scada-led w-2 h-2" :class="activeTab === tab ? 'scada-led-cyan' : 'scada-led-gray'"></span>
+      <span
+        class="scada-led w-2 h-2"
+        :class="activeTab === tab ? 'scada-led-cyan' : 'scada-led-gray'"
+      />
       <span class="uppercase tracking-wider">{{ tabLabels[tab] || tab }}</span>
-      <span class="ml-auto text-[10px]" :class="activeTab === tab ? 'text-cyan-300' : 'text-slate-600'">
+      <span
+        class="ml-auto text-[10px]"
+        :class="activeTab === tab ? 'text-cyan-300' : 'text-slate-600'"
+      >
         {{ getTabCount(tab, data).toLocaleString() }}
       </span>
     </div>

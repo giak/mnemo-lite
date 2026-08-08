@@ -49,19 +49,6 @@ onUnmounted(() => {
   }
 })
 
-// Format relative time in UPPERCASE abbreviated format
-function formatRelativeTime(isoString: string): string {
-  const date = new Date(isoString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffSec = Math.floor(diffMs / 1000)
-
-  if (diffSec < 60) return `${diffSec}S AGO`
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}MIN AGO`
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}H AGO`
-  return `${Math.floor(diffSec / 86400)}D AGO`
-}
-
 // Extract session ID from tags (format: session:abc123...)
 function extractSessionId(tags: string[]): string {
   const sessionTag = tags.find(tag => tag.startsWith('session:'))
@@ -100,14 +87,17 @@ function getMemoryTypeLabel(type: string): string {
   <div class="scada-panel h-full">
     <!-- Header avec LED -->
     <div class="flex items-center gap-3 mb-4 pb-3 border-b-2 border-slate-700">
-      <span class="scada-led scada-led-cyan"></span>
+      <span class="scada-led scada-led-cyan" />
       <h2 class="text-lg scada-label text-cyan-400">
         Recent Conversations
       </h2>
     </div>
 
     <!-- Empty State -->
-    <div v-if="memories.length === 0" class="text-gray-400 text-sm text-center py-8 font-mono uppercase">
+    <div
+      v-if="memories.length === 0"
+      class="text-gray-400 text-sm text-center py-8 font-mono uppercase"
+    >
       No Conversations Found
     </div>
 
@@ -135,7 +125,10 @@ function getMemoryTypeLabel(type: string): string {
         </div>
 
         <!-- Project (conditional) -->
-        <div v-if="memory.project_name || memory.project_id" class="text-xs text-cyan-400 mb-2 flex items-center gap-1">
+        <div
+          v-if="memory.project_name || memory.project_id"
+          class="text-xs text-cyan-400 mb-2 flex items-center gap-1"
+        >
           <span>📁</span>
           <span class="uppercase font-mono">{{ memory.project_name || memory.project_id }}</span>
         </div>
@@ -163,8 +156,14 @@ function getMemoryTypeLabel(type: string): string {
         <!-- Footer: Embedding Status + View Button -->
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <span class="scada-led" :class="memory.has_embedding ? 'scada-led-green' : 'scada-led-yellow'"></span>
-            <span class="text-xs font-mono uppercase" :class="memory.has_embedding ? 'scada-status-healthy' : 'scada-status-warning'">
+            <span
+              class="scada-led"
+              :class="memory.has_embedding ? 'scada-led-green' : 'scada-led-yellow'"
+            />
+            <span
+              class="text-xs font-mono uppercase"
+              :class="memory.has_embedding ? 'scada-status-healthy' : 'scada-status-warning'"
+            >
               {{ memory.has_embedding ? 'Embedded' : 'No Embedding' }}
             </span>
           </div>
@@ -178,13 +177,19 @@ function getMemoryTypeLabel(type: string): string {
       </div>
 
       <!-- NEW: Loading indicator at bottom -->
-      <div v-if="loadingMore" class="text-center py-4">
-        <span class="scada-led scada-led-yellow animate-pulse"></span>
+      <div
+        v-if="loadingMore"
+        class="text-center py-4"
+      >
+        <span class="scada-led scada-led-yellow animate-pulse" />
         <span class="text-sm font-mono text-cyan-400 ml-2">LOADING MORE...</span>
       </div>
 
       <!-- NEW: End of list indicator -->
-      <div v-else-if="!hasMore && memories.length > 0" class="text-center py-4">
+      <div
+        v-else-if="!hasMore && memories.length > 0"
+        class="text-center py-4"
+      >
         <span class="text-xs font-mono text-gray-500 uppercase">— End of Conversations —</span>
       </div>
     </div>

@@ -6,7 +6,7 @@
  */
 
 import { API_V1 } from '@/config/api'
-import { ref, computed } from 'vue'
+import { ref, computed, type ComputedRef } from 'vue'
 
 export interface SearchResult {
   chunk_id: string
@@ -46,7 +46,7 @@ interface UseCodeSearchReturn {
   results: ReturnType<typeof ref<SearchResult[]>>
   loading: ReturnType<typeof ref<boolean>>
   error: ReturnType<typeof ref<string | null>>
-  totalResults: ReturnType<typeof computed<number>>
+  totalResults: ComputedRef<number>
   search: (query: string, options?: SearchOptions) => Promise<void>
   clear: () => void
 }

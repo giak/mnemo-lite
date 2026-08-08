@@ -3,9 +3,7 @@ import {
   getComplexityColor,
   getComplexitySize,
   getHubsColor,
-  getHubsSize,
-  getHierarchyColor,
-  getHierarchySize
+  getHierarchyColor
 } from '../orgchart-visual-encoding'
 
 describe('orgchart-visual-encoding', () => {

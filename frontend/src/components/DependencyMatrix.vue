@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed } from 'vue'
 import type { GraphNode, GraphEdge } from '@/composables/useCodeGraph'
 
 const props = defineProps<{
@@ -72,7 +72,7 @@ const matrixData = computed(() => {
     const sourceIdx = nodeIndexMap.get(edge.source)
     const targetIdx = nodeIndexMap.get(edge.target)
     if (sourceIdx !== undefined && targetIdx !== undefined) {
-      matrix[sourceIdx][targetIdx] = 1
+      matrix[sourceIdx]![targetIdx] = 1
     }
   })
 
@@ -81,10 +81,10 @@ const matrixData = computed(() => {
   let circularDeps = 0
   for (let i = 0; i < nodes.length; i++) {
     for (let j = 0; j < nodes.length; j++) {
-      if (matrix[i][j] === 1) {
+      if (matrix[i]![j] === 1) {
         totalDeps++
         // Check for circular dependency
-        if (matrix[j][i] === 1) {
+        if (matrix[j]![i] === 1) {
           circularDeps++
         }
       }
@@ -113,6 +113,12 @@ const getNodeLabel = (node: GraphNode): string => {
   return parts[parts.length - 1] || node.label
 }
 
+// Get node label at a matrix index (safe under noUncheckedIndexedAccess)
+const getNodeLabelAt = (index: number): string => {
+  const node = matrixData.value.nodes[index]
+  return node ? getNodeLabel(node) : ''
+}
+
 // Get cell color
 const getCellColor = (value: number, row: number, col: number): string => {
   if (value === 0) return '#1e293b'
@@ -121,7 +127,7 @@ const getCellColor = (value: number, row: number, col: number): string => {
   if (row === col) return '#fbbf24'
 
   // Check if circular dependency
-  const isCircular = matrixData.value.matrix[col][row] === 1
+  const isCircular = matrixData.value.matrix[col]![row] === 1
   if (isCircular) return '#ef4444'
 
   return '#3b82f6'
@@ -145,12 +151,12 @@ const getNodeCoupling = (index: number): number => {
 
   // Outgoing dependencies
   for (let j = 0; j < matrix.length; j++) {
-    if (matrix[index][j] === 1) score++
+    if (matrix[index]![j] === 1) score++
   }
 
   // Incoming dependencies
   for (let i = 0; i < matrix.length; i++) {
-    if (matrix[i][index] === 1) score++
+    if (matrix[i]![index] === 1) score++
   }
 
   return score
@@ -183,14 +189,23 @@ console.log('[DependencyMatrix] Data:', {
           type="text"
           placeholder="Filter modules..."
           class="search-input"
-        />
+        >
       </div>
 
       <div class="control-group">
         <label class="control-label scada-label">Dossier:</label>
-        <select v-model="folderFilter" class="folder-select">
-          <option value="all">Tous</option>
-          <option v-for="folder in folders" :key="folder" :value="folder">
+        <select
+          v-model="folderFilter"
+          class="folder-select"
+        >
+          <option value="all">
+            Tous
+          </option>
+          <option
+            v-for="folder in folders"
+            :key="folder"
+            :value="folder"
+          >
             {{ folder }}
           </option>
         </select>
@@ -222,33 +237,54 @@ console.log('[DependencyMatrix] Data:', {
     <!-- Legend -->
     <div class="legend">
       <div class="legend-item">
-        <span class="scada-led" style="background: #3b82f6;"></span>
+        <span
+          class="scada-led"
+          style="background: #3b82f6;"
+        />
         <span class="font-mono uppercase">Dependency</span>
       </div>
       <div class="legend-item">
-        <span class="scada-led scada-led-red"></span>
+        <span class="scada-led scada-led-red" />
         <span class="font-mono uppercase">Circular</span>
       </div>
       <div class="legend-item">
-        <span class="scada-led scada-led-yellow"></span>
+        <span class="scada-led scada-led-yellow" />
         <span class="font-mono uppercase">Self-Ref</span>
       </div>
       <div class="legend-item">
-        <span class="scada-led" style="background: #1e293b; border: 1px solid #475569;"></span>
+        <span
+          class="scada-led"
+          style="background: #1e293b; border: 1px solid #475569;"
+        />
         <span class="font-mono uppercase">None</span>
       </div>
     </div>
 
     <!-- Matrix -->
-    <div ref="containerRef" class="matrix-wrapper">
-      <div v-if="matrixData.nodes.length === 0" class="empty-state">
+    <div
+      ref="containerRef"
+      class="matrix-wrapper"
+    >
+      <div
+        v-if="matrixData.nodes.length === 0"
+        class="empty-state"
+      >
         <p>No modules match your filters</p>
-        <p class="text-sm text-gray-500">Try adjusting search or folder filter</p>
+        <p class="text-sm text-gray-500">
+          Try adjusting search or folder filter
+        </p>
       </div>
 
-      <div v-else class="matrix-grid" :style="{ width: `${cellSize * matrixData.nodes.length + 200}px` }">
+      <div
+        v-else
+        class="matrix-grid"
+        :style="{ width: `${cellSize * matrixData.nodes.length + 200}px` }"
+      >
         <!-- Column labels (top) -->
-        <div class="column-labels" :style="{ marginLeft: '200px', height: '150px' }">
+        <div
+          class="column-labels"
+          :style="{ marginLeft: '200px', height: '150px' }"
+        >
           <div
             v-for="(node, colIdx) in matrixData.nodes"
             :key="`col-${colIdx}`"
@@ -283,7 +319,7 @@ console.log('[DependencyMatrix] Data:', {
                 class="coupling-indicator"
                 :style="{ backgroundColor: getCouplingColor(getNodeCoupling(rowIdx)) }"
                 :title="`Coupling: ${getNodeCoupling(rowIdx)}`"
-              ></div>
+              />
               <span class="row-label-text">{{ getNodeLabel(node) }}</span>
             </div>
 
@@ -299,10 +335,10 @@ console.log('[DependencyMatrix] Data:', {
                   backgroundColor: getCellColor(cell, rowIdx, colIdx),
                   opacity: getCellOpacity(rowIdx, colIdx)
                 }"
-                :title="cell === 1 ? `${getNodeLabel(matrixData.nodes[rowIdx])} → ${getNodeLabel(matrixData.nodes[colIdx])}` : ''"
+                :title="cell === 1 ? `${getNodeLabelAt(rowIdx)} → ${getNodeLabelAt(colIdx)}` : ''"
                 @mouseenter="() => { hoveredRow = rowIdx; hoveredCol = colIdx }"
                 @mouseleave="() => { hoveredRow = null; hoveredCol = null }"
-              ></div>
+              />
             </div>
           </div>
         </div>
@@ -312,10 +348,14 @@ console.log('[DependencyMatrix] Data:', {
     <!-- Info note -->
     <div class="info-note">
       <div class="flex items-center gap-2">
-        <span class="scada-led scada-led-cyan"></span>
-        <p class="font-mono uppercase text-xs">Rows = Source | Columns = Target | Hover to Highlight Dependencies</p>
+        <span class="scada-led scada-led-cyan" />
+        <p class="font-mono uppercase text-xs">
+          Rows = Source | Columns = Target | Hover to Highlight Dependencies
+        </p>
       </div>
-      <p class="text-xs text-gray-500 font-mono uppercase">Limited to 100 Modules for Performance. Use Filters to Focus on Specific Areas.</p>
+      <p class="text-xs text-gray-500 font-mono uppercase">
+        Limited to 100 Modules for Performance. Use Filters to Focus on Specific Areas.
+      </p>
     </div>
   </div>
 </template>

@@ -113,12 +113,12 @@ describe('semantic-zoom-scoring', () => {
         { id: 'e2', source: 'class', target: 'func', type: 'contains' }
       ]
 
-      // 33% zoom = 1 node (the Function with highest score)
-      // But should also include Module and Class ancestors
+      // 50% zoom = 2 top nodes (Module score 1.0 forcé + Function 0.8)
+      // Class (0.2) est hors top mais ajoutée comme ancêtre de la Function
       const filtered = filterNodesByScore(
         nodes,
         edges,
-        33,
+        50,
         'complexity',
         { complexity: 1, loc: 0, connections: 0 }
       )

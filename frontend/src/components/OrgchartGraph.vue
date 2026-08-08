@@ -59,7 +59,7 @@ const getNodeColor = (type?: string): string => {
     Config: '#ec4899',      // Pink
     default: '#64748b'      // Gray
   }
-  return colors[type ?? 'default'] ?? colors.default
+  return colors[type ?? 'default'] ?? colors.default ?? '#64748b'
 }
 
 const getModuleLabel = (node: GraphNode): string => {
@@ -802,7 +802,10 @@ onUnmounted(() => {
 
 <template>
   <div class="orgchart-wrapper">
-    <div ref="containerRef" class="orgchart-container"></div>
+    <div
+      ref="containerRef"
+      class="orgchart-container"
+    />
   </div>
 </template>
 

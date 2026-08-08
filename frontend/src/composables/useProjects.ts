@@ -112,7 +112,7 @@ export function useProjects() {
   /**
    * Trigger project reindexing
    */
-  async function reindexProject(repository: string): Promise<void> {
+  async function reindexProject(repository: string): Promise<ReindexProjectResponse> {
     loading.value = true
     error.value = null
 
@@ -164,8 +164,9 @@ export function useProjects() {
 
       // If deleted project was active, switch to default
       if (activeProject.value === repository) {
-        if (projects.value.length > 0) {
-          await setActiveProject(projects.value[0].repository)
+        const firstProject = projects.value[0]
+        if (firstProject) {
+          await setActiveProject(firstProject.repository)
         } else {
           activeProject.value = 'default'
         }

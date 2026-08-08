@@ -4,7 +4,7 @@
  * Navigation with LED indicator, monospace UPPERCASE labels, and dropdown menu
  * EPIC-30: Added Alerts link with active alert count badge
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { API } from '@/config/api'
 
@@ -56,9 +56,6 @@ const links: { group: string; items: MenuItem[] }[] = [
   },
 ]
 
-// Flatten for iteration
-const allLinks = computed(() => links.flatMap(g => g.items))
-
 const openSubmenu = ref<string | null>(null)
 const activeAlertCount = ref(0)
 
@@ -104,7 +101,7 @@ onUnmounted(() => clearInterval(alertRefreshInterval))
         <div class="flex space-x-8">
           <!-- Logo avec LED SCADA -->
           <div class="flex-shrink-0 flex items-center gap-3">
-            <span class="scada-led scada-led-cyan"></span>
+            <span class="scada-led scada-led-cyan" />
             <h1 class="text-xl font-bold font-mono text-cyan-400 uppercase tracking-wider">
               MnemoLite
             </h1>
@@ -112,11 +109,20 @@ onUnmounted(() => clearInterval(alertRefreshInterval))
 
           <!-- Navigation Links avec regroupement visuel -->
           <div class="flex items-center">
-            <template v-for="(group, gi) in links" :key="group.group">
+            <template
+              v-for="(group, gi) in links"
+              :key="group.group"
+            >
               <!-- Group separator -->
-              <div v-if="gi > 0" class="w-px h-6 bg-slate-700 mx-3"></div>
+              <div
+                v-if="gi > 0"
+                class="w-px h-6 bg-slate-700 mx-3"
+              />
 
-              <template v-for="link in group.items" :key="link.name">
+              <template
+                v-for="link in group.items"
+                :key="link.name"
+              >
                 <!-- Regular links without children -->
                 <router-link
                   v-if="!link.children"
@@ -135,13 +141,16 @@ onUnmounted(() => clearInterval(alertRefreshInterval))
                 </router-link>
 
                 <!-- Links with submenu -->
-                <div v-else class="relative">
+                <div
+                  v-else
+                  class="relative"
+                >
                   <button
-                    @click="toggleSubmenu(link.name)"
                     :class="[
                       'flex items-center gap-1 font-mono text-xs tracking-wide px-2 py-1 rounded transition-colors',
                       isSubmenuActive(link.children) ? 'nav-link-active' : 'nav-link'
                     ]"
+                    @click="toggleSubmenu(link.name)"
                   >
                     {{ link.name }}
                     <svg
@@ -151,15 +160,20 @@ onUnmounted(() => clearInterval(alertRefreshInterval))
                       stroke="currentColor"
                       viewBox="0 0 24 24"
                     >
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19 9l-7 7-7-7"
+                      />
                     </svg>
                   </button>
 
                   <!-- Submenu dropdown avec border industriel -->
                   <div
                     v-if="openSubmenu === link.name"
-                    @click="closeSubmenu"
                     class="absolute left-0 mt-2 w-48 bg-slate-800 border-2 border-slate-600 rounded shadow-lg z-50"
+                    @click="closeSubmenu"
                   >
                     <router-link
                       v-for="child in link.children"

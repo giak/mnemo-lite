@@ -89,13 +89,14 @@ export function calculateNodeStyle(
         size: getComplexitySize(node.data.lines_of_code)
       }
 
-    case 'hubs':
+    case 'hubs': {
       const totalEdges = node.data.total_edges || 1
       const incomingRatio = (node.data.incoming_edges || 0) / totalEdges
       return {
         fill: getHubsColor(incomingRatio),
         size: getHubsSize(totalEdges)
       }
+    }
 
     case 'hierarchy':
       return {

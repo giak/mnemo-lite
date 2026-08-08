@@ -110,9 +110,8 @@ export function useExpanseMemory(options: { refreshInterval?: number } = {}) {
       safePost(`${API}/memories/search`, { query: t.tag, tags: [t.tag], limit: 20 })
     )
 
-    const [statsResult, chunksResult, ...tagResults] = await Promise.all([
+    const [statsResult, ...tagResults] = await Promise.all([
       safeFetch(`${API}/memories/stats`),
-      safeFetch(`${API}/memories/code-chunks/recent?limit=10`),
       ...searchPromises
     ])
 
@@ -136,7 +135,6 @@ export function useExpanseMemory(options: { refreshInterval?: number } = {}) {
     }))
 
     // Lifecycle counts
-    const sealed = tags.find(t => t.tag === 'sys:pattern')?.memories.filter(m => (m.tags || []).includes('sys:anchor')).length || 0
     const candidate = allMemories.filter(m => (m.tags || []).some((t: string) => t.includes('candidate'))).length
     const doubt = allMemories.filter(m => (m.tags || []).some((t: string) => t.includes('doubt'))).length
 

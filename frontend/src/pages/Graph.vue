@@ -7,7 +7,7 @@
 
 import { ref, computed, onMounted, watch } from 'vue'
 import { useCodeGraph } from '@/composables/useCodeGraph'
-import type { Nodes, Edges, Configs, Layouts } from 'v-network-graph'
+import type { Nodes, Edges, Layouts } from 'v-network-graph'
 import G6Graph from '@/components/G6Graph.vue'
 
 const { stats, graphData, loading, error, building, buildError, repositories, fetchStats, fetchGraphData, buildGraph, fetchRepositories } = useCodeGraph()
@@ -101,7 +101,7 @@ const layouts = computed<Layouts>(() => {
 
   // Position nodes: each file gets a column with zigzag pattern
   let fileIndex = 0
-  for (const [_file, nodeIds] of nodesByFile.entries()) {
+  for (const nodeIds of nodesByFile.values()) {
     const fileX = offsetX + fileIndex * fileSpacingX
 
     // Position nodes within this file with zigzag pattern for edge visibility
@@ -124,7 +124,7 @@ const layouts = computed<Layouts>(() => {
 })
 
 // v-network-graph configuration
-const configs: any = computed<Configs>(() => ({
+const configs = computed<any>(() => ({
   view: {
     autoPanAndZoomOnLoad: 'fit-content',
     panEnabled: true,
@@ -134,17 +134,17 @@ const configs: any = computed<Configs>(() => ({
     selectable: true,
     draggable: true,
     normal: {
-      type: (node) => {
+      type: (node: { type?: string }) => {
         // Use different shapes for different node types
         return node.type === 'class' ? 'rect' : 'circle'
       },
-      radius: (node) => {
+      radius: (node: { type?: string }) => {
         // Classes are bigger
         return node.type === 'class' ? 24 : 20
       },
       width: 48, // For rect shape (classes)
       height: 48,
-      color: (node) => {
+      color: (node: { type?: string }) => {
         switch (node.type) {
           case 'class':
             return '#3b82f6' // blue
@@ -207,7 +207,7 @@ const configs: any = computed<Configs>(() => ({
     normal: {
       width: 3, // THICK for visibility
       color: '#f59e0b', // BRIGHT amber/orange - very visible!
-      dasharray: (edge) => edge.type === 'calls' ? '0' : '4 2',
+      dasharray: (edge: { type?: string }) => edge.type === 'calls' ? '0' : '4 2',
       linecap: 'round'
     },
     hover: {
@@ -279,34 +279,46 @@ onMounted(async () => {
 <template>
   <div class="bg-slate-950">
     <div class="max-w-full mx-auto px-4 py-3">
-
       <!-- Loading State -->
-      <div v-if="loading" class="section">
+      <div
+        v-if="loading"
+        class="section"
+      >
         <div class="animate-pulse">
-          <div class="h-4 bg-slate-700 w-1/4 mb-4"></div>
-          <div class="h-64 bg-slate-700"></div>
+          <div class="h-4 bg-slate-700 w-1/4 mb-4" />
+          <div class="h-64 bg-slate-700" />
         </div>
       </div>
 
       <!-- Error State -->
-      <div v-else-if="error" class="alert-error">
+      <div
+        v-else-if="error"
+        class="alert-error"
+      >
         <div class="flex items-start gap-3">
-          <span class="scada-led scada-led-red"></span>
+          <span class="scada-led scada-led-red" />
           <div>
-            <h3 class="text-sm font-medium text-red-300 uppercase font-mono">Graph Error</h3>
-            <p class="mt-1 text-sm text-red-400 font-mono">{{ error }}</p>
+            <h3 class="text-sm font-medium text-red-300 uppercase font-mono">
+              Graph Error
+            </h3>
+            <p class="mt-1 text-sm text-red-400 font-mono">
+              {{ error }}
+            </p>
           </div>
         </div>
       </div>
 
       <!-- Graph Stats + Visualization -->
-      <div v-else-if="stats" class="space-y-2">
+      <div
+        v-else-if="stats"
+        class="space-y-2"
+      >
         <!-- Ultra-Compact Toolbar: Everything on one line -->
         <div class="bg-slate-800/50 rounded-lg px-4 py-2 flex items-center gap-4 border-2 border-slate-700 text-xs">
           <!-- Stats -->
           <div class="flex items-center gap-3">
             <div class="flex items-center gap-2">
-              <span class="scada-led scada-led-cyan"></span>
+              <span class="scada-led scada-led-cyan" />
               <span class="text-gray-500 uppercase tracking-wide font-mono">Graph</span>
             </div>
             <div class="flex items-center gap-2">
@@ -327,51 +339,77 @@ onMounted(async () => {
             </div>
           </div>
 
-          <div class="h-4 w-px bg-slate-600"></div>
+          <div class="h-4 w-px bg-slate-600" />
 
           <!-- Repository Selector -->
           <select
             v-model="repository"
             class="bg-slate-700 text-gray-200 border border-slate-600 rounded px-3 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
-            <option value="" disabled>Select repository...</option>
-            <option v-for="repo in repositories" :key="repo" :value="repo">
+            <option
+              value=""
+              disabled
+            >
+              Select repository...
+            </option>
+            <option
+              v-for="repo in repositories"
+              :key="repo"
+              :value="repo"
+            >
               {{ repo }}
             </option>
           </select>
 
-          <div class="h-4 w-px bg-slate-600"></div>
+          <div class="h-4 w-px bg-slate-600" />
 
           <!-- Layout Toggle -->
           <div class="flex items-center gap-1">
             <span class="scada-label mr-1">View:</span>
             <button
-              @click="useG6 = false"
               class="px-2 py-1 rounded text-xs transition-colors font-mono uppercase"
               :class="!useG6 ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
+              @click="useG6 = false"
             >
               Network
             </button>
             <button
-              @click="useG6 = true"
               class="px-2 py-1 rounded text-xs transition-colors font-mono uppercase"
               :class="useG6 ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
+              @click="useG6 = true"
             >
               G6
             </button>
           </div>
 
-          <div class="flex-1"></div>
+          <div class="flex-1" />
 
           <!-- Build Graph Button -->
           <button
-            @click="handleBuildGraph"
             :disabled="building || loading"
             class="scada-btn scada-btn-primary text-xs"
+            @click="handleBuildGraph"
           >
-            <svg v-if="building" class="animate-spin -ml-1 mr-1 h-3 w-3 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            <svg
+              v-if="building"
+              class="animate-spin -ml-1 mr-1 h-3 w-3 inline"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              />
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
             </svg>
             {{ building ? 'BUILDING...' : 'BUILD' }}
           </button>
@@ -379,19 +417,25 @@ onMounted(async () => {
 
 
         <!-- Build Error Banner -->
-        <div v-if="buildError" class="alert-error">
+        <div
+          v-if="buildError"
+          class="alert-error"
+        >
           <div class="flex items-start gap-3">
-            <span class="scada-led scada-led-red"></span>
+            <span class="scada-led scada-led-red" />
             <div>
-              <h3 class="text-sm font-medium text-red-300 uppercase font-mono">Build Error</h3>
-              <p class="mt-1 text-sm text-red-400 font-mono">{{ buildError }}</p>
+              <h3 class="text-sm font-medium text-red-300 uppercase font-mono">
+                Build Error
+              </h3>
+              <p class="mt-1 text-sm text-red-400 font-mono">
+                {{ buildError }}
+              </p>
             </div>
           </div>
         </div>
 
         <!-- Graph Visualization -->
         <div class="section">
-
           <!-- G6 Graph (Prototype) -->
           <div v-if="useG6">
             <!-- Debug info -->
@@ -405,15 +449,25 @@ onMounted(async () => {
               :edges="graphData.edges || []"
               :loading="loading"
             />
-            <div v-else class="flex flex-col items-center justify-center h-[calc(100vh-120px)] bg-slate-900 border border-slate-700 rounded text-gray-400">
+            <div
+              v-else
+              class="flex flex-col items-center justify-center h-[calc(100vh-120px)] bg-slate-900 border border-slate-700 rounded text-gray-400"
+            >
               <p>No graph data available</p>
-              <p class="text-xs mt-2">graphData: {{ graphData ? 'exists' : 'null' }}</p>
-              <p class="text-xs">nodes: {{ graphData?.nodes?.length || 0 }}</p>
+              <p class="text-xs mt-2">
+                graphData: {{ graphData ? 'exists' : 'null' }}
+              </p>
+              <p class="text-xs">
+                nodes: {{ graphData?.nodes?.length || 0 }}
+              </p>
             </div>
           </div>
 
           <!-- v-network-graph Container -->
-          <div v-else class="w-full h-[calc(100vh-120px)] bg-slate-900 border border-slate-700 rounded overflow-hidden">
+          <div
+            v-else
+            class="w-full h-[calc(100vh-120px)] bg-slate-900 border border-slate-700 rounded overflow-hidden"
+          >
             <v-network-graph
               v-if="Object.keys(nodes).length > 0"
               :nodes="nodes"
@@ -422,46 +476,70 @@ onMounted(async () => {
               :configs="configs"
               class="w-full h-full"
             />
-            <div v-else class="flex items-center justify-center h-full text-gray-400">
+            <div
+              v-else
+              class="flex items-center justify-center h-full text-gray-400"
+            >
               No graph data available
             </div>
           </div>
 
           <!-- Legend (v-network-graph only) -->
-          <div v-if="!useG6" class="mt-4 space-y-3">
+          <div
+            v-if="!useG6"
+            class="mt-4 space-y-3"
+          >
             <div class="flex items-center gap-6 text-sm font-mono">
               <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded bg-blue-500 border-2 border-white"></div>
+                <div class="w-8 h-8 rounded bg-blue-500 border-2 border-white" />
                 <span class="uppercase">Classes</span>
               </div>
               <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-full bg-green-500 border-2 border-white"></div>
+                <div class="w-8 h-8 rounded-full bg-green-500 border-2 border-white" />
                 <span class="uppercase">Functions</span>
               </div>
               <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-full bg-purple-500 border-2 border-white"></div>
+                <div class="w-8 h-8 rounded-full bg-purple-500 border-2 border-white" />
                 <span class="uppercase">Methods</span>
               </div>
               <div class="flex items-center gap-2">
-                <svg class="w-8 h-1" viewBox="0 0 32 4">
-                  <line x1="0" y1="2" x2="32" y2="2" stroke="#475569" stroke-width="2" />
-                  <polygon points="28,0 32,2 28,4" fill="#475569" />
+                <svg
+                  class="w-8 h-1"
+                  viewBox="0 0 32 4"
+                >
+                  <line
+                    x1="0"
+                    y1="2"
+                    x2="32"
+                    y2="2"
+                    stroke="#475569"
+                    stroke-width="2"
+                  />
+                  <polygon
+                    points="28,0 32,2 28,4"
+                    fill="#475569"
+                  />
                 </svg>
                 <span class="uppercase">Function Calls</span>
               </div>
             </div>
             <div class="flex items-center gap-2 text-xs text-gray-500">
-              <span class="scada-led scada-led-cyan"></span>
+              <span class="scada-led scada-led-cyan" />
               <span class="font-mono uppercase">Tip: Nodes Grouped by File • Labels Show Filename:Line • Hover for Details • Drag to Pan, Scroll to Zoom</span>
             </div>
           </div>
 
           <!-- Info Message -->
-          <div v-if="stats.total_nodes === 0" class="mt-4 p-4 bg-amber-900/20 border-2 border-amber-700/30 rounded">
+          <div
+            v-if="stats.total_nodes === 0"
+            class="mt-4 p-4 bg-amber-900/20 border-2 border-amber-700/30 rounded"
+          >
             <div class="flex items-start gap-3">
-              <span class="scada-led scada-led-yellow"></span>
+              <span class="scada-led scada-led-yellow" />
               <div>
-                <h3 class="text-sm font-medium text-amber-300 font-mono uppercase">Graph Not Built</h3>
+                <h3 class="text-sm font-medium text-amber-300 font-mono uppercase">
+                  Graph Not Built
+                </h3>
                 <p class="mt-1 text-sm text-amber-400/80 font-mono">
                   The code graph has not been built yet. Click the <strong>"BUILD GRAPH"</strong> button above to analyze code dependencies and generate the graph.
                 </p>
@@ -470,11 +548,16 @@ onMounted(async () => {
           </div>
 
           <!-- No Edges Warning -->
-          <div v-else-if="stats.total_nodes > 0 && stats.total_edges === 0" class="mt-4 p-4 bg-blue-900/20 border-2 border-blue-700/30 rounded">
+          <div
+            v-else-if="stats.total_nodes > 0 && stats.total_edges === 0"
+            class="mt-4 p-4 bg-blue-900/20 border-2 border-blue-700/30 rounded"
+          >
             <div class="flex items-start gap-3">
-              <span class="scada-led scada-led-cyan"></span>
+              <span class="scada-led scada-led-cyan" />
               <div>
-                <h3 class="text-sm font-medium text-blue-300 font-mono uppercase">No Dependencies Detected</h3>
+                <h3 class="text-sm font-medium text-blue-300 font-mono uppercase">
+                  No Dependencies Detected
+                </h3>
                 <p class="mt-1 text-sm text-blue-400/80 font-mono">
                   Graph shows {{ stats.total_nodes }} nodes but no edges. This means no code dependencies (imports/calls) were detected between functions and classes.
                 </p>

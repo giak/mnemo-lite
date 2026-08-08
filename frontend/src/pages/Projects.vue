@@ -3,9 +3,8 @@
  * EPIC-28 Story 28.2: Projects Management Page — SCADA Style
  * Manage indexed code repositories
  */
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useProjects } from '@/composables/useProjects'
-import type { Project } from '@/types/projects'
 
 const {
   projects,
@@ -121,9 +120,11 @@ function isActionLoading(action: string, repository: string): boolean {
       <!-- Header SCADA -->
       <div class="flex items-center justify-between mb-8">
         <div class="flex items-center gap-4">
-          <span class="scada-led scada-led-cyan"></span>
+          <span class="scada-led scada-led-cyan" />
           <div>
-            <h1 class="text-3xl font-bold font-mono text-cyan-400 uppercase tracking-wider">Projects</h1>
+            <h1 class="text-3xl font-bold font-mono text-cyan-400 uppercase tracking-wider">
+              Projects
+            </h1>
             <p class="mt-2 text-sm text-gray-400 font-mono uppercase tracking-wide">
               Manage Indexed Code Repositories
             </p>
@@ -131,9 +132,9 @@ function isActionLoading(action: string, repository: string): boolean {
         </div>
         <div class="text-right">
           <button
-            @click="fetchProjects"
             :disabled="loading"
             class="scada-btn scada-btn-primary"
+            @click="fetchProjects"
           >
             {{ loading ? 'REFRESHING...' : 'REFRESH' }}
           </button>
@@ -144,26 +145,38 @@ function isActionLoading(action: string, repository: string): boolean {
       </div>
 
       <!-- Error Banner -->
-      <div v-if="error" class="mb-6 bg-red-950/50 border-l-4 border-red-500 p-4">
+      <div
+        v-if="error"
+        class="mb-6 bg-red-950/50 border-l-4 border-red-500 p-4"
+      >
         <div class="flex">
           <div class="flex-shrink-0">
-            <span class="scada-led scada-led-red"></span>
+            <span class="scada-led scada-led-red" />
           </div>
           <div class="ml-3">
-            <h3 class="text-sm scada-status-danger">Failed to Load Projects</h3>
-            <p class="mt-1 text-sm text-red-400 font-mono">{{ error }}</p>
+            <h3 class="text-sm scada-status-danger">
+              Failed to Load Projects
+            </h3>
+            <p class="mt-1 text-sm text-red-400 font-mono">
+              {{ error }}
+            </p>
           </div>
         </div>
       </div>
 
       <!-- Active Project Card -->
-      <div v-if="activeProject" class="mb-6 scada-panel scada-panel-info">
+      <div
+        v-if="activeProject"
+        class="mb-6 scada-panel scada-panel-info"
+      >
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <span class="scada-led scada-led-cyan animate-pulse"></span>
+            <span class="scada-led scada-led-cyan animate-pulse" />
             <div>
               <span class="scada-label">Active Project</span>
-              <h2 class="text-2xl font-bold text-cyan-400 font-mono">{{ activeProject }}</h2>
+              <h2 class="text-2xl font-bold text-cyan-400 font-mono">
+                {{ activeProject }}
+              </h2>
             </div>
           </div>
           <span class="scada-badge scada-badge-cyan">ACTIVE</span>
@@ -176,15 +189,33 @@ function isActionLoading(action: string, repository: string): boolean {
           <table class="w-full border-collapse">
             <thead class="bg-slate-800 border-b-2 border-slate-600">
               <tr>
-                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">Repository</th>
-                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">Files</th>
-                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">Chunks</th>
-                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">LOC</th>
-                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">Languages</th>
-                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">Coverage</th>
-                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">Last Indexed</th>
-                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">Status</th>
-                <th class="px-4 py-3 text-center text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider">Actions</th>
+                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">
+                  Repository
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">
+                  Files
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">
+                  Chunks
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">
+                  LOC
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">
+                  Languages
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">
+                  Coverage
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">
+                  Last Indexed
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider border-r border-slate-700">
+                  Status
+                </th>
+                <th class="px-4 py-3 text-center text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y-2 divide-slate-700">
@@ -197,7 +228,10 @@ function isActionLoading(action: string, repository: string): boolean {
                 <!-- Repository -->
                 <td class="px-4 py-3 border-r border-slate-700">
                   <div class="flex items-center gap-2">
-                    <span v-if="project.repository === activeProject" class="scada-led scada-led-cyan animate-pulse"></span>
+                    <span
+                      v-if="project.repository === activeProject"
+                      class="scada-led scada-led-cyan animate-pulse"
+                    />
                     <span class="font-mono font-semibold text-white">{{ project.repository }}</span>
                   </div>
                 </td>
@@ -235,7 +269,10 @@ function isActionLoading(action: string, repository: string): boolean {
                         +{{ project.languages.length - 3 }}
                       </span>
                     </template>
-                    <span v-else class="text-xs font-mono text-slate-600">—</span>
+                    <span
+                      v-else
+                      class="text-xs font-mono text-slate-600"
+                    >—</span>
                   </div>
                 </td>
 
@@ -251,7 +288,7 @@ function isActionLoading(action: string, repository: string): boolean {
                           'bg-red-500': project.graph_coverage < 0.4
                         }"
                         :style="{ width: `${Math.max(4, project.graph_coverage * 100)}%` }"
-                      ></div>
+                      />
                     </div>
                     <span class="text-xs font-mono text-gray-400 font-bold">{{ Math.round(project.graph_coverage * 100) }}%</span>
                   </div>
@@ -265,7 +302,10 @@ function isActionLoading(action: string, repository: string): boolean {
                 <!-- Status -->
                 <td class="px-4 py-3 border-r border-slate-700">
                   <div class="flex items-center gap-2">
-                    <span :class="getStatusLed(project.status)" class="scada-led"></span>
+                    <span
+                      :class="getStatusLed(project.status)"
+                      class="scada-led"
+                    />
                     <span class="text-xs font-mono font-bold uppercase text-gray-300">
                       {{ getStatusLabel(project.status) }}
                     </span>
@@ -277,26 +317,26 @@ function isActionLoading(action: string, repository: string): boolean {
                   <div class="flex items-center justify-center gap-1">
                     <button
                       v-if="project.repository !== activeProject"
-                      @click="handleSetActive(project.repository)"
                       :disabled="isActionLoading('activate', project.repository)"
                       class="scada-btn scada-btn-primary text-xs"
                       title="Set as active project"
+                      @click="handleSetActive(project.repository)"
                     >
                       {{ isActionLoading('activate', project.repository) ? '...' : 'ACTIVATE' }}
                     </button>
                     <button
-                      @click="handleReindex(project.repository)"
                       :disabled="isActionLoading('reindex', project.repository)"
                       class="scada-btn scada-btn-ghost text-xs"
                       title="Reindex project"
+                      @click="handleReindex(project.repository)"
                     >
                       {{ isActionLoading('reindex', project.repository) ? '...' : 'REINDEX' }}
                     </button>
                     <button
-                      @click="handleDeleteClick(project.repository)"
                       :disabled="isActionLoading('delete', project.repository)"
                       class="scada-btn scada-btn-danger text-xs"
                       title="Delete project"
+                      @click="handleDeleteClick(project.repository)"
                     >
                       {{ isActionLoading('delete', project.repository) ? '...' : 'DELETE' }}
                     </button>
@@ -307,10 +347,17 @@ function isActionLoading(action: string, repository: string): boolean {
           </table>
 
           <!-- Empty State -->
-          <div v-if="!loading && projects.length === 0" class="py-12 text-center">
-            <span class="scada-led scada-led-gray"></span>
-            <p class="text-lg text-gray-400 font-mono mt-4">NO PROJECTS INDEXED</p>
-            <p class="text-sm text-gray-500 font-mono mt-2">Use the CLI to index your first project</p>
+          <div
+            v-if="!loading && projects.length === 0"
+            class="py-12 text-center"
+          >
+            <span class="scada-led scada-led-gray" />
+            <p class="text-lg text-gray-400 font-mono mt-4">
+              NO PROJECTS INDEXED
+            </p>
+            <p class="text-sm text-gray-500 font-mono mt-2">
+              Use the CLI to index your first project
+            </p>
           </div>
         </div>
       </div>
@@ -326,8 +373,10 @@ function isActionLoading(action: string, repository: string): boolean {
           @click.stop
         >
           <div class="flex items-center gap-3 mb-4 border-b-2 border-red-500 pb-4">
-            <span class="scada-led scada-led-red animate-pulse"></span>
-            <h3 class="text-xl font-mono font-bold text-red-400 uppercase tracking-wider">Delete Project</h3>
+            <span class="scada-led scada-led-red animate-pulse" />
+            <h3 class="text-xl font-mono font-bold text-red-400 uppercase tracking-wider">
+              Delete Project
+            </h3>
           </div>
           <p class="text-gray-300 mb-4 font-mono text-sm">
             Confirm deletion of: <strong class="text-white bg-red-900/30 px-2 py-1">{{ confirmDeleteProject }}</strong>
@@ -337,15 +386,15 @@ function isActionLoading(action: string, repository: string): boolean {
           </p>
           <div class="flex gap-2 justify-end">
             <button
-              @click="handleDeleteCancel"
               class="scada-btn scada-btn-ghost"
+              @click="handleDeleteCancel"
             >
               CANCEL
             </button>
             <button
-              @click="handleDeleteConfirm"
               :disabled="isActionLoading('delete', confirmDeleteProject)"
               class="scada-btn scada-btn-danger"
+              @click="handleDeleteConfirm"
             >
               {{ isActionLoading('delete', confirmDeleteProject) ? 'DELETING...' : 'CONFIRM DELETE' }}
             </button>

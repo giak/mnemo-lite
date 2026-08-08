@@ -136,7 +136,6 @@ export function useBrain(options: { refreshInterval?: number } = {}) {
       autosaveStats,
 
       repos,
-      _cacheStatsDup,
     ] = results
 
     // Process memories

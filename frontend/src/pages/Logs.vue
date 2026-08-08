@@ -6,8 +6,7 @@
  * OpenObserve runs on localhost:5080 and collects all container logs.
  * This page provides quick access + system status overview.
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { API_BASE } from '@/config/api'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const apiStatus = ref<string>('checking')
 const mcpStatus = ref<string>('checking')
@@ -92,9 +91,11 @@ onUnmounted(() => clearInterval(refreshInterval))
       <!-- Header SCADA -->
       <div class="flex items-center justify-between mb-8">
         <div class="flex items-center gap-4">
-          <span class="scada-led scada-led-cyan"></span>
+          <span class="scada-led scada-led-cyan" />
           <div>
-            <h1 class="text-3xl font-bold font-mono text-cyan-400 uppercase tracking-wider">Logs</h1>
+            <h1 class="text-3xl font-bold font-mono text-cyan-400 uppercase tracking-wider">
+              Logs
+            </h1>
             <p class="mt-2 text-sm text-gray-400 font-mono uppercase tracking-wide">
               System Log Viewer & Service Health
             </p>
@@ -102,9 +103,9 @@ onUnmounted(() => clearInterval(refreshInterval))
         </div>
         <div class="text-right">
           <button
-            @click="checkServices"
             :disabled="loading"
             class="scada-btn scada-btn-primary"
+            @click="checkServices"
           >
             {{ loading ? 'CHECKING...' : 'REFRESH' }}
           </button>
@@ -119,41 +120,69 @@ onUnmounted(() => clearInterval(refreshInterval))
         <!-- API -->
         <div class="scada-panel">
           <div class="flex items-center gap-2 mb-2">
-            <span :class="statusLed(apiStatus)" class="scada-led"></span>
+            <span
+              :class="statusLed(apiStatus)"
+              class="scada-led"
+            />
             <span class="scada-label">API</span>
           </div>
-          <p class="scada-data text-lg">{{ statusLabel(apiStatus) }}</p>
-          <p class="text-xs text-gray-500 font-mono mt-1">:8001</p>
+          <p class="scada-data text-lg">
+            {{ statusLabel(apiStatus) }}
+          </p>
+          <p class="text-xs text-gray-500 font-mono mt-1">
+            :8001
+          </p>
         </div>
 
         <!-- MCP -->
         <div class="scada-panel">
           <div class="flex items-center gap-2 mb-2">
-            <span :class="statusLed(mcpStatus)" class="scada-led"></span>
+            <span
+              :class="statusLed(mcpStatus)"
+              class="scada-led"
+            />
             <span class="scada-label">MCP</span>
           </div>
-          <p class="scada-data text-lg">{{ statusLabel(mcpStatus) }}</p>
-          <p class="text-xs text-gray-500 font-mono mt-1">:8002</p>
+          <p class="scada-data text-lg">
+            {{ statusLabel(mcpStatus) }}
+          </p>
+          <p class="text-xs text-gray-500 font-mono mt-1">
+            :8002
+          </p>
         </div>
 
         <!-- Database -->
         <div class="scada-panel">
           <div class="flex items-center gap-2 mb-2">
-            <span :class="statusLed(dbStatus)" class="scada-led"></span>
+            <span
+              :class="statusLed(dbStatus)"
+              class="scada-led"
+            />
             <span class="scada-label">Database</span>
           </div>
-          <p class="scada-data text-lg">{{ statusLabel(dbStatus) }}</p>
-          <p class="text-xs text-gray-500 font-mono mt-1">:5432</p>
+          <p class="scada-data text-lg">
+            {{ statusLabel(dbStatus) }}
+          </p>
+          <p class="text-xs text-gray-500 font-mono mt-1">
+            :5432
+          </p>
         </div>
 
         <!-- Redis -->
         <div class="scada-panel">
           <div class="flex items-center gap-2 mb-2">
-            <span :class="statusLed(redisStatus)" class="scada-led"></span>
+            <span
+              :class="statusLed(redisStatus)"
+              class="scada-led"
+            />
             <span class="scada-label">Redis</span>
           </div>
-          <p class="scada-data text-lg">{{ statusLabel(redisStatus) }}</p>
-          <p class="text-xs text-gray-500 font-mono mt-1">:6379</p>
+          <p class="scada-data text-lg">
+            {{ statusLabel(redisStatus) }}
+          </p>
+          <p class="text-xs text-gray-500 font-mono mt-1">
+            :6379
+          </p>
         </div>
       </div>
 
@@ -161,7 +190,7 @@ onUnmounted(() => clearInterval(refreshInterval))
       <div class="scada-panel scada-panel-info mb-8">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <span class="scada-led scada-led-cyan"></span>
+            <span class="scada-led scada-led-cyan" />
             <div>
               <span class="scada-label">OpenObserve Log Aggregator</span>
               <p class="text-sm text-gray-400 font-mono mt-1">
@@ -182,7 +211,9 @@ onUnmounted(() => clearInterval(refreshInterval))
 
       <!-- Container Log Links -->
       <div class="scada-panel">
-        <h2 class="scada-label text-cyan-400 mb-4">Container Quick Links</h2>
+        <h2 class="scada-label text-cyan-400 mb-4">
+          Container Quick Links
+        </h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <a
             :href="`${openObserveUrl}/web/logs?stream_type=logs&stream=mnemo-api`"
@@ -190,7 +221,7 @@ onUnmounted(() => clearInterval(refreshInterval))
             rel="noopener noreferrer"
             class="flex items-center gap-3 p-3 bg-slate-800/50 border border-slate-700 rounded hover:border-cyan-600 hover:bg-slate-800/80 transition-colors"
           >
-            <span class="scada-led scada-led-cyan"></span>
+            <span class="scada-led scada-led-cyan" />
             <div>
               <span class="text-sm font-mono text-cyan-400">mnemo-api</span>
               <p class="text-xs text-gray-500 font-mono">FastAPI application logs</p>
@@ -202,7 +233,7 @@ onUnmounted(() => clearInterval(refreshInterval))
             rel="noopener noreferrer"
             class="flex items-center gap-3 p-3 bg-slate-800/50 border border-slate-700 rounded hover:border-cyan-600 hover:bg-slate-800/80 transition-colors"
           >
-            <span class="scada-led scada-led-green"></span>
+            <span class="scada-led scada-led-green" />
             <div>
               <span class="text-sm font-mono text-cyan-400">mnemo-mcp</span>
               <p class="text-xs text-gray-500 font-mono">MCP server logs</p>
@@ -214,7 +245,7 @@ onUnmounted(() => clearInterval(refreshInterval))
             rel="noopener noreferrer"
             class="flex items-center gap-3 p-3 bg-slate-800/50 border border-slate-700 rounded hover:border-cyan-600 hover:bg-slate-800/80 transition-colors"
           >
-            <span class="scada-led scada-led-yellow"></span>
+            <span class="scada-led scada-led-yellow" />
             <div>
               <span class="text-sm font-mono text-cyan-400">mnemo-worker</span>
               <p class="text-xs text-gray-500 font-mono">Background worker logs</p>

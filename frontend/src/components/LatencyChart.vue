@@ -112,7 +112,7 @@ function createChart() {
           titleFont: { family: 'monospace' },
           bodyFont: { family: 'monospace' },
           callbacks: {
-            label: (ctx) => `  ${ctx.dataset.label}: ${Math.round(ctx.parsed.y)}ms`
+            label: (ctx) => `  ${ctx.dataset.label}: ${Math.round(ctx.parsed.y ?? 0)}ms`
           }
         }
       },
@@ -145,8 +145,11 @@ onUnmounted(() => {
 
 <template>
   <div class="relative h-64">
-    <canvas ref="canvasRef"></canvas>
-    <div v-if="data.length === 0" class="absolute inset-0 flex items-center justify-center text-slate-600 font-mono text-sm">
+    <canvas ref="canvasRef" />
+    <div
+      v-if="data.length === 0"
+      class="absolute inset-0 flex items-center justify-center text-slate-600 font-mono text-sm"
+    >
       NO DATA
     </div>
   </div>

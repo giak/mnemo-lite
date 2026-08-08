@@ -35,10 +35,10 @@ const taxonomie = computed(() => {
   }
 
   return [
-    { group: 'PERMANENT', decay: 0, items: [tagGroups['sys:core'], tagGroups['sys:anchor']] },
-    { group: 'LONG TERME', decay: 0.005, items: [tagGroups['sys:pattern']] },
-    { group: 'MOYEN TERME', decay: 0.01, items: [tagGroups['sys:extension']] },
-    { group: 'COURT TERME', decay: 0.02, items: [tagGroups['sys:history'], tagGroups['sys:drift'], tagGroups['trace:fresh']] },
+    { group: 'PERMANENT', decay: 0, items: [tagGroups['sys:core']!, tagGroups['sys:anchor']!] },
+    { group: 'LONG TERME', decay: 0.005, items: [tagGroups['sys:pattern']!] },
+    { group: 'MOYEN TERME', decay: 0.01, items: [tagGroups['sys:extension']!] },
+    { group: 'COURT TERME', decay: 0.02, items: [tagGroups['sys:history']!, tagGroups['sys:drift']!, tagGroups['trace:fresh']!] },
   ]
 })
 
@@ -64,16 +64,24 @@ function formatDate(iso: string): string {
     <!-- Taxonomie header -->
     <div class="mb-4">
       <div class="flex items-center gap-2 mb-3">
-        <span class="scada-led scada-led-cyan"></span>
-        <h2 class="scada-label text-cyan-400">Taxonomie Μ</h2>
+        <span class="scada-led scada-led-cyan" />
+        <h2 class="scada-label text-cyan-400">
+          Taxonomie Μ
+        </h2>
         <span class="text-xs font-mono text-slate-500 ml-auto">{{ data.memoriesCount }} memories</span>
       </div>
 
       <!-- Hiérarchie temporelle -->
       <div class="space-y-2">
-        <div v-for="group in taxonomie" :key="group.group">
+        <div
+          v-for="group in taxonomie"
+          :key="group.group"
+        >
           <div class="text-[10px] font-mono uppercase tracking-wider text-slate-600 mb-1">
-            {{ group.group }} <span v-if="group.decay > 0" class="text-slate-700">(decay={{ group.decay }})</span>
+            {{ group.group }} <span
+              v-if="group.decay > 0"
+              class="text-slate-700"
+            >(decay={{ group.decay }})</span>
           </div>
           <div class="flex gap-1 flex-wrap">
             <button
@@ -101,7 +109,7 @@ function formatDate(iso: string): string {
         @click="emit('select', memory)"
       >
         <div class="flex items-center gap-2 mb-1">
-          <span class="scada-led scada-led-green"></span>
+          <span class="scada-led scada-led-green" />
           <span class="font-mono text-xs text-cyan-400 truncate">{{ memory.title }}</span>
           <span class="ml-auto text-[10px] font-mono text-slate-500">{{ memory.memory_type }}</span>
         </div>
@@ -115,7 +123,10 @@ function formatDate(iso: string): string {
         </div>
       </div>
 
-      <div v-if="filteredMemories.length === 0" class="text-center text-slate-600 py-8 text-sm font-mono">
+      <div
+        v-if="filteredMemories.length === 0"
+        class="text-center text-slate-600 py-8 text-sm font-mono"
+      >
         NO MEMORIES
       </div>
     </div>

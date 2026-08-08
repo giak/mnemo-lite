@@ -101,8 +101,8 @@ describe('useDashboard', () => {
     await nextTick()
 
     expect(errors.value.length).toBeGreaterThan(0)
-    expect(errors.value[0].endpoint).toBeTruthy()
-    expect(errors.value[0].message).toContain('500')
+    expect(errors.value[0]!.endpoint).toBeTruthy()
+    expect(errors.value[0]!.message).toContain('500')
     expect(data.value.health).toBeNull()
   })
 
@@ -115,7 +115,7 @@ describe('useDashboard', () => {
     await nextTick()
 
     expect(errors.value.length).toBeGreaterThan(0)
-    expect(errors.value[0].message).toContain('Network error')
+    expect(errors.value[0]!.message).toContain('Network error')
   })
 
   it('should update lastUpdated timestamp after refresh', async () => {

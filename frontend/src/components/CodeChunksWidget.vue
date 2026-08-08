@@ -3,14 +3,13 @@
  * EPIC-27: Code Chunks Widget - SCADA Industrial Style
  * Displays indexing activity stats + recent code chunks with LED indicators
  */
-import { computed } from 'vue'
 import type { CodeChunksResponse } from '@/types/memories'
 
 interface Props {
   data: CodeChunksResponse | null
 }
 
-const props = defineProps<Props>()
+defineProps<Props>()
 
 // Format relative time
 function formatRelativeTime(isoString: string): string {
@@ -49,39 +48,56 @@ function getLanguageColor(language: string): string {
   <div class="scada-panel h-full">
     <!-- Header avec LED -->
     <div class="flex items-center gap-3 mb-4 pb-3 border-b-2 border-slate-700">
-      <span class="scada-led scada-led-cyan"></span>
+      <span class="scada-led scada-led-cyan" />
       <h2 class="text-lg scada-label text-cyan-400">
         Code Indexing Activity
       </h2>
     </div>
 
     <!-- Stats Box -->
-    <div v-if="data" class="bg-slate-700/50 border-2 border-slate-600 rounded p-3 mb-4">
-      <div class="scada-label mb-3">Today's Activity</div>
+    <div
+      v-if="data"
+      class="bg-slate-700/50 border-2 border-slate-600 rounded p-3 mb-4"
+    >
+      <div class="scada-label mb-3">
+        Today's Activity
+      </div>
       <div class="grid grid-cols-2 gap-4 text-center">
         <div class="border-r border-slate-600">
           <div class="text-xl scada-data text-purple-400">
             +{{ data.indexing_stats.chunks_today }}
           </div>
-          <div class="scada-label text-[10px]">Chunks</div>
+          <div class="scada-label text-[10px]">
+            Chunks
+          </div>
         </div>
         <div>
           <div class="text-xl scada-data text-emerald-400">
             {{ data.indexing_stats.files_today }}
           </div>
-          <div class="scada-label text-[10px]">Files</div>
+          <div class="scada-label text-[10px]">
+            Files
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Recent Chunks List -->
-    <div class="scada-label mb-2">Latest Chunks:</div>
+    <div class="scada-label mb-2">
+      Latest Chunks:
+    </div>
 
-    <div v-if="!data || data.recent_chunks.length === 0" class="text-gray-400 text-sm text-center py-8 font-mono uppercase">
+    <div
+      v-if="!data || data.recent_chunks.length === 0"
+      class="text-gray-400 text-sm text-center py-8 font-mono uppercase"
+    >
       No Code Chunks Found
     </div>
 
-    <div v-else class="space-y-2 overflow-y-auto max-h-[450px]">
+    <div
+      v-else
+      class="space-y-2 overflow-y-auto max-h-[450px]"
+    >
       <div
         v-for="chunk in data.recent_chunks"
         :key="chunk.id"
