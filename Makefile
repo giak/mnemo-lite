@@ -161,7 +161,7 @@ frontend-test:
 
 # Commandes MCP
 mcp-test:
-	@echo "Running MCP tests (358 tests)..."
+	@echo "Running MCP tests (447 tests)..."
 	docker compose -f $(COMPOSE_FILE) exec api python -m pytest tests/mnemo_mcp/ -v --tb=short
 
 mcp-shell:
