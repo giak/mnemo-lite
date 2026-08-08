@@ -6,45 +6,31 @@
 import { api, apiV1 } from '@/api/client'
 import { ref, onMounted, onUnmounted } from 'vue'
 
-
-
 export interface BrainData {
   // Counts
   totalRows: number
   memoriesCount: number
   chunksCount: number
-  eventsCount: number
   alertsCount: number
   metricsCount: number
   nodesCount: number
   edgesCount: number
   computedMetricsCount: number
-  edgeWeightsCount: number
 
   // Μ+Λ+Φ: Memory
   memories: any[]
-  memoryStats: any | null
   chunks: any[]
-  events: any[]
-  vocabfWords: any[]
 
   // Ξ: System
   alerts: any[]
-  alertSummary: any[]
   latency: any[]
-  indexingErrors: any[]
-  decayConfig: any[]
   cacheStats: any | null
-  autosaveStats: any | null
   batchStatus: any | null
 
   // Ω: Intelligence
   graphNodes: any[]
   graphEdges: any[]
-  graphStats: any | null
   computedMetrics: any[]
-  edgeWeights: any[]
-  searchResults: any[]
 }
 
 export function useBrain(options: { refreshInterval?: number } = {}) {
@@ -54,32 +40,20 @@ export function useBrain(options: { refreshInterval?: number } = {}) {
     totalRows: 0,
     memoriesCount: 0,
     chunksCount: 0,
-    eventsCount: 0,
     alertsCount: 0,
     metricsCount: 0,
     nodesCount: 0,
     edgesCount: 0,
     computedMetricsCount: 0,
-    edgeWeightsCount: 0,
     memories: [],
-    memoryStats: null,
     chunks: [],
-    events: [],
-    vocabfWords: [],
     alerts: [],
-    alertSummary: [],
     latency: [],
-    indexingErrors: [],
-    decayConfig: [],
     cacheStats: null,
-    autosaveStats: null,
     batchStatus: null,
     graphNodes: [],
     graphEdges: [],
-    graphStats: null,
-    computedMetrics: [],
-    edgeWeights: [],
-    searchResults: []
+    computedMetrics: []
   })
 
   const loading = ref(false)
@@ -88,53 +62,54 @@ export function useBrain(options: { refreshInterval?: number } = {}) {
 
   let intervalId: number | null = null
 
-  async function safeFetch(request: Promise<Response>, fallback: any = null): Promise<any> {
+  // Compteur d'échecs par cycle de refresh (peuple `error`)
+  let fetchStats: { total: number; failed: number; failedEndpoints: string[] } = {
+    total: 0,
+    failed: 0,
+    failedEndpoints: []
+  }
+
+  async function safeFetch(request: Promise<Response>, fallback: any = null, label = 'unknown'): Promise<any> {
+    fetchStats.total += 1
     try {
       const resp = await request
-      if (!resp.ok) return fallback
+      if (!resp.ok) {
+        fetchStats.failed += 1
+        fetchStats.failedEndpoints.push(`${label} (HTTP ${resp.status})`)
+        return fallback
+      }
       return await resp.json()
     } catch {
+      fetchStats.failed += 1
+      fetchStats.failedEndpoints.push(label)
       return fallback
     }
   }
 
   async function fetchAll(): Promise<void> {
     loading.value = true
-    error.value = null
+    fetchStats = { total: 0, failed: 0, failedEndpoints: [] }
 
     const results = await Promise.all([
       // Μ+Λ+Φ
-      safeFetch(api('/memories/recent?limit=50'), []),
-      safeFetch(api('/memories/stats'), null),
-      safeFetch(api('/memories/code-chunks/recent?limit=30'), { recent_chunks: [] }),
-      safeFetch(apiV1('/events/cache/stats'), null),
+      safeFetch(api('/memories/recent?limit=50'), [], '/memories/recent'),
+      safeFetch(api('/memories/code-chunks/recent?limit=30'), { recent_chunks: [] }, '/memories/code-chunks/recent'),
 
       // Ξ
-      safeFetch(api('/alerts/recent?limit=20'), { data: [] }),
-      safeFetch(api('/alerts/summary'), { data: [] }),
-      safeFetch(api('/monitoring/latency?hours=24'), { data: [] }),
-      safeFetch(api('/memories/decay/config'), { data: [] }),
-      safeFetch(apiV1('/cache/stats'), null),
-      safeFetch(apiV1('/autosave/stats'), null),
+      safeFetch(api('/alerts/recent?limit=20'), { data: [] }, '/alerts/recent'),
+      safeFetch(api('/monitoring/latency?hours=24'), { data: [] }, '/monitoring/latency'),
+      safeFetch(apiV1('/cache/stats'), null, '/cache/stats'),
 
       // Ω
-      safeFetch(apiV1('/code/graph/repositories'), []),
-      safeFetch(apiV1('/cache/stats'), null),
+      safeFetch(apiV1('/code/graph/repositories'), [], '/code/graph/repositories'),
     ])
 
     const [
       memories,
-      memoryStats,
       chunksResp,
-      eventsStats,
-
       alertsResp,
-      alertSummaryResp,
       latencyResp,
-      decayConfigResp,
       cacheStats,
-      autosaveStats,
-
       repos,
     ] = results
 
@@ -144,79 +119,73 @@ export function useBrain(options: { refreshInterval?: number } = {}) {
 
     // Process alerts
     const alertsList = alertsResp?.data || []
-    const alertSummaryList = alertSummaryResp?.data || []
 
     // Process latency
     const latencyList = latencyResp?.data || []
 
-    // Process decay config
-    const decayList = decayConfigResp?.data || []
-
     // Get graph data for first repo
     let graphNodes: any[] = []
     let graphEdges: any[] = []
-    let graphStats: any = null
     let computedMetricsList: any[] = []
-    let edgeWeightsList: any[] = []
+
+    let batchStatus: any = null
 
     if (repos && repos.length > 0) {
       const repo = repos[0]?.repository || repos[0]?.name || 'expanse'
-      const [graphResp, metricsResp] = await Promise.all([
-        safeFetch(apiV1(`/code/graph/data/${repo}?limit=50`), null),
-        safeFetch(apiV1(`/code/graph/metrics/${repo}`), null),
+      const [graphResp, metricsResp, batchResp] = await Promise.all([
+        safeFetch(apiV1(`/code/graph/data/${repo}?limit=50`), null, `/code/graph/data/${repo}`),
+        safeFetch(apiV1(`/code/graph/metrics/${repo}`), null, `/code/graph/metrics/${repo}`),
+        safeFetch(api(`/indexing/batch/status/${repo}`), null, `/indexing/batch/status/${repo}`),
       ])
 
       if (graphResp) {
         graphNodes = graphResp.nodes || []
         graphEdges = graphResp.edges || []
-        graphStats = graphResp.stats || null
       }
       if (metricsResp) {
         computedMetricsList = metricsResp.nodes || metricsResp.metrics || []
+      }
+      if (batchResp && batchResp.status !== 'not_found') {
+        batchStatus = batchResp
       }
     }
 
     // Calculate counts
     const memoriesCount = memoriesList.length
     const chunksCount = chunksList.length
-    const eventsCount = eventsStats?.total || 0
     const alertsCount = alertsList.length
     const metricsCount = latencyList.reduce((s: number, d: any) => s + (d.count || 0), 0)
     const nodesCount = graphNodes.length
     const edgesCount = graphEdges.length
     const computedMetricsCount = computedMetricsList.length
-    const edgeWeightsCount = edgeWeightsList.length
 
     data.value = {
-      totalRows: memoriesCount + chunksCount + eventsCount + alertsCount + metricsCount + nodesCount + edgesCount,
+      totalRows: memoriesCount + chunksCount + alertsCount + metricsCount + nodesCount + edgesCount,
       memoriesCount,
       chunksCount,
-      eventsCount,
       alertsCount,
       metricsCount,
       nodesCount,
       edgesCount,
       computedMetricsCount,
-      edgeWeightsCount,
       memories: memoriesList,
-      memoryStats,
       chunks: chunksList,
-      events: [],
-      vocabfWords: [],
       alerts: alertsList,
-      alertSummary: alertSummaryList,
       latency: latencyList,
-      indexingErrors: [],
-      decayConfig: decayList,
       cacheStats,
-      autosaveStats,
-      batchStatus: null,
+      batchStatus,
       graphNodes,
       graphEdges,
-      graphStats,
-      computedMetrics: computedMetricsList,
-      edgeWeights: edgeWeightsList,
-      searchResults: []
+      computedMetrics: computedMetricsList
+    }
+
+    // Peupler `error` : null si tout va bien, message sinon (partiel ou total)
+    if (fetchStats.failed === 0) {
+      error.value = null
+    } else if (fetchStats.failed === fetchStats.total) {
+      error.value = `Backend inaccessible : ${fetchStats.total} endpoints en échec`
+    } else {
+      error.value = `${fetchStats.failed}/${fetchStats.total} endpoints en échec : ${fetchStats.failedEndpoints.join(', ')}`
     }
 
     loading.value = false

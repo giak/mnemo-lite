@@ -21,6 +21,8 @@ interface AlertRule {
 
 const rules = ref<AlertRule[]>([])
 const loading = ref(false)
+const error = ref<string | null>(null)
+const actionLoading = ref<string | null>(null) // id de la règle en cours de mutation
 const editingRule = ref<AlertRule | null>(null)
 const showForm = ref(false)
 
@@ -61,36 +63,48 @@ const formData = ref<FormData>({ ...emptyRule })
 
 async function fetchRules() {
   loading.value = true
+  error.value = null
   try {
     const resp = await apiBase('/api/monitoring/advanced/alert-rules')
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     const data = await resp.json()
     rules.value = data.data || []
   } catch (err) {
-    console.error('Failed to fetch alert rules:', err)
+    error.value = `Failed to fetch alert rules: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error(error.value)
   } finally {
     loading.value = false
   }
 }
 
 async function toggleRule(rule: AlertRule) {
+  actionLoading.value = rule.id
+  error.value = null
   try {
     const resp = await apiBase(`/api/monitoring/advanced/alert-rules/${rule.id}/toggle`, { method: 'POST' })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     await fetchRules()
   } catch (err) {
-    console.error('Failed to toggle rule:', err)
+    error.value = `Failed to toggle rule: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error(error.value)
+  } finally {
+    actionLoading.value = null
   }
 }
 
 async function deleteRule(rule: AlertRule) {
   if (!confirm(`Delete rule "${rule.name}"?`)) return
+  actionLoading.value = rule.id
+  error.value = null
   try {
     const resp = await apiBase(`/api/monitoring/advanced/alert-rules/${rule.id}`, { method: 'DELETE' })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     await fetchRules()
   } catch (err) {
-    console.error('Failed to delete rule:', err)
+    error.value = `Failed to delete rule: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error(error.value)
+  } finally {
+    actionLoading.value = null
   }
 }
 
@@ -112,6 +126,8 @@ function cancelForm() {
 }
 
 async function saveRule() {
+  actionLoading.value = editingRule.value?.id || 'create'
+  error.value = null
   try {
     const url = editingRule.value
       ? `/api/monitoring/advanced/alert-rules/${editingRule.value.id}`
@@ -127,7 +143,10 @@ async function saveRule() {
     editingRule.value = null
     await fetchRules()
   } catch (err) {
-    console.error('Failed to save rule:', err)
+    error.value = `Failed to save rule: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error(error.value)
+  } finally {
+    actionLoading.value = null
   }
 }
 
@@ -155,6 +174,7 @@ onMounted(() => {
       </h2>
       <button
         class="scada-btn scada-btn-primary text-xs"
+        :disabled="!!actionLoading"
         @click="startCreate"
       >
         + NEW RULE
@@ -243,12 +263,18 @@ onMounted(() => {
           </button>
           <button
             class="scada-btn scada-btn-primary text-xs"
+            :disabled="!!actionLoading"
             @click="saveRule"
           >
-            SAVE
+            {{ actionLoading ? 'SAVING...' : 'SAVE' }}
           </button>
         </div>
       </div>
+    </div>
+
+    <!-- Error banner -->
+    <div v-if="error" class="alert-error mb-4">
+      {{ error }}
     </div>
 
     <!-- Rules Table -->
@@ -311,6 +337,7 @@ onMounted(() => {
                 class="scada-led transition-opacity"
                 :class="rule.enabled ? 'scada-led-green' : 'scada-led-gray'"
                 :title="rule.enabled ? 'Click to disable' : 'Click to enable'"
+                :disabled="!!actionLoading"
                 @click="toggleRule(rule)"
               />
             </td>
@@ -318,15 +345,17 @@ onMounted(() => {
               <div class="flex items-center justify-center gap-1">
                 <button
                   class="scada-btn scada-btn-ghost text-[10px] px-2 py-0.5"
+                  :disabled="!!actionLoading"
                   @click="startEdit(rule)"
                 >
                   EDIT
                 </button>
                 <button
                   class="scada-btn scada-btn-danger text-[10px] px-2 py-0.5"
+                  :disabled="!!actionLoading"
                   @click="deleteRule(rule)"
                 >
-                  DEL
+                  {{ actionLoading === rule.id ? '...' : 'DEL' }}
                 </button>
               </div>
             </td>

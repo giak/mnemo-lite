@@ -45,7 +45,7 @@ Dev : Vite proxie `/api`, `/v1`, `/health` → `http://localhost:8001` et `/mcp`
 src/
 ├── pages/            # 7 pages (routes du router, meta.navLabel pour la nav)
 ├── components/       # composants racine (Navbar, G6Graph, widgets)
-│   └── brain/        # 13 sous-composants de la page Brain
+│   └── brain/        # 12 sous-composants de la page Brain
 ├── composables/      # 10 composables (logique de données, fetch nu)
 │   └── __tests__/    # tests unitaires composables
 ├── layouts/          # MainLayout.vue (navbar + router-view)
@@ -62,7 +62,7 @@ src/
 | `/dashboard` | Dashboard.vue | Santé système, stats embeddings, AutoSave, auto-refresh 30 s |
 | `/search` | Search.vue | Recherche hybride : onglet Code + onglet Memories (persistance `?tab=`) |
 | `/memories` | Memories.vue | Stats mémoires, récentes (infinite scroll), code chunks, santé embeddings |
-| `/brain` | Brain.vue | Explorateur : groupes (memory/system/intelligence), 15 onglets (mémoires, code, events, alertes, métriques, graphe mémoire, consolidation...) |
+| `/brain` | Brain.vue | Explorateur : groupes (memory/system/intelligence), 10 onglets (mémoires, code, alertes, métriques, cache, batch, graphe, métriques calculées, graphe mémoire, consolidation). Onglets fantômes retirés en EPIC-76 |
 | `/monitoring` | Monitoring.vue | Latence, règles d'alertes |
 | `/projects` | Projects.vue | Projets indexés (contenu, langages, couverture) |
 | `/graph` | Graph.vue | Graphe de code (G6Graph) |
@@ -83,6 +83,7 @@ Routes supprimées en EPIC-74 (récupérables via git) : `/search-analytics`, `/
 | **Client API unique** | ✅ | EPIC-75 : `src/api/client.ts` (3 constantes + helpers `api`/`apiV1`/`apiBase`), `config/api.ts` supprimé, tous les fetch migrés |
 | **Warnings lint** | ⚠️ 4 | `vue/require-default-prop` (props sans défaut) + `vue/no-v-html` (BrainSidebar) — de la vraie qualité, volontairement actifs |
 | **Chunk size** | ⚠️ | bundle g6 > 500 kB (warning Vite au build, non bloquant) |
+| **Robustesse UX (F-06)** | ✅ | EPIC-76 : bandeau d'erreur Brain réel (échec partiel/total), onglets fantômes retirés, Batch branché sur la vraie route, AlertRuleEditor avec erreurs + actions bloquées |
 
 État du pipeline (EPIC-71-74) : lint **0 erreur**, vue-tsc **0 erreur**, vitest **29/29**, build **OK**.
 

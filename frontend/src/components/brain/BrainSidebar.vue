@@ -8,7 +8,6 @@ import { useMarkdown } from '@/composables/useMarkdown'
 const props = defineProps<{
   item: any
   type: string
-  data: any
 }>()
 
 // Markdown rendering for memory content
@@ -107,18 +106,6 @@ function formatDate(iso: string): string {
             <span class="text-slate-400">{{ val }}</span>
           </div>
         </div>
-      </div>
-    </div>
-
-    <!-- Event detail -->
-    <div v-else-if="type === 'event'">
-      <div class="flex items-center gap-2 mb-3">
-        <span class="scada-led scada-led-cyan"></span>
-        <h3 class="scada-label text-cyan-400 text-xs">Event</h3>
-      </div>
-      <div class="space-y-3">
-        <div class="text-[10px] font-mono text-slate-500">{{ formatDate(item.timestamp) }}</div>
-        <pre class="bg-slate-900 border border-slate-700 rounded p-2 text-[10px] font-mono text-slate-300 overflow-x-auto">{{ JSON.stringify(item.content || item, null, 2).substring(0, 500) }}</pre>
       </div>
     </div>
 

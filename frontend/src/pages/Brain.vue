@@ -8,7 +8,6 @@ import { useBrain } from '@/composables/useBrain'
 import GroupTabs from '@/components/brain/GroupTabs.vue'
 import MemoriesExplorer from '@/components/brain/MemoriesExplorer.vue'
 import CodeExplorer from '@/components/brain/CodeExplorer.vue'
-import EventsTimeline from '@/components/brain/EventsTimeline.vue'
 import AlertsDashboard from '@/components/brain/AlertsDashboard.vue'
 import MetricsDashboard from '@/components/brain/MetricsDashboard.vue'
 import GraphExplorer from '@/components/brain/GraphExplorer.vue'
@@ -60,22 +59,22 @@ const groups = computed(() => [
     id: 'memory' as const,
     label: 'MÉMOIRE',
     modules: ['Μ', 'Λ', 'Φ'],
-    count: data.value.memoriesCount + data.value.chunksCount + data.value.eventsCount,
-    tabs: ['memories', 'code', 'events', 'vocabf']
+    count: data.value.memoriesCount + data.value.chunksCount,
+    tabs: ['memories', 'code']
   },
   {
     id: 'system' as const,
     label: 'SYSTÈME',
     modules: ['Ξ', 'Ψ'],
     count: data.value.alertsCount + data.value.metricsCount,
-    tabs: ['alerts', 'metrics', 'errors', 'decay', 'cache', 'lsp', 'autosave', 'batch']
+    tabs: ['alerts', 'metrics', 'cache', 'batch']
   },
   {
     id: 'intelligence' as const,
     label: 'INTELLIGENCE',
     modules: ['Ω'],
     count: data.value.nodesCount + data.value.edgesCount + data.value.computedMetricsCount,
-    tabs: ['graph', 'computed', 'memory-graph', 'consolidation', 'weights', 'search']
+    tabs: ['graph', 'computed', 'memory-graph', 'consolidation']
   }
 ])
 
@@ -149,7 +148,6 @@ const currentGroup = computed(() => groups.value.find(g => g.id === activeGroup.
         <!-- Μ+Λ+Φ: MEMORY -->
         <MemoriesExplorer v-if="activeGroup === 'memory' && activeTab === 'memories'" :data="data" @select="(item) => selectItem(item, 'memory')" />
         <CodeExplorer v-if="activeGroup === 'memory' && activeTab === 'code'" :data="data" @select="(item) => selectItem(item, 'chunk')" />
-        <EventsTimeline v-if="activeGroup === 'memory' && activeTab === 'events'" :data="data" @select="(item) => selectItem(item, 'event')" />
 
         <!-- Ξ: SYSTEM -->
         <AlertsDashboard v-if="activeGroup === 'system' && activeTab === 'alerts'" :data="data" @select="(item) => selectItem(item, 'alert')" />
@@ -169,7 +167,6 @@ const currentGroup = computed(() => groups.value.find(g => g.id === activeGroup.
         <BrainSidebar
           :item="selectedItem"
           :type="selectedItemType"
-          :data="data"
         />
       </div>
     </div>

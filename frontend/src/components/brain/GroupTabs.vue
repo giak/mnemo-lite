@@ -16,40 +16,28 @@ const emit = defineEmits<{
 const tabLabels: Record<string, string> = {
   memories: 'Memories',
   code: 'Code Chunks',
-  events: 'Events',
-  vocabf: 'Vocabf',
   alerts: 'Alerts',
   metrics: 'Metrics',
-  errors: 'Errors',
-  decay: 'Decay',
   cache: 'Cache',
-  lsp: 'LSP',
-  autosave: 'Autosave',
   batch: 'Batch',
   graph: 'Graph',
   computed: 'Metrics',
-  weights: 'Weights',
-  search: 'Search'
+  'memory-graph': 'Memory Graph',
+  consolidation: 'Consolidation'
 }
 
 function getTabCount(tab: string, data: any): number {
   const counts: Record<string, number> = {
     memories: data.memoriesCount || 0,
     code: data.chunksCount || 0,
-    events: data.eventsCount || 0,
-    vocabf: data.vocabfWords?.length || 0,
     alerts: data.alertsCount || 0,
     metrics: data.metricsCount || 0,
-    errors: data.indexingErrors?.length || 0,
-    decay: data.decayConfig?.length || 0,
     cache: 0,
-    lsp: 0,
-    autosave: 0,
     batch: 0,
     graph: (data.nodesCount || 0) + (data.edgesCount || 0),
     computed: data.computedMetricsCount || 0,
-    weights: data.edgeWeightsCount || 0,
-    search: data.searchResults?.length || 0
+    'memory-graph': 0,
+    consolidation: 0
   }
   return counts[tab] || 0
 }
