@@ -2,7 +2,7 @@
  * EPIC-27: Projects Management Composable
  * Centralized state and API calls for projects management
  */
-import { API } from '@/config/api'
+import { api } from '@/api/client'
 import { ref, computed } from 'vue'
 import type {
   Project,
@@ -12,8 +12,6 @@ import type {
   ReindexProjectResponse,
   DeleteProjectResponse
 } from '@/types/projects'
-
-const API_BASE = API
 
 // Global state for active project
 const activeProject = ref<string>('default')
@@ -38,7 +36,7 @@ export function useProjects() {
     error.value = null
 
     try {
-      const response = await fetch(`${API_BASE}/projects`)
+      const response = await api('/projects')
 
       if (!response.ok) {
         throw new Error(`Failed to fetch projects: ${response.statusText}`)
@@ -59,7 +57,7 @@ export function useProjects() {
    */
   async function fetchActiveProject(): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE}/projects/active`)
+      const response = await api('/projects/active')
 
       if (!response.ok) {
         throw new Error(`Failed to fetch active project: ${response.statusText}`)
@@ -83,7 +81,7 @@ export function useProjects() {
     error.value = null
 
     try {
-      const response = await fetch(`${API_BASE}/projects/active`, {
+      const response = await api('/projects/active', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -117,7 +115,7 @@ export function useProjects() {
     error.value = null
 
     try {
-      const response = await fetch(`${API_BASE}/projects/${repository}/reindex`, {
+      const response = await api(`/projects/${repository}/reindex`, {
         method: 'POST'
       })
 
@@ -148,7 +146,7 @@ export function useProjects() {
     error.value = null
 
     try {
-      const response = await fetch(`${API_BASE}/projects/${repository}`, {
+      const response = await api(`/projects/${repository}`, {
         method: 'DELETE'
       })
 

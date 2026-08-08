@@ -31,10 +31,11 @@ pnpm format           # prettier --write src/
 
 ### Configuration API
 
-`src/config/api.ts` expose 3 bases (reliquat, voir Reliquats) :
+`src/api/client.ts` est le **client API unique** (EPIC-75) : 3 constantes + 3 helpers fetch.
 - `API` = `/api/v1` (voie de référence, prod : `VITE_API_URL`)
-- `API_V1` = `/v1` (endpoints legacy)
-- `API_BASE` = racine seule
+- `API_V1` = `/v1` (endpoints legacy : code, events, cache, conversations…)
+- `API_BASE` = racine seule (endpoints hors préfixes standard, ex. `/api/monitoring/advanced`)
+- `api(path, init?)` / `apiV1(path, init?)` / `apiBase(path, init?)` : `fetch` préfixé (ne passe `init` que s'il est défini)
 
 Dev : Vite proxie `/api`, `/v1`, `/health` → `http://localhost:8001` et `/mcp` → `http://localhost:8002` (configurable par `API_TARGET`).
 
@@ -48,8 +49,8 @@ src/
 ├── composables/      # 10 composables (logique de données, fetch nu)
 │   └── __tests__/    # tests unitaires composables
 ├── layouts/          # MainLayout.vue (navbar + router-view)
+├── api/              # client.ts (client API unique : constantes + helpers fetch)
 ├── types/            # interfaces par domaine (dashboard, memories, memory-graph, projects)
-├── config/           # api.ts (bases API)
 ├── styles/           # theme.css (750 lignes de classes SCADA custom)
 └── router.ts         # routes + meta nav
 ```
@@ -79,7 +80,7 @@ Routes supprimées en EPIC-74 (récupérables via git) : `/search-analytics`, `/
 
 | Point | État | Détail |
 |---|---|---|
-| **3 bases API** | ⚠️ | `API`/`API_V1`/`API_BASE` coexistent dans `config/api.ts` et les composables (unification prévue, EPIC F-02) |
+| **Client API unique** | ✅ | EPIC-75 : `src/api/client.ts` (3 constantes + helpers `api`/`apiV1`/`apiBase`), `config/api.ts` supprimé, tous les fetch migrés |
 | **Warnings lint** | ⚠️ 4 | `vue/require-default-prop` (props sans défaut) + `vue/no-v-html` (BrainSidebar) — de la vraie qualité, volontairement actifs |
 | **Chunk size** | ⚠️ | bundle g6 > 500 kB (warning Vite au build, non bloquant) |
 

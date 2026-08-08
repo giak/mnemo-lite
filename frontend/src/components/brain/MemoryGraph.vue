@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import G6Graph from '../G6Graph.vue'
 import type { MemoryNode, MemoryGraphData } from '../../types/memory-graph'
-import { API } from '../../config/api'
+import { api } from '@/api/client'
 
 const graphData = ref<MemoryGraphData>({ nodes: [], edges: [], total_nodes: 0, total_edges: 0 })
 const loading = ref(false)
@@ -26,7 +26,7 @@ async function fetchGraph() {
   loading.value = true
   error.value = null
   try {
-    const res = await fetch(`${API}/memories/graph?min_score=${minScore.value}&limit=100`)
+    const res = await api(`/memories/graph?min_score=${minScore.value}&limit=100`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     graphData.value = await res.json()
   } catch (e: any) {

@@ -4,10 +4,8 @@
  * Provides search, filtering, multi-selection, and ID copying functionality.
  */
 
-import { API } from '@/config/api'
+import { api } from '@/api/client'
 import { ref, computed } from 'vue'
-
-const API_BASE_URL = `${API}/memories`
 
 export interface MemorySearchResult {
   id: string
@@ -57,7 +55,7 @@ export function useMemorySearch() {
         requestBody.memory_type = options.memoryType
       }
 
-      const response = await fetch(`${API_BASE_URL}/search`, {
+      const response = await api('/memories/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

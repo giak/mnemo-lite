@@ -3,6 +3,7 @@
  * EPIC-30 Story 30.1: Alert Rule Editor — SCADA Style
  * CRUD interface for managing alert rules.
  */
+import { apiBase } from '@/api/client'
 import { ref, onMounted } from 'vue'
 
 interface AlertRule {
@@ -61,7 +62,7 @@ const formData = ref<FormData>({ ...emptyRule })
 async function fetchRules() {
   loading.value = true
   try {
-    const resp = await fetch(`/api/monitoring/advanced/alert-rules`)
+    const resp = await apiBase('/api/monitoring/advanced/alert-rules')
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     const data = await resp.json()
     rules.value = data.data || []
@@ -74,7 +75,7 @@ async function fetchRules() {
 
 async function toggleRule(rule: AlertRule) {
   try {
-    const resp = await fetch(`/api/monitoring/advanced/alert-rules/${rule.id}/toggle`, { method: 'POST' })
+    const resp = await apiBase(`/api/monitoring/advanced/alert-rules/${rule.id}/toggle`, { method: 'POST' })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     await fetchRules()
   } catch (err) {
@@ -85,7 +86,7 @@ async function toggleRule(rule: AlertRule) {
 async function deleteRule(rule: AlertRule) {
   if (!confirm(`Delete rule "${rule.name}"?`)) return
   try {
-    const resp = await fetch(`/api/monitoring/advanced/alert-rules/${rule.id}`, { method: 'DELETE' })
+    const resp = await apiBase(`/api/monitoring/advanced/alert-rules/${rule.id}`, { method: 'DELETE' })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     await fetchRules()
   } catch (err) {
@@ -116,7 +117,7 @@ async function saveRule() {
       ? `/api/monitoring/advanced/alert-rules/${editingRule.value.id}`
       : `/api/monitoring/advanced/alert-rules`
     const method = editingRule.value ? 'PUT' : 'POST'
-    const resp = await fetch(url, {
+    const resp = await apiBase(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(formData.value)

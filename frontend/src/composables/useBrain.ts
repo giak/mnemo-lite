@@ -3,7 +3,7 @@
  * Fetches ALL MnemoLite data for the Brain page
  */
 
-import { API, API_V1 } from '@/config/api'
+import { api, apiV1 } from '@/api/client'
 import { ref, onMounted, onUnmounted } from 'vue'
 
 
@@ -88,9 +88,9 @@ export function useBrain(options: { refreshInterval?: number } = {}) {
 
   let intervalId: number | null = null
 
-  async function safeFetch(url: string, fallback: any = null): Promise<any> {
+  async function safeFetch(request: Promise<Response>, fallback: any = null): Promise<any> {
     try {
-      const resp = await fetch(url)
+      const resp = await request
       if (!resp.ok) return fallback
       return await resp.json()
     } catch {
@@ -104,22 +104,22 @@ export function useBrain(options: { refreshInterval?: number } = {}) {
 
     const results = await Promise.all([
       // Μ+Λ+Φ
-      safeFetch(`${API}/memories/recent?limit=50`, []),
-      safeFetch(`${API}/memories/stats`, null),
-      safeFetch(`${API}/memories/code-chunks/recent?limit=30`, { recent_chunks: [] }),
-      safeFetch(`${API_V1}/events/cache/stats`, null),
+      safeFetch(api('/memories/recent?limit=50'), []),
+      safeFetch(api('/memories/stats'), null),
+      safeFetch(api('/memories/code-chunks/recent?limit=30'), { recent_chunks: [] }),
+      safeFetch(apiV1('/events/cache/stats'), null),
 
       // Ξ
-      safeFetch(`${API}/alerts/recent?limit=20`, { data: [] }),
-      safeFetch(`${API}/alerts/summary`, { data: [] }),
-      safeFetch(`${API}/monitoring/latency?hours=24`, { data: [] }),
-      safeFetch(`${API}/memories/decay/config`, { data: [] }),
-      safeFetch(`${API_V1}/cache/stats`, null),
-      safeFetch(`${API_V1}/autosave/stats`, null),
+      safeFetch(api('/alerts/recent?limit=20'), { data: [] }),
+      safeFetch(api('/alerts/summary'), { data: [] }),
+      safeFetch(api('/monitoring/latency?hours=24'), { data: [] }),
+      safeFetch(api('/memories/decay/config'), { data: [] }),
+      safeFetch(apiV1('/cache/stats'), null),
+      safeFetch(apiV1('/autosave/stats'), null),
 
       // Ω
-      safeFetch(`${API_V1}/code/graph/repositories`, []),
-      safeFetch(`${API_V1}/cache/stats`, null),
+      safeFetch(apiV1('/code/graph/repositories'), []),
+      safeFetch(apiV1('/cache/stats'), null),
     ])
 
     const [
@@ -162,8 +162,8 @@ export function useBrain(options: { refreshInterval?: number } = {}) {
     if (repos && repos.length > 0) {
       const repo = repos[0]?.repository || repos[0]?.name || 'expanse'
       const [graphResp, metricsResp] = await Promise.all([
-        safeFetch(`${API_V1}/code/graph/data/${repo}?limit=50`, null),
-        safeFetch(`${API_V1}/code/graph/metrics/${repo}`, null),
+        safeFetch(apiV1(`/code/graph/data/${repo}?limit=50`), null),
+        safeFetch(apiV1(`/code/graph/metrics/${repo}`), null),
       ])
 
       if (graphResp) {

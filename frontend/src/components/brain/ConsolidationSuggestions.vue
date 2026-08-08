@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import type { ConsolidationGroup } from '../../types/memory-graph'
-import { API } from '../../config/api'
+import { api } from '@/api/client'
 
 const suggestions = ref<ConsolidationGroup[]>([])
 const loading = ref(false)
@@ -15,7 +15,7 @@ async function fetchSuggestions() {
   loading.value = true
   error.value = null
   try {
-    const res = await fetch(`${API}/memories/consolidation/suggestions?min_shared_entities=0&min_shared_concepts=0&similarity_threshold=0.01&min_group_size=2`)
+    const res = await api('/memories/consolidation/suggestions?min_shared_entities=0&min_shared_concepts=0&similarity_threshold=0.01&min_group_size=2')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     suggestions.value = data.groups
@@ -36,7 +36,7 @@ async function consolidate() {
   if (!selectedGroup.value) return
   consolidating.value = selectedGroup.value.source_ids[0] ?? null
   try {
-    const res = await fetch(`${API}/memories/consolidate`, {
+    const res = await api('/memories/consolidate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -8,7 +8,7 @@ import { computed } from 'vue'
 import { useDashboard } from '@/composables/useDashboard'
 import DashboardCard from '@/components/DashboardCard.vue'
 import AutoSaveStatus from '@/components/AutoSaveStatus.vue'
-import { API_BASE } from '@/config/api'
+import { API_BASE } from '@/api/client'
 
 // Expose API_BASE for template use
 // Expose API_BASE for template use

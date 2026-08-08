@@ -3,14 +3,12 @@
  * Vue 3 composable for fetching and managing memories data
  */
 
-import { API } from '@/config/api'
+import { api } from '@/api/client'
 import { ref, onMounted, onUnmounted } from 'vue'
 import type {
   MemoriesData,
   MemoriesError
 } from '@/types/memories'
-
-const API_BASE_URL = `${API}/memories`
 
 export function useMemories(options: { refreshInterval?: number } = {}) {
   const { refreshInterval = 30000 } = options // Default: 30 seconds
@@ -38,7 +36,7 @@ export function useMemories(options: { refreshInterval?: number } = {}) {
   // Fetch memories stats
   async function fetchStats(): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/stats`)
+      const response = await api('/memories/stats')
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
@@ -58,7 +56,7 @@ export function useMemories(options: { refreshInterval?: number } = {}) {
   async function fetchRecentMemories(limit: number = pageSize, append: boolean = false): Promise<void> {
     try {
       const currentOffset = append ? offset.value : 0
-      const response = await fetch(`${API_BASE_URL}/recent?limit=${limit}&offset=${currentOffset}`)
+      const response = await api(`/memories/recent?limit=${limit}&offset=${currentOffset}`)
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
@@ -99,7 +97,7 @@ export function useMemories(options: { refreshInterval?: number } = {}) {
   // Fetch code chunks
   async function fetchCodeChunks(limit: number = 10): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/code-chunks/recent?limit=${limit}`)
+      const response = await api(`/memories/code-chunks/recent?limit=${limit}`)
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
@@ -118,7 +116,7 @@ export function useMemories(options: { refreshInterval?: number } = {}) {
   // Fetch embeddings health
   async function fetchEmbeddingsHealth(): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/embeddings/health`)
+      const response = await api('/memories/embeddings/health')
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }

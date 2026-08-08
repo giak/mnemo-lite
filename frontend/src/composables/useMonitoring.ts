@@ -3,9 +3,8 @@
  * Fetches metrics and alerts from the MnemoLite API
  */
 
+import { api } from '@/api/client'
 import { ref, onMounted, onUnmounted } from 'vue'
-
-const API_BASE_URL = '/api/v1'
 
 export interface LatencyPoint {
   hour: string
@@ -47,7 +46,7 @@ export function useMonitoring(options: { refreshInterval?: number } = {}) {
 
   async function fetchLatency(): Promise<void> {
     try {
-      const resp = await fetch(`${API_BASE_URL}/monitoring/latency?hours=24`)
+      const resp = await api('/monitoring/latency?hours=24')
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       const data = await resp.json()
       latency.value = data.data || []
@@ -58,7 +57,7 @@ export function useMonitoring(options: { refreshInterval?: number } = {}) {
 
   async function fetchAlertSummary(): Promise<void> {
     try {
-      const resp = await fetch(`${API_BASE_URL}/alerts/summary`)
+      const resp = await api('/alerts/summary')
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       const data = await resp.json()
       alertSummary.value = data.data || []
@@ -69,7 +68,7 @@ export function useMonitoring(options: { refreshInterval?: number } = {}) {
 
   async function fetchRecentAlerts(): Promise<void> {
     try {
-      const resp = await fetch(`${API_BASE_URL}/alerts/recent?limit=20`)
+      const resp = await api('/alerts/recent?limit=20')
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       const data = await resp.json()
       recentAlerts.value = data.data || []
@@ -80,7 +79,7 @@ export function useMonitoring(options: { refreshInterval?: number } = {}) {
 
   async function ackAlert(id: string): Promise<void> {
     try {
-      const resp = await fetch(`${API_BASE_URL}/alerts/${id}/ack`, { method: 'POST' })
+      const resp = await api(`/alerts/${id}/ack`, { method: 'POST' })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       // Refresh alerts after ack
       await fetchAlertSummary()

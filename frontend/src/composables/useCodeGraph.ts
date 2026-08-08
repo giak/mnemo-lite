@@ -4,7 +4,7 @@
  * Composable for fetching code graph statistics and data.
  */
 
-import { API_V1 } from '@/config/api'
+import { apiV1 } from '@/api/client'
 import { ref } from 'vue'
 
 export interface GraphStats {
@@ -90,7 +90,7 @@ export function useCodeGraph(): UseCodeGraphReturn {
     error.value = null
 
     try {
-      const response = await fetch(`${API_V1}/code/graph/stats/${repository}`)
+      const response = await apiV1(`/code/graph/stats/${repository}`)
 
       if (!response.ok) {
         throw new Error(`Failed to fetch graph stats: ${response.status} ${response.statusText}`)
@@ -113,7 +113,7 @@ export function useCodeGraph(): UseCodeGraphReturn {
     buildError.value = null
 
     try {
-      const response = await fetch(`${API_V1}/code/graph/build`, {
+      const response = await apiV1('/code/graph/build', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -148,8 +148,8 @@ export function useCodeGraph(): UseCodeGraphReturn {
     error.value = null
 
     try {
-      const response = await fetch(
-        `${API_V1}/code/graph/data/${repository}?limit=${limit}`
+      const response = await apiV1(
+        `/code/graph/data/${repository}?limit=${limit}`
       )
 
       if (!response.ok) {
@@ -173,8 +173,8 @@ export function useCodeGraph(): UseCodeGraphReturn {
     error.value = null
 
     try {
-      const response = await fetch(
-        `${API_V1}/code/graph/module/${repository}?limit=${limit}`
+      const response = await apiV1(
+        `/code/graph/module/${repository}?limit=${limit}`
       )
 
       if (!response.ok) {
@@ -195,7 +195,7 @@ export function useCodeGraph(): UseCodeGraphReturn {
 
   const fetchRepositories = async () => {
     try {
-      const response = await fetch(`${API_V1}/code/graph/repositories`)
+      const response = await apiV1('/code/graph/repositories')
 
       if (!response.ok) {
         throw new Error(`Failed to fetch repositories: ${response.status} ${response.statusText}`)
@@ -214,7 +214,7 @@ export function useCodeGraph(): UseCodeGraphReturn {
     error.value = null
 
     try {
-      const response = await fetch(`${API_V1}/code/graph/metrics/${repository}`)
+      const response = await apiV1(`/code/graph/metrics/${repository}`)
 
       if (!response.ok) {
         throw new Error(`Failed to fetch metrics: ${response.status} ${response.statusText}`)

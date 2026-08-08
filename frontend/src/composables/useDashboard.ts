@@ -3,11 +3,9 @@
  * Vue 3 composable for fetching and managing dashboard data
  */
 
-import { API } from '@/config/api'
+import { api } from '@/api/client'
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { DashboardData, DashboardError } from '@/types/dashboard'
-
-const API_BASE_URL = `${API}/dashboard`
 
 export function useDashboard(options: { refreshInterval?: number } = {}) {
   const { refreshInterval = 30000 } = options // Default: 30 seconds
@@ -28,7 +26,7 @@ export function useDashboard(options: { refreshInterval?: number } = {}) {
   // Fetch health status
   async function fetchHealth(): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/health`)
+      const response = await api('/dashboard/health')
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
@@ -47,7 +45,7 @@ export function useDashboard(options: { refreshInterval?: number } = {}) {
   // Fetch text embeddings stats
   async function fetchTextEmbeddings(): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/embeddings/text`)
+      const response = await api('/dashboard/embeddings/text')
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
@@ -66,7 +64,7 @@ export function useDashboard(options: { refreshInterval?: number } = {}) {
   // Fetch code embeddings stats
   async function fetchCodeEmbeddings(): Promise<void> {
     try {
-      const response = await fetch(`${API_BASE_URL}/embeddings/code`)
+      const response = await api('/dashboard/embeddings/code')
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
