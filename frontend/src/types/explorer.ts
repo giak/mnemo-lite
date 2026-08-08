@@ -38,3 +38,18 @@ export interface ExplorerTree {
   facts: ExplorerTreeItem[]
   others: ExplorerTreeItem[]
 }
+
+/** Mémoire liée par proxy de tags partagés (endpoint /related-by-tags) */
+export interface RelatedItem {
+  id: string
+  title: string
+  memory_type: string
+  shared_tags: string[]
+  score: number
+}
+
+export interface RelatedResponse {
+  memory_id: string
+  related: RelatedItem[]
+  total: number
+}

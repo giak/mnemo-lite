@@ -9,9 +9,10 @@
  *      autres, branchée sur GET /api/v1/memories/explorer/tree.
  */
 import { ref, computed, watch, onMounted } from 'vue'
-import { getExplorerStats, getExplorerTree } from '@/api/explorer'
-import type { ExplorerStats, ExplorerTree, ExplorerTreeItem } from '@/types/explorer'
+import { getExplorerStats, getExplorerTree, getRelatedByTags, searchSourceMemories } from '@/api/explorer'
+import type { ExplorerStats, ExplorerTree, ExplorerTreeItem, RelatedItem } from '@/types/explorer'
 import TreeItemRow from '@/components/TreeItemRow.vue'
+import G6Graph from '@/components/G6Graph.vue'
 
 // --- États
 type Tab = 'socle' | 'explorer' | 'relations'
@@ -75,6 +76,116 @@ watch(activeTab, (tab) => {
   if (tab === 'explorer' && selectedSubject.value && !tree.value && !treeLoading.value) {
     loadTree(selectedSubject.value)
   }
+})
+
+// --- Relations (T4)
+const sourceQuery = ref('')
+const sourceResults = ref<ExplorerTreeItem[]>([])
+const sourceSearching = ref(false)
+const sourceError = ref<string | null>(null)
+
+const sourceMemory = ref<ExplorerTreeItem | null>(null)
+const related = ref<RelatedItem[]>([])
+const relatedTotal = ref(0)
+const relatedLoading = ref(false)
+const relatedError = ref<string | null>(null)
+const minShared = ref(1)
+const relatedLimit = ref(20)
+
+async function searchSources(): Promise<void> {
+  const q = sourceQuery.value.trim()
+  if (!q) return
+  sourceSearching.value = true
+  sourceError.value = null
+  try {
+    sourceResults.value = await searchSourceMemories(q)
+  } catch (err) {
+    sourceError.value = err instanceof Error ? err.message : 'Recherche impossible'
+  } finally {
+    sourceSearching.value = false
+  }
+}
+
+// Séquence anti-course : seule la dernière requête fait foi (changements rapides de source)
+let relatedSeq = 0
+
+async function loadRelated(): Promise<void> {
+  if (!sourceMemory.value) return
+  const seq = ++relatedSeq
+  relatedLoading.value = true
+  relatedError.value = null
+  try {
+    const resp = await getRelatedByTags(sourceMemory.value.id, relatedLimit.value, minShared.value)
+    if (seq !== relatedSeq) return // réponse obsolète : une plus récente est en vol
+    related.value = resp.related
+    relatedTotal.value = resp.total
+  } catch (err) {
+    if (seq !== relatedSeq) return
+    relatedError.value = err instanceof Error ? err.message : 'Chargement des relations impossible'
+  } finally {
+    if (seq === relatedSeq) relatedLoading.value = false
+  }
+}
+
+function selectSource(item: ExplorerTreeItem): void {
+  sourceMemory.value = item
+  sourceQuery.value = ''
+  sourceResults.value = []
+  loadRelated()
+}
+
+function clearSource(): void {
+  sourceMemory.value = null
+  related.value = []
+  relatedTotal.value = 0
+}
+
+/** Re-centrage : une relation devient la nouvelle source (saute de puce) */
+function selectRelated(r: RelatedItem): void {
+  selectSource({
+    id: r.id,
+    title: r.title,
+    memory_type: r.memory_type,
+    tags: r.shared_tags,
+    created_at: null
+  })
+}
+
+// Chips rapides : éléments du tree courant (si un sujet a été exploré)
+const treeQuickSources = computed<ExplorerTreeItem[]>(() => {
+  if (!tree.value) return []
+  return [...tree.value.investigations, ...tree.value.facts, ...tree.value.others].slice(0, 8)
+})
+
+// Graphe G6 : nœud central = source, satellites = relations
+const graphNodes = computed(() => {
+  if (!sourceMemory.value) return []
+  const nodes: Array<{ id: string; label: string; type: string }> = [
+    {
+      id: sourceMemory.value.id,
+      label: sourceMemory.value.title,
+      type: sourceMemory.value.memory_type
+    }
+  ]
+  for (const r of related.value) {
+    nodes.push({ id: r.id, label: r.title, type: r.memory_type })
+  }
+  return nodes
+})
+
+const graphEdges = computed(() => {
+  if (!sourceMemory.value) return []
+  return related.value.map((r) => ({
+    id: `${sourceMemory.value!.id}->${r.id}`,
+    source: sourceMemory.value!.id,
+    target: r.id,
+    type: 'related'
+  }))
+})
+
+// Recharger les relations quand les filtres changent
+watch([minShared, relatedLimit], () => {
+  if (sourceMemory.value) loadRelated()
 })
 
 const copyFeedback = ref<string | null>(null)
@@ -575,13 +686,189 @@ const typeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1)
         </div>
 
         <!-- ============ RELATIONS TAB (T4) ============ -->
-        <div v-else class="scada-panel text-center py-16 space-y-3">
-          <span class="text-4xl">🕸️</span>
-          <h3 class="text-lg font-medium text-gray-300 uppercase">Graphe de relations</h3>
-          <p class="text-sm text-gray-500 max-w-md mx-auto">
-            Le graphe des liens entre mémoires (proxy par tags partagés) arrive en T4.
-            Le backend <span class="text-cyan-400 font-mono">/related-by-tags</span> est déjà opérationnel.
-          </p>
+        <div v-else class="space-y-6">
+          <!-- Sélecteur de mémoire source -->
+          <div class="scada-panel">
+            <h2 class="scada-label text-cyan-400 mb-4 pb-3 border-b-2 border-slate-700">
+              Mémoire source
+            </h2>
+            <div class="flex gap-3">
+              <input
+                v-model="sourceQuery"
+                @keypress.enter="searchSources"
+                type="text"
+                class="input flex-1"
+                placeholder="Rechercher une mémoire par titre (ex: parrainages, ARCOM)"
+              />
+              <button
+                @click="searchSources"
+                :disabled="!sourceQuery.trim() || sourceSearching"
+                class="scada-btn scada-btn-primary"
+              >
+                {{ sourceSearching ? 'RECHERCHE...' : 'RECHERCHER' }}
+              </button>
+            </div>
+
+            <!-- Résultats de recherche -->
+            <div v-if="sourceResults.length > 0" class="mt-3 space-y-1">
+              <button
+                v-for="r in sourceResults"
+                :key="r.id"
+                @click="selectSource(r)"
+                class="w-full flex items-center gap-3 px-3 py-2 border border-slate-700 bg-slate-900/50 hover:border-cyan-500/50 rounded transition-colors text-left"
+              >
+                <span class="flex-1 min-w-0">
+                  <span class="block text-sm text-gray-200 font-mono truncate">{{ r.title }}</span>
+                  <span class="block text-[10px] text-gray-500 font-mono uppercase mt-0.5">
+                    {{ r.memory_type }} · {{ formatDate(r.created_at) }}
+                  </span>
+                </span>
+                <span class="text-gray-600">›</span>
+              </button>
+            </div>
+            <p v-else-if="sourceError" class="mt-3 text-xs text-red-400 font-mono">{{ sourceError }}</p>
+
+            <!-- Chips rapides depuis le tree courant -->
+            <div v-if="treeQuickSources.length > 0" class="mt-3 pt-3 border-t border-slate-700">
+              <p class="text-[10px] text-gray-500 font-mono uppercase mb-2">
+                Depuis le sujet « {{ tree?.subject }} »
+              </p>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="item in treeQuickSources"
+                  :key="item.id"
+                  @click="selectSource(item)"
+                  class="px-2 py-1 text-xs font-mono border rounded transition-colors border-slate-600 text-gray-400 hover:border-cyan-500 hover:text-cyan-400 max-w-xs truncate"
+                  :title="item.title"
+                >
+                  {{ item.title }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Source choisie -->
+          <div v-if="sourceMemory" class="space-y-6">
+            <!-- Barre source + filtres -->
+            <div class="scada-panel">
+              <div class="flex flex-wrap items-center gap-3">
+                <span class="scada-led scada-led-cyan"></span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm text-gray-100 font-mono truncate">{{ sourceMemory.title }}</p>
+                  <p class="text-[10px] text-gray-500 font-mono uppercase">
+                    {{ sourceMemory.memory_type }} · {{ formatDate(sourceMemory.created_at) }} ·
+                    {{ relatedTotal }} relations affichées (limit {{ relatedLimit }})
+                  </p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <label class="text-[10px] text-gray-500 font-mono uppercase">Tags min</label>
+                  <select
+                    v-model.number="minShared"
+                    class="bg-slate-700 text-gray-200 border border-slate-600 rounded px-2 py-1 text-xs"
+                  >
+                    <option :value="1">1</option>
+                    <option :value="2">2</option>
+                    <option :value="3">3</option>
+                  </select>
+                  <label class="text-[10px] text-gray-500 font-mono uppercase ml-2">Max</label>
+                  <select
+                    v-model.number="relatedLimit"
+                    class="bg-slate-700 text-gray-200 border border-slate-600 rounded px-2 py-1 text-xs"
+                  >
+                    <option :value="10">10</option>
+                    <option :value="20">20</option>
+                    <option :value="50">50</option>
+                  </select>
+                  <button
+                    @click="clearSource"
+                    class="ml-2 text-xs font-mono text-gray-500 hover:text-gray-300 uppercase"
+                  >
+                    ✕ changer
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Erreur -->
+            <div v-if="relatedError" class="alert-error">
+              <span class="text-sm font-mono">{{ relatedError }}</span>
+            </div>
+
+            <!-- Chargement -->
+            <div v-if="relatedLoading" class="animate-pulse space-y-3">
+              <div v-for="i in 5" :key="i" class="h-12 bg-slate-800/60 border-2 border-slate-700"></div>
+            </div>
+
+            <!-- Contenu -->
+            <template v-else>
+              <div
+                v-if="related.length === 0"
+                class="scada-panel text-center py-14 space-y-3"
+              >
+                <span class="text-4xl">🕸️</span>
+                <h3 class="text-lg font-medium text-gray-300 uppercase">Aucune relation</h3>
+                <p class="text-sm text-gray-500 max-w-md mx-auto">
+                  Aucune mémoire ne partage un tag avec la source au seuil choisi.
+                  Réduisez « Tags min » ou changez de mémoire source.
+                </p>
+              </div>
+
+              <div v-else class="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6">
+                <!-- Graphe G6 réutilisé -->
+                <div class="scada-panel p-0 overflow-hidden">
+                  <G6Graph :nodes="graphNodes" :edges="graphEdges" :loading="relatedLoading" />
+                </div>
+
+                <!-- Liste des relations -->
+                <div class="scada-panel max-h-[850px] overflow-y-auto">
+                  <h3 class="scada-label text-cyan-400 mb-3 pb-2 border-b-2 border-slate-700">
+                    Relations ({{ related.length }})
+                  </h3>
+                  <div class="space-y-2">
+                    <button
+                      v-for="r in related"
+                      :key="r.id"
+                      @click="selectRelated(r)"
+                      class="w-full text-left px-3 py-2 border rounded transition-colors border-slate-700 bg-slate-900/50 hover:border-cyan-500/50"
+                    >
+                      <div class="flex items-center gap-2">
+                        <span class="flex-1 text-xs text-gray-200 font-mono truncate">{{ r.title }}</span>
+                        <span
+                          class="flex-shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded"
+                          :class="r.score >= 4 ? 'bg-amber-600/30 text-amber-300' : 'bg-slate-700 text-gray-300'"
+                        >
+                          score {{ r.score }}
+                        </span>
+                      </div>
+                      <p class="text-[10px] text-gray-500 font-mono uppercase mt-1">{{ r.memory_type }}</p>
+                      <div v-if="r.shared_tags.length > 0" class="mt-1 flex flex-wrap gap-1">
+                        <span
+                          v-for="t in r.shared_tags.slice(0, 4)"
+                          :key="t"
+                          class="text-[10px] bg-slate-700 text-gray-300 px-1 rounded"
+                        >
+                          #{{ t }}
+                        </span>
+                        <span v-if="r.shared_tags.length > 4" class="text-[10px] text-gray-500">
+                          +{{ r.shared_tags.length - 4 }}
+                        </span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Aucune source -->
+          <div v-else class="scada-panel text-center py-16 space-y-3">
+            <span class="text-4xl">🕸️</span>
+            <h3 class="text-lg font-medium text-gray-300 uppercase">Graphe de relations</h3>
+            <p class="text-sm text-gray-500 max-w-md mx-auto">
+              Recherchez une mémoire source pour voir les mémoires liées par tags partagés.
+              Cliquez une relation pour re-centrer le graphe sur elle (exploration en saut de puce).
+            </p>
+          </div>
         </div>
       </template>
 

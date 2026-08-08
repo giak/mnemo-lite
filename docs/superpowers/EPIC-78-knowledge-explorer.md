@@ -1,6 +1,6 @@
 # 🧭 EPIC-78 : Knowledge Explorer — consulter le socle Truth Engine (faits, enquêtes, articles, relations)
 
-> **Status:** IN_PROGRESS — T0+T1 backend DONE, T2 Socle DONE, T3 Explorer arborescence DONE (2026-08-08) ; reste T4-T6 frontend
+> **Status:** IN_PROGRESS — T0-T4 DONE (2026-08-08) ; reste T5 fiche enrichie + T6 recherche avancée
 > **Priority:** P1 : le besoin central « voir ce qui est lié » est aujourd'hui techniquement impossible
 > **Date:** 2026-08-08
 > **Effort:** 8-12 h (T0/T1 backend + T2-T6 frontend)
@@ -55,8 +55,15 @@ Onglet **Explorer** de `Explorer.vue` :
 - Composant `src/components/TreeItemRow.vue` (DRY, 3 sections). Tests `getExplorerTree` : parsing, URL-encoding, erreur HTTP.
 - **Validé** : vue-tsc 0 erreur · vitest 34/34 · eslint 0 erreur · build OK · rendu Socle navigateur vérifié.
 
-### T4 — Graphe de relations (frontend, ~3-4 h)
-Onglet **Relations** : `G6Graph` (réutilisé) — nœuds = mémoires (couleur par type, taille par statut CONFIRME), arêtes = score proxy, filtres type/sujet/score, clic → fiche. Bloc « Liées » dans la fiche.
+### ✅ T4 — Graphe de relations (frontend, DONE)
+Onglet **Relations** de `Explorer.vue`, branché sur `/api/v1/memories/{id}/related-by-tags` :
+- **Sélecteur de mémoire source** : recherche sémantique par titre (POST `/memories/search`, 8 résultats cliquables) + chips rapides depuis le tree du sujet courant.
+- **Graphe G6 réutilisé** (`G6Graph`) : nœud central = source, satellites = relations (labels = titres, couleurs = type), arêtes source→relation (`type: related`). Les types mémoires ne matchent pas Class/Function/Method → la garde EPIC-71 garde tous les nœuds.
+- **Filtres** : `min_shared` (1-3) et `limit` (10/20/50), rechargement auto via watch ; **liste des relations** (score coloré ≥ 4, tags partagés max 4) cliquable → la relation devient la nouvelle source (exploration en saut de puce).
+- **Robustesse** : garde anti-course (`relatedSeq`) pour les changements rapides de source ; états loading/error/empty explicites (aucune relation au seuil choisi).
+- **Tests** : `getRelatedByTags` (URL + parsing) et `searchSourceMemories` (POST + mapping) — 4 nouveaux tests.
+- **Limitations assumées** (review) : G6Graph affiche du chrome code-oriented (légende Classes/Functions, stats Complexity) — garde EPIC-71 assure l'affichage, un `memoryMode` restera propre plus tard ; le clic nœud ne re-propage pas à la page (re-centrage via la liste) ; `created_at` absent du hop (date vide dans la barre source).
+- **Validé** : vue-tsc 0 erreur · vitest 38/38 · eslint 0 erreur · build OK.
 
 ### T5 — Fiche mémoire enrichie (frontend, ~2 h)
 Panneau de détail : contenu markdown (useMarkdown), **tags colorés par rôle** (`status:` vert/rouge, `project:` cyan, `article:` bleu, `circuit:` ambre, `piste:` violet), entités/concepts, liens « Liées », lien article publié si `article:*`.
@@ -68,8 +75,8 @@ Extension de Search : filtres combinés (type + tags + statut + période) en s'a
 
 - [x] `GET /api/v1/memories/graph` renvoie une structure valide sans erreur (T0 ; nodes/edges vides tant que la table n'est pas peuplée)
 - [x] `related-by-tags` renvoie les top-N liées pour une fiche TE quelconque (validé : ARCOM/SREN/divergence 2022 sur la mémoire parrainages)
-- [x] Page Explorer : onglets Socle (T2) + Explorer arborescence (T3) livrés ; Relations T4, fiche enrichie T5 à venir
-- [x] `pnpm vue-tsc -b --noEmit` : 0 erreur · vitest 34/34 · eslint 0 erreur · build OK (frontend, T2+T3)
+- [x] Page Explorer : onglets Socle (T2), Explorer arborescence (T3) et Relations graphe G6 (T4) livrés ; fiche enrichie T5, recherche T6 à venir
+- [x] `pnpm vue-tsc -b --noEmit` : 0 erreur · vitest 38/38 · eslint 0 erreur · build OK (frontend, T2-T4)
 - [x] Tests backend (pytest) pour les 3 nouveaux endpoints : `tests/routes/test_explorer_routes.py` **8/8** + zéro régression adjacente (26/26)
 
 ## Notes de décision
