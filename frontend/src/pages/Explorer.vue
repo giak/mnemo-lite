@@ -13,6 +13,7 @@ import { getExplorerStats, getExplorerTree, getRelatedByTags, searchSourceMemori
 import type { ExplorerStats, ExplorerTree, ExplorerTreeItem, RelatedItem } from '@/types/explorer'
 import TreeItemRow from '@/components/TreeItemRow.vue'
 import G6Graph from '@/components/G6Graph.vue'
+import MemoryDetailPanel from '@/components/MemoryDetailPanel.vue'
 
 // --- États
 type Tab = 'socle' | 'explorer' | 'relations'
@@ -106,6 +107,17 @@ async function searchSources(): Promise<void> {
   }
 }
 
+/** Une relation choisie dans la fiche remplace l'élément sélectionné (re-centrage) */
+function handleSelectMemory(item: {
+  id: string
+  title: string
+  memory_type: string
+  tags: string[]
+  created_at: string | null
+}): void {
+  selectedItem.value = { ...item }
+}
+
 // Séquence anti-course : seule la dernière requête fait foi (changements rapides de source)
 let relatedSeq = 0
 
@@ -187,19 +199,6 @@ const graphEdges = computed(() => {
 watch([minShared, relatedLimit], () => {
   if (sourceMemory.value) loadRelated()
 })
-
-const copyFeedback = ref<string | null>(null)
-async function copyId(id: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(id)
-    copyFeedback.value = 'ID copié !'
-  } catch {
-    copyFeedback.value = 'Copie impossible'
-  }
-  setTimeout(() => {
-    copyFeedback.value = null
-  }, 2000)
-}
 
 // --- Helpers de rendu
 const TYPE_META: Record<string, { icon: string; bar: string }> = {
@@ -299,16 +298,6 @@ const typeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1)
           </p>
         </div>
       </div>
-
-      <!-- Copy feedback toast -->
-      <Transition name="fade">
-        <div
-          v-if="copyFeedback"
-          class="fixed top-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded shadow-lg z-50 font-mono text-sm"
-        >
-          {{ copyFeedback }}
-        </div>
-      </Transition>
 
       <!-- Tabs -->
       <div class="mb-6 border-b border-slate-700">
@@ -647,42 +636,14 @@ const typeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1)
             </p>
           </div>
 
-          <!-- Détail de l'élément sélectionné (préfiguration T5) -->
-          <div v-if="selectedItem" class="scada-panel">
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="scada-label text-cyan-400">Détail</h3>
-              <button
-                @click="selectedItem = null"
-                class="text-xs font-mono text-gray-500 hover:text-gray-300 transition-colors uppercase"
-              >
-                Fermer ✕
-              </button>
-            </div>
-            <p class="text-base text-gray-100 font-mono">{{ selectedItem.title }}</p>
-            <div class="flex flex-wrap items-center gap-2 mt-3">
-              <span class="badge-info text-xs">{{ selectedItem.memory_type }}</span>
-              <span class="text-xs text-gray-500 font-mono">
-                {{ formatDate(selectedItem.created_at) }}
-              </span>
-              <button
-                @click="copyId(selectedItem.id)"
-                class="ml-auto text-xs font-mono text-gray-500 hover:text-emerald-400 transition-colors uppercase"
-                title="Copier l'ID"
-              >
-                📋 copier l'id
-              </button>
-            </div>
-            <div v-if="selectedItem.tags.length > 0" class="mt-3 flex flex-wrap gap-1.5">
-              <span
-                v-for="tag in selectedItem.tags"
-                :key="tag"
-                class="inline-block text-xs bg-slate-700 text-gray-300 px-2 py-0.5 rounded"
-              >
-                #{{ tag }}
-              </span>
-            </div>
-            <p class="text-xs text-gray-600 mt-4">La fiche enrichie (contenu, entités, liens) arrive en T5.</p>
-          </div>
+          <!-- Fiche mémoire enrichie (T5) -->
+          <MemoryDetailPanel
+            v-if="selectedItem"
+            :memory-id="selectedItem.id"
+            :title="selectedItem.title"
+            @close="selectedItem = null"
+            @select-memory="handleSelectMemory"
+          />
         </div>
 
         <!-- ============ RELATIONS TAB (T4) ============ -->
@@ -881,14 +842,3 @@ const typeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1)
   </div>
 </template>
 
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>

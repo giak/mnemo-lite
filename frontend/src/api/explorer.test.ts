@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { getExplorerStats, getExplorerTree, getRelatedByTags, searchSourceMemories } from './explorer'
+import { getExplorerStats, getExplorerTree, getRelatedByTags, searchSourceMemories, getMemoryDetail } from './explorer'
 
 describe('getExplorerStats', () => {
   beforeEach(() => {
@@ -173,5 +173,51 @@ describe('searchSourceMemories', () => {
     ) as any
 
     await expect(searchSourceMemories('x')).rejects.toThrow('HTTP 500')
+  })
+})
+
+describe('getMemoryDetail', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('should fetch the memory detail and return parsed data', async () => {
+    const payload = {
+      id: 'm1',
+      title: 'Parrainages 2022',
+      content: '# Titre\n\nContenu.',
+      memory_type: 'investigation',
+      tags: ['fact-check', 'status:CONFIRME'],
+      author: null,
+      created_at: '2026-08-01',
+      updated_at: null,
+      project_id: null,
+      entities: ['ARCOM'],
+      concepts: ['parrainages'],
+      has_embedding: true
+    }
+    global.fetch = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve(payload) })
+    ) as any
+
+    const detail = await getMemoryDetail('m1')
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/memories/m1')
+    )
+    expect(detail.content).toContain('Contenu')
+    expect(detail.tags).toContain('status:CONFIRME')
+    expect(detail.entities).toContain('ARCOM')
+    expect(detail.concepts).toContain('parrainages')
+    expect(detail.has_embedding).toBe(true)
+  })
+
+  it('should throw on non-OK response', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve({ ok: false, status: 404 })
+    ) as any
+
+    await expect(getMemoryDetail('missing')).rejects.toThrow('HTTP 404')
   })
 })

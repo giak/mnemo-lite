@@ -657,6 +657,8 @@ async def get_memory_by_id(
                         created_at,
                         updated_at,
                         project_id,
+                        entities,
+                        concepts,
                         (embedding IS NOT NULL) as has_embedding
                     FROM memories
                     WHERE id = :memory_id
@@ -682,6 +684,8 @@ async def get_memory_by_id(
                 "created_at": row.created_at.isoformat(),
                 "updated_at": row.updated_at.isoformat() if row.updated_at else None,
                 "project_id": str(row.project_id) if row.project_id else None,
+                "entities": row.entities or [],
+                "concepts": row.concepts or [],
                 "has_embedding": row.has_embedding
             }
     except HTTPException:

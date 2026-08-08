@@ -53,3 +53,19 @@ export interface RelatedResponse {
   related: RelatedItem[]
   total: number
 }
+
+/** Détail complet d'une mémoire (endpoint GET /memories/{id}) */
+export interface MemoryDetail {
+  id: string
+  title: string
+  content: string
+  memory_type: string
+  tags: string[]
+  author: string | null
+  created_at: string
+  updated_at: string | null
+  project_id: string | null
+  entities: string[]
+  concepts: string[]
+  has_embedding: boolean
+}

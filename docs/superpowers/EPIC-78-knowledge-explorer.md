@@ -1,6 +1,6 @@
 # 🧭 EPIC-78 : Knowledge Explorer — consulter le socle Truth Engine (faits, enquêtes, articles, relations)
 
-> **Status:** IN_PROGRESS — T0-T4 DONE (2026-08-08) ; reste T5 fiche enrichie + T6 recherche avancée
+> **Status:** IN_PROGRESS — T0-T5 DONE (2026-08-08) ; reste T6 recherche avancée
 > **Priority:** P1 : le besoin central « voir ce qui est lié » est aujourd'hui techniquement impossible
 > **Date:** 2026-08-08
 > **Effort:** 8-12 h (T0/T1 backend + T2-T6 frontend)
@@ -65,8 +65,16 @@ Onglet **Relations** de `Explorer.vue`, branché sur `/api/v1/memories/{id}/rela
 - **Limitations assumées** (review) : G6Graph affiche du chrome code-oriented (légende Classes/Functions, stats Complexity) — garde EPIC-71 assure l'affichage, un `memoryMode` restera propre plus tard ; le clic nœud ne re-propage pas à la page (re-centrage via la liste) ; `created_at` absent du hop (date vide dans la barre source).
 - **Validé** : vue-tsc 0 erreur · vitest 38/38 · eslint 0 erreur · build OK.
 
-### T5 — Fiche mémoire enrichie (frontend, ~2 h)
-Panneau de détail : contenu markdown (useMarkdown), **tags colorés par rôle** (`status:` vert/rouge, `project:` cyan, `article:` bleu, `circuit:` ambre, `piste:` violet), entités/concepts, liens « Liées », lien article publié si `article:*`.
+### ✅ T5 — Fiche mémoire enrichie (frontend, DONE)
+Nouveau composant `src/components/MemoryDetailPanel.vue`, branché dans l'onglet Explorer (clic sur un élément du tree) :
+- **Contenu markdown** via `useMarkdown` (classe `scada-markdown`, highlight.js), chargé par `GET /memories/{id}` ; le titre du nœud sert de placeholder pendant le chargement.
+- **Tags colorés par rôle** (insensible à la casse) : `status:CONFIRME` vert · `status:` ambre · `project:` cyan · `article:` bleu · `circuit:` orange · `piste:` violet · `fact-check` vert · `date:/session:/source-` gris.
+- **Entités / concepts** : sections conditionnelles (non affichées si vides). **Backend étendu** : `GET /memories/{id}` expose désormais les colonnes `entities`/`concepts` (text[] en base, jamais exposées auparavant).
+- **Bloc « Liées »** : relations par proxy de tags partagés (`/related-by-tags`, limit 8), score coloré, clic = re-centrage de la fiche (emit `select-memory`).
+- Meta : type, date, auteur, badge embedding, bouton copier l'ID (feedback inline).
+- **Robustesse** : séquence anti-course (détail puis relations, garde `seq`) ; états loading/error. **Tests** : `getMemoryDetail` (parsing + 404).
+- **Review** : prop `title` réutilisée en placeholder de chargement, `tagRole` normalisé `toLowerCase()`, CSS `fade` mort retiré, `circuit:` → orange.
+- **Validé** : vue-tsc 0 erreur · vitest 40/40 · eslint 0 erreur · build OK.
 
 ### T6 — Recherche avancée (frontend, ~2 h)
 Extension de Search : filtres combinés (type + tags + statut + période) en s'appuyant sur le search existant (`tags` ET + `memory_type`), résultats groupés par type.
@@ -75,8 +83,8 @@ Extension de Search : filtres combinés (type + tags + statut + période) en s'a
 
 - [x] `GET /api/v1/memories/graph` renvoie une structure valide sans erreur (T0 ; nodes/edges vides tant que la table n'est pas peuplée)
 - [x] `related-by-tags` renvoie les top-N liées pour une fiche TE quelconque (validé : ARCOM/SREN/divergence 2022 sur la mémoire parrainages)
-- [x] Page Explorer : onglets Socle (T2), Explorer arborescence (T3) et Relations graphe G6 (T4) livrés ; fiche enrichie T5, recherche T6 à venir
-- [x] `pnpm vue-tsc -b --noEmit` : 0 erreur · vitest 38/38 · eslint 0 erreur · build OK (frontend, T2-T4)
+- [x] Page Explorer : onglets Socle (T2), Explorer (T3), Relations (T4) + fiche enrichie (T5) livrés ; recherche avancée T6 à venir
+- [x] `pnpm vue-tsc -b --noEmit` : 0 erreur · vitest 40/40 · eslint 0 erreur · build OK (frontend, T2-T5)
 - [x] Tests backend (pytest) pour les 3 nouveaux endpoints : `tests/routes/test_explorer_routes.py` **8/8** + zéro régression adjacente (26/26)
 
 ## Notes de décision

@@ -3,7 +3,13 @@
  * Endpoints du Knowledge Explorer : /api/v1/memories/explorer/*
  */
 import { api } from '@/api/client'
-import type { ExplorerStats, ExplorerTree, ExplorerTreeItem, RelatedResponse } from '@/types/explorer'
+import type {
+  ExplorerStats,
+  ExplorerTree,
+  ExplorerTreeItem,
+  MemoryDetail,
+  RelatedResponse
+} from '@/types/explorer'
 
 /** Agrégats du socle de connaissances (distribution, sujets, statuts, timeline) */
 export async function getExplorerStats(): Promise<ExplorerStats> {
@@ -43,6 +49,13 @@ export async function getRelatedByTags(
  * Recherche de mémoire source par titre (POST /memories/search, sémantique).
  * Réutilisé par le sélecteur de l'onglet Relations.
  */
+/** Détail complet d'une mémoire (contenu, tags, entités, concepts) */
+export async function getMemoryDetail(id: string): Promise<MemoryDetail> {
+  const resp = await api(`/memories/${encodeURIComponent(id)}`)
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  return resp.json()
+}
+
 export async function searchSourceMemories(query: string): Promise<ExplorerTreeItem[]> {
   const resp = await api('/memories/search', {
     method: 'POST',
