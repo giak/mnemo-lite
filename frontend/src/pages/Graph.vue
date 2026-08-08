@@ -12,12 +12,24 @@ import G6Graph from '@/components/G6Graph.vue'
 const { stats, graphData, loading, error, building, buildError, repositories, fetchStats, fetchGraphData, buildGraph, fetchRepositories } = useCodeGraph()
 
 const repository = ref<string>('')
+const buildSuccess = ref(false)
+let buildSuccessTimer: number | null = null
 
 // Build graph handler
 const handleBuildGraph = async () => {
   await buildGraph(repository.value, 'python')
   // Refresh visualization after build
   await fetchGraphData(repository.value, 500)
+  // Toast de succès uniquement si buildGraph n'a pas peuplé buildError
+  if (!buildError.value) {
+    buildSuccess.value = true
+    if (buildSuccessTimer !== null) {
+      clearTimeout(buildSuccessTimer)
+    }
+    buildSuccessTimer = window.setTimeout(() => {
+      buildSuccess.value = false
+    }, 4000)
+  }
 }
 
 // Watch repository changes and reload data
@@ -174,6 +186,18 @@ onMounted(async () => {
           </button>
         </div>
 
+        <!-- Build Success Toast -->
+        <Transition
+          name="fade"
+        >
+          <div
+            v-if="buildSuccess"
+            class="fixed top-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded shadow-lg z-50 font-mono text-sm"
+          >
+            BUILD OK — {{ repository }}
+          </div>
+        </Transition>
+
         <!-- Build Error Banner -->
         <div
           v-if="buildError"
@@ -258,3 +282,12 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+</style>

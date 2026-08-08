@@ -9,7 +9,7 @@ import { useMonitoring } from '@/composables/useMonitoring'
 import LatencyChart from '@/components/LatencyChart.vue'
 import AlertRuleEditor from '@/components/AlertRuleEditor.vue'
 
-const { latency, alertSummary, recentAlerts, loading, error, lastUpdated, refresh, ackAlert } = useMonitoring({
+const { latency, alertSummary, recentAlerts, loading, error, lastUpdated, ackingId, refresh, ackAlert } = useMonitoring({
   refreshInterval: 30000
 })
 
@@ -39,8 +39,7 @@ const healthStatus = computed(() => {
     .reduce((s, a) => s + a.unacked, 0)
 
   if (critCount > 100) return { label: 'CRITICAL', color: 'red', led: 'scada-led-red' }
-  if (critCount > 0) return { label: 'WARNING', color: 'amber', led: 'scada-led-yellow' }
-  if (warnCount > 0) return { label: 'NOMINAL', color: 'yellow', led: 'scada-led-yellow' }
+  if (critCount > 0 || warnCount > 0) return { label: 'WARNING', color: 'amber', led: 'scada-led-yellow' }
   return { label: 'HEALTHY', color: 'green', led: 'scada-led-green' }
 })
 
@@ -132,7 +131,6 @@ const chartMax = computed(() => {
           @click="refresh"
         >
           <span v-if="loading">⏳</span>
-          <span v-else>REFRESH</span>
           {{ loading ? 'LOADING...' : 'REFRESH' }}
         </button>
       </div>
@@ -342,10 +340,11 @@ const chartMax = computed(() => {
               <button
                 v-if="!alert.acknowledged"
                 class="ml-auto text-[10px] font-mono px-2 py-0.5 rounded bg-slate-700 text-slate-400 hover:text-cyan-400 hover:border-cyan-600 border border-slate-600 transition-colors"
+                :disabled="ackingId !== null"
                 title="Acquitter cette alerte (marquer comme vue)"
                 @click="ackAlert(alert.id)"
               >
-                ACK
+                {{ ackingId === alert.id ? 'ACK...' : 'ACK' }}
               </button>
             </div>
           </div>

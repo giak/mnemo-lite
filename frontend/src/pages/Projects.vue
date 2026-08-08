@@ -18,11 +18,24 @@ const {
 } = useProjects()
 
 const confirmDeleteProject = ref<string | null>(null)
+const confirmReindexProject = ref<string | null>(null)
 const actionLoading = ref<string | null>(null)
+const feedback = ref<{ type: 'success' | 'error'; message: string } | null>(null)
+let feedbackTimer: number | null = null
 
 onMounted(() => {
   fetchProjects()
 })
+
+function showFeedback(type: 'success' | 'error', message: string) {
+  feedback.value = { type, message }
+  if (feedbackTimer !== null) {
+    clearTimeout(feedbackTimer)
+  }
+  feedbackTimer = window.setTimeout(() => {
+    feedback.value = null
+  }, 4000)
+}
 
 function getStatusLed(status: string): string {
   switch (status) {
@@ -64,26 +77,35 @@ async function handleSetActive(repository: string) {
   try {
     actionLoading.value = `activate:${repository}`
     await setActiveProject(repository)
+    showFeedback('success', `"${repository}" is now the active project`)
   } catch (err) {
-    console.error('Failed to set active project:', err)
+    showFeedback('error', `Failed to set active project: ${err instanceof Error ? err.message : 'Unknown error'}`)
   } finally {
     actionLoading.value = null
   }
 }
 
-async function handleReindex(repository: string) {
-  if (!confirm(`Reindex project "${repository}"?\n\nThis will re-scan all files and may take several minutes.`)) {
-    return
-  }
+function handleReindexClick(repository: string) {
+  confirmReindexProject.value = repository
+}
+
+async function handleReindexConfirm() {
+  if (!confirmReindexProject.value) return
 
   try {
-    actionLoading.value = `reindex:${repository}`
-    await reindexProject(repository)
+    actionLoading.value = `reindex:${confirmReindexProject.value}`
+    await reindexProject(confirmReindexProject.value)
+    showFeedback('success', `Reindex launched for "${confirmReindexProject.value}"`)
+    confirmReindexProject.value = null
   } catch (err) {
-    alert(`Failed to reindex: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    showFeedback('error', `Failed to reindex: ${err instanceof Error ? err.message : 'Unknown error'}`)
   } finally {
     actionLoading.value = null
   }
+}
+
+function handleReindexCancel() {
+  confirmReindexProject.value = null
 }
 
 function handleDeleteClick(repository: string) {
@@ -96,10 +118,10 @@ async function handleDeleteConfirm() {
   try {
     actionLoading.value = `delete:${confirmDeleteProject.value}`
     const result = await deleteProject(confirmDeleteProject.value)
-    alert(`Deleted ${result.repository}: ${result.deleted_chunks} chunks, ${result.deleted_nodes} nodes`)
+    showFeedback('success', `Deleted ${result.repository}: ${result.deleted_chunks} chunks, ${result.deleted_nodes} nodes`)
     confirmDeleteProject.value = null
   } catch (err) {
-    alert(`Failed to delete: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    showFeedback('error', `Failed to delete: ${err instanceof Error ? err.message : 'Unknown error'}`)
   } finally {
     actionLoading.value = null
   }
@@ -141,6 +163,28 @@ function isActionLoading(action: string, repository: string): boolean {
           <p class="mt-2 text-xs text-gray-500 font-mono uppercase">
             {{ projects.length }} PROJECT{{ projects.length !== 1 ? 'S' : '' }}
           </p>
+        </div>
+      </div>
+
+      <!-- Action Feedback (inline, remplace alert()) -->
+      <div
+        v-if="feedback"
+        class="mb-6 border-l-4 p-4"
+        :class="feedback.type === 'error'
+          ? 'bg-red-950/50 border-red-500'
+          : 'bg-emerald-950/50 border-emerald-500'"
+      >
+        <div class="flex items-center gap-3">
+          <span
+            class="scada-led"
+            :class="feedback.type === 'error' ? 'scada-led-red' : 'scada-led-green'"
+          />
+          <span
+            class="text-sm font-mono"
+            :class="feedback.type === 'error' ? 'text-red-300' : 'text-emerald-300'"
+          >
+            {{ feedback.message }}
+          </span>
         </div>
       </div>
 
@@ -328,7 +372,7 @@ function isActionLoading(action: string, repository: string): boolean {
                       :disabled="isActionLoading('reindex', project.repository)"
                       class="scada-btn scada-btn-ghost text-xs"
                       title="Reindex project"
-                      @click="handleReindex(project.repository)"
+                      @click="handleReindexClick(project.repository)"
                     >
                       {{ isActionLoading('reindex', project.repository) ? '...' : 'REINDEX' }}
                     </button>
@@ -358,6 +402,46 @@ function isActionLoading(action: string, repository: string): boolean {
             <p class="text-sm text-gray-500 font-mono mt-2">
               Use the CLI to index your first project
             </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reindex Confirmation Modal -->
+      <div
+        v-if="confirmReindexProject"
+        class="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4"
+        @click="handleReindexCancel"
+      >
+        <div
+          class="bg-slate-900 border-2 border-cyan-500 shadow-2xl shadow-cyan-500/30 max-w-md w-full p-6"
+          @click.stop
+        >
+          <div class="flex items-center gap-3 mb-4 border-b-2 border-cyan-500 pb-4">
+            <span class="scada-led scada-led-cyan animate-pulse" />
+            <h3 class="text-xl font-mono font-bold text-cyan-400 uppercase tracking-wider">
+              Reindex Project
+            </h3>
+          </div>
+          <p class="text-gray-300 mb-4 font-mono text-sm">
+            Confirm reindex of: <strong class="text-white bg-cyan-900/30 px-2 py-1">{{ confirmReindexProject }}</strong>
+          </p>
+          <p class="text-xs font-mono text-gray-400 mb-6 bg-slate-800 border border-slate-700 p-3">
+            This will re-scan all files and may take several minutes. The index is updated in place.
+          </p>
+          <div class="flex gap-2 justify-end">
+            <button
+              class="scada-btn scada-btn-ghost"
+              @click="handleReindexCancel"
+            >
+              CANCEL
+            </button>
+            <button
+              :disabled="isActionLoading('reindex', confirmReindexProject)"
+              class="scada-btn scada-btn-primary"
+              @click="handleReindexConfirm"
+            >
+              {{ isActionLoading('reindex', confirmReindexProject) ? 'REINDEXING...' : 'CONFIRM REINDEX' }}
+            </button>
           </div>
         </div>
       </div>

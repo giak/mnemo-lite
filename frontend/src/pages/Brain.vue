@@ -88,7 +88,7 @@ const currentGroup = computed(() => groups.value.find(g => g.id === activeGroup.
       <div class="flex items-center gap-4">
         <span class="scada-led scada-led-cyan"></span>
         <h1 class="text-2xl font-bold font-mono text-cyan-400 uppercase tracking-wider">Brain</h1>
-        <span class="scada-data text-slate-400 text-sm">{{ data.totalRows.toLocaleString() }} rows</span>
+        <span class="scada-data text-slate-400 text-sm">{{ lastUpdated ? `${data.totalRows.toLocaleString()} rows` : '—' }}</span>
       </div>
       <div class="flex items-center gap-4">
         <span v-if="lastUpdated" class="text-xs font-mono text-slate-500">
@@ -127,7 +127,7 @@ const currentGroup = computed(() => groups.value.find(g => g.id === activeGroup.
           </div>
           <div class="flex items-center gap-1 text-[10px] font-mono text-slate-500 ml-5">
             <span v-for="m in group.modules" :key="m" class="px-1 bg-slate-700 rounded">{{ m }}</span>
-            <span class="ml-auto text-slate-600">{{ group.count.toLocaleString() }}</span>
+            <span class="ml-auto text-slate-600">{{ lastUpdated ? group.count.toLocaleString() : '—' }}</span>
           </div>
         </div>
 

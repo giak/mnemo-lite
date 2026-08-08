@@ -41,6 +41,7 @@ export function useMonitoring(options: { refreshInterval?: number } = {}) {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const lastUpdated = ref<Date | null>(null)
+  const ackingId = ref<string | null>(null) // id de l'alerte en cours d'acknowledgement
 
   let intervalId: number | null = null
 
@@ -78,6 +79,8 @@ export function useMonitoring(options: { refreshInterval?: number } = {}) {
   }
 
   async function ackAlert(id: string): Promise<void> {
+    if (ackingId.value !== null) return // anti double-clic
+    ackingId.value = id
     try {
       const resp = await api(`/alerts/${id}/ack`, { method: 'POST' })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
@@ -86,6 +89,8 @@ export function useMonitoring(options: { refreshInterval?: number } = {}) {
       await fetchRecentAlerts()
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to ack alert'
+    } finally {
+      ackingId.value = null
     }
   }
 
@@ -120,6 +125,7 @@ export function useMonitoring(options: { refreshInterval?: number } = {}) {
     loading,
     error,
     lastUpdated,
+    ackingId,
     refresh,
     ackAlert
   }
