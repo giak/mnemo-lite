@@ -21,9 +21,9 @@ docker compose ps
 
 ## 2. Configurer MCP
 
-MnemoLite expose 29 outils MCP via SSE (Server-Sent Events) sur le port 8002.
+MnemoLite expose 31 outils MCP via Streamable HTTP sur le port 8002.
 
-### Méthode moderne (recommandée) — Connexion directe SSE
+### Méthode moderne (recommandée) — Connexion directe HTTP
 
 ```json
 {
@@ -36,7 +36,7 @@ MnemoLite expose 29 outils MCP via SSE (Server-Sent Events) sur le port 8002.
 }
 ```
 
-> ⚠️ Le format exact (`type: "remote"` ou `transport: "sse"`) dépend du client. Voir [`MCP_SETUP.md`](../MCP_SETUP.md) pour les configurations détaillées.
+> ⚠️ Le format exact (`type: "http"` ou `transport: "streamable-http"`) dépend du client. Voir [`MCP_SETUP.md`](../MCP_SETUP.md) pour les configurations détaillées.
 
 ### Méthode legacy — Script bash
 
@@ -64,8 +64,12 @@ Créer `.mcp.json` dans votre projet:
 # Health check API
 curl http://localhost:8001/health
 
-# Health check MCP
-curl http://localhost:8002/health
+# Health check MCP : pas de /health HTTP sur 8002 (404 attendu) —
+# le serveur MCP se teste via l'handshake (initialize) ou le ping MCP.
+curl -s -X POST http://localhost:8002/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1"}}}'
 ```
 
 ## 4. Premier Usage

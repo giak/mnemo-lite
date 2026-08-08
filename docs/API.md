@@ -30,15 +30,18 @@ http://localhost:8001
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | / | Index repository |
-| GET | /status/{repository} | Indexing status |
-| POST | /batch | Batch indexing |
+| GET | /repositories | Indexing status par repository |
+| GET | /health | Santé du service d'indexation |
+| GET | /cache/stats | Stats du cache d'indexation |
 
 ### Code Search (`/v1/code/search`)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | / | Hybrid search |
-| POST | /content | Content search |
+| POST | /hybrid | Recherche hybride (lexical + vector, RRF) |
+| POST | /lexical | Recherche lexicale seule (pg_trgm) |
+| POST | /vector | Recherche vectorielle seule (HNSW) |
+| GET | /health | Santé du service de recherche code |
 
 ### Projects (`/api/v1/projects`)
 
@@ -109,9 +112,9 @@ curl -X POST http://localhost:8001/v1/code/index \
 ### Search Code
 
 ```bash
-curl -X POST http://localhost:8001/v1/code/search \
+curl -X POST http://localhost:8001/v1/code/search/hybrid \
   -H "Content-Type: application/json" \
-  -d '{"query": "authentication function", "limit": 10}'
+  -d '{"query": "authentication function", "enable_lexical": true, "enable_vector": false}'
 ```
 
 ## Schemas

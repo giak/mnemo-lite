@@ -9,7 +9,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.12+-blue.svg?style=flat-square)](https://www.python.org/downloads/)
 [![PostgreSQL Version](https://img.shields.io/badge/postgres-18-blue.svg?style=flat-square)](https://www.postgresql.org/)
 [![pgvector](https://img.shields.io/badge/pgvector-0.8.1-brightgreen.svg?style=flat-square)](https://github.com/pgvector/pgvector)
-[![Tests](https://img.shields.io/badge/tests-1570%20passing-success.svg?style=flat-square)](https://github.com/giak/MnemoLite)
+[![Tests](https://img.shields.io/badge/tests-1893-success.svg?style=flat-square)](https://github.com/giak/MnemoLite)
 
 **MnemoLite** is a high-performance, locally deployable cognitive memory system built *exclusively* on PostgreSQL 18. It empowers AI agents with robust, searchable, and time-aware memory capabilities, advanced Code Intelligence features, and full [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) support for LLM integration.
 
@@ -19,14 +19,14 @@ Zero external vector databases. Zero API dependencies. Zero cost. Complete priva
 
 ### 🧠 Cognitive Memory
 * **PostgreSQL Native:** Uses `pgvector` (HNSW), `pg_trgm`, and `pg_partman` — no external databases needed
-* **100% Local Embeddings:** Sentence-Transformers (nomic-embed-text-v1.5), zero API calls
+* **100% Local Embeddings:** bge-m3 (TEXT, 1024D) + jina-code (CODE, 768D), zero API calls
 * **Hybrid Search:** Lexical (trigram) + Vector (HNSW) + BM25 reranking + RRF fusion
 * **Time-Aware Storage:** Monthly partitioning via `pg_partman`
 * **Triple-Layer Cache:** L1 (in-memory) → L2 (Redis) → PostgreSQL
-* **~37 000 Memories** indexées (investigations, articles, notes, quintessences)
+* **~39 700 Memories** indexées (investigations, articles, notes, quintessences)
 
 ### 💻 Code Intelligence
-* **Semantic Code Search:** Dual embeddings (TEXT + CODE, 768D each)
+* **Semantic Code Search:** Dual embeddings (TEXT 1024D bge-m3, CODE 768D jina-code)
 * **AST-based Chunking:** Tree-sitter for 15+ languages
 * **Dependency Graph:** Function/class call graphs with recursive CTE traversal
 * **7-Step Indexing Pipeline:** Language detection → AST parsing → chunking → metadata → dual embedding → graph → storage
@@ -38,7 +38,7 @@ Zero external vector databases. Zero API dependencies. Zero cost. Complete priva
 * **Zero Dependencies:** stdlib `re` module, no external packages
 * **Toggle:** `MCP_PRIVACY_ENABLED` env var (default: `true`)
 
-### 🔌 MCP Integration (29 tools)
+### 🔌 MCP Integration (31 tools)
 
 | Catégorie | Outils |
 |-----------|--------|
@@ -133,7 +133,7 @@ curl http://localhost:8001/health
 ```bash
 make up          # Start all services
 make down        # Stop all services
-make api-test    # Run tests (356/358 passing)
+make api-test    # Run tests (1893 fonctions)
 make api-shell   # Shell in API container
 make health      # Check API health
 ```
@@ -146,9 +146,9 @@ docker compose --profile prod up -d  # Prod (Nginx)
 
 ## 📊 Project Status
 
-**Version:** 5.0.0-dev | **Tests:** 1570+ functions | **MCP Tools:** 29 | **Memories:** ~37 000
+**Version:** 5.0.0-dev | **Tests:** 1893 fonctions | **MCP Tools:** 31 | **Memories:** ~39 700
 
-**Completed EPICs:** 28–36, 42 (Frontend Hardening, Test Infrastructure, Observability, MCP Integration, Search Performance, Design Polish, Backend API, Search UX, Production Readiness, Secret Stripping)
+**Completed EPICs:** 55-68 (OTLP, dimensions, tests, backfills, REST unification, registre tags, boot), 69 PAUSED et 70 PARKED (volet code, focus recherche TEXTE). EPIC 28-42 : infrastructure, MCP, observabilité, secret stripping.
 
 ## 📜 License
 
