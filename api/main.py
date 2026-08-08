@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy.event import listen
 
 # Import des routes
-from routes import health_routes, event_routes, search_routes, ui_routes, graph_routes, monitoring_routes, code_graph_routes, code_search_routes, code_indexing_routes, cache_admin_routes, lsp_routes, monitoring_routes_advanced, conversations_routes, autosave_monitoring_routes, dashboard_routes, batch_indexing_routes, indexing_error_routes, memories_routes, projects_routes, memory_relationship_routes, memory_graph_routes
+from routes import health_routes, event_routes, search_routes, ui_routes, graph_routes, monitoring_routes, code_graph_routes, code_search_routes, code_indexing_routes, cache_admin_routes, lsp_routes, monitoring_routes_advanced, conversations_routes, autosave_monitoring_routes, dashboard_routes, batch_indexing_routes, indexing_error_routes, memories_routes, projects_routes, memory_relationship_routes, memory_graph_routes, explorer_routes
 
 # Configuration de base
 DATABASE_URL = get_settings().DATABASE_URL
@@ -594,14 +594,21 @@ app.include_router(autosave_monitoring_routes.router, tags=["v1_AutoSave_Monitor
 app.include_router(dashboard_routes.router, tags=["v1_Dashboard"])  # EPIC-25: Dashboard Backend API
 app.include_router(batch_indexing_routes.router)  # EPIC-27: Batch Indexing with Redis Streams
 app.include_router(indexing_error_routes.router)  # EPIC-27: Indexing Error Tracking
-app.include_router(memories_routes.router)  # EPIC-26: Memories Monitor
 
-# EPIC-27: Projects Management
-app.include_router(projects_routes.router)
-# EPIC-29: Memory Relationships
+# EPIC-29: Memory Relationships — monté AVANT memories_routes pour que
+# GET /graph (1 segment) ne soit pas capturé par GET /{memory_id} de
+# memories_routes (conflit historique : /api/v1/memories/graph renvoyait
+# « Failed to retrieve memory »).
 app.include_router(memory_relationship_routes.router)
 # EPIC-31: Memory Graph and Consolidation
 app.include_router(memory_graph_routes.router)
+
+app.include_router(memories_routes.router)  # EPIC-26: Memories Monitor
+# EPIC-78: Knowledge Explorer (socle Truth Engine)
+app.include_router(explorer_routes.router)
+
+# EPIC-27: Projects Management
+app.include_router(projects_routes.router)
 # app.include_router(embedding_routes.router)
 
 # --- Endpoint pour la création d'événements PENDANT LES TESTS ---
