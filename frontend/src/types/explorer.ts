@@ -54,6 +54,21 @@ export interface RelatedResponse {
   total: number
 }
 
+/** Résultat de la recherche avancée : élément d'arborescence + score de pertinence */
+export type SearchResultItem = ExplorerTreeItem & { score: number | null }
+
+/** Filtres combinés de la recherche avancée (GET /memories/search) */
+export interface SearchFilters {
+  query: string
+  limit?: number
+  memory_type?: string
+  status?: string
+  tags: string[]
+  /** Date ISO (YYYY-MM-DD) : bornes de created_at */
+  created_from?: string
+  created_to?: string
+}
+
 /** Détail complet d'une mémoire (endpoint GET /memories/{id}) */
 export interface MemoryDetail {
   id: string

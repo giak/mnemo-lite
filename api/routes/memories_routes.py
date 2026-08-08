@@ -496,6 +496,8 @@ class MemorySearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Search query")
     memory_type: Optional[str] = Field(None, description="Filter by memory type")
     tags: List[str] = Field(default_factory=list, description="Filter by tags (AND logic)")
+    created_after: Optional[str] = Field(None, description="Filter by creation date >= (ISO datetime ou YYYY-MM-DD)")
+    created_before: Optional[str] = Field(None, description="Filter by creation date <= (ISO datetime ou YYYY-MM-DD)")
     limit: int = Field(20, ge=1, le=100, description="Max results")
     offset: int = Field(0, ge=0, description="Pagination offset")
 
@@ -518,6 +520,32 @@ class MemorySearchResponse(BaseModel):
     query: str
     search_time_ms: float
 
+def _parse_datetime_bound(value: Optional[str], bound: str = "after") -> Optional[datetime]:
+    """Parse une borne de date (ISO datetime ou YYYY-MM-DD) en datetime tz-aware UTC.
+
+    Pour une date seule : début de journée si bornes inférieure ('after'),
+    fin de journée si borne supérieure ('before') — sinon la journée entière
+    serait exclue du filtre created_before.
+    """
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            if bound == "before":
+                # Fin de journée avec microsecondes : ne pas exclure les
+                # créations survenues dans la dernière seconde de la journée.
+                dt = datetime.fromisoformat(f"{value}T23:59:59.999999+00:00")
+            else:
+                dt = datetime.fromisoformat(f"{value}T00:00:00+00:00")
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid date bound: {value}")
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 async def _search_memories(
     query: str,
     memory_type: Optional[str],
@@ -526,6 +554,8 @@ async def _search_memories(
     offset: int,
     engine: AsyncEngine,
     embedding_service: EmbeddingServiceProtocol,
+    created_after: Optional[str] = None,
+    created_before: Optional[str] = None,
 ) -> MemorySearchResponse:
     """Shared search helper for both GET and POST routes."""
     import time
@@ -550,10 +580,12 @@ async def _search_memories(
         # Generate query embedding
         query_embedding = await embedding_service.generate_embedding(query)
 
-        # Build filters
+        # Build filters (bornes de période EPIC-78 T6)
         filters = MemoryFilters(
             memory_type=memory_type_enum,
             tags=tags or [],
+            created_after=_parse_datetime_bound(created_after, "after"),
+            created_before=_parse_datetime_bound(created_before, "before"),
             exclude_conversations=memory_type_enum is None,
         )
 
@@ -605,6 +637,9 @@ async def search_memories_get(
     query: str = Query(..., min_length=1, description="Search query"),
     memory_type: Optional[str] = Query(None, description="Filter by memory type"),
     tags: Optional[str] = Query(None, description="Filter by tags (comma-separated)"),
+    status: Optional[str] = Query(None, description="Filter by status tag (ex: status:CONFIRME, fact-check) — équivalent à un tag"),
+    created_after: Optional[str] = Query(None, description="Filter by creation date >= (ISO datetime ou YYYY-MM-DD)"),
+    created_before: Optional[str] = Query(None, description="Filter by creation date <= (ISO datetime ou YYYY-MM-DD)"),
     limit: int = Query(20, ge=1, le=100, description="Max results"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     engine: AsyncEngine = Depends(get_db_engine),
@@ -613,12 +648,15 @@ async def search_memories_get(
     """
     Semantic search on memories (GET version).
 
-    Supports filtering by memory_type (note, decision, task, reference, conversation, investigation).
+    Supports filtering by memory_type, tags, status tag, and creation period.
 
     Query parameters:
     - query: Search text (required)
     - memory_type: Optional memory type filter
     - tags: Optional comma-separated tag filter
+    - status: Optional status tag filter (AND with tags)
+    - created_after: Optional creation date lower bound (ISO datetime or YYYY-MM-DD)
+    - created_before: Optional creation date upper bound (ISO datetime or YYYY-MM-DD)
     - limit: Max results (1-100, default 20)
     - offset: Pagination offset (default 0)
 
@@ -626,7 +664,12 @@ async def search_memories_get(
         MemorySearchResponse with results, total count, and search metadata.
     """
     tags_list = [t.strip() for t in tags.split(",")] if tags else []
-    return await _search_memories(query, memory_type, tags_list, limit, offset, engine, embedding_service)
+    if status:
+        tags_list.append(status.strip())
+    return await _search_memories(
+        query, memory_type, tags_list, limit, offset, engine, embedding_service,
+        created_after=created_after, created_before=created_before
+    )
 
 
 @router.get("/{memory_id}")
@@ -768,7 +811,11 @@ async def search_memories(
     embedding_service: EmbeddingServiceProtocol = Depends(get_embedding_service)
 ) -> MemorySearchResponse:
     """Semantic search on memories (POST version). Uses same logic as GET."""
-    return await _search_memories(request.query, request.memory_type, request.tags, request.limit, request.offset, engine, embedding_service)
+    return await _search_memories(
+        request.query, request.memory_type, request.tags, request.limit, request.offset,
+        engine, embedding_service,
+        created_after=request.created_after, created_before=request.created_before
+    )
 
 @router.get("/decay/config")
 async def get_decay_config(engine: AsyncEngine = Depends(get_db_engine)) -> Dict[str, Any]:

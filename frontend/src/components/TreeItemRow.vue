@@ -5,7 +5,7 @@
  */
 import type { ExplorerTreeItem } from '@/types/explorer'
 
-defineProps<{ item: ExplorerTreeItem; active: boolean }>()
+defineProps<{ item: ExplorerTreeItem; active: boolean; score?: number | null }>()
 defineEmits<{ select: [item: ExplorerTreeItem] }>()
 
 const TYPE_ICON: Record<string, string> = {
@@ -56,6 +56,13 @@ const formatDate = (d: string | null) => {
       >
         {{ tag }}
       </span>
+    </span>
+    <span
+      v-if="score != null"
+      class="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-mono rounded"
+      :class="score >= 0.7 ? 'bg-emerald-900/60 text-emerald-300' : score >= 0.4 ? 'bg-amber-900/50 text-amber-300' : 'bg-slate-700 text-gray-400'"
+    >
+      {{ Math.round(score * 100) }}
     </span>
     <span class="text-gray-600 group-hover:text-cyan-400 transition-colors">›</span>
   </button>

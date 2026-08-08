@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { getExplorerStats, getExplorerTree, getRelatedByTags, searchSourceMemories, getMemoryDetail } from './explorer'
+import { getExplorerStats, getExplorerTree, getRelatedByTags, searchSourceMemories, getMemoryDetail, searchMemories } from './explorer'
 
 describe('getExplorerStats', () => {
   beforeEach(() => {
@@ -173,6 +173,110 @@ describe('searchSourceMemories', () => {
     ) as any
 
     await expect(searchSourceMemories('x')).rejects.toThrow('HTTP 500')
+  })
+})
+
+describe('searchMemories', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('should GET /memories/search with the combined filters and map results with score', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            total: 1,
+            results: [
+              {
+                id: 'm1',
+                title: 'Parrainages 2022',
+                memory_type: 'investigation',
+                tags: ['sujet:14-juillet-2026', 'status:CONFIRME'],
+                created_at: '2026-08-01',
+                score: 0.87
+              }
+            ]
+          })
+      })
+    ) as any
+
+    const resp = await searchMemories({
+      query: 'parrainages',
+      memory_type: 'investigation',
+      status: 'status:CONFIRME',
+      tags: ['sujet:14-juillet-2026'],
+      created_from: '2026-07-01',
+      created_to: '2026-08-31',
+      limit: 50
+    })
+
+    const call = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!
+    expect(call[0]).toContain('/api/v1/memories/search?')
+    const url = String(call[0])
+    expect(url).toContain('query=parrainages')
+    expect(url).toContain('memory_type=investigation')
+    expect(url).toContain('status=status%3ACONFIRME')
+    expect(url).toContain('tags=sujet%3A14-juillet-2026')
+    expect(url).toContain('created_after=2026-07-01')
+    expect(url).toContain('created_before=2026-08-31')
+    expect(resp.results).toHaveLength(1)
+    expect(resp.results[0]!.score).toBe(0.87)
+    expect(resp.results[0]!.memory_type).toBe('investigation')
+    expect(resp.total).toBe(1)
+  })
+
+  it('should use the backend total even when results are capped by limit', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            total: 200,
+            results: [
+              {
+                id: 'm1',
+                title: 'Arcom',
+                memory_type: 'investigation',
+                tags: [],
+                created_at: null,
+                score: 0.9
+              }
+            ]
+          })
+      })
+    ) as any
+
+    const resp = await searchMemories({ query: 'arcom', tags: [] })
+    expect(resp.results).toHaveLength(1)
+    expect(resp.total).toBe(200)
+  })
+
+  it('should omit empty filters from the query string', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ total: 0, results: [] }) })
+    ) as any
+
+    const resp = await searchMemories({ query: 'arcom', tags: [], limit: 50 })
+
+    const call = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!
+    const url = String(call[0])
+    expect(url).toContain('query=arcom')
+    expect(url).toContain('limit=50')
+    expect(url).not.toContain('memory_type=')
+    expect(url).not.toContain('status=')
+    expect(url).not.toContain('created_after=')
+    expect(url).not.toContain('created_before=')
+    expect(resp.total).toBe(0)
+  })
+
+  it('should throw on non-OK response', async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve({ ok: false, status: 500 })
+    ) as any
+
+    await expect(searchMemories({ query: 'x', tags: [] })).rejects.toThrow('HTTP 500')
   })
 })
 

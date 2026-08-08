@@ -8,7 +8,9 @@ import type {
   ExplorerTree,
   ExplorerTreeItem,
   MemoryDetail,
-  RelatedResponse
+  RelatedResponse,
+  SearchFilters,
+  SearchResultItem
 } from '@/types/explorer'
 
 /** Agrégats du socle de connaissances (distribution, sujets, statuts, timeline) */
@@ -71,4 +73,40 @@ export async function searchSourceMemories(query: string): Promise<ExplorerTreeI
     tags: r.tags || [],
     created_at: r.created_at || null
   }))
+}
+
+/** Résultat de recherche avancée : items + total réel du backend */
+export interface SearchResponse {
+  results: SearchResultItem[]
+  total: number
+}
+
+/**
+ * Recherche avancée (onglet Recherche) : requête sémantique + filtres combinés
+ * type / tags / statut / période. GET /memories/search (filtres en query params).
+ * Retourne le total réel du backend (et non results.length, plafonné par limit).
+ */
+export async function searchMemories(filters: SearchFilters): Promise<SearchResponse> {
+  const params = new URLSearchParams()
+  const q = filters.query.trim()
+  if (q) params.set('query', q)
+  params.set('limit', String(filters.limit ?? 50))
+  if (filters.memory_type) params.set('memory_type', filters.memory_type)
+  if (filters.status) params.set('status', filters.status)
+  if (filters.tags.length > 0) params.set('tags', filters.tags.join(','))
+  if (filters.created_from) params.set('created_after', filters.created_from)
+  if (filters.created_to) params.set('created_before', filters.created_to)
+
+  const resp = await api(`/memories/search?${params.toString()}`)
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  const data = await resp.json()
+  const results: SearchResultItem[] = (data.results || []).map((r: Record<string, any>) => ({
+    id: r.id,
+    title: r.title,
+    memory_type: r.memory_type,
+    tags: r.tags || [],
+    created_at: r.created_at || null,
+    score: typeof r.score === 'number' ? r.score : null
+  }))
+  return { results, total: typeof data.total === 'number' ? data.total : results.length }
 }

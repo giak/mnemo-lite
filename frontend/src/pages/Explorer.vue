@@ -2,21 +2,35 @@
 /**
  * Explorer.vue — EPIC-78 Knowledge Explorer
  *
- * Onglets : Socle (T2) / Explorer (T3) / Relations (T4).
+ * Onglets : Socle (T2) / Explorer (T3) / Relations (T4) / Recherche (T6).
  * T2 : vue « Socle » — distribution par type, top sujets cliquables,
  *      couverture factuelle (status:CONFIRME) et timeline des investigations.
  * T3 : vue « Explorer » — arborescence sujet -> enquêtes -> faits vérifiés ->
  *      autres, branchée sur GET /api/v1/memories/explorer/tree.
+ * T4 : vue « Relations » — graphe G6 des mémoires liées par tags partagés.
+ * T6 : vue « Recherche » — recherche avancée (type + statut + tags + période).
  */
 import { ref, computed, watch, onMounted } from 'vue'
-import { getExplorerStats, getExplorerTree, getRelatedByTags, searchSourceMemories } from '@/api/explorer'
-import type { ExplorerStats, ExplorerTree, ExplorerTreeItem, RelatedItem } from '@/types/explorer'
+import {
+  getExplorerStats,
+  getExplorerTree,
+  getRelatedByTags,
+  searchSourceMemories,
+  searchMemories
+} from '@/api/explorer'
+import type {
+  ExplorerStats,
+  ExplorerTree,
+  ExplorerTreeItem,
+  RelatedItem,
+  SearchResultItem
+} from '@/types/explorer'
 import TreeItemRow from '@/components/TreeItemRow.vue'
 import G6Graph from '@/components/G6Graph.vue'
 import MemoryDetailPanel from '@/components/MemoryDetailPanel.vue'
 
 // --- États
-type Tab = 'socle' | 'explorer' | 'relations'
+type Tab = 'socle' | 'explorer' | 'relations' | 'recherche'
 const activeTab = ref<Tab>('socle')
 const selectedSubject = ref<string | null>(null)
 const subjectQuery = ref('')
@@ -74,6 +88,9 @@ function exploreFromInput(): void {
 
 // Si on revient sur l'onglet Explorer avec un sujet déjà choisi mais jamais chargé
 watch(activeTab, (tab) => {
+  // La fiche mémoire est scopée à l'onglet : on la ferme en quittant l'onglet
+  // (évite une fiche périmée d'un autre onglet)
+  selectedItem.value = null
   if (tab === 'explorer' && selectedSubject.value && !tree.value && !treeLoading.value) {
     loadTree(selectedSubject.value)
   }
@@ -200,6 +217,85 @@ watch([minShared, relatedLimit], () => {
   if (sourceMemory.value) loadRelated()
 })
 
+// --- Recherche avancée (T6)
+const searchQuery = ref('')
+const searchType = ref('')
+const searchStatus = ref('')
+const searchTags = ref('')
+const searchFrom = ref('')
+const searchTo = ref('')
+const searchResults = ref<SearchResultItem[]>([])
+const searchTotal = ref(0)
+const searchRunning = ref(false)
+const searchError = ref<string | null>(null)
+const searchHasRun = ref(false)
+
+const SEARCH_TYPES = [
+  { value: 'investigation', label: 'Enquêtes' },
+  { value: 'article', label: 'Articles' },
+  { value: 'quintessence', label: 'Fiches internes' },
+  { value: 'reference', label: 'Références' },
+  { value: 'note', label: 'Notes' },
+  { value: 'decision', label: 'Décisions' },
+  { value: 'task', label: 'Tâches' },
+  { value: 'conversation', label: 'Conversations' }
+]
+
+const SEARCH_STATUSES = [
+  { value: 'status:CONFIRME', label: 'status:CONFIRME' },
+  { value: 'fact-check', label: 'fact-check' }
+]
+
+async function runSearch(): Promise<void> {
+  const q = searchQuery.value.trim()
+  if (!q) {
+    searchError.value = 'Saisissez un texte de recherche.'
+    return
+  }
+  searchRunning.value = true
+  searchError.value = null
+  try {
+    const resp = await searchMemories({
+      query: q,
+      memory_type: searchType.value || undefined,
+      status: searchStatus.value || undefined,
+      tags: searchTags.value
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean),
+      created_from: searchFrom.value || undefined,
+      created_to: searchTo.value || undefined,
+      limit: 50
+    })
+    searchResults.value = resp.results
+    searchTotal.value = resp.total
+    searchHasRun.value = true
+  } catch (err) {
+    searchError.value = err instanceof Error ? err.message : 'Recherche impossible'
+  } finally {
+    searchRunning.value = false
+  }
+}
+
+function resetSearch(): void {
+  searchQuery.value = ''
+  searchType.value = ''
+  searchStatus.value = ''
+  searchTags.value = ''
+  searchFrom.value = ''
+  searchTo.value = ''
+  searchResults.value = []
+  searchTotal.value = 0
+  searchError.value = null
+  searchHasRun.value = false
+  selectedItem.value = null
+}
+
+/** Un résultat de recherche devient la fiche affichée (le score est perdu, géré par la fiche) */
+function openSearchResult(item: ExplorerTreeItem): void {
+  selectedItem.value = item
+}
+
 // --- Helpers de rendu
 const TYPE_META: Record<string, { icon: string; bar: string }> = {
   investigation: { icon: '🔬', bar: 'bg-cyan-500' },
@@ -303,7 +399,7 @@ const typeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1)
       <div class="mb-6 border-b border-slate-700">
         <nav class="flex gap-4">
           <button
-            v-for="t in (['socle', 'explorer', 'relations'] as Tab[])"
+            v-for="t in (['socle', 'explorer', 'relations', 'recherche'] as Tab[])"
             :key="t"
             @click="activeTab = t"
             :class="[
@@ -633,6 +729,133 @@ const typeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1)
             <p class="text-sm text-gray-500 max-w-md mx-auto">
               Saisissez un tag de sujet ou cliquez sur un sujet ci-dessus (ou dans l'onglet Socle)
               pour voir son arborescence : enquêtes → faits vérifiés → sources.
+            </p>
+          </div>
+
+          <!-- Fiche mémoire enrichie (T5) -->
+          <MemoryDetailPanel
+            v-if="selectedItem"
+            :memory-id="selectedItem.id"
+            :title="selectedItem.title"
+            @close="selectedItem = null"
+            @select-memory="handleSelectMemory"
+          />
+        </div>
+
+        <!-- ============ RECHERCHE TAB (T6) ============ -->
+        <div v-else-if="activeTab === 'recherche'" class="space-y-6">
+          <!-- Filtres combinés -->
+          <div class="scada-panel">
+            <h2 class="scada-label text-cyan-400 mb-4 pb-3 border-b-2 border-slate-700">
+              Recherche avancée
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div class="md:col-span-2 lg:col-span-3">
+                <input
+                  v-model="searchQuery"
+                  @keypress.enter="runSearch"
+                  type="text"
+                  class="input w-full"
+                  placeholder="Requête sémantique (ex: parrainages, ingérences russes, ARCOM)"
+                />
+              </div>
+              <div>
+                <label class="block text-[10px] text-gray-500 font-mono uppercase mb-1">Type</label>
+                <select v-model="searchType" class="input w-full">
+                  <option value="">Tous</option>
+                  <option v-for="t in SEARCH_TYPES" :key="t.value" :value="t.value">{{ t.label }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] text-gray-500 font-mono uppercase mb-1">Statut</label>
+                <select v-model="searchStatus" class="input w-full">
+                  <option value="">Tous</option>
+                  <option v-for="s in SEARCH_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] text-gray-500 font-mono uppercase mb-1">Tags (séparés par virgule)</label>
+                <input
+                  v-model="searchTags"
+                  type="text"
+                  class="input w-full"
+                  placeholder="sujet:14-juillet-2026, piste:12"
+                />
+              </div>
+              <div>
+                <label class="block text-[10px] text-gray-500 font-mono uppercase mb-1">Créé après</label>
+                <input v-model="searchFrom" type="date" class="input w-full" />
+              </div>
+              <div>
+                <label class="block text-[10px] text-gray-500 font-mono uppercase mb-1">Créé avant</label>
+                <input v-model="searchTo" type="date" class="input w-full" />
+              </div>
+              <div class="flex items-end gap-2">
+                <button
+                  @click="runSearch"
+                  :disabled="!searchQuery.trim() || searchRunning"
+                  class="scada-btn scada-btn-primary flex-1"
+                >
+                  {{ searchRunning ? 'RECHERCHE...' : 'RECHERCHER' }}
+                </button>
+                <button
+                  @click="resetSearch"
+                  class="scada-btn"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Erreur -->
+          <div v-if="searchError" class="alert-error">
+            <span class="text-sm font-mono">{{ searchError }}</span>
+          </div>
+
+          <!-- Chargement -->
+          <div v-if="searchRunning" class="animate-pulse space-y-3">
+            <div v-for="i in 5" :key="i" class="h-12 bg-slate-800/60 border-2 border-slate-700"></div>
+          </div>
+
+          <!-- Résultats -->
+          <template v-else>
+            <div v-if="searchHasRun && searchResults.length > 0" class="space-y-3">
+              <p class="text-xs text-gray-500 font-mono uppercase">
+                {{ searchTotal }} résultat{{ searchTotal > 1 ? 's' : '' }} — cliquer une ligne pour ouvrir la fiche
+              </p>
+              <TreeItemRow
+                v-for="item in searchResults"
+                :key="item.id"
+                :item="item"
+                :score="item.score"
+                :active="selectedItem?.id === item.id"
+                @select="openSearchResult"
+              />
+            </div>
+
+            <div
+              v-else-if="searchHasRun"
+              class="scada-panel text-center py-14 space-y-3"
+            >
+              <span class="text-4xl">🔎</span>
+              <h3 class="text-lg font-medium text-gray-300 uppercase">Aucun résultat</h3>
+              <p class="text-sm text-gray-500 max-w-md mx-auto">
+                Aucune mémoire ne correspond aux filtres. Élargissez la requête ou retirez des filtres.
+              </p>
+            </div>
+          </template>
+
+          <!-- État initial -->
+          <div
+            v-if="!searchHasRun && !searchRunning"
+            class="scada-panel text-center py-16 space-y-3"
+          >
+            <span class="text-4xl">🔍</span>
+            <h3 class="text-lg font-medium text-gray-300 uppercase">Rechercher dans le socle</h3>
+            <p class="text-sm text-gray-500 max-w-md mx-auto">
+              Combinez une requête sémantique avec des filtres : type, statut (status:CONFIRME,
+              fact-check), tags (AND) et période de création.
             </p>
           </div>
 

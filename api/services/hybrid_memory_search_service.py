@@ -578,6 +578,14 @@ class HybridMemorySearchService:
             if filters.exclude_conversations:
                 where_clauses.append("memory_type != 'conversation'")
 
+            # EPIC-78 T6: bornes de période (created_after/created_before)
+            if filters.created_after:
+                where_clauses.append("created_at >= :created_after")
+                params["created_after"] = filters.created_after
+            if filters.created_before:
+                where_clauses.append("created_at <= :created_before")
+                params["created_before"] = filters.created_before
+
         where_sql = " AND ".join(where_clauses)
 
         # Optimized approach: ILIKE + trigram on title/embedding_source ONLY
@@ -686,6 +694,14 @@ class HybridMemorySearchService:
             if filters.exclude_conversations:
                 where_clauses.append("memory_type != 'conversation'")
 
+            # EPIC-78 T6: bornes de période (created_after/created_before)
+            if filters.created_after:
+                where_clauses.append("created_at >= :created_after")
+                params["created_after"] = filters.created_after
+            if filters.created_before:
+                where_clauses.append("created_at <= :created_before")
+                params["created_before"] = filters.created_before
+
         where_sql = " AND ".join(where_clauses)
 
         # Format vector for pgvector halfvec (validated via helper)
@@ -793,6 +809,14 @@ class HybridMemorySearchService:
             if filters.exclude_conversations:
                 where_clauses.append("memory_type != 'conversation'")
 
+            # EPIC-78 T6: bornes de période (created_after/created_before)
+            if filters.created_after:
+                where_clauses.append("created_at >= :created_after")
+                params["created_after"] = filters.created_after
+            if filters.created_before:
+                where_clauses.append("created_at <= :created_before")
+                params["created_before"] = filters.created_before
+
         where_sql = " AND ".join(where_clauses)
 
         # Build JSONB containment conditions for each keyword
@@ -892,6 +916,14 @@ class HybridMemorySearchService:
 
             if filters.exclude_conversations:
                 where_clauses.append("memory_type != 'conversation'")
+
+            # EPIC-78 T6: bornes de période (created_after/created_before)
+            if filters.created_after:
+                where_clauses.append("created_at >= :created_after")
+                params["created_after"] = filters.created_after
+            if filters.created_before:
+                where_clauses.append("created_at <= :created_before")
+                params["created_before"] = filters.created_before
 
         where_sql = " AND ".join(where_clauses)
 

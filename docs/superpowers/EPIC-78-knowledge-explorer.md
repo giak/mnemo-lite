@@ -1,6 +1,6 @@
 # 🧭 EPIC-78 : Knowledge Explorer — consulter le socle Truth Engine (faits, enquêtes, articles, relations)
 
-> **Status:** IN_PROGRESS — T0-T5 DONE (2026-08-08) ; reste T6 recherche avancée
+> **Status:** ✅ DONE — T0-T6 terminés (2026-08-08)
 > **Priority:** P1 : le besoin central « voir ce qui est lié » est aujourd'hui techniquement impossible
 > **Date:** 2026-08-08
 > **Effort:** 8-12 h (T0/T1 backend + T2-T6 frontend)
@@ -76,15 +76,21 @@ Nouveau composant `src/components/MemoryDetailPanel.vue`, branché dans l'onglet
 - **Review** : prop `title` réutilisée en placeholder de chargement, `tagRole` normalisé `toLowerCase()`, CSS `fade` mort retiré, `circuit:` → orange.
 - **Validé** : vue-tsc 0 erreur · vitest 40/40 · eslint 0 erreur · build OK.
 
-### T6 — Recherche avancée (frontend, ~2 h)
-Extension de Search : filtres combinés (type + tags + statut + période) en s'appuyant sur le search existant (`tags` ET + `memory_type`), résultats groupés par type.
+### ✅ T6 — Recherche avancée (frontend + backend, DONE)
+Onglet **Recherche** de `Explorer.vue` (4e onglet) : filtres combinés sur `GET /api/v1/memories/search` :
+- **Requête sémantique** (obligatoire) + **filtres** : type, statut (`status:CONFIRME` / `fact-check`), tags libres (CSV, logique ET), période de création (bornes `Créé après` / `Créé avant`, inputs date).
+- **Résultats** : score de pertinence coloré (≥ 0.7 vert, ≥ 0.4 ambre) via `TreeItemRow` (prop `score` optionnelle), clic = fiche mémoire enrichie (T5). Total affiché = **total réel du backend** (et non `results.length` plafonné par limit).
+- **Backend étendu** : les bornes `created_after`/`created_before` de `MemoryFilters` existaient dans le modèle mais **n'étaient jamais appliquées dans le SQL** — ajoutées aux 4 méthodes du service de recherche (WHERE `created_at >=` / `<=`). Nouveau paramètre `status` sur la route GET search (mappé sur un tag, AND avec `tags`) — il était **silencieusement ignoré** auparavant. Bornes date-seule : début de journée (`after`) / fin de journée avec microsecondes (`before`).
+- **Tests** : backend `test_search_created_period_filter` (bornes + 422 sur borne invalide) et `test_search_status_filter` (filtre + équivalence `tags`) — 2/2 ; frontend `searchMemories` (encodage des filtres, omission des vides, total backend capé, erreur HTTP) — 4 nouveaux tests.
+- **Review** : 1 point neutralisé (casse `status:*` — validator EPIC-60 normalise en majuscules, vérifié live : `status:confirme` minuscule matche bien les tags `status:CONFIRME`) ; 3 bugs corrigés : compteur total (total réel du backend), fuite d'état `selectedItem` entre onglets (fiche nettoyée au changement d'onglet), bornes microsecondes (`23:59:59.999999`).
+- **Validé** : pytest 2/2 · vue-tsc 0 erreur · vitest 44/44 · eslint 0 erreur · build OK · scénario combiné live (query + status + période).
 
 ## Critères d'acceptation
 
 - [x] `GET /api/v1/memories/graph` renvoie une structure valide sans erreur (T0 ; nodes/edges vides tant que la table n'est pas peuplée)
 - [x] `related-by-tags` renvoie les top-N liées pour une fiche TE quelconque (validé : ARCOM/SREN/divergence 2022 sur la mémoire parrainages)
-- [x] Page Explorer : onglets Socle (T2), Explorer (T3), Relations (T4) + fiche enrichie (T5) livrés ; recherche avancée T6 à venir
-- [x] `pnpm vue-tsc -b --noEmit` : 0 erreur · vitest 40/40 · eslint 0 erreur · build OK (frontend, T2-T5)
+- [x] Page Explorer : onglets Socle (T2), Explorer (T3), Relations (T4), fiche enrichie (T5) et recherche avancée (T6) livrés
+- [x] `pnpm vue-tsc -b --noEmit` : 0 erreur · vitest 44/44 · eslint 0 erreur · build OK (frontend, T2-T6)
 - [x] Tests backend (pytest) pour les 3 nouveaux endpoints : `tests/routes/test_explorer_routes.py` **8/8** + zéro régression adjacente (26/26)
 
 ## Notes de décision

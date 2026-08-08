@@ -907,5 +907,120 @@ async def test_post_search_json_body_filters(
             await conn.execute("DELETE FROM memories WHERE title LIKE 'EPIC59 %'")
 
 
+@pytest.mark.anyio
+async def test_search_created_period_filter(client: TestClient, test_db_pool: asyncpg.Pool):
+    """EPIC-78 T6 : filtre de période created_after/created_before sur /api/v1/memories/search.
+
+    Deux mémoires créées à des dates distinctes : la borne inférieure (date
+    seule -> début de journée) et la borne supérieure (date seule -> fin de
+    journée) doivent toutes deux fonctionner.
+    """
+    unique_tag = f"t6-{uuid.uuid4().hex[:10]}"
+    old_time = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+    new_time = datetime(2026, 6, 15, 10, 0, 0, tzinfo=timezone.utc)
+    async with test_db_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO memories (title, content, memory_type, tags, created_at) "
+            "VALUES ($1, $2, 'note', $3, $4)",
+            f"T6-OLD {unique_tag}",
+            f"contenu ancien {unique_tag}",
+            [unique_tag],
+            old_time,
+        )
+        await conn.execute(
+            "INSERT INTO memories (title, content, memory_type, tags, created_at) "
+            "VALUES ($1, $2, 'note', $3, $4)",
+            f"T6-NEW {unique_tag}",
+            f"contenu recent {unique_tag}",
+            [unique_tag],
+            new_time,
+        )
+    try:
+        # created_after = 2026-01-01 (début de journée) -> seule la mémoire récente
+        resp_after = client.get(
+            "/api/v1/memories/search",
+            params={"query": unique_tag, "created_after": "2026-01-01", "limit": 10},
+        )
+        assert resp_after.status_code == 200, resp_after.text
+        titles_after = [r["title"] for r in resp_after.json()["results"]]
+        assert any(t.startswith("T6-NEW") for t in titles_after), (
+            "La mémoire récente devrait être trouvée avec created_after"
+        )
+        assert not any(t.startswith("T6-OLD") for t in titles_after), (
+            "La mémoire ancienne ne devrait pas passer created_after"
+        )
+
+        # created_before = 2026-01-01 (fin de journée) -> seule la mémoire ancienne
+        resp_before = client.get(
+            "/api/v1/memories/search",
+            params={"query": unique_tag, "created_before": "2026-01-01", "limit": 10},
+        )
+        assert resp_before.status_code == 200, resp_before.text
+        titles_before = [r["title"] for r in resp_before.json()["results"]]
+        assert any(t.startswith("T6-OLD") for t in titles_before), (
+            "La mémoire ancienne devrait être trouvée avec created_before"
+        )
+        assert not any(t.startswith("T6-NEW") for t in titles_before), (
+            "La mémoire récente ne devrait pas passer created_before"
+        )
+
+        # borne invalide -> 422
+        resp_bad = client.get(
+            "/api/v1/memories/search",
+            params={"query": unique_tag, "created_after": "pas-une-date", "limit": 10},
+        )
+        assert resp_bad.status_code == 422
+    finally:
+        async with test_db_pool.acquire() as conn:
+            await conn.execute("DELETE FROM memories WHERE title LIKE 'T6-%'")
+
+@pytest.mark.anyio
+async def test_search_status_filter(client: TestClient, test_db_pool: asyncpg.Pool):
+    """EPIC-78 T6 : filtre status (tag status:CONFIRME) sur /api/v1/memories/search.
+
+    Le paramètre status est mappé sur un tag (AND) : seul le mémoire portant
+    le tag doit être retournée.
+    """
+    unique_tag = f"t6s-{uuid.uuid4().hex[:10]}"
+    async with test_db_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO memories (title, content, memory_type, tags) "
+            "VALUES ($1, $2, 'note', $3)",
+            f"T6S-CONFIRME {unique_tag}",
+            f"contenu confirme {unique_tag}",
+            [unique_tag, "status:CONFIRME"],
+        )
+        await conn.execute(
+            "INSERT INTO memories (title, content, memory_type, tags) "
+            "VALUES ($1, $2, 'note', $3)",
+            f"T6S-BRUIT {unique_tag}",
+            f"contenu bruit {unique_tag}",
+            [unique_tag],
+        )
+    try:
+        resp = client.get(
+            "/api/v1/memories/search",
+            params={"query": unique_tag, "status": "status:CONFIRME", "limit": 10},
+        )
+        assert resp.status_code == 200, resp.text
+        results = resp.json()["results"]
+        assert results, "La mémoire taggée status:CONFIRME devrait être trouvée"
+        assert all(r["title"].startswith("T6S-CONFIRME") for r in results), (
+            "Le filtre status devrait exclure la mémoire non taggée"
+        )
+        # Le même tag passé dans `tags` doit donner le même résultat (équivalence)
+        resp_tags = client.get(
+            "/api/v1/memories/search",
+            params={"query": unique_tag, "tags": "status:CONFIRME", "limit": 10},
+        )
+        assert resp_tags.status_code == 200, resp_tags.text
+        ids_status = {r["id"] for r in results}
+        ids_tags = {r["id"] for r in resp_tags.json()["results"]}
+        assert ids_status == ids_tags
+    finally:
+        async with test_db_pool.acquire() as conn:
+            await conn.execute("DELETE FROM memories WHERE title LIKE 'T6S-%'")
+
+
 # TODO: Ajouter tests pour :
 # - Cas limites (ex: filtre vide ? {} )
