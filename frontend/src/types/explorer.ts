@@ -20,3 +20,21 @@ export interface ExplorerStats {
   /** Investigations/articles/quintessences par mois (YYYY-MM) */
   timeline: Array<{ month: string; count: number }>
 }
+
+/** Élément de l'arborescence d'un sujet (endpoint /explorer/tree) */
+export interface ExplorerTreeItem {
+  id: string
+  title: string
+  memory_type: string
+  tags: string[]
+  created_at: string | null
+}
+
+/** Arborescence d'un sujet : enquêtes / faits vérifiés / autres */
+export interface ExplorerTree {
+  subject: string
+  total: number
+  investigations: ExplorerTreeItem[]
+  facts: ExplorerTreeItem[]
+  others: ExplorerTreeItem[]
+}

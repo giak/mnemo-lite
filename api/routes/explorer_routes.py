@@ -132,9 +132,14 @@ async def get_explorer_tree(
     project_id: Optional[str] = Query(None, description="Project_id optionnel (par défaut : tout le socle)"),
     engine: AsyncEngine = Depends(get_db_engine),
 ) -> Dict[str, Any]:
-    """Arborescence sujet -> enquêtes -> faits vérifiés -> notes/sources."""
+    """Arborescence sujet -> enquêtes -> faits vérifiés -> notes/sources.
+
+    Match insensible à la casse (aligné sur related-by-tags) : la base a des
+    tags mixtes, un sélecteur utilisateur peut introduire une autre casse.
+    """
     try:
-        where = "deleted_at IS NULL AND :subject = ANY(tags)"
+        where = ("deleted_at IS NULL AND EXISTS "
+                 "(SELECT 1 FROM unnest(tags) AS t WHERE lower(t) = lower(:subject))")
         params: Dict[str, Any] = {"subject": subject}
         if project_id:
             where += " AND project_id = :pid"

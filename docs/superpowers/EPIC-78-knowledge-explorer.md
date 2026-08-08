@@ -1,6 +1,6 @@
 # 🧭 EPIC-78 : Knowledge Explorer — consulter le socle Truth Engine (faits, enquêtes, articles, relations)
 
-> **Status:** IN_PROGRESS — T0+T1 backend DONE, T2 page Socle DONE (2026-08-08) ; reste T3-T6 frontend
+> **Status:** IN_PROGRESS — T0+T1 backend DONE, T2 Socle DONE, T3 Explorer arborescence DONE (2026-08-08) ; reste T4-T6 frontend
 > **Priority:** P1 : le besoin central « voir ce qui est lié » est aujourd'hui techniquement impossible
 > **Date:** 2026-08-08
 > **Effort:** 8-12 h (T0/T1 backend + T2-T6 frontend)
@@ -46,8 +46,14 @@ Nouvelle page `src/pages/Explorer.vue` (route `/explorer`, groupe Data, nav auto
 - Fichiers : `src/types/explorer.ts` (types), `src/api/explorer.ts` (`getExplorerStats`), test `src/api/explorer.test.ts` (2 tests).
 - **Validé** : vue-tsc 0 erreur · vitest 31/31 · eslint 0 erreur · build OK · rendu navigateur vérifié (zéro erreur console).
 
-### T3 — Explorer arborescence (frontend, ~3-4 h)
-Onglet **Explorer** : sélecteur de sujet → arborescence sujet → enquêtes → faits vérifiés → sources, chaque niveau cliquable, drill-down, badges de statut. Réutilise les patterns `loading/errors/empty`.
+### ✅ T3 — Explorer arborescence (frontend, DONE)
+Onglet **Explorer** de `Explorer.vue` :
+- **Sélecteur de sujet** : champ de saisie libre (tag) + chips des 12 top sujets (depuis les stats Socle) ; l'input libre est le cas d'usage principal (ex. `ingerences-russes` hors top 25).
+- **Arborescence 3 sections** : `Enquêtes` (investigations) / `Faits vérifiés` (quintessences + fact-check) / `Autres`, avec compteurs par section, barre de synthèse (total éléments), badges tags (3 max), date, état vide explicite si le tag ne matche rien.
+- **Détail de l'élément** (préfiguration T5) : panneau avec type, date, tous les tags, bouton copier l'ID (toast).
+- **Backend** : `tree` rendu **insensible à la casse** (`lower(t) = lower(:subject)`, aligné sur `related-by-tags`) pour éviter les faux négatifs du sélecteur ; validé live (318 éléments avec casse exacte et différente), pytest 8/8.
+- Composant `src/components/TreeItemRow.vue` (DRY, 3 sections). Tests `getExplorerTree` : parsing, URL-encoding, erreur HTTP.
+- **Validé** : vue-tsc 0 erreur · vitest 34/34 · eslint 0 erreur · build OK · rendu Socle navigateur vérifié.
 
 ### T4 — Graphe de relations (frontend, ~3-4 h)
 Onglet **Relations** : `G6Graph` (réutilisé) — nœuds = mémoires (couleur par type, taille par statut CONFIRME), arêtes = score proxy, filtres type/sujet/score, clic → fiche. Bloc « Liées » dans la fiche.
@@ -62,8 +68,8 @@ Extension de Search : filtres combinés (type + tags + statut + période) en s'a
 
 - [x] `GET /api/v1/memories/graph` renvoie une structure valide sans erreur (T0 ; nodes/edges vides tant que la table n'est pas peuplée)
 - [x] `related-by-tags` renvoie les top-N liées pour une fiche TE quelconque (validé : ARCOM/SREN/divergence 2022 sur la mémoire parrainages)
-- [x] Page Explorer : 3 onglets (Socle implémenté ; Explorer T3, Relations T4, fiche enrichie T5) — onglet Socle livré en T2
-- [x] `pnpm vue-tsc -b --noEmit` : 0 erreur · vitest 31/31 · eslint 0 erreur · build OK (frontend, T2)
+- [x] Page Explorer : onglets Socle (T2) + Explorer arborescence (T3) livrés ; Relations T4, fiche enrichie T5 à venir
+- [x] `pnpm vue-tsc -b --noEmit` : 0 erreur · vitest 34/34 · eslint 0 erreur · build OK (frontend, T2+T3)
 - [x] Tests backend (pytest) pour les 3 nouveaux endpoints : `tests/routes/test_explorer_routes.py` **8/8** + zéro régression adjacente (26/26)
 
 ## Notes de décision

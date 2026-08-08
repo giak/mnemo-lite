@@ -4,17 +4,20 @@
  *
  * Onglets : Socle (T2) / Explorer (T3) / Relations (T4).
  * T2 : vue « Socle » — distribution par type, top sujets cliquables,
- * couverture factuelle (status:CONFIRME) et timeline des investigations,
- * branchée sur GET /api/v1/memories/explorer/stats.
+ *      couverture factuelle (status:CONFIRME) et timeline des investigations.
+ * T3 : vue « Explorer » — arborescence sujet -> enquêtes -> faits vérifiés ->
+ *      autres, branchée sur GET /api/v1/memories/explorer/tree.
  */
-import { ref, computed, onMounted } from 'vue'
-import { getExplorerStats } from '@/api/explorer'
-import type { ExplorerStats } from '@/types/explorer'
+import { ref, computed, watch, onMounted } from 'vue'
+import { getExplorerStats, getExplorerTree } from '@/api/explorer'
+import type { ExplorerStats, ExplorerTree, ExplorerTreeItem } from '@/types/explorer'
+import TreeItemRow from '@/components/TreeItemRow.vue'
 
 // --- États
 type Tab = 'socle' | 'explorer' | 'relations'
 const activeTab = ref<Tab>('socle')
 const selectedSubject = ref<string | null>(null)
+const subjectQuery = ref('')
 
 const data = ref<ExplorerStats | null>(null)
 const loading = ref(false)
@@ -36,10 +39,55 @@ async function refresh(): Promise<void> {
 
 onMounted(refresh)
 
-/** Clic sur un sujet -> onglet Explorer (l'arborescence arrive en T3) */
+// --- Arborescence (T3)
+const tree = ref<ExplorerTree | null>(null)
+const treeLoading = ref(false)
+const treeError = ref<string | null>(null)
+const selectedItem = ref<ExplorerTreeItem | null>(null)
+
+async function loadTree(subject: string): Promise<void> {
+  treeLoading.value = true
+  treeError.value = null
+  selectedItem.value = null
+  try {
+    tree.value = await getExplorerTree(subject)
+  } catch (err) {
+    treeError.value = err instanceof Error ? err.message : 'Failed to load tree'
+  } finally {
+    treeLoading.value = false
+  }
+}
+
+/** Sélection d'un sujet (depuis le Socle ou le sélecteur) -> charge l'arborescence */
 function selectSubject(tag: string): void {
   selectedSubject.value = tag
   activeTab.value = 'explorer'
+  loadTree(tag)
+}
+
+function exploreFromInput(): void {
+  const q = subjectQuery.value.trim()
+  if (q) selectSubject(q)
+}
+
+// Si on revient sur l'onglet Explorer avec un sujet déjà choisi mais jamais chargé
+watch(activeTab, (tab) => {
+  if (tab === 'explorer' && selectedSubject.value && !tree.value && !treeLoading.value) {
+    loadTree(selectedSubject.value)
+  }
+})
+
+const copyFeedback = ref<string | null>(null)
+async function copyId(id: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(id)
+    copyFeedback.value = 'ID copié !'
+  } catch {
+    copyFeedback.value = 'Copie impossible'
+  }
+  setTimeout(() => {
+    copyFeedback.value = null
+  }, 2000)
 }
 
 // --- Helpers de rendu
@@ -104,6 +152,15 @@ const formatMonth = (ym: string) => {
   return mi >= 0 && mi < 12 ? `${months[mi]} ${y}` : ym
 }
 
+const formatDate = (d: string | null) => {
+  if (!d) return ''
+  return new Date(d).toLocaleDateString('fr-FR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+}
+
 const typeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1)
 </script>
 
@@ -131,6 +188,16 @@ const typeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1)
           </p>
         </div>
       </div>
+
+      <!-- Copy feedback toast -->
+      <Transition name="fade">
+        <div
+          v-if="copyFeedback"
+          class="fixed top-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded shadow-lg z-50 font-mono text-sm"
+        >
+          {{ copyFeedback }}
+        </div>
+      </Transition>
 
       <!-- Tabs -->
       <div class="mb-6 border-b border-slate-700">
@@ -285,7 +352,7 @@ const typeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1)
               <h2 class="scada-label text-cyan-400 mb-1 pb-3 border-b-2 border-slate-700">
                 Top sujets
               </h2>
-              <p class="text-xs text-gray-500 mb-4 -mt-2">Cliquer un sujet pour explorer son arborescence (T3)</p>
+              <p class="text-xs text-gray-500 mb-4 -mt-2">Cliquer un sujet pour explorer son arborescence</p>
               <div v-if="data.top_subjects.length > 0" class="space-y-1">
                 <button
                   v-for="s in data.top_subjects"
@@ -340,19 +407,170 @@ const typeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1)
         </div>
 
         <!-- ============ EXPLORER TAB (T3) ============ -->
-        <div v-else-if="activeTab === 'explorer'" class="scada-panel text-center py-16">
-          <div v-if="selectedSubject" class="space-y-4">
-            <p class="text-sm text-gray-400 font-mono uppercase tracking-wide">Sujet sélectionné</p>
-            <p class="scada-data text-2xl">{{ selectedSubject }}</p>
-            <p class="text-sm text-gray-500">L'arborescence sujet → enquêtes → faits vérifiés → sources arrive en T3.</p>
+        <div v-else-if="activeTab === 'explorer'" class="space-y-6">
+          <!-- Sélecteur de sujet -->
+          <div class="scada-panel">
+            <h2 class="scada-label text-cyan-400 mb-4 pb-3 border-b-2 border-slate-700">
+              Sélectionner un sujet
+            </h2>
+            <div class="flex gap-3">
+              <input
+                v-model="subjectQuery"
+                @keypress.enter="exploreFromInput"
+                type="text"
+                class="input flex-1"
+                placeholder="Tag de sujet (ex: 14-juillet-2026, ingerences-russes, macron)"
+              />
+              <button
+                @click="exploreFromInput"
+                :disabled="!subjectQuery.trim() || treeLoading"
+                class="scada-btn scada-btn-primary"
+              >
+                {{ treeLoading ? 'CHARGEMENT...' : 'EXPLORER' }}
+              </button>
+            </div>
+            <div v-if="data.top_subjects.length > 0" class="mt-3 flex flex-wrap gap-2">
+              <button
+                v-for="s in data.top_subjects.slice(0, 12)"
+                :key="s.tag"
+                @click="selectSubject(s.tag)"
+                class="px-2 py-1 text-xs font-mono border rounded transition-colors"
+                :class="
+                  selectedSubject === s.tag
+                    ? 'border-cyan-400 text-cyan-400 bg-cyan-950/30'
+                    : 'border-slate-600 text-gray-400 hover:border-cyan-500 hover:text-cyan-400'
+                "
+              >
+                {{ s.tag }} <span class="text-gray-600">{{ s.count }}</span>
+              </button>
+            </div>
           </div>
-          <div v-else class="space-y-3">
+
+          <!-- Erreur arborescence -->
+          <div v-if="selectedSubject && treeError" class="alert-error">
+            <span class="text-sm font-mono">{{ treeError }}</span>
+          </div>
+
+          <!-- Chargement arborescence -->
+          <div v-if="selectedSubject && treeLoading" class="animate-pulse space-y-3">
+            <div v-for="i in 6" :key="i" class="h-12 bg-slate-800/60 border-2 border-slate-700"></div>
+          </div>
+
+          <!-- Résultats -->
+          <template v-else-if="selectedSubject && tree">
+            <div v-if="tree.total > 0" class="space-y-6">
+              <!-- Barre de synthèse -->
+              <div class="flex flex-wrap items-center gap-3">
+                <span class="scada-led scada-led-cyan"></span>
+                <h2 class="text-lg font-mono text-cyan-400 uppercase tracking-wide">{{ tree.subject }}</h2>
+                <span class="text-sm text-gray-500 font-mono">{{ tree.total }} éléments</span>
+                <span class="text-xs text-gray-500 font-mono uppercase">(majuscules/minuscules ignorées)</span>
+              </div>
+
+              <!-- Enquêtes -->
+              <section v-if="tree.investigations.length > 0">
+                <h3 class="scada-label text-cyan-400 mb-3 pb-2 border-b border-slate-700">
+                  🔬 Enquêtes <span class="text-gray-500">({{ tree.investigations.length }})</span>
+                </h3>
+                <div class="space-y-2">
+                  <TreeItemRow
+                    v-for="item in tree.investigations"
+                    :key="item.id"
+                    :item="item"
+                    :active="selectedItem?.id === item.id"
+                    @select="selectedItem = item"
+                  />
+                </div>
+              </section>
+
+              <!-- Faits vérifiés -->
+              <section v-if="tree.facts.length > 0">
+                <h3 class="scada-label text-amber-400 mb-3 pb-2 border-b border-slate-700">
+                  🧬 Faits vérifiés <span class="text-gray-500">({{ tree.facts.length }})</span>
+                </h3>
+                <div class="space-y-2">
+                  <TreeItemRow
+                    v-for="item in tree.facts"
+                    :key="item.id"
+                    :item="item"
+                    :active="selectedItem?.id === item.id"
+                    @select="selectedItem = item"
+                  />
+                </div>
+              </section>
+
+              <!-- Autres -->
+              <section v-if="tree.others.length > 0">
+                <h3 class="scada-label text-gray-400 mb-3 pb-2 border-b border-slate-700">
+                  📄 Autres <span class="text-gray-500">({{ tree.others.length }})</span>
+                </h3>
+                <div class="space-y-2">
+                  <TreeItemRow
+                    v-for="item in tree.others"
+                    :key="item.id"
+                    :item="item"
+                    :active="selectedItem?.id === item.id"
+                    @select="selectedItem = item"
+                  />
+                </div>
+              </section>
+            </div>
+
+            <div v-else class="scada-panel text-center py-14 space-y-3">
+              <span class="text-4xl">🔎</span>
+              <h3 class="text-lg font-medium text-gray-300 uppercase">Aucun élément</h3>
+              <p class="text-sm text-gray-500 max-w-md mx-auto">
+                Le sujet <span class="text-cyan-400 font-mono">{{ tree.subject }}</span> ne correspond à
+                aucune mémoire. Vérifiez le tag (il doit être présent sur au moins une mémoire du socle).
+              </p>
+            </div>
+          </template>
+
+          <!-- État initial / aucun sujet -->
+          <div v-else class="scada-panel text-center py-16 space-y-3">
             <span class="text-4xl">🧭</span>
             <h3 class="text-lg font-medium text-gray-300 uppercase">Explorer un sujet</h3>
             <p class="text-sm text-gray-500 max-w-md mx-auto">
-              Cliquez un sujet dans l'onglet Socle pour voir son arborescence.
-              L'arborescence sujet → enquêtes → faits vérifiés → sources arrive en T3.
+              Saisissez un tag de sujet ou cliquez sur un sujet ci-dessus (ou dans l'onglet Socle)
+              pour voir son arborescence : enquêtes → faits vérifiés → sources.
             </p>
+          </div>
+
+          <!-- Détail de l'élément sélectionné (préfiguration T5) -->
+          <div v-if="selectedItem" class="scada-panel">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="scada-label text-cyan-400">Détail</h3>
+              <button
+                @click="selectedItem = null"
+                class="text-xs font-mono text-gray-500 hover:text-gray-300 transition-colors uppercase"
+              >
+                Fermer ✕
+              </button>
+            </div>
+            <p class="text-base text-gray-100 font-mono">{{ selectedItem.title }}</p>
+            <div class="flex flex-wrap items-center gap-2 mt-3">
+              <span class="badge-info text-xs">{{ selectedItem.memory_type }}</span>
+              <span class="text-xs text-gray-500 font-mono">
+                {{ formatDate(selectedItem.created_at) }}
+              </span>
+              <button
+                @click="copyId(selectedItem.id)"
+                class="ml-auto text-xs font-mono text-gray-500 hover:text-emerald-400 transition-colors uppercase"
+                title="Copier l'ID"
+              >
+                📋 copier l'id
+              </button>
+            </div>
+            <div v-if="selectedItem.tags.length > 0" class="mt-3 flex flex-wrap gap-1.5">
+              <span
+                v-for="tag in selectedItem.tags"
+                :key="tag"
+                class="inline-block text-xs bg-slate-700 text-gray-300 px-2 py-0.5 rounded"
+              >
+                #{{ tag }}
+              </span>
+            </div>
+            <p class="text-xs text-gray-600 mt-4">La fiche enrichie (contenu, entités, liens) arrive en T5.</p>
           </div>
         </div>
 
@@ -375,3 +593,15 @@ const typeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1)
     </div>
   </div>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>
