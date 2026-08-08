@@ -1,97 +1,39 @@
 <script setup lang="ts">
 /**
  * EPIC-27: Navbar Component - SCADA Industrial Style
- * Navigation with LED indicator, monospace UPPERCASE labels, and dropdown menu
- * EPIC-30: Added Alerts link with active alert count badge
+ * EPIC-74 : navigation générée depuis le router (meta.navLabel / meta.navGroup).
+ * Toute route portant meta.navLabel apparaît automatiquement — plus de liens codés en dur.
  */
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
-import { API } from '@/config/api'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
+const router = useRouter()
 
-interface MenuItem {
+interface NavItem {
   name: string
-  path?: string
-  children?: MenuItem[]
+  path: string
 }
 
-const links: { group: string; items: MenuItem[] }[] = [
-  {
-    group: 'Data',
-    items: [
-      { name: 'DASHBOARD', path: '/dashboard' },
-      { name: 'SEARCH', path: '/search' },
-      { name: 'MEMORIES', path: '/memories' },
-    ]
-  },
-  {
-    group: 'Cognitive',
-    items: [
-      { name: 'PROJECTS', path: '/projects' },
-      { name: 'EXPANSE', path: '/expanse' },
-      { name: 'EXP. MEMORY', path: '/expanse-memory' },
-    ]
-  },
-  {
-    group: 'Ops',
-    items: [
-      { name: 'MONITORING', path: '/monitoring' },
-      { name: 'ALERTS', path: '/alerts' },
-    ]
-  },
-  {
-    group: 'Tools',
-    items: [
-      { name: 'BRAIN', path: '/brain' },
-      {
-        name: 'GRAPH',
-        children: [
-          { name: 'CODE GRAPH', path: '/graph' },
-          { name: 'ORGANIGRAMME', path: '/orgchart' }
-        ]
-      },
-      { name: 'LOGS', path: '/logs' },
-    ]
-  },
-]
-
-const openSubmenu = ref<string | null>(null)
-const activeAlertCount = ref(0)
-
-const isActive = (path: string) => route.path === path
-
-const toggleSubmenu = (name: string) => {
-  openSubmenu.value = openSubmenu.value === name ? null : name
+interface NavGroup {
+  group: string
+  items: NavItem[]
 }
 
-const closeSubmenu = () => {
-  openSubmenu.value = null
-}
-
-const isSubmenuActive = (children?: MenuItem[]) => {
-  if (!children) return false
-  return children.some(child => child.path && isActive(child.path))
-}
-
-async function fetchActiveAlertCount() {
-  try {
-    const resp = await fetch(`${API}/alerts/summary`)
-    if (!resp.ok) return
-    const data = await resp.json()
-    const alerts = data.data || []
-    activeAlertCount.value = alerts.reduce((sum: number, a: { unacked: number }) => sum + a.unacked, 0)
-  } catch {
-    // Silently fail — badge not critical
+const navGroups = computed<NavGroup[]>(() => {
+  const groups = new Map<string, NavItem[]>()
+  for (const r of router.options.routes) {
+    const label = r.meta?.navLabel as string | undefined
+    if (!label) continue
+    const group = (r.meta?.navGroup as string | undefined) || 'Other'
+    const items = groups.get(group) || []
+    items.push({ name: label, path: r.path })
+    groups.set(group, items)
   }
-}
-
-onMounted(() => {
-  fetchActiveAlertCount()
+  return Array.from(groups.entries()).map(([group, items]) => ({ group, items }))
 })
 
-const alertRefreshInterval = setInterval(fetchActiveAlertCount, 30000)
-onUnmounted(() => clearInterval(alertRefreshInterval))
+const isActive = (path: string) => route.path === path
 </script>
 
 <template>
@@ -107,10 +49,10 @@ onUnmounted(() => clearInterval(alertRefreshInterval))
             </h1>
           </div>
 
-          <!-- Navigation Links avec regroupement visuel -->
+          <!-- Navigation Links (générés depuis le router) -->
           <div class="flex items-center">
             <template
-              v-for="(group, gi) in links"
+              v-for="(group, gi) in navGroups"
               :key="group.group"
             >
               <!-- Group separator -->
@@ -119,76 +61,17 @@ onUnmounted(() => clearInterval(alertRefreshInterval))
                 class="w-px h-6 bg-slate-700 mx-3"
               />
 
-              <template
+              <router-link
                 v-for="link in group.items"
                 :key="link.name"
+                :to="link.path"
+                :class="[
+                  isActive(link.path) ? 'nav-link-active' : 'nav-link',
+                  'font-mono text-xs tracking-wide flex items-center gap-1.5 px-2 py-1 rounded transition-colors'
+                ]"
               >
-                <!-- Regular links without children -->
-                <router-link
-                  v-if="!link.children"
-                  :to="link.path!"
-                  :class="[
-                    isActive(link.path!) ? 'nav-link-active' : 'nav-link',
-                    'font-mono text-xs tracking-wide flex items-center gap-1.5 px-2 py-1 rounded transition-colors'
-                  ]"
-                >
-                  {{ link.name }}
-                  <!-- Alert badge — only show when there are active alerts -->
-                  <span
-                    v-if="link.name === 'ALERTS' && activeAlertCount > 0"
-                    class="inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold font-mono text-white bg-red-600 rounded-full"
-                  >{{ activeAlertCount > 99 ? '99+' : activeAlertCount }}</span>
-                </router-link>
-
-                <!-- Links with submenu -->
-                <div
-                  v-else
-                  class="relative"
-                >
-                  <button
-                    :class="[
-                      'flex items-center gap-1 font-mono text-xs tracking-wide px-2 py-1 rounded transition-colors',
-                      isSubmenuActive(link.children) ? 'nav-link-active' : 'nav-link'
-                    ]"
-                    @click="toggleSubmenu(link.name)"
-                  >
-                    {{ link.name }}
-                    <svg
-                      class="w-3 h-3 transition-transform"
-                      :class="{ 'rotate-180': openSubmenu === link.name }"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
-                  </button>
-
-                  <!-- Submenu dropdown avec border industriel -->
-                  <div
-                    v-if="openSubmenu === link.name"
-                    class="absolute left-0 mt-2 w-48 bg-slate-800 border-2 border-slate-600 rounded shadow-lg z-50"
-                    @click="closeSubmenu"
-                  >
-                    <router-link
-                      v-for="child in link.children"
-                      :key="child.path"
-                      :to="child.path!"
-                      :class="[
-                        'block px-4 py-2 text-xs font-mono tracking-wide hover:bg-slate-700 transition-colors border-b border-slate-700 last:border-b-0',
-                        isActive(child.path!) ? 'text-cyan-400 bg-slate-700' : 'text-gray-300'
-                      ]"
-                    >
-                      {{ child.name }}
-                    </router-link>
-                  </div>
-                </div>
-              </template>
+                {{ link.name }}
+              </router-link>
             </template>
           </div>
         </div>
