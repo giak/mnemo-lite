@@ -35,7 +35,7 @@ MnemoLite est un système cognitif de mémoire et d'intelligence de code **100% 
 | **Mémoire Sémantique** | Stockage avec embeddings + decay temporel | Connaissance persistante |
 | **Intelligence de Code** | Indexation AST, graphe de dépendances | Compréhension codebase |
 | **Recherche Hybride** | Lexical + Vectoriel + RRF + Reranking | Résultats précis |
-| **Intégration MCP** | 34 outils pour LLM (Claude, KiloCode) | Interface LLM native |
+| **Intégration MCP** | 31 outils pour LLM (Claude, KiloCode) | Interface LLM native |
 | **Secret Stripping** | 11 regex patterns + `<private>` tags | Sécurité (EPIC-42) |
 | **Cache Triple-Layer** | L1 → L2 → L3 avec fallback | Performance |
 
@@ -47,11 +47,11 @@ MnemoLite est un système cognitif de mémoire et d'intelligence de code **100% 
 ├─────────────────────────────────────────────────────────────────────┤
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
 │  │  Vue 3   │  │  FastAPI │  │ MCP 1.12.3│  │  PostgreSQL 18    │   │
-│  │   SPA    │  │  AsyncPG │  │  (33 tools)│  │  pgvector 0.8.1  │   │
+│  │   SPA    │  │  AsyncPG │  │  (31 tools)│  │  pgvector 0.8.1  │   │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘   │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Embeddings: nomic-ai/nomic-embed-text-v1.5 (768D) +       │   │
-│  │             jinaai/jina-embeddings-v2-base-code (768D)      │   │
+│  │  Embeddings: BAAI/bge-m3 TEXT (1024D) +                   │   │
+│  │             jinaai/jina-embeddings-v2-base-code CODE (768D)│   │
 │  │  Indexation: tree-sitter (15+ langs) + LSP (Pyright)       │   │
 │  │  Entity Extraction: GLiNER multi-v2.1 (zero hallucination)  │   │
 │  └──────────────────────────────────────────────────────────────┘   │
@@ -111,9 +111,9 @@ graph TB
 |---------|------|----------|-------------|
 | **Frontend** | 3000 | HTTP | Vue 3 SPA avec design SCADA |
 | **API REST** | 8001 | HTTP/HTTPS | FastAPI backend |
-| **MCP Server** | 8002 | Streamable HTTP | 34 outils pour LLM |
+| **MCP Server** | 8002 | Streamable HTTP | 31 outils pour LLM |
 | **Worker** | — | Background | Batch indexing + conversation import |
-| **PostgreSQL** | 5432 | TCP | Données + Vecteurs 768D |
+| **PostgreSQL** | 5432 | TCP | Données + Vecteurs (TEXT 1024D, CODE 768D) |
 | **Redis** | 6379 | TCP | Cache L2 + Sessions |
 | **OpenObserve** | 5080 | HTTP | Logs + Traces + Metrics |
 
@@ -182,7 +182,7 @@ flowchart TB
         C["2️⃣ Parsing<br/><b>AST Tree-sitter</b><br/>Abstract Syntax Tree"]
         D["3️⃣ Chunking<br/><b>Semantic Split</b><br/>functions, classes, methods"]
         E["4️⃣ Métadonnées<br/><b>LSP Analysis</b><br/>types, signatures, imports"]
-        F["5️⃣ Embed TEXT<br/><b>nomic-ai/nomic-embed-text-v1.5</b><br/>768D vector"]
+        F["5️⃣ Embed TEXT<br/><b>BAAI/bge-m3</b><br/>1024D vector"]
         G["6️⃣ Embed CODE<br/><b>jina-embeddings-v2-base-code</b><br/>768D vector"]
         H["7️⃣ Graphe<br/><b>Dependency Graph</b><br/>calls, imports"]
     end
@@ -221,7 +221,7 @@ flowchart TB
     end
 
     subgraph PROCESS["⚙️ Hybrid Search Pipeline"]
-        Q -->|"a)"| EMB["Embedding Generation<br/><b>nomic-ai/nomic-embed-text-v1.5</b>"]
+        Q -->|"a)"| EMB["Embedding Generation<br/><b>BAAI/bge-m3 (TEXT)</b>"]
         Q -->|"b)"| TOK["Tokenisation<br/><b>pg_trgm</b>"]
 
         subgraph LEXICAL["📝 Lexical Search"]
@@ -635,7 +635,7 @@ erDiagram
         text content
         enum memory_type "note|decision|task|reference|conversation|investigation"
         array tags
-        vector embedding "halfvec(768)"
+        vector embedding "halfvec(1024)"
         string author
         uuid project_id FK
         bool consumed "agent processed"
@@ -702,7 +702,7 @@ erDiagram
 
 ---
 
-## 12. MCP - 34 Outils
+## 12. MCP - 31 Outils
 
 ```mermaid
 graph TD
@@ -929,7 +929,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://mnemo:mnemopass@db:5432/mnemolite
       REDIS_URL: redis://redis:6379/0
-      EMBEDDING_MODEL: nomic-ai/nomic-embed-text-v1.5
+      EMBEDDING_MODEL: BAAI/bge-m3
       CODE_EMBEDDING_MODEL: jinaai/jina-embeddings-v2-base-code
       GLINER_MODEL_PATH: /app/models/gliner_multi-v2.1
       ENTITY_EXTRACTION_ENABLED: "true"
@@ -959,7 +959,7 @@ services:
       - ./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro
 
   # ─────────────────────────────────────────────
-  # MCP Server (34 tools)
+  # MCP Server (31 tools)
   # ─────────────────────────────────────────────
   mcp:
     build:
@@ -1028,7 +1028,7 @@ volumes:
 | `DATABASE_URL` | postgresql+asyncpg://... | PostgreSQL connection |
 | `REDIS_URL` | redis://localhost:6379 | Redis connection |
 | `EMBEDDING_MODE` | real | real/mock |
-| `EMBEDDING_MODEL` | nomic-ai/nomic-embed-text-v1.5 | TEXT embedding |
+| `EMBEDDING_MODEL` | BAAI/bge-m3 | TEXT embedding (1024D) |
 | `CODE_EMBEDDING_MODEL` | jinaai/jina-embeddings-v2-base-code | CODE embedding |
 | `EMBEDDING_DIMENSION` | 768 | Vector dimension |
 | `MCP_PRIVACY_ENABLED` | true | Enable secret stripping |

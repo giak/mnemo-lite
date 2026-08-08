@@ -15,7 +15,7 @@
       ▼                               ▼
 ┌──────────────┐            ┌──────────────────┐
 │  MCP Server  │            │   FastAPI REST   │
-│  (29 tools)  │            │  (tous endpoints)│
+│  (31 tools)  │            │  (tous endpoints)│
 └──────┬───────┘            └────────┬─────────┘
        │                            │
        └──────────┬─────────────────┘
@@ -107,7 +107,7 @@ curl -s -X POST http://localhost:8002/mcp \
 
 ---
 
-## 2. Outils MCP Disponibles (29 tools)
+## 2. Outils MCP Disponibles (31 tools)
 
 ### 🔧 Test
 
@@ -185,7 +185,7 @@ curl -s -X POST http://localhost:8002/mcp \
 ### Signatures détaillées (inputSchema)
 
 > **Note** : Les signatures ci-dessous décrivent les 8 outils les plus utilisés et sont stables. Pour la liste canonique complète avec inputSchema exact, appeler `tools/list` sur le MCP Server (port 8002).
-> Les 21 autres outils (graphe, indexation, analytics) sont également accessibles via `tools/list`.
+> Les 23 autres outils (graphe, indexation, analytics, entités) sont également accessibles via `tools/list`.
 
 #### 🔍 `search_memory`
 
@@ -525,7 +525,7 @@ POST /api/v1/memories     → Créer
 GET  /api/v1/memories/{id} → Lire
 DELETE /api/v1/memories/{id} → Supprimer
 
-# MCP Tools (29)
+# MCP Tools (31)
 search_memory, search_code, write_memory, read_memory,
 update_memory, delete_memory, consolidate_memory,
 mark_consumed, rate_memory, export_memories,

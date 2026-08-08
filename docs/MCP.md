@@ -1,10 +1,10 @@
-# MnemoLite MCP — 29 Tools
+# MnemoLite MCP — 31 Tools
 
 [![MCP](https://img.shields.io/badge/MCP-1.12.3-blue.svg)](https://modelcontextprotocol.io/)
 [![Python](https://img.shields.io/badge/Python-3.11+-green.svg)](https://www.python.org/)
 [![Version](https://img.shields.io/badge/version-v5.0.0--dev-orange.svg)](https://github.com/anomalyco/mnemolite)
 
-MnemoLite exposes 29 MCP tools for LLM integration via Streamable HTTP transport (port 8002).
+MnemoLite exposes 31 MCP tools for LLM integration via Streamable HTTP transport (port 8002).
 
 ## Overview
 
@@ -16,7 +16,7 @@ MnemoLite provides a comprehensive code intelligence platform with hybrid lexica
 
 ## Tools
 
-### Memory (11 tools)
+### Memory (13 tools)
 
 Semantic memory management with embeddings for persistent knowledge.
 
@@ -33,6 +33,8 @@ Semantic memory management with embeddings for persistent knowledge.
 | `configure_decay` | Configure decay rules per tag pattern | ~10ms |
 | `rate_memory` | Rate memory outcome (positive/negative feedback) | ~10ms |
 | `export_memories` | Export memories as JSON (project-scoped, no embeddings) | ~50ms |
+| `search_by_entity` | Search memories by named entity (GLiNER) | ~50ms |
+| `extract_entities` | Re-extract entities from an existing memory | ~500ms |
 
 **Use cases:**
 - Persistent knowledge base for agents
@@ -270,14 +272,14 @@ All write operations (`write_memory`, `update_memory`) automatically sanitize se
 
 | Category | Tools | Quick Start |
 |----------|-------|-------------|
-| Memory | 11 | `write_memory(title="...", content="...")` |
+| Memory | 13 | `write_memory(title="...", content="...")` |
 | Indexing | 7 | `index_project(project_path="/path")` |
 | Search | 1 | `search_code(query="...")` |
 | Analytics | 4 | `get_memory_health()` |
 | Graph | 4 | `get_graph_stats(repository="default")` |
 | Project | 2 | `ping()` |
-| **Total** | **29** | — |
+| **Total** | **31** | — |
 
 ---
 
-**Version:** v5.0.0-dev | **MCP SDK:** 1.12.3 | **Transport:** Streamable HTTP | **Tools:** 29
+**Version:** v5.0.0-dev | **MCP SDK:** 1.12.3 | **Transport:** Streamable HTTP | **Tools:** 31
