@@ -23,9 +23,6 @@ importers:
       marked-highlight:
         specifier: ^2.2.4
         version: 2.2.4(marked@15.0.12)
-      v-network-graph:
-        specifier: ^0.9.21
-        version: 0.9.21(d3-force@3.0.0)(vue@3.5.22(typescript@5.9.3))
       vue:
         specifier: ^3.5.22
         version: 3.5.22(typescript@5.9.3)
@@ -195,9 +192,6 @@ packages:
   '@babel/types@7.28.5':
     resolution: {integrity: sha512-qQ5m48eI/MFLQ5PxQj4PFaprjyCTLI37ElWMmNs0K8Lk3dVeOdNpB3ks8jc7yM5CDmVC73eMVk/trk3fgmrUpA==}
     engines: {node: '>=6.9.0'}
-
-  '@dash14/svg-pan-zoom@3.6.9':
-    resolution: {integrity: sha512-6u+KTQec+9+3bRdk2mReix8AGsp2mB40cw0iYfQQzo22QBkeCNpXl2amnfwQzK7xB9oH/62Wvf2z7l6l2w+csA==}
 
   '@emnapi/core@1.9.2':
     resolution: {integrity: sha512-UC+ZhH3XtczQYfOlu3lNEkdW/p4dsJ1r/bP7H8+rhao3TTTMO1ATq/4DdIi23XuGoFY+Cz0JmCbdVl0hz9jZcA==}
@@ -1907,9 +1901,6 @@ packages:
     resolution: {integrity: sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw==}
     engines: {node: '>=10'}
 
-  lodash-es@4.17.21:
-    resolution: {integrity: sha512-mKnC+QJ9pWVzv+C4/U3rRsHapFfHvQFoFB92e52xeyGMcX6/OlIl78je1u8vePzYZSkkogMPJ2yjxxsb89cxyw==}
-
   lodash.merge@4.6.2:
     resolution: {integrity: sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ==}
 
@@ -1965,9 +1956,6 @@ packages:
   minipass@7.1.2:
     resolution: {integrity: sha512-qOOzS1cBTWYF4BH8fVePDBOO9iptMnGUEZwNc/cMWnTV2nVLZ7VoNWEPHkYczZA0pdoA7dl6e7FL659nX9S2aw==}
     engines: {node: '>=16 || 14 >=14.17'}
-
-  mitt@3.0.1:
-    resolution: {integrity: sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==}
 
   ml-array-max@1.2.4:
     resolution: {integrity: sha512-BlEeg80jI0tW6WaPyGxf5Sa4sqvcyY6lbSn5Vcv44lp1I2GR6AWojfUvLnGTNsIXrZ8uqWmo8VcG1WpkI2ONMQ==}
@@ -2338,15 +2326,6 @@ packages:
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
-
-  v-network-graph@0.9.21:
-    resolution: {integrity: sha512-/KjaKtBMTg5TBI98N0Gf7gvtl6+6Q3tv14cJRYmzNb66iYtciET4gyagReZ0GwMt+X1EzUAnSezwqEuhH7Ya3w==}
-    peerDependencies:
-      d3-force: ^3.0.0
-      vue: ^3.5.13
-    peerDependenciesMeta:
-      d3-force:
-        optional: true
 
   vite@7.1.12:
     resolution: {integrity: sha512-ZWyE8YXEXqJrrSLvYgrRP7p62OziLW7xI5HYGWFzOvupfAlrLvURSzv/FyGyy0eidogEM3ujU+kUG1zuHgb6Ug==}
@@ -2799,8 +2778,6 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
-
-  '@dash14/svg-pan-zoom@3.6.9': {}
 
   '@emnapi/core@1.9.2':
     dependencies:
@@ -4325,8 +4302,6 @@ snapshots:
     dependencies:
       p-locate: 5.0.0
 
-  lodash-es@4.17.21: {}
-
   lodash.merge@4.6.2: {}
 
   lodash@4.17.21: {}
@@ -4371,8 +4346,6 @@ snapshots:
       brace-expansion: 2.0.2
 
   minipass@7.1.2: {}
-
-  mitt@3.0.1: {}
 
   ml-array-max@1.2.4:
     dependencies:
@@ -4704,15 +4677,6 @@ snapshots:
       punycode: 2.3.1
 
   util-deprecate@1.0.2: {}
-
-  v-network-graph@0.9.21(d3-force@3.0.0)(vue@3.5.22(typescript@5.9.3)):
-    dependencies:
-      '@dash14/svg-pan-zoom': 3.6.9
-      lodash-es: 4.17.21
-      mitt: 3.0.1
-      vue: 3.5.22(typescript@5.9.3)
-    optionalDependencies:
-      d3-force: 3.0.0
 
   vite@7.1.12(@types/node@24.9.2)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.49.2):
     dependencies:

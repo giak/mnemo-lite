@@ -1,237 +1,17 @@
 <script setup lang="ts">
 /**
  * EPIC-25 Story 25.5: Code Graph Page
- * Interactive code graph visualization using v-network-graph
- * Migrated from Cytoscape.js to v-network-graph for better Vue 3 integration
+ * Interactive code graph visualization using @antv/g6 (G6Graph component)
+ * EPIC-73 : v-network-graph retiré, G6 unique
  */
 
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useCodeGraph } from '@/composables/useCodeGraph'
-import type { Nodes, Edges, Layouts } from 'v-network-graph'
 import G6Graph from '@/components/G6Graph.vue'
 
 const { stats, graphData, loading, error, building, buildError, repositories, fetchStats, fetchGraphData, buildGraph, fetchRepositories } = useCodeGraph()
 
 const repository = ref<string>('')
-const useG6 = ref(true) // Toggle between v-network-graph and G6
-
-// Extract human-readable name from file path
-const extractNodeName = (node: any): string => {
-  if (!node.file_path) return node.label
-
-  // Extract filename from path
-  const filename = node.file_path.split('/').pop() || node.label
-
-  // Remove extension for cleaner display
-  const nameWithoutExt = filename.replace(/\.(ts|tsx|js|jsx|py|java|go|rs)$/, '')
-
-  // For methods/functions, show filename + line number
-  if (node.type === 'method' || node.type === 'function') {
-    return `${nameWithoutExt}:${node.start_line || '?'}`
-  }
-
-  // For classes, just show the filename
-  return nameWithoutExt
-}
-
-// Extract grouping key for hierarchical layout
-const getNodeGroup = (node: any): string => {
-  if (!node.file_path) return 'ungrouped'
-  return node.file_path
-}
-
-// Transform API data to v-network-graph format
-const nodes = computed<Nodes>(() => {
-  if (!graphData.value?.nodes) return {}
-
-  const nodesMap: Nodes = {}
-  for (const node of graphData.value.nodes) {
-    nodesMap[node.id] = {
-      name: extractNodeName(node),
-      type: node.type,
-      file_path: node.file_path,
-      start_line: node.start_line,
-      end_line: node.end_line,
-      group: getNodeGroup(node),
-      originalLabel: node.label
-    }
-  }
-  return nodesMap
-})
-
-const edges = computed<Edges>(() => {
-  if (!graphData.value?.edges) return {}
-
-  const edgesMap: Edges = {}
-  for (const edge of graphData.value.edges) {
-    edgesMap[edge.id] = {
-      source: edge.source,
-      target: edge.target,
-      type: edge.type
-    }
-  }
-
-  // DEBUG: Log edges to verify transformation
-  console.log(`[Graph] Transformed ${Object.keys(edgesMap).length} edges:`, Object.values(edgesMap).slice(0, 3))
-
-  return edgesMap
-})
-
-// Generate hierarchical layout grouped by file with horizontal variation
-// CRITICAL: Without positions, v-network-graph calculates expensive force-directed layout
-const layouts = computed<Layouts>(() => {
-  const layoutsMap: Layouts = { nodes: {} }
-
-  // Group nodes by file
-  const nodesByFile = new Map<string, string[]>()
-  for (const [nodeId, node] of Object.entries(nodes.value)) {
-    const file = node.file_path || 'unknown'
-    if (!nodesByFile.has(file)) {
-      nodesByFile.set(file, [])
-    }
-    nodesByFile.get(file)!.push(nodeId)
-  }
-
-  // Layout parameters
-  const fileSpacingX = 300  // Horizontal space between file groups
-  const nodeSpacingY = 80   // Vertical space between nodes in same file
-  const nodeOffsetX = 60    // Horizontal variation within file (zigzag)
-  const offsetX = 50
-  const offsetY = 50
-
-  // Position nodes: each file gets a column with zigzag pattern
-  let fileIndex = 0
-  for (const nodeIds of nodesByFile.values()) {
-    const fileX = offsetX + fileIndex * fileSpacingX
-
-    // Position nodes within this file with zigzag pattern for edge visibility
-    nodeIds.forEach((nodeId, indexInFile) => {
-      // Alternate left-right for visibility
-      const xOffset = (indexInFile % 2 === 0) ? 0 : nodeOffsetX
-
-      layoutsMap.nodes[nodeId] = {
-        x: fileX + xOffset,
-        y: offsetY + indexInFile * nodeSpacingY
-      }
-    })
-
-    fileIndex++
-  }
-
-  console.log(`[Graph] Layout: ${nodesByFile.size} files, ${Object.keys(layoutsMap.nodes).length} nodes positioned`)
-
-  return layoutsMap
-})
-
-// v-network-graph configuration
-const configs = computed<any>(() => ({
-  view: {
-    autoPanAndZoomOnLoad: 'fit-content',
-    panEnabled: true,
-    zoomEnabled: true
-  },
-  node: {
-    selectable: true,
-    draggable: true,
-    normal: {
-      type: (node: { type?: string }) => {
-        // Use different shapes for different node types
-        return node.type === 'class' ? 'rect' : 'circle'
-      },
-      radius: (node: { type?: string }) => {
-        // Classes are bigger
-        return node.type === 'class' ? 24 : 20
-      },
-      width: 48, // For rect shape (classes)
-      height: 48,
-      color: (node: { type?: string }) => {
-        switch (node.type) {
-          case 'class':
-            return '#3b82f6' // blue
-          case 'function':
-            return '#10b981' // green
-          case 'method':
-            return '#8b5cf6' // purple
-          default:
-            return '#64748b' // gray
-        }
-      },
-      strokeWidth: 2,
-      strokeColor: '#ffffff'
-    },
-    hover: {
-      color: '#fbbf24' // amber on hover
-    },
-    label: {
-      visible: true, // Show labels with extracted names
-      fontFamily: 'ui-monospace, monospace',
-      fontSize: 11,
-      color: '#e2e8f0',
-      margin: 6,
-      direction: 'south', // Position label below node
-      background: {
-        visible: true,
-        color: '#1e293b',
-        padding: {
-          vertical: 2,
-          horizontal: 4
-        },
-        borderRadius: 3
-      }
-    },
-    // Show detailed info on hover via custom tooltip content
-    tooltip: {
-      enabled: true,
-      content: (nodeId: string) => {
-        const node = nodes.value[nodeId]
-        if (!node) return ''
-        return `
-          <div style="padding: 4px 8px; max-width: 300px;">
-            <div style="font-weight: bold; margin-bottom: 4px;">${node.name}</div>
-            <div style="font-size: 11px; color: #94a3b8;">Type: ${node.type}</div>
-            <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">File: ${node.file_path || 'unknown'}</div>
-            ${node.start_line ? `<div style="font-size: 11px; color: #94a3b8;">Lines: ${node.start_line}-${node.end_line || '?'}</div>` : ''}
-          </div>
-        `
-      }
-    },
-    focusring: {
-      visible: true,
-      width: 4,
-      padding: 3,
-      color: '#fbbf24'
-    }
-  },
-  edge: {
-    selectable: true,
-    normal: {
-      width: 3, // THICK for visibility
-      color: '#f59e0b', // BRIGHT amber/orange - very visible!
-      dasharray: (edge: { type?: string }) => edge.type === 'calls' ? '0' : '4 2',
-      linecap: 'round'
-    },
-    hover: {
-      width: 5,
-      color: '#fbbf24'
-    },
-    selected: {
-      width: 5,
-      color: '#22d3ee', // cyan
-      dasharray: '0'
-    },
-    marker: {
-      target: {
-        type: 'arrow',
-        width: 10,
-        height: 10,
-        margin: -1,
-        color: null // Inherit edge color
-      }
-    },
-    gap: 3, // Less gap for better connection visibility
-    type: 'curve' // Curved edges are more visible than straight
-  }
-}))
 
 // Build graph handler
 const handleBuildGraph = async () => {
@@ -361,27 +141,6 @@ onMounted(async () => {
             </option>
           </select>
 
-          <div class="h-4 w-px bg-slate-600" />
-
-          <!-- Layout Toggle -->
-          <div class="flex items-center gap-1">
-            <span class="scada-label mr-1">View:</span>
-            <button
-              class="px-2 py-1 rounded text-xs transition-colors font-mono uppercase"
-              :class="!useG6 ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
-              @click="useG6 = false"
-            >
-              Network
-            </button>
-            <button
-              class="px-2 py-1 rounded text-xs transition-colors font-mono uppercase"
-              :class="useG6 ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'"
-              @click="useG6 = true"
-            >
-              G6
-            </button>
-          </div>
-
           <div class="flex-1" />
 
           <!-- Build Graph Button -->
@@ -415,7 +174,6 @@ onMounted(async () => {
           </button>
         </div>
 
-
         <!-- Build Error Banner -->
         <div
           v-if="buildError"
@@ -436,97 +194,28 @@ onMounted(async () => {
 
         <!-- Graph Visualization -->
         <div class="section">
-          <!-- G6 Graph (Prototype) -->
-          <div v-if="useG6">
-            <!-- Debug info -->
-            <div class="text-xs text-gray-500 mb-2">
-              Debug: graphData={{ !!graphData }}, nodes={{ graphData?.nodes?.length || 0 }}, edges={{ graphData?.edges?.length || 0 }}
-            </div>
-
-            <G6Graph
-              v-if="graphData?.nodes && graphData.nodes.length > 0"
-              :nodes="graphData.nodes"
-              :edges="graphData.edges || []"
-              :loading="loading"
-            />
-            <div
-              v-else
-              class="flex flex-col items-center justify-center h-[calc(100vh-120px)] bg-slate-900 border border-slate-700 rounded text-gray-400"
-            >
-              <p>No graph data available</p>
-              <p class="text-xs mt-2">
-                graphData: {{ graphData ? 'exists' : 'null' }}
-              </p>
-              <p class="text-xs">
-                nodes: {{ graphData?.nodes?.length || 0 }}
-              </p>
-            </div>
+          <!-- Debug info -->
+          <div class="text-xs text-gray-500 mb-2">
+            Debug: graphData={{ !!graphData }}, nodes={{ graphData?.nodes?.length || 0 }}, edges={{ graphData?.edges?.length || 0 }}
           </div>
 
-          <!-- v-network-graph Container -->
+          <G6Graph
+            v-if="graphData?.nodes && graphData.nodes.length > 0"
+            :nodes="graphData.nodes"
+            :edges="graphData.edges || []"
+            :loading="loading"
+          />
           <div
             v-else
-            class="w-full h-[calc(100vh-120px)] bg-slate-900 border border-slate-700 rounded overflow-hidden"
+            class="flex flex-col items-center justify-center h-[calc(100vh-120px)] bg-slate-900 border border-slate-700 rounded text-gray-400"
           >
-            <v-network-graph
-              v-if="Object.keys(nodes).length > 0"
-              :nodes="nodes"
-              :edges="edges"
-              :layouts="layouts"
-              :configs="configs"
-              class="w-full h-full"
-            />
-            <div
-              v-else
-              class="flex items-center justify-center h-full text-gray-400"
-            >
-              No graph data available
-            </div>
-          </div>
-
-          <!-- Legend (v-network-graph only) -->
-          <div
-            v-if="!useG6"
-            class="mt-4 space-y-3"
-          >
-            <div class="flex items-center gap-6 text-sm font-mono">
-              <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded bg-blue-500 border-2 border-white" />
-                <span class="uppercase">Classes</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-full bg-green-500 border-2 border-white" />
-                <span class="uppercase">Functions</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-full bg-purple-500 border-2 border-white" />
-                <span class="uppercase">Methods</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <svg
-                  class="w-8 h-1"
-                  viewBox="0 0 32 4"
-                >
-                  <line
-                    x1="0"
-                    y1="2"
-                    x2="32"
-                    y2="2"
-                    stroke="#475569"
-                    stroke-width="2"
-                  />
-                  <polygon
-                    points="28,0 32,2 28,4"
-                    fill="#475569"
-                  />
-                </svg>
-                <span class="uppercase">Function Calls</span>
-              </div>
-            </div>
-            <div class="flex items-center gap-2 text-xs text-gray-500">
-              <span class="scada-led scada-led-cyan" />
-              <span class="font-mono uppercase">Tip: Nodes Grouped by File • Labels Show Filename:Line • Hover for Details • Drag to Pan, Scroll to Zoom</span>
-            </div>
+            <p>No graph data available</p>
+            <p class="text-xs mt-2">
+              graphData: {{ graphData ? 'exists' : 'null' }}
+            </p>
+            <p class="text-xs">
+              nodes: {{ graphData?.nodes?.length || 0 }}
+            </p>
           </div>
 
           <!-- Info Message -->
