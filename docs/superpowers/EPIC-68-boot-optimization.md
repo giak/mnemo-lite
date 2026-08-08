@@ -44,14 +44,15 @@ Le démarrage de `mnemo-api` prend **~8-13 minutes** (diagnostic EPIC-55) : pré
 | Comportement prod | Inchangé : `ENVIRONMENT=production` → await synchrone (fail-fast) ; dev/test → boot immédiat + préchargement en fond |
 | Boot réel (< 2 min) | **VALIDÉ le 2026-08-07 22 h 35** : `docker compose restart api` ; shutdown de l'ancien process 22 h 35 min 26 s Z → startup complet 22 h 35 min 33 s Z (**~6 s**) ; GET /health 200 immédiat (conteneur + host port 8001) ; Docker `Up (healthy)` |
 | Lazy-load réel | `GET /api/v1/memories/search?query=bonjour&limit=1` → **200 en 0,58 s** (modèle text chargé, encode le query sous contention avec le backfill memory) |
-| Preload async (tâche de fond) | Tâche lancée (warning jina après le startup = chargement code en cours) ; verdict final non loggé après ~40 min sous contention (bug code dimension 768 vs 1024 préexistant, voir EPIC-69) : point à revérifier à CPU libre |
+| Preload async (tâche de fond), verdict final à CPU libre | **Tâche terminée sans échec** (2026-08-08 ~00 h 20, backfill EPIC-67 fini, load ~2,5) : aucune activité de chargement modèle depuis >90 min (zéro log huggingface/torch) ; **aucun** ERROR `Background embedding preload failed` ; le verdict de succès (`pre-loaded in background`, INFO) est **invisible par construction** : les logs INFO du logger `main` sont filtrés par le niveau du logging stdlib (preuve : le `⏳ Pre-loading...` du boot 15 h 39 n'apparaît pas non plus alors que son ERROR de 15 h 44 sort ; la config structlog `utils/logging_config.py` ne fixe pas de niveau, c'est le LoggerFactory stdlib qui hérite du niveau racine) ; le lazy-load réel prouve le modèle text chargé et fonctionnel |
 
 ## Validation
 
 - `docker compose restart api` le 2026-08-07 22 h 35 : startup app **~6 s** (22 h 35 min 26 → 22 h 35 min 33 Z), contre 8-13 min avant.
 - `GET /health` 200 immédiat (conteneur + host 8001) ; Docker `healthy` ; **aucun crash** de preload (le try/except du helper loggue sans faire crasher, comportement voulu).
 - Lazy-load fonctionnel : search text 200 en 0,58 s.
-- Point suivi : verdict final de la tâche async (complétion ou erreur code) non loggé sous contention ; à revérifier une fois le backfill memory EPIC-67 fini (la tâche est annulée au shutdown, rechargée à chaque boot).
+- Verdict final de la tâche async (2026-08-08 ~00 h 20, à CPU libre) : **terminée sans échec** : plus aucune activité de chargement (zéro log de modèle sur >90 min, load ~2,5) ; aucun ERROR `Background embedding preload failed` ; le log INFO de succès est invisible par construction (niveau du logging stdlib filtrait les INFO du logger `main`, vérifié sur le boot 15 h 39 : le `⏳ Pre-loading...` INFO n'apparaît pas, son ERROR sort). La preuve fonctionnelle du chargement text reste le lazy-load : recherche réelle 200 en 122 ms avec la bonne mémoire en position 1 (voir EPIC-67).
+- Reste préexistant, hors EPIC-68 : le modèle CODE (jina-code, 768) ne charge pas (dimension mismatch vs 1024 attendu) = bug documenté EPIC-69. Non bloquant : le lazy-load text est fonctionnel et la recherche hybride répond.
 
 ## Régressions
 
