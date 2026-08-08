@@ -208,8 +208,11 @@ const getLayoutConfig = (layoutType: 'dagre' | 'radial' | 'concentric' | 'force'
 const initGraph = async () => {
   if (!containerRef.value || props.nodes.length === 0) return
 
-  // Filter nodes by type
-  const filteredNodes = props.nodes.filter(node => filterByType.value.includes(node.type))
+  // Filter nodes by type, mais uniquement si des types connus (Class/Function/Method) existent.
+  // Sans cette garde, un graphe mémoire (types decision/note/investigation, via MemoryGraph.vue)
+  // serait entièrement vidé. Fix du caveat documenté dans EPIC-71.
+  const knownNodes = props.nodes.filter(node => filterByType.value.includes(node.type))
+  const filteredNodes = knownNodes.length > 0 ? knownNodes : props.nodes
 
   // Filter edges to only include edges between visible nodes
   const filteredNodeIds = new Set(filteredNodes.map(n => n.id))

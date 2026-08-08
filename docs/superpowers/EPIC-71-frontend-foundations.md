@@ -61,3 +61,5 @@ Le frontend MnemoLite (Vue 3 + TS + Vite) est fonctionnel mais porte 3 fragilit�
 ### Caveat runtime connu (hors périmètre, préexistant)
 
 Le « Memory Graph » (`MemoryGraph.vue`, embarqué dans `pages/Brain.vue`) **ne se rend pas** : `G6Graph` filtre les nœuds sur `filterByType = ['Class','Function','Method']`, or les nœuds mémoire ont `type: decision/note/investigation` → tout est exclu → graph vide. **Préexistant** (avant, `type` était même absent des nœuds), non introduit par cette EPIC. Options : (a) `G6Graph` ne filtre que si des types connus existent, (b) page dédiée hors G6Graph. Page susceptible d'être supprimée en EPIC-74 (simplification) → laissé tel quel (YAGNI).
+
+**→ Corrigé le 2026-08-08** (option a) : `G6Graph.initGraph` ne filtre désormais que si au moins un nœud matche les types connus, sinon il conserve tous les nœuds. Le graphe mémoire se rend (nœuds gris, couleurs par type non appliquées : hors périmètre).
