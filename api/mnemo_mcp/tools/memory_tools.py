@@ -43,6 +43,12 @@ from sqlalchemy import text as sa_text
 
 logger = structlog.get_logger()
 
+# EPIC-79: write_memory awaits the async embedding task with this timeout.
+# Warm BGE-M3 (nominal, <1s after EPIC-68) -> embedding_generated True.
+# Cold start -> task keeps running in background, flag False + embedding_pending True.
+# 10s < middleware 120s and client 30s timeouts.
+EMBEDDING_WRITE_TIMEOUT_S = 10
+
 
 class WriteMemoryTool(BaseMCPComponent):
     """
@@ -106,6 +112,8 @@ class WriteMemoryTool(BaseMCPComponent):
 
         Returns:
             Dict with id, title, memory_type, created_at, updated_at, embedding_generated
+            If embedding generation is still running in background (cold start):
+            also includes embedding_pending: true
             If duplicates found: also includes duplicate_warning and potential_duplicates
             If near-matches found: also includes similar_memories
 
@@ -231,21 +239,33 @@ class WriteMemoryTool(BaseMCPComponent):
                     # Graceful degradation: continue without dedup check
                     logger.warning("dedup_check_failed", error=str(e))
 
-            # CRITICAL FIX: Skip embedding generation in write_memory to avoid 10s+ cold start.
-            # The MCP client has a 30s timeout and the middleware has a 5s timeout.
-            # Embedding generation takes 10-50s on cold start, causing timeout errors.
-            # Embeddings can be generated asynchronously later if needed.
+            # Save to database (embedding computed asynchronously below, EPIC-79)
             embedding = None
             embedding_generated = False
+            embedding_pending = False
 
-            # Save to database
             memory = await self.memory_repository.create(memory_create, embedding)
 
             # EPIC-28: Trigger async entity extraction (non-blocking)
             self._trigger_entity_extraction(memory)
 
-            # Trigger async embedding generation (non-blocking)
-            self._trigger_async_embedding(memory, content, embedding_source)
+            # EPIC-79: Await the async embedding task with a short timeout.
+            # Warm model (nominal, <1s): embedding written in DB before the response -> flag True.
+            # Cold start: task keeps running in background -> flag False + embedding_pending True.
+            embedding_task = self._trigger_async_embedding(memory, content, embedding_source)
+            if embedding_task is not None:
+                try:
+                    done, _pending = await asyncio.wait(
+                        {embedding_task}, timeout=EMBEDDING_WRITE_TIMEOUT_S
+                    )
+                    if embedding_task in done:
+                        embedding_generated = bool(embedding_task.result())  # True si UPDATE réussi
+                    else:
+                        embedding_pending = True  # en background, non terminé
+                except Exception:
+                    # La tâche a terminé avec une erreur (improbable : _generate avale tout) :
+                    # échec réel, pas un cas pending. Le background n'écrira rien.
+                    embedding_generated = False
 
             elapsed_ms = (time.time() - start_time) * 1000
 
@@ -255,6 +275,7 @@ class WriteMemoryTool(BaseMCPComponent):
                 title=memory.title,
                 memory_type=memory.memory_type.value,
                 embedding_generated=embedding_generated,
+                embedding_pending=embedding_pending,
                 elapsed_ms=f"{elapsed_ms:.2f}"
             )
 
@@ -272,6 +293,10 @@ class WriteMemoryTool(BaseMCPComponent):
             )
 
             result = response.model_dump(mode='json')
+
+            # EPIC-79: signal a background embedding (cold start) without blocking the client
+            if embedding_pending:
+                result["embedding_pending"] = True
 
             # Add duplicate warning if found
             if duplicate_warning:
@@ -317,26 +342,30 @@ class WriteMemoryTool(BaseMCPComponent):
         except Exception as e:
             logger.debug("entity_extraction_trigger_failed", error=str(e))
 
-    def _trigger_async_embedding(self, memory: Any, content: str, embedding_source: Optional[str] = None) -> None:
+    def _trigger_async_embedding(self, memory: Any, content: str, embedding_source: Optional[str] = None) -> Optional[asyncio.Task]:
         """Schedule async embedding generation for the newly created memory.
 
-        Non-blocking: uses asyncio.create_task to generate the embedding
-        in the background. The embedding appears in the database within
-        seconds after write_memory returns (subsequent calls after the
-        BGE-M3 model is loaded).
+        EPIC-79: returns the asyncio.Task so the caller can await it with a
+        short timeout (honest embedding_generated flag). Returns None when no
+        embedding service is available (embedding stays NULL in DB).
+
+        The embedding appears in the database within seconds after
+        write_memory returns (subsequent calls after the BGE-M3 model is
+        loaded, warm start <1s).
         """
-        async def _generate():
+        emb_svc = self._services.get("embedding_service")
+        if emb_svc is None:
+            logger.debug("async_embedding_skipped", reason="no_embedding_service")
+            return None
+
+        async def _generate() -> bool:
             try:
                 settings = get_settings()
-                emb_svc = self._services.get("embedding_service")
-                if emb_svc is None:
-                    logger.debug("async_embedding_skipped", reason="no_embedding_service")
-                    return
                 title = getattr(memory, "title", "") or ""
                 text = f"{title}. {embedding_source or content}" if title else (embedding_source or content)
                 embedding = await emb_svc.generate_embedding(text)
                 if embedding is None or len(embedding) == 0:
-                    return
+                    return False
                 if hasattr(embedding, 'tolist'):
                     embedding = embedding.tolist()
                 embedding_str = format_vector_for_sql(embedding)
@@ -352,12 +381,16 @@ class WriteMemoryTool(BaseMCPComponent):
                         {"id": memory.id}
                     )
                 logger.info("async_embedding_generated", memory_id=str(memory.id))
+                return True
             except Exception as e:
                 logger.warning("async_embedding_failed", memory_id=str(memory.id), error=str(e)[:200])
+                return False
+
         try:
-            asyncio.create_task(_generate())
+            return asyncio.create_task(_generate())
         except Exception as e:
             logger.debug("async_embedding_trigger_failed", error=str(e))
+            return None
 
 
 class UpdateMemoryTool(BaseMCPComponent):

@@ -1104,6 +1104,8 @@ def register_memory_components(mcp: FastMCP):
 
         Returns:
             MemoryResponse with id, title, memory_type, timestamps, embedding_generated
+            If embedding generation is still running in background (cold start):
+            also includes embedding_pending: true
             If duplicates found: also includes duplicate_warning and potential_duplicates
             If near-matches found: also includes similar_memories
 

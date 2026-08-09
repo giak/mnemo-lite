@@ -91,7 +91,14 @@ class TestWriteMemoryTool:
         sample_memory
     ):
         """Test successful memory creation."""
+        from unittest.mock import patch
+
         tool = WriteMemoryTool()
+
+        # EPIC-79: engine mocké pour que la tâche d'embedding async aboutisse (<1s, warm start)
+        engine = MagicMock()
+        engine.begin.return_value.__aenter__.return_value.execute = AsyncMock()
+        mock_memory_repository.engine = engine
 
         # Inject services
         tool.inject_services({
@@ -102,25 +109,30 @@ class TestWriteMemoryTool:
         # Mock repository response
         mock_memory_repository.create.return_value = sample_memory
 
-        # Execute
-        response = await tool.execute(
-            ctx=mock_ctx,
-            title="Test Memory",
-            content="Test content",
-            memory_type="note",
-            tags=["test", "python"],
-            author="Claude"
-        )
+        with patch("mnemo_mcp.tools.memory_tools.get_settings") as mock_settings:
+            mock_settings.return_value.EMBEDDING_MODEL = "bge-m3"
+            # Execute
+            response = await tool.execute(
+                ctx=mock_ctx,
+                title="Test Memory",
+                content="Test content",
+                memory_type="note",
+                tags=["test", "python"],
+                author="Claude"
+            )
 
         # Assert
         assert response["id"] is not None
         assert response["title"] == "Test Memory"
         assert response["memory_type"] == "note"
-        # Embeddings are skipped in MCP tools to avoid cold start timeouts
-        assert response["embedding_generated"] is False
+        # EPIC-79: modèle chaud (mock <1s) -> embedding écrit avant la réponse -> True
+        assert response["embedding_generated"] is True
+        assert response.get("embedding_pending") is None
 
         # Verify repository was called
         mock_memory_repository.create.assert_called_once()
+        # La tâche d'embedding a été awaitée et a abouti (UPDATE exécuté via l'engine mock)
+        assert mock_embedding_service.generate_embedding.await_count == 1
 
     @pytest.mark.asyncio
     async def test_execute_invalid_title_empty(self, mock_ctx):
@@ -284,7 +296,9 @@ class TestWriteMemoryTool:
 
         # Assert - memory was created without embedding
         assert response["id"] is not None
+        # EPIC-79: le service lève -> la tâche retourne False (échec réel, pas de pending)
         assert response["embedding_generated"] is False
+        assert response.get("embedding_pending") is None
         mock_memory_repository.create.assert_called_once()
 
     @pytest.mark.asyncio
@@ -330,8 +344,58 @@ class TestWriteMemoryTool:
         )
 
         # Assert
+        # EPIC-79: pas de service -> pas de tâche -> False, pas de pending
         assert response["embedding_generated"] is False
+        assert response.get("embedding_pending") is None
 
+    @pytest.mark.asyncio
+    async def test_execute_cold_start_embedding_pending(
+        self,
+        mock_ctx,
+        mock_memory_repository,
+        mock_embedding_service,
+        sample_memory
+    ):
+        """EPIC-79: cold start (service lent > timeout) -> embedding_pending True, tâche continue en background."""
+        import asyncio
+        from unittest.mock import patch
+
+        tool = WriteMemoryTool()
+
+        # Service lent : dépasse le timeout court patché (0.05s)
+        async def slow_generate(text):
+            await asyncio.sleep(0.2)
+            return [0.1] * 768
+
+        mock_embedding_service.generate_embedding.side_effect = slow_generate
+
+        # Engine mocké pour que le write-back background aboutisse après le timeout
+        engine = MagicMock()
+        engine.begin.return_value.__aenter__.return_value.execute = AsyncMock()
+        mock_memory_repository.engine = engine
+        mock_memory_repository.create.return_value = sample_memory
+
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "embedding_service": mock_embedding_service,
+        })
+
+        with patch("mnemo_mcp.tools.memory_tools.EMBEDDING_WRITE_TIMEOUT_S", 0.05):
+            with patch("mnemo_mcp.tools.memory_tools.get_settings") as mock_settings:
+                mock_settings.return_value.EMBEDDING_MODEL = "bge-m3"
+                response = await tool.execute(
+                    ctx=mock_ctx,
+                    title="Test Memory",
+                    content="Test content",
+                )
+
+        # Timeout -> génération non terminée à la réponse : False + pending True
+        assert response["embedding_generated"] is False
+        assert response.get("embedding_pending") is True
+
+        # La tâche continue en background : elle finit après le timeout
+        await asyncio.sleep(0.4)
+        assert mock_embedding_service.generate_embedding.await_count == 1
 
     @pytest.mark.asyncio
     async def test_async_embedding_text_includes_title(
