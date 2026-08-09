@@ -872,6 +872,9 @@ class SearchMemoryTool(BaseMCPComponent):
             # Embedding generation takes 10-50s on cold start, causing timeout errors.
             # Use lexical-only search instead — fast and still useful.
             query_embedding = None
+            embedding_failed = False
+            embedding_fallback_reason = None
+            requested_search_mode = search_mode  # EPIC-79 Story 79.2: signaler un fallback silencieux
             is_tag_only = search_mode not in ("hybrid", "semantic")  # tag-only for speed; use hybrid/semantic for vector search
             if search_mode not in ("tag", "hybrid", "semantic"):
                 raise ValueError(f"search_mode must be 'tag', 'hybrid', or 'semantic', got '{search_mode}'")  # validated like memory_type
@@ -907,7 +910,28 @@ class SearchMemoryTool(BaseMCPComponent):
                     if hasattr(query_embedding, "tolist"):
                         query_embedding = query_embedding.tolist()
                 except Exception as e:
-                    logger.warning(f"Embedding generation failed, falling back to tag-only search: {e}")
+                    # EPIC-79 Story 79.2: le fallback n'est plus silencieux — la réponse expose
+                    # embedding_failed + embedding_fallback_reason pour que l'agent puisse
+                    # voir que le mode demandé (hybrid/semantic) a été dégradé en lexical.
+                    embedding_failed = True
+                    embedding_fallback_reason = str(e)[:200]
+                    logger.warning(
+                        "search_memory.embedding_fallback",
+                        reason=embedding_fallback_reason,
+                        requested_mode=requested_search_mode,
+                        actual_mode="text_or_tag_only",
+                    )
+            elif not is_tag_only:
+                # EPIC-79 Story 79.2 (review): pas de service d'embedding -> la dégradation
+                # du mode demandé (hybrid/semantic) doit aussi être visible, pas silencieuse.
+                embedding_failed = True
+                embedding_fallback_reason = "no_embedding_service"
+                logger.warning(
+                    "search_memory.embedding_fallback",
+                    reason=embedding_fallback_reason,
+                    requested_mode=requested_search_mode,
+                    actual_mode="text_or_tag_only",
+                )
 
             embedding_ms = (time.time() - start_time) * 1000
 
@@ -980,6 +1004,8 @@ class SearchMemoryTool(BaseMCPComponent):
                         "search_mode": "hybrid",
                         "embedding_time_ms": round(embedding_ms, 2),
                         "execution_time_ms": round(response.metadata.execution_time_ms, 2),
+                        "requested_search_mode": requested_search_mode,
+                        "embedding_failed": embedding_failed,
                     }
                 }
             else:
@@ -1064,8 +1090,14 @@ class SearchMemoryTool(BaseMCPComponent):
                     "metadata": {
                         "search_mode": search_mode,
                         "embedding_time_ms": round(embedding_ms, 2),
+                        "requested_search_mode": requested_search_mode,
+                        "embedding_failed": embedding_failed,
                     }
                 }
+
+            # EPIC-79 Story 79.2: exposer la raison du fallback si l'embedding a échoué
+            if embedding_fallback_reason:
+                result["metadata"]["embedding_fallback_reason"] = embedding_fallback_reason
 
             elapsed_ms = (time.time() - start_time) * 1000
 

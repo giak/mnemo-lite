@@ -1228,9 +1228,8 @@ def register_memory_components(mcp: FastMCP):
         tags: list[str] | None = None,
         consumed: bool | None = None,
         lifecycle_state: str | None = None,
-        include_outcome: bool = False,
-        search_mode: str = "tag",
-    ) -> dict:
+        include_outcome: bool = False,            search_mode: str = "tag",
+        ) -> dict:
         """
         Search memories using semantic vector search.
 
@@ -1245,9 +1244,16 @@ def register_memory_components(mcp: FastMCP):
             tags: Filter by tags (optional)
             consumed: Filter by consumption status (None=all, True=consumed, False=fresh)
             lifecycle_state: Filter by lifecycle (None=all, "sealed", "candidate", "doubt", "summary")
+            search_mode: "tag" (default, fast) | "hybrid" | "semantic".
+                        Si "hybrid"/"semantic" et que la génération d'embedding échoue
+                        (cold start, service indisponible), la recherche retombe en mode
+                        text/tag_only : le metadata expose alors embedding_failed: true
+                        + embedding_fallback_reason pour le signaler (EPIC-79).
 
         Returns:
             MemorySearchResponse with results, scores, and pagination
+            Metadata include: search_mode, requested_search_mode, embedding_failed
+            (+ embedding_fallback_reason when the embedding generation failed)
 
         Examples:
             - search_memory(query="async patterns")

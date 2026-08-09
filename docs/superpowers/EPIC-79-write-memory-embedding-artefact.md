@@ -84,6 +84,20 @@ if task is not None:
 - `embedding_pending` ajouté au dict de retour uniquement si `True` (comme `duplicate_warning`), `MemoryResponse` inchangé.
 - Review : 1 point corrigé (sémantique du `except` : échec ≠ pending).
 
+## Story 79.2 (2026-08-09) : fallback embedding du `search_memory` rendu non silencieux
+
+**Problème constaté** : quand `search_mode="hybrid"`/`"semantic"` était demandé et que la génération d'embedding échouait (cold start, service down), `SearchMemoryTool.execute` retombait silencieusement en `search_mode: text` / `tag_only` dans le metadata — sans aucun signal pour l'agent (constaté en session : `search_mode: text, embedding_time_ms: 0.08`). Le warning loggé disait « falling back to tag-only search » (inexact : le fallback peut être text/tag_only).
+
+**Correctif (KISS, résilience préservée)** : le fallback reste (pas de blocage cold start), mais devient **visible** :
+- `requested_search_mode` : le mode demandé par l'appelant (capturé avant toute réassignation de `search_mode` dans la branche fallback).
+- `embedding_failed: true` + `embedding_fallback_reason` (tronqué à 200 chars) dans le metadata quand la génération échoue.
+- `elif not is_tag_only` : pas de service d'embedding + hybrid/semantic demandé → `embedding_failed: true` + `reason: "no_embedding_service"` (review point 1 : ce cas était resté silencieux).
+- Warning structuré `search_memory.embedding_fallback` (requested_mode + actual_mode).
+
+**Tests** : `test_hybrid_embedding_failure_reports_fallback` (hybrid + service qui lève → signalé), `test_hybrid_no_embedding_service_reports_fallback` (hybrid sans service → signalé), `test_hybrid_success_reports_no_fallback` (hybrid réussi → `embedding_failed: false`, pas de reason). 54 passed sur les 2 fichiers de tests.
+
+**Caveat connu (préexistant)** : la clé cache Redis `memsearch:{hash}` n'inclut pas `search_mode` — un résultat hybride dégradé peut être servi à une future recherche de même requête, et les entrées cache antérieures au changement n'ont pas les nouveaux champs. Les consommateurs doivent lire `metadata.embedding_failed` avec `.get()` défensif.
+
 ## Notes de décision
 
 - **Pourquoi ne pas renommer en `embedding_status`** : KISS — l'ajout d'un champ booléen `embedding_pending` suffit à lever l'ambiguïté sans casser les consommateurs existants de `embedding_generated`.

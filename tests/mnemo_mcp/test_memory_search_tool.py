@@ -721,6 +721,123 @@ class TestSearchMemoryTool:
         call_kwargs = mock_memory_repository.search_by_tags.call_args.kwargs
         assert call_kwargs.get("query_text") == "test query"
 
+    @pytest.mark.asyncio
+    async def test_hybrid_embedding_failure_reports_fallback(
+        self, mock_ctx, mock_memory_repository, mock_redis
+    ):
+        """EPIC-79 Story 79.2: search_mode=hybrid avec embedding en échec expose le fallback.
+
+        La réponse doit signaler embedding_failed: true + embedding_fallback_reason
+        + requested_search_mode: hybrid, pour que l'agent voie la dégradation
+        (avant : fallback silencieux en search_mode: text).
+        """
+        tool = SearchMemoryTool()
+
+        mock_embedding = AsyncMock()
+        mock_embedding.generate_embedding.side_effect = RuntimeError("Model unavailable")
+
+        mock_mem = _make_mock_memory(
+            memory_id="fallback-hybrid",
+            title="Hybrid fallback",
+            content="Content when hybrid embedding fails",
+            tags=[],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
+
+        tool.inject_services({
+            "embedding_service": mock_embedding,
+            "memory_repository": mock_memory_repository,
+            "redis": mock_redis,
+        })
+
+        result = await tool.execute(
+            ctx=mock_ctx,
+            query="test query",
+            search_mode="hybrid",
+            limit=5,
+        )
+
+        # Le fallback fonctionne (résilience préservée)
+        assert len(result["memories"]) == 1
+        assert result["metadata"]["search_mode"] == "text"
+        # ... mais n'est plus silencieux : la dégradation est visible
+        assert result["metadata"]["requested_search_mode"] == "hybrid"
+        assert result["metadata"]["embedding_failed"] is True
+        assert "Model unavailable" in result["metadata"]["embedding_fallback_reason"]
+
+    @pytest.mark.asyncio
+    async def test_hybrid_success_reports_no_fallback(
+        self, mock_ctx, mock_memory_repository, mock_redis,
+        mock_hybrid_search_service, sample_hybrid_response
+    ):
+        """EPIC-79 Story 79.2: hybrid réussi → embedding_failed: false, pas de fallback_reason."""
+        tool = SearchMemoryTool()
+
+        mock_embedding = AsyncMock()
+        mock_embedding.generate_embedding.return_value = [0.1] * 768
+        mock_hybrid_search_service.search.return_value = sample_hybrid_response
+        mock_redis.get.return_value = None
+
+        tool.inject_services({
+            "embedding_service": mock_embedding,
+            "memory_repository": mock_memory_repository,
+            "hybrid_memory_search_service": mock_hybrid_search_service,
+            "redis": mock_redis,
+        })
+
+        result = await tool.execute(
+            ctx=mock_ctx,
+            query="DSA censorship",
+            search_mode="hybrid",
+            limit=5,
+        )
+
+        assert result["metadata"]["search_mode"] == "hybrid"
+        assert result["metadata"]["requested_search_mode"] == "hybrid"
+        assert result["metadata"]["embedding_failed"] is False
+        assert "embedding_fallback_reason" not in result["metadata"]
+        assert len(result["memories"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_hybrid_no_embedding_service_reports_fallback(
+        self, mock_ctx, mock_memory_repository, mock_redis
+    ):
+        """EPIC-79 Story 79.2 (review): hybrid demandé sans service d'embedding → signalé.
+
+        Avant : le fallback était silencieux (embedding_failed restait False par défaut
+        car le bloc embedding est sauté). Après : embedding_failed: true +
+        embedding_fallback_reason: "no_embedding_service".
+        """
+        tool = SearchMemoryTool()
+
+        mock_mem = _make_mock_memory(
+            memory_id="fallback-nosvc",
+            title="No service fallback",
+            content="Content when no embedding service",
+            tags=[],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
+
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "redis": mock_redis,
+        })
+
+        result = await tool.execute(
+            ctx=mock_ctx,
+            query="test query",
+            search_mode="hybrid",
+            limit=5,
+        )
+
+        assert len(result["memories"]) == 1
+        assert result["metadata"]["search_mode"] == "text"
+        assert result["metadata"]["requested_search_mode"] == "hybrid"
+        assert result["metadata"]["embedding_failed"] is True
+        assert result["metadata"]["embedding_fallback_reason"] == "no_embedding_service"
+
     # ---- Response structure ----
 
     @pytest.mark.asyncio
