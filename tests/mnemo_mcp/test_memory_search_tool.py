@@ -487,6 +487,88 @@ class TestSearchMemoryTool:
         assert len(result["memories"]) == 1
         mock_redis.setex.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_cache_key_differs_by_search_mode(
+        self, mock_ctx, mock_memory_repository, mock_redis,
+        mock_hybrid_search_service, sample_hybrid_response
+    ):
+        """EPIC-80: la clé cache intègre search_mode.
+
+        Même requête en mode tag puis en mode hybrid → deux clés distinctes :
+        le résultat d'un mode ne peut pas être servi à l'autre (avant EPIC-80 :
+        clé partagée, un résultat hybrid dégradé était servi à une recherche tag).
+        """
+        mock_mem = _make_mock_memory(
+            memory_id="mode-key-id", title="Mode key", content="Content", tags=[],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None  # cache miss à chaque appel
+
+        mock_embedding = AsyncMock()
+        mock_embedding.generate_embedding.return_value = [0.1] * 768
+        mock_hybrid_search_service.search.return_value = sample_hybrid_response
+
+        tool = SearchMemoryTool()
+        tool.inject_services({
+            "memory_repository": mock_memory_repository,
+            "embedding_service": mock_embedding,
+            "hybrid_memory_search_service": mock_hybrid_search_service,
+            "redis": mock_redis,
+        })
+
+        # Mode tag (défaut) → fallback text, cache écrit sous clé A
+        await tool.execute(ctx=mock_ctx, query="DSA censorship", limit=5)
+        # Mode hybrid → succès embedding, cache écrit sous clé B
+        await tool.execute(ctx=mock_ctx, query="DSA censorship", search_mode="hybrid", limit=5)
+
+        # Les 2 recherches ont tourné (2 misses, 2 writes) et les clés diffèrent
+        assert mock_redis.get.call_count == 2
+        assert mock_redis.setex.call_count == 2
+        key_a = mock_redis.setex.call_args_list[0][0][0]
+        key_b = mock_redis.setex.call_args_list[1][0][0]
+        assert key_a != key_b
+
+    @pytest.mark.asyncio
+    async def test_degraded_hybrid_result_not_cached(
+        self, mock_ctx, mock_memory_repository, mock_redis
+    ):
+        """EPIC-80: un résultat dégradé (embedding en échec) ne doit jamais être mis en cache.
+
+        Il est transitoire (cold start) : même sous sa propre clé de mode, il serait
+        servi à une recherche ultérieure du même mode dont l'embedding aurait réussi.
+        """
+        mock_embedding = AsyncMock()
+        mock_embedding.generate_embedding.side_effect = RuntimeError("Model unavailable")
+
+        mock_mem = _make_mock_memory(
+            memory_id="degraded-nocache",
+            title="Degraded",
+            content="Content when embedding fails",
+            tags=[],
+        )
+        mock_memory_repository.search_by_tags.return_value = ([mock_mem], 1)
+        mock_redis.get.return_value = None
+
+        tool = SearchMemoryTool()
+        tool.inject_services({
+            "embedding_service": mock_embedding,
+            "memory_repository": mock_memory_repository,
+            "redis": mock_redis,
+        })
+
+        result = await tool.execute(
+            ctx=mock_ctx,
+            query="test query",
+            search_mode="hybrid",
+            limit=5,
+        )
+
+        # Le fallback fonctionne et est signalé...
+        assert result["metadata"]["embedding_failed"] is True
+        assert result["metadata"]["search_mode"] == "text"
+        # ... mais rien n'est mis en cache
+        mock_redis.setex.assert_not_called()
+
     # ---- Fallback when hybrid service unavailable ----
 
     @pytest.mark.asyncio

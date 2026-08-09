@@ -96,7 +96,7 @@ if task is not None:
 
 **Tests** : `test_hybrid_embedding_failure_reports_fallback` (hybrid + service qui lève → signalé), `test_hybrid_no_embedding_service_reports_fallback` (hybrid sans service → signalé), `test_hybrid_success_reports_no_fallback` (hybrid réussi → `embedding_failed: false`, pas de reason). 54 passed sur les 2 fichiers de tests.
 
-**Caveat connu (préexistant)** : la clé cache Redis `memsearch:{hash}` n'inclut pas `search_mode` — un résultat hybride dégradé peut être servi à une future recherche de même requête, et les entrées cache antérieures au changement n'ont pas les nouveaux champs. Les consommateurs doivent lire `metadata.embedding_failed` avec `.get()` défensif.
+**Caveat corrigé (EPIC-80)** : la clé cache Redis `memsearch:{hash}` n'incluait pas `search_mode` — un résultat hybride dégradé pouvait être servi à une future recherche de même requête. **EPIC-80** (2026-08-09) : `search_mode` fait désormais partie de la clé, et un résultat dégradé (`embedding_failed`) n'est jamais écrit en cache. Les entrées cache antérieures à EPIC-80 expirent naturellement (TTL 60-300 s) ; les consommateurs lisent `metadata.embedding_failed` avec `.get()` défensif.
 
 ## Notes de décision
 

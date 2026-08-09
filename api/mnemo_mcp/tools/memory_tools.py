@@ -893,6 +893,13 @@ class SearchMemoryTool(BaseMCPComponent):
                         "ls": lifecycle_state,
                         "l": limit,
                         "o": offset,
+                        # EPIC-80: le mode demandé fait partie de la clé — un résultat
+                        # hybrid/semantic ne doit pas être servi à une recherche tag (et inversement).
+                        "sm": requested_search_mode,
+                        # EPIC-80 (review) : include_outcome change le payload (champs
+                        # outcome_* ajoutés) — même classe de bug que search_mode : hors clé,
+                        # un résultat sans outcomes serait servi à une requête qui les demande.
+                        "io": include_outcome,
                     }
                     cache_key = f"memsearch:{_hashlib.sha256(json.dumps(cache_params, sort_keys=True).encode()).hexdigest()[:16]}"
                     cached = await redis.get(cache_key)
@@ -1102,7 +1109,10 @@ class SearchMemoryTool(BaseMCPComponent):
             elapsed_ms = (time.time() - start_time) * 1000
 
             # EPIC-32 Story 32.2: Write to Redis cache
-            if redis:
+            # EPIC-80: un résultat dégradé (fallback embedding) est transitoire (cold start) —
+            # ne jamais le mettre en cache, même sous sa propre clé de mode : il serait servi
+            # à une recherche ultérieure du même mode dont l'embedding aurait réussi.
+            if redis and not embedding_failed:
                 try:
                     # TTL depends on query type: tag-only=5min, natural=1min
                     ttl = 300 if is_tag_only else 60
