@@ -481,6 +481,7 @@ class TestSearchMemoryTool:
         result = await tool.execute(
             ctx=mock_ctx,
             query="uncached query",
+            search_mode="tag",  # explicite : un résultat dégradé (défaut hybrid sans embedding) n'est jamais caché (EPIC-80)
             limit=5,
         )
 
@@ -516,8 +517,8 @@ class TestSearchMemoryTool:
             "redis": mock_redis,
         })
 
-        # Mode tag (défaut) → fallback text, cache écrit sous clé A
-        await tool.execute(ctx=mock_ctx, query="DSA censorship", limit=5)
+        # Mode tag (explicite) → fallback text, cache écrit sous clé A
+        await tool.execute(ctx=mock_ctx, query="DSA censorship", search_mode="tag", limit=5)
         # Mode hybrid → succès embedding, cache écrit sous clé B
         await tool.execute(ctx=mock_ctx, query="DSA censorship", search_mode="hybrid", limit=5)
 

@@ -807,7 +807,7 @@ class SearchMemoryTool(BaseMCPComponent):
         tags: Optional[List[str]] = None,
         consumed: Optional[bool] = None,
         lifecycle_state: Optional[str] = None,
-        search_mode: str = "tag",  # "tag" (default, fast) | "hybrid" | "semantic"
+        search_mode: str = "hybrid",  # "hybrid" (default) | "semantic" | "tag"
         limit: int = 10,
         offset: int = 0,
         include_outcome: bool = False,
@@ -875,7 +875,7 @@ class SearchMemoryTool(BaseMCPComponent):
             embedding_failed = False
             embedding_fallback_reason = None
             requested_search_mode = search_mode  # EPIC-79 Story 79.2: signaler un fallback silencieux
-            is_tag_only = search_mode not in ("hybrid", "semantic")  # tag-only for speed; use hybrid/semantic for vector search
+            is_tag_only = search_mode not in ("hybrid", "semantic")  # true seulement pour "tag" explicite (lexical seul)
             if search_mode not in ("tag", "hybrid", "semantic"):
                 raise ValueError(f"search_mode must be 'tag', 'hybrid', or 'semantic', got '{search_mode}'")  # validated like memory_type
 
