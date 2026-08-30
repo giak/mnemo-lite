@@ -38,7 +38,7 @@ Zero external vector databases. Zero API dependencies. Zero cost. Complete priva
 * **Zero Dependencies:** stdlib `re` module, no external packages
 * **Toggle:** `MCP_PRIVACY_ENABLED` env var (default: `true`)
 
-### 🔌 MCP Integration (31 tools)
+### 🔌 MCP Integration (34 tools)
 
 | Catégorie | Outils |
 |-----------|--------|
@@ -51,7 +51,10 @@ Zero external vector databases. Zero API dependencies. Zero cost. Complete priva
 | **Graph** | `get_graph_stats`, `traverse_graph`, `find_path`, `get_module_data` |
 | **Indexing** | `index_project`, `reindex_file`, `index_incremental`, `index_markdown_workspace` |
 | **Indexing Ops** | `get_indexing_status`, `get_indexing_errors`, `retry_indexing`, `clear_cache`, `get_indexing_stats` |
-| **Analytics** | `get_memory_health`, `get_cache_stats`, `switch_project` |
+| **Analytics** | `get_memory_health`, `get_cache_stats` |
+| **Config** | `switch_project` |
+| **Entités** | `extract_entities`, `search_by_entity` |
+| **Relations & Consolidation** | `get_memory_graph`, `get_related_memories`, `suggest_consolidation` |
 
 ### 🖥️ User Interface (Vue 3 SPA)
 * **13 Pages:** Dashboard, Search, Memories, Projects, Expanse, Expanse Memory, Monitoring, Alerts, Brain, Graph, Orgchart, Logs, Search Analytics
@@ -87,7 +90,7 @@ docker compose --profile dev up -d --build
 |---------|-----|-------|
 | Web UI | http://localhost:3000 | Interface utilisateur Vue 3 |
 | REST API | http://localhost:8001 | API HTTP (documentation Swagger: /docs) |
-| MCP Server | http://localhost:8002 | Protocole MCP (SSE) pour agents LLM |
+| MCP Server | http://localhost:8002 | Protocole MCP (Streamable HTTP) pour agents LLM |
 | OpenObserve | http://localhost:5080 | Observabilité et logs |
 
 **Verify:**

@@ -1,10 +1,10 @@
-# MnemoLite MCP — 31 Tools
+# MnemoLite MCP — 34 Tools
 
 [![MCP](https://img.shields.io/badge/MCP-1.12.3-blue.svg)](https://modelcontextprotocol.io/)
 [![Python](https://img.shields.io/badge/Python-3.11+-green.svg)](https://www.python.org/)
 [![Version](https://img.shields.io/badge/version-v5.0.0--dev-orange.svg)](https://github.com/anomalyco/mnemolite)
 
-MnemoLite exposes 31 MCP tools for LLM integration via Streamable HTTP transport (port 8002).
+MnemoLite exposes 34 MCP tools for LLM integration via Streamable HTTP transport (port 8002).
 
 ## Overview
 
@@ -108,6 +108,16 @@ Multi-repository support and health checks.
 |------|-------------|---------|
 | `switch_project` | Change active repository context | ~10ms |
 | `ping` | Health check (pong response) | <1ms |
+
+### Relations & Consolidation (3 tools)
+
+Memory relationship graph and advanced consolidation.
+
+| Tool | Description | Latency |
+|------|-------------|---------|
+| `get_memory_graph` | Retrieve the memory relationship graph | ~10ms |
+| `get_related_memories` | Get memories related to a given memory | ~10ms |
+| `suggest_consolidation` | Suggest memories to consolidate | ~50ms |
 
 ## Client Configuration
 
@@ -278,8 +288,9 @@ All write operations (`write_memory`, `update_memory`) automatically sanitize se
 | Analytics | 4 | `get_memory_health()` |
 | Graph | 4 | `get_graph_stats(repository="default")` |
 | Project | 2 | `ping()` |
-| **Total** | **31** | — |
+| Relations & Consolidation | 3 | `get_memory_graph()` |
+| **Total** | **34** | — |
 
 ---
 
-**Version:** v5.0.0-dev | **MCP SDK:** 1.12.3 | **Transport:** Streamable HTTP | **Tools:** 31
+**Version:** v5.0.0-dev | **MCP SDK:** 1.12.3 | **Transport:** Streamable HTTP | **Tools:** 34

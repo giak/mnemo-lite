@@ -21,7 +21,7 @@ docker compose ps
 
 ## 2. Configurer MCP
 
-MnemoLite expose 31 outils MCP via Streamable HTTP sur le port 8002.
+MnemoLite expose 34 outils MCP via Streamable HTTP sur le port 8002.
 
 ### Méthode moderne (recommandée) — Connexion directe HTTP
 

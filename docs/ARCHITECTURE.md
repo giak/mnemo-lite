@@ -18,7 +18,7 @@
 9. [Graphe de Code](#9-graphe-de-code)
 10. [Cache Triple-Layer](#10-cache-triple-layer)
 11. [Schéma Base de Données](#11-schéma-base-de-données)
-12. [MCP - 33 Outils](#12-mcp---33-outils)
+12. [MCP - 34 Outils](#12-mcp---34-outils)
 13. [Secret Stripping (EPIC-42)](#13-secret-stripping-epic-42)
 14. [Déploiement](#14-déploiement)
 
@@ -35,7 +35,7 @@ MnemoLite est un système cognitif de mémoire et d'intelligence de code **100% 
 | **Mémoire Sémantique** | Stockage avec embeddings + decay temporel | Connaissance persistante |
 | **Intelligence de Code** | Indexation AST, graphe de dépendances | Compréhension codebase |
 | **Recherche Hybride** | Lexical + Vectoriel + RRF + Reranking | Résultats précis |
-| **Intégration MCP** | 31 outils pour LLM (Claude, KiloCode) | Interface LLM native |
+| **Intégration MCP** | 34 outils pour LLM (Claude, KiloCode) | Interface LLM native |
 | **Secret Stripping** | 11 regex patterns + `<private>` tags | Sécurité (EPIC-42) |
 | **Cache Triple-Layer** | L1 → L2 → L3 avec fallback | Performance |
 
@@ -47,7 +47,7 @@ MnemoLite est un système cognitif de mémoire et d'intelligence de code **100% 
 ├─────────────────────────────────────────────────────────────────────┤
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
 │  │  Vue 3   │  │  FastAPI │  │ MCP 1.12.3│  │  PostgreSQL 18    │   │
-│  │   SPA    │  │  AsyncPG │  │  (31 tools)│  │  pgvector 0.8.1  │   │
+│  │   SPA    │  │  AsyncPG │  │  (34 tools)│  │  pgvector 0.8.1  │   │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘   │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │  Embeddings: BAAI/bge-m3 TEXT (1024D) +                   │   │
@@ -111,7 +111,7 @@ graph TB
 |---------|------|----------|-------------|
 | **Frontend** | 3000 | HTTP | Vue 3 SPA avec design SCADA |
 | **API REST** | 8001 | HTTP/HTTPS | FastAPI backend |
-| **MCP Server** | 8002 | Streamable HTTP | 31 outils pour LLM |
+| **MCP Server** | 8002 | Streamable HTTP | 34 outils pour LLM |
 | **Worker** | — | Background | Batch indexing + conversation import |
 | **PostgreSQL** | 5432 | TCP | Données + Vecteurs (TEXT 1024D, CODE 768D) |
 | **Redis** | 6379 | TCP | Cache L2 + Sessions |
@@ -702,7 +702,7 @@ erDiagram
 
 ---
 
-## 12. MCP - 31 Outils
+## 12. MCP - 34 Outils
 
 ```mermaid
 graph TD
@@ -959,7 +959,7 @@ services:
       - ./gliner_multi-v2.1:/app/models/gliner_multi-v2.1:ro
 
   # ─────────────────────────────────────────────
-  # MCP Server (31 tools)
+  # MCP Server (34 tools)
   # ─────────────────────────────────────────────
   mcp:
     build:

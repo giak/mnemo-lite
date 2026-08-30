@@ -13,7 +13,7 @@
 - **Cognitive Memory** — Semantic search, time-aware storage, hybrid RRF fusion
 - **Code Intelligence** — AST-based indexing, dependency graphs, 15+ languages
 - **Secret Stripping** — 11 regex patterns + `<private>` tags, auto-redaction on write (EPIC-42)
-- **MCP Integration** — 31 tools for LLM integration
+- **MCP Integration** — 34 tools for LLM integration
 - **Triple-Layer Cache** — L1 (memory) → L2 (Redis) → L3 (PostgreSQL)
 
 ## Quick Start
@@ -36,7 +36,7 @@ docker compose --profile dev up -d
 ## Documentation
 
 - [QUICKSTART.md](QUICKSTART.md) — Setup en 5 minutes
-- [MCP.md](MCP.md) — Intégration MCP (33 outils)
+- [MCP.md](MCP.md) — Intégration MCP (34 outils)
 - [API.md](API.md) — Endpoints REST
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Vue technique
 

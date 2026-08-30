@@ -65,10 +65,13 @@ H1: OUTILS MCP
 |-----------|--------|
 | Mémoire (12) | write_memory, read_memory, search_memory, update_memory, delete_memory, export_memories, get_system_snapshot, mark_consumed, rate_memory, consolidate_memory, suggest_consolidation, configure_decay |
 | Code (1) | search_code (hybride lexical + vectoriel avec RRF) |
-| Indexation (7) | index_project, index_incremental, index_markdown_workspace, reindex_file, get_indexing_status, get_indexing_errors, retry_indexing |
+| Indexation (7) | index_project, index_markdown_workspace, reindex_file, get_indexing_status, get_indexing_errors, retry_indexing, index_incremental |
 | Graphe (4) | get_graph_stats, traverse_graph, find_path, get_module_data |
 | Analytics (4) | get_indexing_stats, get_memory_health, get_cache_stats, clear_cache |
-| Config (2) | switch_project, ping |
+| Entités (2) | extract_entities, search_by_entity |
+| Relations (2) | get_memory_graph, get_related_memories |
+| Config (1) | switch_project |
+| Test (1) | ping |
 
 H1: RÈGLES MÉMOIRE
 CTX: capture mémoire automatique — tous environnements IA

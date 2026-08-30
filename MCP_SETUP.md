@@ -15,7 +15,7 @@
       ▼                               ▼
 ┌──────────────┐            ┌──────────────────┐
 │  MCP Server  │            │   FastAPI REST   │
-│  (31 tools)  │            │  (tous endpoints)│
+│  (34 tools)  │            │  (tous endpoints)│
 └──────┬───────┘            └────────┬─────────┘
        │                            │
        └──────────┬─────────────────┘
@@ -31,7 +31,7 @@ Deux façons d'interagir avec Mnemolite :
 
 | Mode | Port | Protocole | Usage |
 |------|------|-----------|-------|
-| **MCP** | 8002 | SSE (Server-Sent Events) | Agents LLM compatibles MCP (Codebuff, Claude Desktop) |
+| **MCP** | 8002 | Streamable HTTP | Agents LLM compatibles MCP (Codebuff, Claude Desktop) |
 | **REST API** | 8001 | HTTP/JSON | Accès direct via curl, Python, scripts |
 | **CLI** | — | Ligne de commande | `mnemo search/write/health/status` |
 
@@ -69,7 +69,7 @@ Dans `~/.config/Claude/claude_desktop_config.json` :
 
 ### Protocole MCP (bas niveau)
 
-Le MCP utilise SSE (Server-Sent Events) pour le transport.
+Le MCP utilise Streamable HTTP pour le transport.
 Les deux headers `Accept` sont obligatoires :
 ```
 Accept: application/json, text/event-stream
@@ -107,7 +107,7 @@ curl -s -X POST http://localhost:8002/mcp \
 
 ---
 
-## 2. Outils MCP Disponibles (31 tools)
+## 2. Outils MCP Disponibles (34 tools)
 
 ### 🔧 Test
 
@@ -122,6 +122,7 @@ curl -s -X POST http://localhost:8002/mcp \
 | `search_memory` | Recherche textuelle hybride (vectoriel + lexical) | `query` (str), `memory_type` (opt), `tags` (opt, comma-separated), `limit` (1-100, def:20), `offset` (def:0) |
 | `search_code` | Recherche de code (lexical + vectoriel + RRF) | `query` (str), `filters` (opt), `limit`, `offset`, `enable_lexical`, `enable_vector`, `lexical_weight`, `vector_weight` |
 | `search_by_entity` | Recherche par entité nommée | `entity_name` (str), `limit` |
+| `extract_entities` | (Ré)extraire les entités nommées d'une mémoire | `memory_id` (str, UUID) |
 
 ### 📝 CRUD Mémoires
 
@@ -142,6 +143,7 @@ curl -s -X POST http://localhost:8002/mcp \
 | `export_memories` | Exporter en JSON (project scoping) |
 | `configure_decay` | Configurer les règles de decay par tag |
 | `get_system_snapshot` | État holistique du système (core memories, patterns, health) |
+| `suggest_consolidation` | Suggérer des mémoires à consolider |
 
 ### 🔗 Graphe de connaissances
 
@@ -507,7 +509,7 @@ Pour des déploiements personnalisés (hôte distant, ports modifiés) :
 ```
 # Services Docker
 mnemo-api      → port 8001 (REST API + Swagger docs)
-mnemo-mcp      → port 8002 (MCP SSE)
+mnemo-mcp      → port 8002 (MCP Streamable HTTP)
 mnemo-postgres → port 5432 (base de données + pgvector)
 mnemo-redis    → port 6379 (cache)
 mnemo-worker   → worker asynchrone
